@@ -22,7 +22,7 @@ onMounted(async () => {
 <template>
   <div class="page">
     <el-card>
-      <template #header><span>解题排行榜（前 50 名）</span></template>
+      <template #header><span>解题排名（前 50 名）</span></template>
       <el-table v-loading="loading" :data="list">
         <el-table-column label="排名" width="100">
           <template #default="{ row }">

@@ -69,8 +69,8 @@ func (h *Handlers) MyClasses(c *gin.Context) {
 	ok(c, cards)
 }
 
-// GetClass 班级详情：公开部分（名称/简介/题目）任何人可见；
-// 成员列表仅成员与 admin 可见；邀请码仅建班人与 admin 可见。
+// GetClass 班级详情：基础信息任何人可见；成员列表与邀请码仅班级管理员可见；
+// 作业列表单独走 /classes/:id/assignments（仅本班成员可见）。
 func (h *Handlers) GetClass(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -87,50 +87,20 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		return
 	}
 
-	uid, _, role, logged := currentUser(c)
+	uid, _, _, logged := currentUser(c)
 	isMember := false
 	if logged {
 		isMember, _ = h.repo.IsMember(ctx, id, uid)
 	}
 	manage := h.classManageable(c, cl)
 
-	// 引用的题目（全局共享，按引用取标题）；
-	// 仅本班的引用对非成员/游客隐藏（全局题库本身仍公开可见）；
-	// 被比赛锁定的引用按视角隐藏/带指引（见 DEVELOPMENT.md「比赛」节）
-	lockMap, err := h.loadLockMap(ctx, uid, role)
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取比赛状态失败")
-		return
-	}
-	problems := make([]gin.H, 0, len(cl.Problems))
-	for _, ref := range cl.Problems {
-		if ref.Hidden && !isMember && !manage {
-			continue
-		}
-		lk := lockMap[ref.PID]
-		if lk != nil && lk.Phase != "running" {
-			continue // 赛前/隐藏期：对该视角隐藏
-		}
-		p, err := h.repo.GetProblem(ctx, ref.PID)
-		if err != nil {
-			continue // 题目可能已被删除，引用失效直接跳过
-		}
-		item := gin.H{"id": p.ID, "title": p.Title, "hidden": ref.Hidden}
-		if lk != nil {
-			item["contest_id"] = lk.Contest.ID
-		}
-		problems = append(problems, item)
-	}
-
 	resp := gin.H{
-		"id":            cl.ID,
-		"name":          cl.Name,
-		"intro":         cl.Intro,
-		"owner_id":      cl.OwnerID,
-		"problem_count": len(cl.Problems),
-		"problems":      problems,
-		"joined":        isMember,
-		"manageable":    manage,
+		"id":         cl.ID,
+		"name":       cl.Name,
+		"intro":      cl.Intro,
+		"owner_id":   cl.OwnerID,
+		"joined":     isMember,
+		"manageable": manage,
 	}
 	if manage {
 		resp["invite_code"] = cl.InviteCode
@@ -214,68 +184,6 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"left": true})
-}
-
-func (h *Handlers) AddClassProblem(c *gin.Context) {
-	id, okID := parseID(c, "id")
-	if !okID {
-		return
-	}
-	cl, err := h.repo.GetClass(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil || !h.classManageable(c, cl) {
-		fail(c, http.StatusForbidden, "仅班级管理员可执行此操作")
-		return
-	}
-	var req struct {
-		ProblemID int64 `json:"problem_id" binding:"required"`
-		Hidden    bool  `json:"hidden"` // true = 仅本班成员可见
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		fail(c, http.StatusBadRequest, "参数不完整")
-		return
-	}
-	ctx := c.Request.Context()
-	if _, err := h.repo.GetProblem(ctx, req.ProblemID); repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	} else if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
-		return
-	}
-	if err := h.repo.AddClassProblem(ctx, id, req.ProblemID, req.Hidden); err != nil {
-		fail(c, http.StatusInternalServerError, "添加题目失败")
-		return
-	}
-	ok(c, gin.H{"added": req.ProblemID, "hidden": req.Hidden})
-}
-
-func (h *Handlers) RemoveClassProblem(c *gin.Context) {
-	id, okID := parseID(c, "id")
-	if !okID {
-		return
-	}
-	cl, err := h.repo.GetClass(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil || !h.classManageable(c, cl) {
-		fail(c, http.StatusForbidden, "仅班级管理员可执行此操作")
-		return
-	}
-	pid, okPID := parseID(c, "pid")
-	if !okPID {
-		return
-	}
-	if err := h.repo.RemoveClassProblem(c.Request.Context(), id, pid); err != nil {
-		fail(c, http.StatusInternalServerError, "移除题目失败")
-		return
-	}
-	ok(c, gin.H{"removed": pid})
 }
 
 func (h *Handlers) RegenInvite(c *gin.Context) {

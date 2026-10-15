@@ -1,30 +1,37 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
-import { classApi, contestApi, problemApi } from '@/api'
+import { assignmentApi, classApi, examApi, problemApi } from '@/api'
 import { fmtDate } from '@/utils/format'
-import type { ClassDetail, ClassMember } from '@/types'
+import type { AssignmentListItem, ClassDetail, ClassMember } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 
 const cl = ref<ClassDetail | null>(null)
 const loading = ref(true)
+const assignments = ref<AssignmentListItem[]>([])
+const assignmentsVisible = ref(false)
+
 const joinCode = ref('')
 const joining = ref(false)
+const showCreateAssignment = ref(false)
+const creatingAssignment = ref(false)
+const assignmentForm = reactive({ title: '', intro: '' })
 const addPid = ref<number | null>(null)
-const addHidden = ref(false)
 const addingProblem = ref(false)
 const problemOptions = ref<{ id: number; title: string }[]>([])
 const importText = ref('')
 const importing = ref(false)
 
-// 办赛
-const showContest = ref(false)
-const creatingContest = ref(false)
-const contestForm = ref({
+// 发起考试
+const exams = ref<{ id: number; title: string; status: string; start: string; end: string; problem_count: number }[]>([])
+const examsVisible = ref(false)
+const showExam = ref(false)
+const creatingExam = ref(false)
+const examForm = ref({
   title: '',
   intro: '',
   range: [] as string[],
@@ -32,14 +39,70 @@ const contestForm = ref({
   selectedProblems: [] as number[],
 })
 
+async function loadExams() {
+  if (!cl.value) return
+  try {
+    const r = await examApi.listByClass(cl.value.id)
+    examsVisible.value = r.visible
+    exams.value = r.list
+  } catch {
+    exams.value = []
+  }
+}
+
+function openExam(row: { id: number }) {
+  router.push(`/exams/${row.id}`)
+}
+
+async function createExam() {
+  if (!cl.value) return
+  if (!examForm.value.title.trim() || examForm.value.range.length !== 2) {
+    ElMessage.warning('请填写考试名称与起止时间')
+    return
+  }
+  if (!examForm.value.selectedProblems.length) {
+    ElMessage.warning('请至少选择一道题')
+    return
+  }
+  creatingExam.value = true
+  try {
+    const r = await examApi.create(cl.value.id, {
+      title: examForm.value.title.trim(),
+      intro: examForm.value.intro.trim(),
+      start: new Date(examForm.value.range[0]).toISOString(),
+      end: new Date(examForm.value.range[1]).toISOString(),
+      hidden_days: examForm.value.hiddenDays,
+      problem_ids: examForm.value.selectedProblems,
+    })
+    ElMessage.success('考试创建成功')
+    showExam.value = false
+    router.push(`/exams/${r.id}`)
+  } finally {
+    creatingExam.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   try {
     cl.value = await classApi.detail(Number(route.params.id))
+    await loadAssignments()
+    await loadExams()
   } catch {
     router.replace('/classes')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadAssignments() {
+  if (!cl.value) return
+  try {
+    const r = await classApi.listAssignments(cl.value.id)
+    assignmentsVisible.value = r.visible
+    assignments.value = r.list
+  } catch {
+    assignments.value = []
   }
 }
 
@@ -74,27 +137,17 @@ async function loadProblemOptions() {
   problemOptions.value = r.list
 }
 
-async function addProblem() {
-  if (!cl.value || !addPid.value) {
-    ElMessage.warning('请选择题目')
-    return
-  }
-  addingProblem.value = true
-  try {
-    await classApi.addProblem(cl.value.id, addPid.value, addHidden.value)
-    ElMessage.success(addHidden.value ? '已添加（仅本班成员可见）' : '已添加')
-    addPid.value = null
-    addHidden.value = false
-    await load()
-  } finally {
-    addingProblem.value = false
+function copyInvite() {
+  if (cl.value?.invite_code) {
+    navigator.clipboard?.writeText(cl.value.invite_code)
+    ElMessage.success('邀请码已复制')
   }
 }
 
-async function removeProblem(pid: number) {
+async function changeMemberRole(row: ClassMember, role: string) {
   if (!cl.value) return
-  await classApi.removeProblem(cl.value.id, pid)
-  ElMessage.success('已移除')
+  await classApi.setMemberRole(cl.value.id, row.uid, role)
+  ElMessage.success(`已把 ${row.username} 设为${role === 'admin' ? '班级管理员' : '普通成员'}`)
   await load()
 }
 
@@ -114,48 +167,30 @@ async function importMembers() {
   }
 }
 
-function copyInvite() {
-  if (cl.value?.invite_code) {
-    navigator.clipboard?.writeText(cl.value.invite_code)
-    ElMessage.success('邀请码已复制')
-  }
-}
-
-async function changeMemberRole(row: { uid: number; username: string; is_owner: boolean }, role: string) {
+async function createAssignment() {
   if (!cl.value) return
-  await classApi.setMemberRole(cl.value.id, row.uid, role)
-  ElMessage.success(`已把 ${row.username} 设为${role === 'admin' ? '班级管理员' : '普通成员'}`)
-  await load()
-}
-
-async function createContest() {
-  if (!cl.value) return
-  if (!contestForm.value.title.trim() || contestForm.value.range.length !== 2) {
-    ElMessage.warning('请填写比赛名称与起止时间')
+  if (!assignmentForm.title.trim()) {
+    ElMessage.warning('请填写作业名称')
     return
   }
-  if (!contestForm.value.selectedProblems.length) {
-    ElMessage.warning('请至少选择一道题')
-    return
-  }
-  creatingContest.value = true
+  creatingAssignment.value = true
   try {
-    const r = await contestApi.create({
-      class_id: cl.value.id,
-      title: contestForm.value.title.trim(),
-      intro: contestForm.value.intro.trim(),
-      start: new Date(contestForm.value.range[0]).toISOString(),
-      end: new Date(contestForm.value.range[1]).toISOString(),
-      hidden_days: contestForm.value.hiddenDays,
-      problem_ids: contestForm.value.selectedProblems,
-    })
-    ElMessage.success('比赛创建成功')
-    showContest.value = false
-    router.push(`/contests/${r.id}`)
+    const r = await assignmentApi.create(
+      cl.value.id,
+      assignmentForm.title.trim(),
+      assignmentForm.intro.trim(),
+    )
+    ElMessage.success('作业创建成功，记得往里加题')
+    showCreateAssignment.value = false
+    assignmentForm.title = ''
+    assignmentForm.intro = ''
+    router.push(`/assignments/${r.id}`)
   } finally {
-    creatingContest.value = false
+    creatingAssignment.value = false
   }
 }
+
+
 
 onMounted(() => {
   load()
@@ -172,8 +207,11 @@ onMounted(() => {
             <span class="title">{{ cl.name }}</span>
             <span class="actions">
               <template v-if="cl.manageable">
-                <el-button size="small" type="success" plain @click="showContest = true; loadProblemOptions()">
-                  举办比赛
+                <el-button size="small" type="success" plain @click="showExam = true; loadProblemOptions()">
+                  发起考试
+                </el-button>
+                <el-button size="small" type="primary" plain @click="showCreateAssignment = true">
+                  布置作业
                 </el-button>
                 <el-button size="small" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
                 <el-button size="small" type="warning" plain @click="regenInvite">重置邀请码</el-button>
@@ -199,47 +237,63 @@ onMounted(() => {
       <el-card class="block">
         <template #header>
           <div class="head">
-            <span>班级题目（{{ cl.problems.length }}）</span>
-            <div v-if="cl.manageable" class="add-problem">
-              <el-select
-                v-model="addPid"
-                filterable
-                placeholder="从题库选择题目"
-                style="width: 260px"
-              >
-                <el-option
-                  v-for="p in problemOptions"
-                  :key="p.id"
-                  :value="p.id"
-                  :label="`#${p.id} ${p.title}`"
-                />
-              </el-select>
-              <el-checkbox v-model="addHidden" label="仅本班成员可见" />
-              <el-button type="primary" :loading="addingProblem" @click="addProblem">添加</el-button>
-            </div>
+            <span>班级作业（{{ assignments.length }}）</span>
           </div>
         </template>
-        <el-table :data="cl.problems">
-          <el-table-column prop="id" label="ID" width="100" />
-          <el-table-column label="题目">
+        <el-alert
+          v-if="!assignmentsVisible"
+          title="加入班级后才能查看和完成作业"
+          type="info"
+          :closable="false"
+        />
+        <template v-else>
+          <el-table
+            :data="assignments"
+            style="cursor: pointer"
+            @row-click="(row: AssignmentListItem) => router.push(`/assignments/${row.id}`)"
+          >
+            <el-table-column prop="title" label="作业" min-width="220" />
+            <el-table-column prop="intro" label="说明" min-width="220">
+              <template #default="{ row }">{{ row.intro || '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="problem_count" label="题数" width="90" />
+            <el-table-column label="布置时间" width="200">
+              <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!assignments.length" description="还没有作业" :image-size="60" />
+        </template>
+      </el-card>
+
+      <el-card class="block">
+        <template #header>
+          <div class="head">
+            <span>班级考试（{{ exams.length }}）</span>
+          </div>
+        </template>
+        <el-table
+          v-if="examsVisible"
+          :data="exams"
+          style="cursor: pointer"
+          @row-click="openExam"
+        >
+          <el-table-column label="状态" width="100">
             <template #default="{ row }">
-              <el-link
-                type="primary"
-                @click="row.contest_id ? router.push(`/contests/${row.contest_id}`) : router.push(`/problems/${row.id}`)"
-              >
-                {{ row.title }}
-              </el-link>
-              <el-tag v-if="row.hidden" size="small" type="warning" class="hidden-tag">仅本班</el-tag>
-              <el-tag v-if="row.contest_id" size="small" type="success" class="hidden-tag">比赛中</el-tag>
+              <el-tag :type="row.status === 'running' ? 'success' : row.status === 'scheduled' ? 'warning' : 'info'">
+                {{ row.status === 'running' ? '进行中' : row.status === 'scheduled' ? '未开始' : '已结束' }}
+              </el-tag>
             </template>
           </el-table-column>
-          <el-table-column v-if="cl.manageable" label="操作" width="100">
+          <el-table-column prop="title" label="考试" min-width="200" />
+          <el-table-column label="时间" min-width="280">
             <template #default="{ row }">
-              <el-button size="small" type="danger" link @click="removeProblem(row.id)">移除</el-button>
+              {{ new Date(row.start).toLocaleString('zh-CN', { hour12: false }) }} ~
+              {{ new Date(row.end).toLocaleString('zh-CN', { hour12: false }) }}
             </template>
           </el-table-column>
+          <el-table-column prop="problem_count" label="题数" width="80" />
         </el-table>
-        <el-empty v-if="!cl.problems.length" description="还没有引用题目" :image-size="60" />
+        <el-empty v-if="!exams.length" description="还没有考试" :image-size="60" />
       </el-card>
 
       <el-card v-if="cl.members" class="block">
@@ -283,28 +337,43 @@ onMounted(() => {
         </div>
       </el-card>
 
-      <el-dialog v-model="showContest" title="举办班级比赛" width="560">
+      <el-dialog v-model="showCreateAssignment" title="布置作业" width="480">
         <el-form label-position="top">
-          <el-form-item label="比赛名称" required>
-            <el-input v-model="contestForm.title" maxlength="64" />
+          <el-form-item label="作业名称" required>
+            <el-input v-model="assignmentForm.title" maxlength="64" placeholder="如：第三章 循环练习" />
           </el-form-item>
-          <el-form-item label="简介">
-            <el-input v-model="contestForm.intro" type="textarea" :rows="2" />
+          <el-form-item label="作业说明">
+            <el-input v-model="assignmentForm.intro" type="textarea" :rows="2" placeholder="选填" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="showCreateAssignment = false">取消</el-button>
+          <el-button type="primary" :loading="creatingAssignment" @click="createAssignment">创建</el-button>
+        </template>
+      </el-dialog>
+
+      <el-dialog v-model="showExam" title="发起班级考试" width="560">
+        <el-form label-position="top">
+          <el-form-item label="考试名称" required>
+            <el-input v-model="examForm.title" maxlength="64" />
+          </el-form-item>
+          <el-form-item label="考试说明">
+            <el-input v-model="examForm.intro" type="textarea" :rows="2" />
           </el-form-item>
           <el-form-item label="起止时间（最长 7 天）" required>
             <el-date-picker
-              v-model="contestForm.range"
+              v-model="examForm.range"
               type="datetimerange"
               start-placeholder="开始"
               end-placeholder="结束"
               style="width: 100%"
             />
           </el-form-item>
-          <el-form-item label="赛后隐藏期（天，0 为不隐藏）">
-            <el-input-number v-model="contestForm.hiddenDays" :min="0" :max="7" />
+          <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
+            <el-input-number v-model="examForm.hiddenDays" :min="0" :max="7" />
           </el-form-item>
-          <el-form-item label="比赛题目（从题库多选）" required>
-            <el-select v-model="contestForm.selectedProblems" multiple filterable style="width: 100%">
+          <el-form-item label="考试题目（从题库多选）" required>
+            <el-select v-model="examForm.selectedProblems" multiple filterable style="width: 100%">
               <el-option
                 v-for="p in problemOptions"
                 :key="p.id"
@@ -315,8 +384,8 @@ onMounted(() => {
           </el-form-item>
         </el-form>
         <template #footer>
-          <el-button @click="showContest = false">取消</el-button>
-          <el-button type="primary" :loading="creatingContest" @click="createContest">创建</el-button>
+          <el-button @click="showExam = false">取消</el-button>
+          <el-button type="primary" :loading="creatingExam" @click="createExam">创建</el-button>
         </template>
       </el-dialog>
     </template>
@@ -342,9 +411,8 @@ onMounted(() => {
 }
 
 .intro {
-  margin: 0;
+  margin: 0 0 8px;
   color: #606266;
-  line-height: 1.7;
 }
 
 .join-bar {
@@ -355,16 +423,6 @@ onMounted(() => {
 
 .block {
   margin-top: 16px;
-}
-
-.add-problem {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.hidden-tag {
-  margin-left: 8px;
 }
 
 .import {

@@ -21,7 +21,7 @@ const latest = ref<Submission | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
 
 const languageOptions = [
-  { value: 'cpp', label: 'C++ 17' },
+  { value: 'cpp', label: 'C++ 14' },
   { value: 'c', label: 'C' },
   { value: 'python3', label: 'Python 3' },
 ]
@@ -33,6 +33,13 @@ const codeTemplates: Record<string, string> = {
 }
 
 const lockedRunning = computed(() => !!problem.value?.locked)
+
+const lockRoute = computed(() => {
+  const p = problem.value
+  if (!p) return ''
+  return p.lock_kind === 'exam' && p.exam_id ? `/exams/${p.exam_id}` : `/contests/${p.contest_id}`
+})
+const lockWhat = computed(() => (problem.value?.lock_kind === 'exam' ? '考试' : '比赛'))
 const canSubmit = computed(() => !!userStore.token && !lockedRunning.value)
 const canSetHidden = computed(() => !!problem.value?.can_set_hidden)
 
@@ -114,18 +121,16 @@ onUnmounted(stopPolling)
   <div v-loading="loading" class="page">
     <template v-if="problem">
       <el-alert
-        v-if="problem.locked && problem.contest_id"
-        title="该题正在比赛中"
+        v-if="problem.locked"
+        :title="`该题正在${lockWhat}中`"
         type="warning"
         :closable="false"
         class="mb8"
       >
         <template #default>
           <div class="lock-bar">
-            <span>比赛期间只能从比赛页面提交（{{ problem.contest_title ?? '' }}）</span>
-            <el-button type="warning" size="small" @click="router.push(`/contests/${problem!.contest_id}`)">
-              前往比赛
-            </el-button>
+            <span>{{ lockWhat }}期间只能从{{ lockWhat }}页面提交（{{ problem.contest_title ?? problem.exam_title ?? '' }}）</span>
+            <el-button type="warning" size="small" @click="router.push(lockRoute)">前往{{ lockWhat }}</el-button>
           </div>
         </template>
       </el-alert>
@@ -177,7 +182,7 @@ onUnmounted(stopPolling)
             <el-option v-for="opt in languageOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
           </el-select>
           <el-button type="primary" :disabled="!canSubmit" :loading="submitting" @click="submit">
-            {{ lockedRunning ? '比赛中，请从比赛页提交' : '提交' }}
+            {{ lockedRunning ? `${lockWhat}中，请从${lockWhat}页提交` : '提交' }}
           </el-button>
         </div>
         <el-input

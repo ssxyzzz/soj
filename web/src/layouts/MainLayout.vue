@@ -15,9 +15,6 @@ function onCommand(command: string) {
     userStore.logout()
     router.push('/login')
   }
-  if (command === 'admin') {
-    router.push('/admin')
-  }
 }
 </script>
 
@@ -31,18 +28,29 @@ function onCommand(command: string) {
           <el-menu-item index="/problems">题库</el-menu-item>
           <el-menu-item index="/contests">比赛</el-menu-item>
           <el-menu-item index="/classes">班级</el-menu-item>
+          <el-menu-item index="/rank">排名</el-menu-item>
           <el-menu-item index="/submissions">提交记录</el-menu-item>
-          <el-menu-item index="/rank">排行榜</el-menu-item>
         </el-menu>
-        <el-dropdown v-if="userStore.token" @command="onCommand">
-          <span class="username">{{ userStore.nickname || '已登录' }}</span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item v-if="userStore.role === 'root'" command="admin">管理后台</el-dropdown-item>
-              <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <template v-if="userStore.token">
+          <el-button
+            v-if="userStore.role === 'root'"
+            size="small"
+            type="warning"
+            plain
+            class="mr8"
+            @click="router.push('/admin')"
+          >
+            管理后台
+          </el-button>
+          <el-dropdown @command="onCommand">
+            <span class="username">{{ userStore.nickname || '已登录' }}</span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </template>
         <el-button v-else type="primary" @click="router.push('/login')">登录 / 注册</el-button>
       </div>
     </el-header>
@@ -56,6 +64,10 @@ function onCommand(command: string) {
 <style scoped>
 .layout {
   min-height: 100vh;
+}
+
+.mr8 {
+  margin-right: 8px;
 }
 
 .header {

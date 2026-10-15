@@ -59,7 +59,12 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden}
 		if lk != nil {
 			item["locked"] = true
-			item["contest_id"] = lk.Contest.ID
+			item["lock_kind"] = lk.Kind
+			if lk.Kind == repo.KindExam {
+				item["exam_id"] = lk.RefID
+			} else {
+				item["contest_id"] = lk.RefID
+			}
 			item["lock_phase"] = lk.Phase
 		}
 		items = append(items, item)
@@ -149,8 +154,14 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	}
 	if lk != nil {
 		resp["locked"] = true
-		resp["contest_id"] = lk.Contest.ID
-		resp["contest_title"] = lk.Contest.Title
+		resp["lock_kind"] = lk.Kind
+		if lk.Kind == repo.KindExam {
+			resp["exam_id"] = lk.RefID
+			resp["exam_title"] = lk.Round.Title
+		} else {
+			resp["contest_id"] = lk.RefID
+			resp["contest_title"] = lk.Round.Title
+		}
 	}
 	ok(c, resp)
 }

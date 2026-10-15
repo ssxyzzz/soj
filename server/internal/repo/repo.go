@@ -156,6 +156,115 @@ func (r *Repo) runMigrations(ctx context.Context) error {
 		}
 		log.Printf("[boot] 班级成员角色已迁移（owner/admin/member）")
 	}
+	if !flagDone("assignmentsV1") {
+		if err := r.migrateAssignments(ctx); err != nil {
+			return err
+		}
+		if err := setFlag("assignmentsV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 班级题目引用已迁移为作业")
+	}
+	if !flagDone("examsV1") {
+		if err := r.migrateExams(ctx); err != nil {
+			return err
+		}
+		if err := setFlag("examsV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 班级比赛已迁移为考试（exams 集合）")
+	}
+	return nil
+}
+
+// migrateExams 考试拆分迁移：把 contests 里 classId≠0 的班级比赛搬入 exams 集合，
+// 其提交的 contestId/contestTitle 同步改名为 examId/examTitle。
+func (r *Repo) migrateExams(ctx context.Context) error {
+	cursor, err := r.db.Collection("contests").Find(ctx,
+		bson.M{"classId": bson.M{"$gt": 0}})
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+	var rounds []bson.M
+	if err := cursor.All(ctx, &rounds); err != nil {
+		return err
+	}
+	for _, doc := range rounds {
+		cid, ok := doc["_id"].(int64)
+		if !ok {
+			continue
+		}
+		if _, err := r.db.Collection("exams").InsertOne(ctx, doc); err != nil {
+			if mongo.IsDuplicateKeyError(err) {
+				continue // 已迁移过
+			}
+			return err
+		}
+		if _, err := r.Submissions.UpdateMany(ctx,
+			bson.M{"contestId": cid},
+			bson.M{"$rename": bson.M{"contestId": "examId", "contestTitle": "examTitle"}}); err != nil {
+			return err
+		}
+		if _, err := r.db.Collection("contests").DeleteOne(ctx, bson.M{"_id": cid}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateAssignments 作业化迁移：每个班级已引用的题目装进一个「默认作业」。
+func (r *Repo) migrateAssignments(ctx context.Context) error {
+	cursor, err := r.db.Collection("classes").Find(ctx, bson.M{})
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+	var classes []bson.M
+	if err := cursor.All(ctx, &classes); err != nil {
+		return err
+	}
+	for _, doc := range classes {
+		cid, ok := doc["_id"].(int64)
+		if !ok {
+			continue
+		}
+		raw, _ := doc["problems"].(bson.A)
+		pids := make([]int64, 0, len(raw))
+		for _, v := range raw {
+			switch ref := v.(type) {
+			case int64: // 旧格式：纯 pid
+				pids = append(pids, ref)
+			case bson.M: // {pid, hidden} 引用对象
+				if pid, ok := ref["pid"].(int64); ok {
+					pids = append(pids, pid)
+				}
+			case bson.D: // 驱动默认把嵌套文档解码为 bson.D
+				for _, e := range ref {
+					if e.Key == "pid" {
+						if pid, ok := e.Value.(int64); ok {
+							pids = append(pids, pid)
+						}
+					}
+				}
+			}
+		}
+		if len(pids) == 0 {
+			continue
+		}
+		id, err := r.nextSeq(ctx, "assignment")
+		if err != nil {
+			return err
+		}
+		_, err = r.db.Collection("assignments").InsertOne(ctx, Assignment{
+			ID: id, ClassID: cid, Title: "默认作业", Problems: pids, CreatedAt: time.Now(),
+		})
+		if err != nil {
+			return err
+		}
+		_, _ = r.db.Collection("classes").UpdateOne(ctx,
+			bson.M{"_id": cid}, bson.M{"$set": bson.M{"problems": bson.A{}}})
+	}
 	return nil
 }
 

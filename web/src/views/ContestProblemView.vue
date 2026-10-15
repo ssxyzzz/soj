@@ -20,7 +20,7 @@ const mine = ref<ContestMySubmission[]>([])
 const revealed = ref(false)
 
 const languageOptions = [
-  { value: 'cpp', label: 'C++ 17' },
+  { value: 'cpp', label: 'C++ 14' },
   { value: 'c', label: 'C' },
   { value: 'python3', label: 'Python 3' },
 ]

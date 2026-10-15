@@ -96,10 +96,9 @@ onMounted(load)
           </template>
         </el-table-column>
         <el-table-column prop="title" label="比赛" min-width="220" />
-        <el-table-column label="范围" width="160">
-          <template #default="{ row }">
-            <el-tag v-if="row.class_id === 0" size="small">主题库 · 全员</el-tag>
-            <el-tag v-else size="small" type="warning">班级：{{ row.class_name }}</el-tag>
+        <el-table-column label="范围" width="140">
+          <template #default>
+            <el-tag size="small">主题库 · 全员</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="时间" min-width="280">

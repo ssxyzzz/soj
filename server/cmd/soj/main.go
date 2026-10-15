@@ -61,7 +61,7 @@ func main() {
 		}
 	}
 
-	// 隐藏期结束的比赛定期发布：榜单/提交记录并入公开态、题目解锁、历史代码恢复可见
+	// 隐藏期结束的比赛与考试定期发布：榜单/提交记录并入公开态、题目解锁、历史代码恢复可见
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
@@ -70,10 +70,10 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if n, err := r.PublishDueContests(ctx, time.Now()); err != nil {
+				if n, err := r.PublishDueRounds(ctx, time.Now()); err != nil {
 					log.Printf("[publish] %v", err)
 				} else if n > 0 {
-					log.Printf("[publish] 已发布 %d 场到期的比赛", n)
+					log.Printf("[publish] 已发布 %d 场到期的比赛/考试", n)
 				}
 			}
 		}

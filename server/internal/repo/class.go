@@ -109,7 +109,7 @@ type ClassCard struct {
 	ProblemCount int64  `bson:"problemCount" json:"problem_count"`
 }
 
-// ListClasses 全部班级卡片（按创建时间正序）。
+// ListClasses 全部班级卡片（按创建时间正序）。题数 = 各作业题目数之和。
 func (r *Repo) ListClasses(ctx context.Context) ([]ClassCard, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$lookup", Value: bson.M{
@@ -118,11 +118,24 @@ func (r *Repo) ListClasses(ctx context.Context) ([]ClassCard, error) {
 			"foreignField": "classId",
 			"as":           "m",
 		}}},
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "assignments",
+			"localField":   "_id",
+			"foreignField": "classId",
+			"as":           "a",
+		}}},
 		{{Key: "$project", Value: bson.M{
-			"name":         1,
-			"intro":        1,
-			"memberCount":  bson.M{"$size": "$m"},
-			"problemCount": bson.M{"$size": bson.M{"$ifNull": bson.A{"$problems", bson.A{}}}},
+			"name":        1,
+			"intro":       1,
+			"memberCount": bson.M{"$size": "$m"},
+			"problemCount": bson.M{"$reduce": bson.M{
+				"input":        "$a",
+				"initialValue": 0,
+				"in": bson.M{"$add": bson.A{
+					"$$value",
+					bson.M{"$size": bson.M{"$ifNull": bson.A{"$$this.problems", bson.A{}}}},
+				}},
+			}},
 		}}},
 		{{Key: "$sort", Value: bson.M{"_id": 1}}},
 	}

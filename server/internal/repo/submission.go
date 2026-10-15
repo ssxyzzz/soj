@@ -38,7 +38,9 @@ type Submission struct {
 	ProblemTitle string        `bson:"ptitle"` // 冗余存储
 	ContestID    int64         `bson:"contestId"`
 	ContestTitle string        `bson:"contestTitle,omitempty"`
-	Published    bool          `bson:"published,omitempty"` // 比赛提交：隐藏期结束并入公开态
+	ExamID       int64         `bson:"examId,omitempty"`
+	ExamTitle    string        `bson:"examTitle,omitempty"`
+	Published    bool          `bson:"published,omitempty"` // 比赛/考试提交：隐藏期结束并入公开态
 	Language     string        `bson:"lang"`
 	Code         string        `bson:"code"`
 	Status       string        `bson:"status"`
@@ -53,8 +55,8 @@ type Submission struct {
 	JudgedAt     *time.Time    `bson:"judgedAt,omitempty"`
 }
 
-// CreateSubmission 创建提交；contest 非 nil 表示比赛提交（隐藏期结束前不计入公开态）。
-func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p *Problem, lang, code string, contest *Contest) (int64, error) {
+// CreateSubmission 创建提交；contest/exam 非 nil 表示比赛或考试提交（隐藏期结束前不计入公开态）。
+func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p *Problem, lang, code string, contest *Contest, exam *Exam) (int64, error) {
 	sid, err := r.nextSeq(ctx, "submission")
 	if err != nil {
 		return 0, err
@@ -65,11 +67,16 @@ func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p 
 		"lang": lang, "code": code, "status": StatusPending,
 		"score": 0, "timeMs": 0, "memKb": 0, "createdAt": time.Now(),
 	}
-	if contest != nil {
+	switch {
+	case contest != nil:
 		doc["contestId"] = contest.ID
 		doc["contestTitle"] = contest.Title
 		doc["published"] = false
-	} else {
+	case exam != nil:
+		doc["examId"] = exam.ID
+		doc["examTitle"] = exam.Title
+		doc["published"] = false
+	default:
 		doc["contestId"] = 0
 		doc["published"] = true
 	}
@@ -159,25 +166,6 @@ func (r *Repo) ListSubmissions(ctx context.Context, uid, pid int64, page, pageSi
 		return nil, 0, err
 	}
 	return list, total, nil
-}
-
-// ListContestSubmissions 比赛的全部提交（榜单计算/组织者查看/选手赛后查看自己的）。
-func (r *Repo) ListContestSubmissions(ctx context.Context, contestID int64, uid int64) ([]*Submission, error) {
-	filter := bson.M{"contestId": contestID}
-	if uid > 0 {
-		filter["uid"] = uid
-	}
-	cursor, err := r.Submissions.Find(ctx, filter,
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-	list := make([]*Submission, 0)
-	if err := cursor.All(ctx, &list); err != nil {
-		return nil, err
-	}
-	return list, nil
 }
 
 // RankRow 排行榜一行。

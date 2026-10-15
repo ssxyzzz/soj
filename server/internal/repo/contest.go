@@ -16,11 +16,18 @@ const (
 	MaxHiddenDays      = 7
 )
 
-// Contest 比赛。ClassID=0 表示主题库比赛（root 创建、全体登录用户可参赛）；
-// 否则为班级比赛（建班人创建、仅本班成员参赛）。
+// 比赛与考试共用同一套规则实现，仅作用域与存储集合不同：
+// 比赛（contest）= 主题库级别，contests 集合，root 创建、全体登录用户参赛；
+// 考试（exam）= 班级级别，exams 集合，班级管理员创建、仅本班成员参赛。
+const (
+	KindContest = "contest"
+	KindExam    = "exam"
+)
+
+// Contest 比赛（主题库）。
 type Contest struct {
 	ID          int64            `bson:"_id"`
-	ClassID     int64            `bson:"classId"` // 0 = 主题库比赛
+	ClassID     int64            `bson:"classId"` // 恒为 0（历史字段，班级赛事已拆分为 Exam）
 	Title       string           `bson:"title"`
 	Intro       string           `bson:"intro"`
 	Start       time.Time        `bson:"start"`
@@ -31,6 +38,9 @@ type Contest struct {
 	Published   bool             `bson:"published"` // 隐藏期结束，提交/榜单已并入公开态
 	CreatedAt   time.Time        `bson:"createdAt"`
 }
+
+// Exam 班级考试：与比赛同构（规则见 DEVELOPMENT.md「比赛」节）。
+type Exam = Contest
 
 // ContestProblem 比赛引用的题目（Score 为该题满分，默认 100）。
 type ContestProblem struct {
@@ -56,6 +66,22 @@ func (c *Contest) HiddenEnd() time.Time {
 		return c.End
 	}
 	return c.HiddenUntil
+}
+
+// roundsCol 按类型返回比赛/考试的集合。
+func (r *Repo) roundsCol(kind string) *mongo.Collection {
+	if kind == KindExam {
+		return r.db.Collection("exams")
+	}
+	return r.db.Collection("contests")
+}
+
+// roundsIDField 比赛/考试提交在 submissions 中的引用字段名。
+func roundsIDField(kind string) string {
+	if kind == KindExam {
+		return "examId"
+	}
+	return "contestId"
 }
 
 func (r *Repo) CreateContest(ctx context.Context, c *Contest) error {
@@ -90,14 +116,10 @@ func (r *Repo) DeleteContest(ctx context.Context, id int64) error {
 	return nil
 }
 
-// ListContests 主题库比赛 + 指定班级的比赛（classIDs 为空则仅主题库比赛）。
-func (r *Repo) ListContests(ctx context.Context, classIDs []int64) ([]*Contest, error) {
-	classFilter := bson.A{int64(0)}
-	for _, id := range classIDs {
-		classFilter = append(classFilter, id)
-	}
+// ListContests 主题库比赛列表。
+func (r *Repo) ListContests(ctx context.Context) ([]*Contest, error) {
 	cursor, err := r.db.Collection("contests").Find(ctx,
-		bson.M{"classId": bson.M{"$in": classFilter}},
+		bson.M{"classId": 0},
 		options.Find().SetSort(bson.D{{Key: "start", Value: -1}}))
 	if err != nil {
 		return nil, err
@@ -110,9 +132,13 @@ func (r *Repo) ListContests(ctx context.Context, classIDs []int64) ([]*Contest, 
 	return list, nil
 }
 
-// ListUnpublishedContests 未发布的比赛（锁题判定用，量小）。
+// ListUnpublishedContests 未发布的主题库比赛（锁题判定用，量小）。
 func (r *Repo) ListUnpublishedContests(ctx context.Context) ([]*Contest, error) {
-	cursor, err := r.db.Collection("contests").Find(ctx, bson.M{"published": false})
+	return listRounds(ctx, r.db.Collection("contests"), bson.M{"published": false})
+}
+
+func listRounds(ctx context.Context, col *mongo.Collection, filter bson.M) ([]*Contest, error) {
+	cursor, err := col.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -124,36 +150,34 @@ func (r *Repo) ListUnpublishedContests(ctx context.Context) ([]*Contest, error) 
 	return list, nil
 }
 
-// PublishDueContests 把隐藏期已结束的比赛标记为已发布，并将其比赛提交并入公开态。
-// 返回本次发布的比赛数。由主循环周期性调用。
-func (r *Repo) PublishDueContests(ctx context.Context, now time.Time) (int, error) {
+// PublishDueRounds 把隐藏期已结束的比赛与考试标记为已发布，并将其提交并入公开态。
+// 返回本次发布的场数。由主循环周期性调用。
+func (r *Repo) PublishDueRounds(ctx context.Context, now time.Time) (int, error) {
 	published := 0
-	cursor, err := r.db.Collection("contests").Find(ctx, bson.M{"published": false})
-	if err != nil {
-		return 0, err
-	}
-	var contests []*Contest
-	if err = cursor.All(ctx, &contests); err != nil {
-		cursor.Close(ctx)
-		return 0, err
-	}
-	cursor.Close(ctx)
-
-	for _, c := range contests {
-		if now.Before(c.HiddenEnd()) {
-			continue
-		}
-		if _, err := r.db.Collection("contests").UpdateOne(ctx,
-			bson.M{"_id": c.ID, "published": false},
-			bson.M{"$set": bson.M{"published": true}}); err != nil {
+	for _, kind := range []string{KindContest, KindExam} {
+		col := r.roundsCol(kind)
+		idField := roundsIDField(kind)
+		var rounds []*Contest
+		var err error
+		if rounds, err = listRounds(ctx, col, bson.M{"published": false}); err != nil {
 			return published, err
 		}
-		if _, err := r.Submissions.UpdateMany(ctx,
-			bson.M{"contestId": c.ID},
-			bson.M{"$set": bson.M{"published": true}}); err != nil {
-			return published, err
+		for _, c := range rounds {
+			if now.Before(c.HiddenEnd()) {
+				continue
+			}
+			if _, err := col.UpdateOne(ctx,
+				bson.M{"_id": c.ID, "published": false},
+				bson.M{"$set": bson.M{"published": true}}); err != nil {
+				return published, err
+			}
+			if _, err := r.Submissions.UpdateMany(ctx,
+				bson.M{idField: c.ID},
+				bson.M{"$set": bson.M{"published": true}}); err != nil {
+				return published, err
+			}
+			published++
 		}
-		published++
 	}
 	return published, nil
 }
@@ -175,11 +199,39 @@ type LeaderRow struct {
 	Problems    map[int64]*LeaderCell
 }
 
-// ContestLeaderboard 计算比赛榜单（比赛规模小，内存计算足够）。
+// RoundSubmissions 某场比赛/考试的全部提交（榜单计算/组织者查看/选手赛后查看自己的）。
+func (r *Repo) RoundSubmissions(ctx context.Context, kind string, roundID int64, uid int64) ([]*Submission, error) {
+	filter := bson.M{roundsIDField(kind): roundID}
+	if uid > 0 {
+		filter["uid"] = uid
+	}
+	cursor, err := r.Submissions.Find(ctx, filter,
+		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	list := make([]*Submission, 0)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
+// ContestLeaderboard 计算比赛榜单（考试榜单走 ExamLeaderboard，同一实现）。
 // 排名规则：总分降序 → 最后得分提交时间早者靠前 → 并列。
 func (r *Repo) ContestLeaderboard(ctx context.Context, c *Contest) ([]*LeaderRow, error) {
+	return r.roundLeaderboard(ctx, KindContest, c.ID)
+}
+
+// ExamLeaderboard 计算考试榜单（规则与比赛一致）。
+func (r *Repo) ExamLeaderboard(ctx context.Context, e *Exam) ([]*LeaderRow, error) {
+	return r.roundLeaderboard(ctx, KindExam, e.ID)
+}
+
+func (r *Repo) roundLeaderboard(ctx context.Context, kind string, roundID int64) ([]*LeaderRow, error) {
 	cursor, err := r.Submissions.Find(ctx,
-		bson.M{"contestId": c.ID},
+		bson.M{roundsIDField(kind): roundID},
 		options.Find().SetProjection(bson.M{
 			"uid": 1, "uname": 1, "pid": 1, "score": 1, "judgedAt": 1,
 		}))

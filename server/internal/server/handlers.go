@@ -30,7 +30,7 @@ type Handlers struct {
 	limiter *rateLimiter
 
 	leaderMu    sync.Mutex
-	leaderCache map[int64]leaderEntry
+	leaderCache map[string]leaderEntry
 }
 
 // 统一响应格式: 成功 {"code":0,"data":...}，失败 {"code":1,"message":"..."}

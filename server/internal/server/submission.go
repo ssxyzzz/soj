@@ -71,10 +71,14 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		return
 	}
 	if lk != nil {
+		what := "比赛"
+		if lk.Kind == repo.KindExam {
+			what = "考试"
+		}
 		if lk.Phase == "running" {
-			fail(c, http.StatusBadRequest, "该题正在比赛中，请从比赛页面提交")
+			fail(c, http.StatusBadRequest, "该题正在"+what+"中，请从"+what+"页面提交")
 		} else {
-			fail(c, http.StatusBadRequest, "该题已被比赛锁定，暂不可提交")
+			fail(c, http.StatusBadRequest, "该题已被"+what+"锁定，暂不可提交")
 		}
 		return
 	}
@@ -89,7 +93,7 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		}
 	}
 
-	id, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, nil)
+	id, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, nil, nil)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "创建提交失败")
 		return
@@ -153,10 +157,18 @@ func (h *Handlers) GetSubmission(c *gin.Context) {
 			fail(c, http.StatusNotFound, "该提交来自隐藏期内的比赛")
 			return
 		}
-	} else if logged && !privileged {
+	}
+	if s.ExamID != 0 {
+		e, err := h.repo.GetExam(ctx, s.ExamID)
+		if err == nil && !e.Published && !(logged && (uid == e.CreatedBy || role == repo.RoleRoot)) {
+			fail(c, http.StatusNotFound, "该提交来自隐藏期内的考试")
+			return
+		}
+	}
+	if logged && !privileged {
 		lockMap, err := h.loadLockMap(ctx, uid, role)
 		if err == nil {
-			if lk := lockMap[s.ProblemID]; lk != nil && s.CreatedAt.Before(lk.Contest.Start) {
+			if lk := lockMap[s.ProblemID]; lk != nil && s.CreatedAt.Before(lk.Round.Start) {
 				masked = true // 赛前旧提交：锁定期内不回代码
 			}
 		}
@@ -181,9 +193,13 @@ func submissionJSON(s *repo.Submission, withCode bool) gin.H {
 		"error_info":    s.ErrorInfo,
 		"created_at":    s.CreatedAt,
 		"contest_id":    s.ContestID,
+		"exam_id":       s.ExamID,
 	}
 	if s.ContestTitle != "" {
 		h["contest_title"] = s.ContestTitle
+	}
+	if s.ExamTitle != "" {
+		h["exam_title"] = s.ExamTitle
 	}
 	if withCode {
 		h["code"] = s.Code

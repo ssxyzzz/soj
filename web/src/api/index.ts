@@ -4,15 +4,20 @@ import { ElMessage } from 'element-plus'
 import type {
   AdminUser,
   ApiResponse,
+  AssignmentDetail,
+  AssignmentListItem,
   ClassCard,
   ClassDetail,
   ContestDetail,
   ContestListItem,
   ContestMySubmission,
+  ExamDetail,
+  ExamListItem,
   LeaderRow,
   LoginResult,
   ProblemDetail,
   ProblemListResult,
+  ProgressRow,
   RankItem,
   Submission,
   SubmissionListResult,
@@ -100,15 +105,27 @@ export const classApi = {
     post<{ id: number; name: string; invite_code: string }>('/classes', { name, intro }),
   join: (id: number, code: string) => post<{ joined: boolean }>(`/classes/${id}/join`, { code }),
   leave: (id: number) => post<{ left: boolean }>(`/classes/${id}/leave`),
-  addProblem: (id: number, problemId: number, hidden: boolean) =>
-    post<{ added: number; hidden: boolean }>(`/classes/${id}/problems`, { problem_id: problemId, hidden }),
-  removeProblem: (id: number, pid: number) =>
-    post<{ removed: number }>(`/classes/${id}/problems/${pid}`),
   regenInvite: (id: number) => post<{ invite_code: string }>(`/classes/${id}/invite`),
   importMembers: (id: number, usernames: string) =>
     post<{ added: number; total: number }>(`/classes/${id}/members`, { usernames }),
   setMemberRole: (id: number, uid: number, role: string) =>
     post<{ updated: number; role: string }>(`/classes/${id}/members/${uid}/role`, { role }),
+  listAssignments: (id: number) =>
+    get<{ visible: boolean; list: AssignmentListItem[] }>(`/classes/${id}/assignments`),
+}
+
+// ---------- 作业（v0.4.x） ----------
+
+export const assignmentApi = {
+  create: (classId: number, title: string, intro: string) =>
+    post<{ id: number; title: string }>(`/classes/${classId}/assignments`, { title, intro }),
+  detail: (id: number) => get<AssignmentDetail>(`/assignments/${id}`),
+  remove: (id: number) => post<{ deleted: number }>(`/assignments/${id}`),
+  addProblem: (id: number, problemId: number) =>
+    post<{ added: number }>(`/assignments/${id}/problems`, { problem_id: problemId }),
+  removeProblem: (id: number, pid: number) =>
+    post<{ removed: number }>(`/assignments/${id}/problems/${pid}`),
+  progress: (id: number) => get<ProgressRow[]>(`/assignments/${id}/progress`),
 }
 
 export const adminApi = {
@@ -145,4 +162,29 @@ export const contestApi = {
   mySubmissions: (contestId: number) =>
     get<{ revealed: boolean; list: ContestMySubmission[] }>(`/contests/${contestId}/submissions/mine`),
   leaderboard: (contestId: number) => get<LeaderRow[]>(`/contests/${contestId}/leaderboard`),
+}
+
+// ---------- 考试（班级级赛事，v0.4.2） ----------
+
+export interface CreateExamPayload {
+  title: string
+  intro?: string
+  start: string
+  end: string
+  hidden_days?: number
+  problem_ids: number[]
+}
+
+export const examApi = {
+  listByClass: (classId: number) =>
+    get<{ visible: boolean; list: ExamListItem[] }>(`/classes/${classId}/exams`),
+  detail: (id: number) => get<ExamDetail>(`/exams/${id}`),
+  create: (classId: number, payload: CreateExamPayload) =>
+    post<{ id: number }>(`/classes/${classId}/exams`, { ...payload, class_id: classId }),
+  remove: (id: number) => post<{ deleted: number }>(`/exams/${id}`),
+  submit: (examId: number, pid: number, language: string, code: string) =>
+    post<{ id: number }>(`/exams/${examId}/problems/${pid}/submissions`, { language, code }),
+  mySubmissions: (examId: number) =>
+    get<{ revealed: boolean; list: ContestMySubmission[] }>(`/exams/${examId}/submissions/mine`),
+  leaderboard: (examId: number) => get<LeaderRow[]>(`/exams/${examId}/leaderboard`),
 }

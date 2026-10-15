@@ -98,7 +98,7 @@ onUnmounted(() => {
               <el-tag :type="contest.status === 'running' ? 'success' : contest.status === 'scheduled' ? 'warning' : 'info'" class="ml8">
                 {{ statusLabel }}
               </el-tag>
-              <el-tag v-if="contest.class_id === 0" size="small" class="ml8">主题库 · 全员</el-tag>
+              <el-tag size="small" class="ml8">主题库 · 全员</el-tag>
             </div>
             <el-button v-if="contest.deletable" size="small" type="danger" plain @click="remove">
               删除比赛
@@ -119,13 +119,6 @@ onUnmounted(() => {
             （赛后隐藏至 {{ new Date(contest.hidden_until).toLocaleString('zh-CN', { hour12: false }) }}）
           </span>
         </div>
-        <el-alert
-          v-if="contest.class_id !== 0 && !contest.participant && !userStore.token"
-          title="登录并加入对应班级后才能参加本场比赛"
-          type="info"
-          :closable="false"
-          class="ml8 mt8"
-        />
       </el-card>
 
       <el-card class="block">
@@ -163,18 +156,26 @@ onUnmounted(() => {
               :closable="false"
             />
             <el-table v-if="leaders.length" :data="leaders" class="mt8">
-              <el-table-column prop="rank" label="排名" width="80" />
-              <el-table-column prop="username" label="用户名" min-width="140" />
-              <el-table-column prop="nickname" label="昵称" min-width="120" />
-              <el-table-column label="各题得分">
+              <el-table-column prop="rank" label="排名" width="70" fixed />
+              <el-table-column prop="username" label="用户名" min-width="130" fixed />
+              <el-table-column prop="nickname" label="昵称" min-width="110" />
+              <el-table-column
+                v-for="cp in contest.problems"
+                :key="cp.id"
+                :label="'P' + cp.id"
+                width="100"
+                align="center"
+              >
                 <template #default="{ row }">
-                  <span v-for="cell in row.problems" :key="cell.pid" class="cell">
-                    P{{ cell.pid }}: {{ cell.score }}（{{ cell.tries }} 次）
-                  </span>
+                  <template v-for="cell in row.problems" :key="cell.pid">
+                    <span v-if="cell.pid === cp.id">
+                      {{ cell.score }} 分<span v-if="cell.tries"> / {{ cell.tries }} 次</span>
+                    </span>
+                  </template>
                 </template>
               </el-table-column>
-              <el-table-column prop="total" label="总分" width="90" />
-              <el-table-column label="最后得分提交" width="200">
+              <el-table-column prop="total" label="总分" width="90" fixed />
+              <el-table-column label="最后得分提交" width="190">
                 <template #default="{ row }">
                   {{ row.last_scoring_at ? new Date(row.last_scoring_at).toLocaleString('zh-CN', { hour12: false }) : '-' }}
                 </template>

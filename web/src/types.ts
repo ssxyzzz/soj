@@ -23,6 +23,8 @@ export interface ProblemListItem {
   hidden?: boolean
   locked?: boolean
   contest_id?: number
+  exam_id?: number
+  lock_kind?: 'contest' | 'exam'
   lock_phase?: string
 }
 
@@ -48,8 +50,11 @@ export interface ProblemDetail {
   hidden?: boolean
   can_set_hidden?: boolean
   locked?: boolean
+  lock_kind?: 'contest' | 'exam'
   contest_id?: number
   contest_title?: string
+  exam_id?: number
+  exam_title?: string
 }
 
 export interface Submission {
@@ -68,6 +73,8 @@ export interface Submission {
   created_at: string
   contest_id?: number
   contest_title?: string
+  exam_id?: number
+  exam_title?: string
 }
 
 export interface SubmissionListResult {
@@ -98,6 +105,48 @@ export interface ClassProblem {
   contest_id?: number
 }
 
+// ---------- 作业（班级题目清单，即时出分） ----------
+
+export interface AssignmentListItem {
+  id: number
+  title: string
+  intro: string
+  problem_count: number
+  created_at: string
+}
+
+export interface AssignmentProblem {
+  id: number
+  title: string
+  contest_id?: number
+  exam_id?: number
+}
+
+export interface AssignmentDetail {
+  id: number
+  class_id: number
+  title: string
+  intro: string
+  problems: AssignmentProblem[]
+  manageable: boolean
+}
+
+export interface ProgressCell {
+  pid: number
+  tries: number
+  best: number
+  solved: boolean
+}
+
+export interface ProgressRow {
+  uid: number
+  username: string
+  nickname: string
+  attempted: number
+  solved: number
+  problems: ProgressCell[]
+}
+
 export interface ClassMember {
   uid: number
   username: string
@@ -111,8 +160,6 @@ export interface ClassDetail {
   name: string
   intro: string
   owner_id: number
-  problem_count: number
-  problems: ClassProblem[]
   joined: boolean
   manageable: boolean
   invite_code?: string
@@ -131,8 +178,6 @@ export interface AdminUser {
 export interface ContestListItem {
   id: number
   title: string
-  class_id: number
-  class_name?: string
   status: 'scheduled' | 'running' | 'ended'
   start: string
   end: string
@@ -151,7 +196,6 @@ export interface ContestDetail {
   id: number
   title: string
   intro: string
-  class_id: number
   status: 'scheduled' | 'running' | 'ended'
   start: string
   end: string
@@ -162,6 +206,22 @@ export interface ContestDetail {
   deletable: boolean
   problems?: ContestProblem[]
 }
+
+// ---------- 考试（班级级赛事，v0.4.2） ----------
+
+export interface ExamListItem {
+  id: number
+  title: string
+  intro: string
+  status: 'scheduled' | 'running' | 'ended'
+  start: string
+  end: string
+  hidden_until?: string
+  problem_count: number
+  is_organizer: boolean
+}
+
+export type ExamDetail = ContestDetail & { class_id: number }
 
 export interface ContestMySubmission {
   id: number

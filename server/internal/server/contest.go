@@ -16,43 +16,68 @@ import (
 
 // ---------- 锁题评估 ----------
 
-// contestLock 对当前视角生效的题目锁。锁的传播范围跟比赛层级走：
-// 主题库比赛对 root 以外的所有人生效；班级比赛只对本班成员生效。
+// contestLock 对当前视角生效的题目锁。锁的传播范围跟赛事层级走：
+// 主题库比赛对 root 以外的所有人生效；班级考试只对本班成员生效。
 type contestLock struct {
-	Contest *repo.Contest
-	Phase   string // scheduled | running | hidden（已结束未发布）
-	Bank    bool   // 主题库比赛（隐藏题赛中临时解锁、全局指引）
+	Round *repo.Contest // 比赛与考试同构，Kind 区分
+	Phase string        // scheduled | running | hidden（已结束未发布）
+	Bank  bool          // 主题库比赛（隐藏题赛中临时解锁、全局指引）
+	Kind  string        // contest | exam
+	RefID int64         // 比赛/考试 ID（前端指引跳转用）
 }
 
-// loadLockMap 当前视角下各题目的锁。未发布比赛数量小，每次请求全量评估。
+// loadLockMap 当前视角下各题目的锁。未发布赛事数量小，每次请求全量评估。
 func (h *Handlers) loadLockMap(ctx context.Context, uid int64, role string) (map[int64]*contestLock, error) {
 	contests, err := h.repo.ListUnpublishedContests(ctx)
 	if err != nil {
 		return nil, err
 	}
+	exams, err := h.repo.ListUnpublishedExams(ctx)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	out := map[int64]*contestLock{}
+
+	apply := func(pid int64, lk *contestLock) {
+		old, ok := out[pid]
+		// 主题库比赛优先于班级考试
+		if !ok || (lk.Bank && !old.Bank) {
+			out[pid] = lk
+		}
+	}
+	phaseOf := func(start, end time.Time) string {
+		p := ""
+		switch {
+		case now.Before(start):
+			p = "scheduled"
+		case now.Before(end):
+			p = "running"
+		default:
+			p = "hidden"
+		}
+		return p
+	}
+
 	for _, ct := range contests {
-		phase := ct.Status(now)
-		if phase == "ended" {
-			phase = "hidden"
+		phase := phaseOf(ct.Start, ct.End)
+		if role == repo.RoleRoot {
+			continue // 主题库比赛对 root 不锁
 		}
-		var applies bool
-		if ct.ClassID == 0 {
-			applies = role != repo.RoleRoot
-		} else if uid > 0 {
-			applies, _ = h.repo.IsMember(ctx, ct.ClassID, uid)
+		for _, cp := range ct.Problems {
+			apply(cp.PID, &contestLock{Round: ct, Phase: phase, Bank: true, Kind: repo.KindContest, RefID: ct.ID})
 		}
-		if !applies {
+	}
+	for _, e := range exams {
+		if uid <= 0 {
 			continue
 		}
-		bank := ct.ClassID == 0
-		for _, cp := range ct.Problems {
-			old, ok := out[cp.PID]
-			// 主题库比赛优先于班级比赛
-			if !ok || (bank && !old.Bank) {
-				out[cp.PID] = &contestLock{Contest: ct, Phase: phase, Bank: bank}
-			}
+		if member, _ := h.repo.IsMember(ctx, e.ClassID, uid); !member {
+			continue
+		}
+		phase := phaseOf(e.Start, e.End)
+		for _, ep := range e.Problems {
+			apply(ep.PID, &contestLock{Round: e, Phase: phase, Bank: false, Kind: repo.KindExam, RefID: e.ID})
 		}
 	}
 	return out, nil
@@ -86,10 +111,10 @@ func (l *rateLimiter) allow(uid int64, limit int, now time.Time) bool {
 
 // ---------- 比赛 ----------
 
+// CreateContest 创建主题库比赛（仅 root；班级赛事走考试接口）。
 func (h *Handlers) CreateContest(c *gin.Context) {
 	uid, _, role, _ := currentUser(c)
 	var req struct {
-		ClassID    int64     `json:"class_id"`
 		Title      string    `json:"title" binding:"required"`
 		Intro      string    `json:"intro"`
 		Start      time.Time `json:"start" binding:"required"`
@@ -118,25 +143,12 @@ func (h *Handlers) CreateContest(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "赛后隐藏期最长 7 天")
 		return
 	}
-
-	ctx := c.Request.Context()
-	if req.ClassID == 0 {
-		if role != repo.RoleRoot {
-			fail(c, http.StatusForbidden, "仅 root 可创建主题库比赛")
-			return
-		}
-	} else {
-		cl, err := h.repo.GetClass(ctx, req.ClassID)
-		if repo.IsNotFound(err) {
-			fail(c, http.StatusNotFound, "班级不存在")
-			return
-		}
-		if err != nil || !h.classManageable(c, cl) {
-			fail(c, http.StatusForbidden, "仅班级管理员可创建班级比赛")
-			return
-		}
+	if role != repo.RoleRoot {
+		fail(c, http.StatusForbidden, "仅 root 可创建主题库比赛")
+		return
 	}
 
+	ctx := c.Request.Context()
 	seen := map[int64]bool{}
 	problems := make([]repo.ContestProblem, 0, len(req.ProblemIDs))
 	for _, pid := range req.ProblemIDs {
@@ -152,7 +164,6 @@ func (h *Handlers) CreateContest(c *gin.Context) {
 	}
 
 	ct := &repo.Contest{
-		ClassID:   req.ClassID,
 		Title:     req.Title,
 		Intro:     req.Intro,
 		Start:     req.Start,
@@ -170,13 +181,10 @@ func (h *Handlers) CreateContest(c *gin.Context) {
 	ok(c, gin.H{"id": ct.ID})
 }
 
+// ListContests 主题库比赛列表（班级赛事见 /classes/:id/exams）。
 func (h *Handlers) ListContests(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
-	var myClassIDs []int64
-	if logged {
-		myClassIDs, _ = h.repo.MyClassIDs(c.Request.Context(), uid)
-	}
-	list, err := h.repo.ListContests(c.Request.Context(), myClassIDs)
+	list, err := h.repo.ListContests(c.Request.Context())
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取比赛失败")
 		return
@@ -187,7 +195,6 @@ func (h *Handlers) ListContests(c *gin.Context) {
 		item := gin.H{
 			"id":            ct.ID,
 			"title":         ct.Title,
-			"class_id":      ct.ClassID,
 			"status":        ct.Status(now),
 			"start":         ct.Start,
 			"end":           ct.End,
@@ -196,11 +203,6 @@ func (h *Handlers) ListContests(c *gin.Context) {
 		}
 		if !ct.HiddenUntil.IsZero() {
 			item["hidden_until"] = ct.HiddenUntil
-		}
-		if ct.ClassID != 0 {
-			if cl, err := h.repo.GetClass(c.Request.Context(), ct.ClassID); err == nil {
-				item["class_name"] = cl.Name
-			}
 		}
 		items = append(items, item)
 	}
@@ -225,14 +227,7 @@ func (h *Handlers) ContestDetail(c *gin.Context) {
 
 	uid, _, role, logged := currentUser(c)
 	isOrganizer := logged && (uid == ct.CreatedBy || role == repo.RoleRoot)
-	participant := false
-	if logged {
-		if ct.ClassID == 0 {
-			participant = true
-		} else {
-			participant, _ = h.repo.IsMember(ctx, ct.ClassID, uid)
-		}
-	}
+	participant := logged // 主题库比赛面向全体登录用户
 	now := time.Now()
 	status := ct.Status(now)
 
@@ -240,7 +235,6 @@ func (h *Handlers) ContestDetail(c *gin.Context) {
 		"id":            ct.ID,
 		"title":         ct.Title,
 		"intro":         ct.Intro,
-		"class_id":      ct.ClassID,
 		"status":        status,
 		"start":         ct.Start,
 		"end":           ct.End,
@@ -325,12 +319,6 @@ func (h *Handlers) SubmitToContest(c *gin.Context) {
 		fail(c, http.StatusNotFound, "比赛不存在")
 		return
 	}
-	if ct.ClassID != 0 {
-		if member, _ := h.repo.IsMember(ctx, ct.ClassID, uid); !member {
-			fail(c, http.StatusForbidden, "该比赛仅限本班成员参赛")
-			return
-		}
-	}
 	if ct.Status(time.Now()) != "running" {
 		fail(c, http.StatusBadRequest, "比赛未开始或已结束，不能提交")
 		return
@@ -359,7 +347,7 @@ func (h *Handlers) SubmitToContest(c *gin.Context) {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}
-	sid, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, ct)
+	sid, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, ct, nil)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "创建提交失败")
 		return
@@ -392,7 +380,7 @@ func (h *Handlers) ContestMySubmissions(c *gin.Context) {
 	}
 	revealed := ct.Published || uid == ct.CreatedBy || role == repo.RoleRoot
 
-	subs, err := h.repo.ListContestSubmissions(ctx, ct.ID, uid)
+	subs, err := h.repo.RoundSubmissions(ctx, repo.KindContest, ct.ID, uid)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取提交失败")
 		return
@@ -429,7 +417,7 @@ func (h *Handlers) ContestLeaderboard(c *gin.Context) {
 	}
 
 	h.leaderMu.Lock()
-	entry, cached := h.leaderCache[ct.ID]
+	entry, cached := h.leaderCache["contest-"+strconv.FormatInt(ct.ID, 10)]
 	h.leaderMu.Unlock()
 	if !cached || (!ct.Published && time.Since(entry.at) > 30*time.Second) {
 		rows, err := h.repo.ContestLeaderboard(ctx, ct)
@@ -463,7 +451,7 @@ func (h *Handlers) ContestLeaderboard(c *gin.Context) {
 		}
 		entry = leaderEntry{at: time.Now(), published: ct.Published, rows: items}
 		h.leaderMu.Lock()
-		h.leaderCache[ct.ID] = entry
+		h.leaderCache["contest-"+strconv.FormatInt(ct.ID, 10)] = entry
 		h.leaderMu.Unlock()
 	}
 	ok(c, entry.rows)

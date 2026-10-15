@@ -7,7 +7,10 @@ import ClassesView from '@/views/ClassesView.vue'
 import ContestDetailView from '@/views/ContestDetailView.vue'
 import ContestProblemView from '@/views/ContestProblemView.vue'
 import ContestsView from '@/views/ContestsView.vue'
+import ExamDetailView from '@/views/ExamDetailView.vue'
+import ExamProblemView from '@/views/ExamProblemView.vue'
 import HomeView from '@/views/HomeView.vue'
+import AssignmentView from '@/views/AssignmentView.vue'
 import LoginView from '@/views/LoginView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import ProblemDetailView from '@/views/ProblemDetailView.vue'
@@ -69,12 +72,30 @@ const router = createRouter({
           meta: { title: '赛题' },
         },
         {
+          path: 'assignments/:id',
+          name: 'assignment-detail',
+          component: AssignmentView,
+          meta: { title: '作业' },
+        },
+        {
+          path: 'exams/:id',
+          name: 'exam-detail',
+          component: ExamDetailView,
+          meta: { title: '考试' },
+        },
+        {
+          path: 'exams/:id/problems/:pid',
+          name: 'exam-problem',
+          component: ExamProblemView,
+          meta: { title: '考题' },
+        },
+        {
           path: 'submissions',
           name: 'submissions',
           component: SubmissionListView,
           meta: { title: '提交记录' },
         },
-        { path: 'rank', name: 'rank', component: RankView, meta: { title: '排行榜' } },
+        { path: 'rank', name: 'rank', component: RankView, meta: { title: '排名' } },
         {
           path: 'admin',
           name: 'admin',

@@ -66,6 +66,9 @@ onUnmounted(() => {
             <el-tag v-if="row.contest_id" size="small" type="success" class="ml8">
               {{ row.contest_title || `比赛#${row.contest_id}` }}
             </el-tag>
+            <el-tag v-if="row.exam_id" size="small" type="success" class="ml8">
+              {{ row.exam_title || `考试#${row.exam_id}` }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="username" label="用户" width="140" />
