@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
+    "postinstall": "node -e \"require('fs').cpSync('node_modules/vditor/dist','public/vditor',{recursive:true})\"",
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview"
   },
@@ -14,6 +15,7 @@
     "axios": "^1.7.7",
     "element-plus": "^2.8.6",
     "pinia": "^2.2.6",
+    "vditor": "^4.0.0",
     "vue": "^3.5.13",
     "vue-router": "^4.4.5"
   },

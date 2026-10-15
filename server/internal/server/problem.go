@@ -148,16 +148,17 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	}
 
 	resp := gin.H{
-		"id":              p.ID,
-		"title":           p.Title,
-		"description":     p.Statement,
-		"time_limit_ms":   p.TimeLimitMS,
-		"memory_limit_kb": p.MemoryLimitKB,
-		"samples":         sampleItems,
-		"has_subtasks":    len(p.Subtasks) > 0,
-		"hidden":          p.Hidden,
-		"can_set_hidden":  role == repo.RoleRoot || (role == repo.RoleAdmin && p.CreatedBy == uid),
-		"can_view_others": canViewOthers, // 满分解锁后可在本页查看他人代码
+		"id":                 p.ID,
+		"title":              p.Title,
+		"description":        p.Statement,
+		"time_limit_ms":      p.TimeLimitMS,
+		"memory_limit_kb":    p.MemoryLimitKB,
+		"samples":            sampleItems,
+		"has_subtasks":       len(p.Subtasks) > 0,
+		"hidden":             p.Hidden,
+		"can_set_hidden":     role == repo.RoleRoot || (role == repo.RoleAdmin && p.CreatedBy == uid),
+		"can_edit_statement": role == repo.RoleRoot || (role == repo.RoleAdmin && p.CreatedBy == uid),
+		"can_view_others":    canViewOthers, // 满分解锁后可在本页查看他人代码
 	}
 	if lk != nil {
 		resp["locked"] = true
@@ -171,6 +172,37 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		}
 	}
 	ok(c, resp)
+}
+
+// SetProblemStatement 编辑题面（Markdown）。权限同隐藏设置：root 任意题；admin 仅自己导入的题。
+func (h *Handlers) SetProblemStatement(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Statement string `json:"statement" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "题面不能为空")
+		return
+	}
+	uid, _, role, _ := currentUser(c)
+	ctx := c.Request.Context()
+	p, err := h.repo.GetProblem(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if role != repo.RoleRoot && !(role == repo.RoleAdmin && p.CreatedBy == uid) {
+		fail(c, http.StatusForbidden, "只有 root 或题目导入者可以编辑题面")
+		return
+	}
+	if err := h.repo.SetProblemStatement(ctx, id, req.Statement); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"id": id})
 }
 
 // SetProblemHidden 设置主题库隐藏标记（root 任意题；admin 仅自己导入的题）。

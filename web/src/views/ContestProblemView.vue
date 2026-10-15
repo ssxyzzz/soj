@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 
 import { contestApi, problemApi } from '@/api'
 import { fmtMem, statusStyle } from '@/utils/format'
+import MdView from '@/components/MdView.vue'
 import type { ContestDetail, ContestMySubmission, ProblemDetail } from '@/types'
 
 const route = useRoute()
@@ -124,7 +125,7 @@ onUnmounted(() => {
             <span class="dim">{{ problem.time_limit_ms }} ms · {{ fmtMem(problem.memory_limit_kb) }}</span>
           </div>
         </template>
-        <div class="description">{{ problem.description }}</div>
+        <MdView :content="problem.description" />
         <el-table v-if="problem.samples.length" :data="problem.samples" class="mt8">
           <el-table-column label="输入">
             <template #default="{ row }"><pre class="mono">{{ row.input || '（空）' }}</pre></template>

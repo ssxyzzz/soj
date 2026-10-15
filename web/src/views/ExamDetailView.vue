@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { examApi } from '@/api'
+import MdEditor from '@/components/MdEditor.vue'
+import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import type { ExamDetail, LeaderRow } from '@/types'
 
@@ -12,6 +14,9 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const exam = ref<ExamDetail | null>(null)
+const showEditIntro = ref(false)
+const editIntro = ref('')
+const savingIntro = ref(false)
 const loading = ref(true)
 const tab = ref('problems')
 const leaders = ref<LeaderRow[]>([])
@@ -68,6 +73,28 @@ async function loadLeaders() {
   }
 }
 
+function openEditIntro() {
+  editIntro.value = exam.value?.intro ?? ''
+  showEditIntro.value = true
+}
+
+async function saveIntro() {
+  if (!exam.value) return
+  if (!editIntro.value.trim()) {
+    ElMessage.warning('考试说明不能为空')
+    return
+  }
+  savingIntro.value = true
+  try {
+    await examApi.setIntro(exam.value.id, editIntro.value)
+    exam.value.intro = editIntro.value
+    ElMessage.success('考试说明已保存')
+    showEditIntro.value = false
+  } finally {
+    savingIntro.value = false
+  }
+}
+
 async function remove() {
   if (!exam.value) return
   await examApi.remove(exam.value.id)
@@ -105,7 +132,7 @@ onUnmounted(() => {
             </el-button>
           </div>
         </template>
-        <p v-if="exam.intro" class="intro">{{ exam.intro }}</p>
+        <div v-if="exam.intro" class="intro"><MdView :content="exam.intro" /></div>
         <div class="meta">
           <span>
             {{ exam.status === 'scheduled' ? '开始倒计时：' : exam.status === 'running' ? '剩余时间：' : '' }}
@@ -127,6 +154,14 @@ onUnmounted(() => {
           class="ml8 mt8"
         />
       </el-card>
+
+      <el-dialog v-model="showEditIntro" title="编辑考试说明（Markdown / 所见即所得）" width="860" top="4vh">
+        <MdEditor v-model="editIntro" height="380px" />
+        <template #footer>
+          <el-button @click="showEditIntro = false">取消</el-button>
+          <el-button type="primary" :loading="savingIntro" @click="saveIntro">保存</el-button>
+        </template>
+      </el-dialog>
 
       <el-card class="block">
         <el-tabs v-model="tab">

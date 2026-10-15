@@ -87,6 +87,8 @@ export const problemApi = {
     get<SubmissionListResult>(`/problems/${id}/submissions`, { page, page_size: pageSize }),
   mySubmissions: (id: number, page: number, pageSize: number) =>
     get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
+  setStatement: (id: number, statement: string) =>
+    post<{ id: number }>(`/problems/${id}/statement`, { statement }),
 }
 
 export const submissionApi = {
@@ -139,9 +141,10 @@ export const adminApi = {
     post<{ id: number }>('/admin/users', { username, password, nickname, role }),
   updateUser: (id: number, patch: { role?: string; password?: string; nickname?: string }) =>
     post<{ updated: number }>(`/admin/users/${id}`, patch),
-  getSettings: () => get<{ rate_limit_per_minute: number }>('/admin/settings'),
-  updateSettings: (rateLimitPerMinute: number) =>
-    put<{ rate_limit_per_minute: number }>('/admin/settings', { rate_limit_per_minute: rateLimitPerMinute }),
+  getSettings: () =>
+    get<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings'),
+  updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string }) =>
+    put<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings', patch),
 }
 
 // ---------- 比赛（v0.4） ----------
@@ -191,4 +194,12 @@ export const examApi = {
   mySubmissions: (examId: number) =>
     get<{ revealed: boolean; list: ContestMySubmission[] }>(`/exams/${examId}/submissions/mine`),
   leaderboard: (examId: number) => get<LeaderRow[]>(`/exams/${examId}/leaderboard`),
+  setIntro: (examId: number, intro: string) =>
+    post<{ id: number }>(`/exams/${examId}/intro`, { intro }),
+}
+
+// ---------- 首页公告 ----------
+
+export const noticeApi = {
+  get: () => get<{ content: string }>('/notice'),
 }

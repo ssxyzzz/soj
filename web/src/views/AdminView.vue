@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
+import MdEditor from '@/components/MdEditor.vue'
 import type { AdminUser } from '@/types'
 
 const list = ref<AdminUser[]>([])
@@ -13,6 +14,8 @@ const loading = ref(false)
 
 const rateLimit = ref(3)
 const savingSettings = ref(false)
+const homeNotice = ref('')
+const savingNotice = ref(false)
 
 const showCreate = ref(false)
 const creating = ref(false)
@@ -33,15 +36,26 @@ async function loadSettings() {
   try {
     const s = await adminApi.getSettings()
     rateLimit.value = s.rate_limit_per_minute
+    homeNotice.value = s.home_notice
   } catch {
     // 设置加载失败不阻塞用户管理
+  }
+}
+
+async function saveNotice() {
+  savingNotice.value = true
+  try {
+    await adminApi.updateSettings({ home_notice: homeNotice.value })
+    ElMessage.success('公告已保存，首页即刻生效')
+  } finally {
+    savingNotice.value = false
   }
 }
 
 async function saveSettings() {
   savingSettings.value = true
   try {
-    await adminApi.updateSettings(rateLimit.value)
+    await adminApi.updateSettings({ rate_limit_per_minute: rateLimit.value })
     ElMessage.success('设置已保存')
   } finally {
     savingSettings.value = false
@@ -151,6 +165,14 @@ onMounted(() => {
       </el-form>
     </el-card>
 
+    <el-card class="block">
+      <template #header><span>首页公告（Markdown，留空则首页不展示）</span></template>
+      <MdEditor v-model="homeNotice" height="300px" />
+      <div class="notice-save">
+        <el-button type="primary" :loading="savingNotice" @click="saveNotice">保存公告</el-button>
+      </div>
+    </el-card>
+
     <el-dialog v-model="showCreate" title="新建用户" width="420">
       <el-form label-position="top">
         <el-form-item label="用户名" required>
@@ -187,6 +209,10 @@ onMounted(() => {
 
 .block {
   margin-top: 16px;
+}
+
+.notice-save {
+  margin-top: 12px;
 }
 
 .pager {

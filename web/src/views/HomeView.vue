@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import MdView from '@/components/MdView.vue'
 
-import { classApi } from '@/api'
+import { classApi, noticeApi } from '@/api'
 import type { ClassCard } from '@/types'
 
 const router = useRouter()
 const classes = ref<ClassCard[]>([])
+const notice = ref('')
 
 const features = [
   {
@@ -40,11 +42,22 @@ onMounted(async () => {
   } catch {
     // 班级加载失败不影响首页其他内容
   }
+  try {
+    notice.value = (await noticeApi.get()).content
+  } catch {
+    // 公告加载失败不影响首页其他内容
+  }
 })
 </script>
 
 <template>
   <div class="page">
+    <el-card v-if="notice" class="notice">
+      <template #header><span>📢 公告</span></template>
+      <h1 class="title">SOJ 在线判题系统</h1>
+      <MdView :content="notice" />
+    </el-card>
+
     <el-card class="hero">
       <h1 class="title">SOJ 在线判题系统</h1>
       <p class="subtitle">面向班级与社团的轻量 Online Judge：提交代码，沙箱判题，实时出分。</p>
@@ -91,6 +104,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.notice {
+  margin-bottom: 16px;
+}
+
 .hero {
   text-align: center;
   padding: 32px 0;

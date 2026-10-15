@@ -3,8 +3,11 @@
 package server
 
 import (
+	"context"
 	"log"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -20,8 +23,8 @@ type Deps struct {
 	Sandbox *sandbox.Client
 }
 
-// Run 启动 HTTP 服务（阻塞）。
-func Run(deps *Deps) {
+// Run 启动 HTTP 服务（阻塞直至 ctx 取消或监听失败）。
+func Run(ctx context.Context, deps *Deps) {
 	cfg := deps.Cfg
 	if os.Getenv("SOJ_DEBUG") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -58,6 +61,7 @@ func Run(deps *Deps) {
 		api.GET("/submissions/:id", AuthOptional(cfg), h.GetSubmission)
 
 		api.GET("/rank", h.Rank)
+		api.GET("/notice", h.GetNotice)
 
 		// 比赛
 		api.GET("/contests", AuthOptional(cfg), h.ListContests)
@@ -106,9 +110,11 @@ func Run(deps *Deps) {
 			authed.POST("/exams/:id/problems/:pid/submissions", h.SubmitToExam)
 			authed.GET("/exams/:id/submissions/mine", h.ExamMySubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
+			authed.PATCH("/exams/:id/intro", h.SetExamIntro)
 
 			// 题目隐藏（root 任意题；admin 仅自己导入的题，handler 内校验）
 			authed.PATCH("/problems/:id/hidden", RequireRole(repo.RoleAdmin, repo.RoleRoot), h.SetProblemHidden)
+			authed.PATCH("/problems/:id/statement", RequireRole(repo.RoleAdmin, repo.RoleRoot), h.SetProblemStatement)
 
 			// 管理端：仅 root
 			adminG := authed.Group("/admin", RequireRole(repo.RoleRoot))
@@ -126,7 +132,18 @@ func Run(deps *Deps) {
 	registerStatic(r)
 
 	log.Printf("[web] SOJ 启动: %s (判题并发 %d, 沙箱 %s)", cfg.Addr, cfg.JudgeWorkers, cfg.SandboxAddr)
-	if err := r.Run(cfg.Addr); err != nil {
-		log.Fatalf("[web] HTTP 服务退出: %v", err)
+
+	srv := &http.Server{Addr: cfg.Addr, Handler: r}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("[web] HTTP 服务异常退出: %v", err)
+		}
+	}()
+	<-ctx.Done()
+	log.Println("[web] 收到退出信号，关闭 HTTP 服务...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[web] 强制退出: %v", err)
 	}
 }

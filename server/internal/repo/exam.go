@@ -51,3 +51,16 @@ func (r *Repo) ListClassExams(ctx context.Context, classID int64) ([]*Exam, erro
 func (r *Repo) ListUnpublishedExams(ctx context.Context) ([]*Exam, error) {
 	return listRounds(ctx, r.db.Collection("exams"), bson.M{"published": false})
 }
+
+// SetExamIntro 更新考试说明（Markdown）。
+func (r *Repo) SetExamIntro(ctx context.Context, id int64, intro string) error {
+	res, err := r.db.Collection("exams").UpdateOne(ctx,
+		bson.M{"_id": id}, bson.M{"$set": bson.M{"intro": intro}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}

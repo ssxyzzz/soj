@@ -18,11 +18,15 @@ ps: ## 查看服务状态
 backup: ## 备份 MongoDB 与测试数据到 ./backups/
 	./scripts/backup.sh
 
-bin: ## 用容器编译独立二进制 server/bin/soj（本机无需装 Go/Node）
-	docker run --rm -v $(CURDIR)/web:/src -w /src -u "$$(id -u):$$(id -g)" -e HOME=/tmp node:22-alpine sh -c "npm install --no-audit --no-fund && npm run build"
-	rm -rf server/internal/webui/dist && cp -r web/dist server/internal/webui/dist
-	docker run --rm -v $(CURDIR)/server:/src -w /src -u "$$(id -u):$$(id -g)" -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -e GOPROXY=https://goproxy.cn,direct golang:1.26-alpine sh -c "CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o bin/soj ./cmd/soj"
-	@echo "==> 产物: server/bin/soj（前端已嵌入，单文件可执行）"
+bin: ## 编译前后端并产出 server/bin/soj（等价于 web-building + server-building）
+	./scripts/web-building.sh
+	./scripts/server-building.sh
+
+web-building: ## 只编译前端（产物 web/dist + 同步 embed 目录）
+	./scripts/web-building.sh
+
+server-building: ## 只编译后端（需先 web-building，产物 server/bin/soj）
+	./scripts/server-building.sh
 
 import: ## 导入题目目录: make import DIR=data/seed/1_A_Plus_B
 	cd server && go run ./cmd/soj -import $(DIR)

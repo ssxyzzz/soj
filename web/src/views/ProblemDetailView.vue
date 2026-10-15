@@ -6,6 +6,8 @@ import { ElMessage } from 'element-plus'
 import { problemApi, submissionApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
+import MdEditor from '@/components/MdEditor.vue'
+import MdView from '@/components/MdView.vue'
 import type { ProblemDetail, Submission } from '@/types'
 
 const route = useRoute()
@@ -26,6 +28,9 @@ const others = ref<Submission[]>([])
 const othersTotal = ref(0)
 const othersPage = ref(1)
 const expandedRows = ref<number[]>([])
+const showEditStatement = ref(false)
+const editStatement = ref('')
+const savingStatement = ref(false)
 
 const languageOptions = [
   { value: 'cpp', label: 'C++ 14' },
@@ -84,6 +89,28 @@ async function loadOthers(p = 1) {
     othersPage.value = p
   } catch {
     others.value = []
+  }
+}
+
+function openEditStatement() {
+  editStatement.value = problem.value?.description ?? ''
+  showEditStatement.value = true
+}
+
+async function saveStatement() {
+  if (!problem.value) return
+  if (!editStatement.value.trim()) {
+    ElMessage.warning('题面不能为空')
+    return
+  }
+  savingStatement.value = true
+  try {
+    await problemApi.setStatement(problem.value.id, editStatement.value)
+    problem.value.description = editStatement.value
+    ElMessage.success('题面已保存')
+    showEditStatement.value = false
+  } finally {
+    savingStatement.value = false
   }
 }
 
@@ -181,12 +208,21 @@ onUnmounted(stopPolling)
               >
                 {{ problem.hidden ? '取消隐藏' : '设为隐藏' }}
               </el-button>
+              <el-button
+                v-if="problem.can_edit_statement"
+                size="small"
+                type="primary"
+                plain
+                @click="openEditStatement"
+              >
+                编辑题面
+              </el-button>
               <el-tag size="small" type="info">{{ problem.time_limit_ms }} ms</el-tag>
               <el-tag size="small" type="info">{{ fmtMem(problem.memory_limit_kb) }}</el-tag>
             </div>
           </div>
         </template>
-        <div class="description">{{ problem.description }}</div>
+        <MdView :content="problem.description" />
       </el-card>
 
       <el-card v-if="problem.samples.length" class="block">
@@ -294,6 +330,14 @@ onUnmounted(stopPolling)
         </div>
         <el-empty v-if="!others.length" description="还没有人提交过" :image-size="50" />
       </el-card>
+
+      <el-dialog v-model="showEditStatement" title="编辑题面（Markdown / 所见即所得）" width="860" top="4vh">
+        <MdEditor v-model="editStatement" height="480px" />
+        <template #footer>
+          <el-button @click="showEditStatement = false">取消</el-button>
+          <el-button type="primary" :loading="savingStatement" @click="saveStatement">保存</el-button>
+        </template>
+      </el-dialog>
 
       <el-card v-if="latest" class="block">
         <template #header><span>判题结果（提交 #{{ latest.id }}）</span></template>

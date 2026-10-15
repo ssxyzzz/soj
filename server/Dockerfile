@@ -4,7 +4,7 @@ WORKDIR /web
 COPY --from=web ./package.json ./package-lock.json* ./
 RUN npm install --no-audit --no-fund
 COPY --from=web . .
-RUN npm run build
+RUN npm run build && cp -r node_modules/vditor/dist dist/vditor
 
 # 后端构建阶段：前端产物嵌入二进制
 FROM golang:1.26-alpine AS build

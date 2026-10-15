@@ -5,6 +5,7 @@ backups/
 # 前端
 node_modules/
 web/dist/
+web/public/vditor/
 *.local
 
 # Go

@@ -111,3 +111,17 @@ func (r *Repo) SetProblemHidden(ctx context.Context, pid int64, hidden bool) err
 	}
 	return nil
 }
+
+// SetProblemStatement 更新题面（Markdown，权限由调用方校验）。
+func (r *Repo) SetProblemStatement(ctx context.Context, pid int64, statement string) error {
+	res, err := r.Problems.UpdateOne(ctx,
+		bson.M{"_id": pid},
+		bson.M{"$set": bson.M{"statement": statement, "updatedAt": time.Now()}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}

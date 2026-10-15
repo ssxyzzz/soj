@@ -49,6 +49,7 @@ export interface ProblemDetail {
   has_subtasks?: boolean
   hidden?: boolean
   can_set_hidden?: boolean
+  can_edit_statement?: boolean
   can_view_others?: boolean
   locked?: boolean
   lock_kind?: 'contest' | 'exam'

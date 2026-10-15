@@ -194,6 +194,37 @@ func (h *Handlers) ExamDetail(c *gin.Context) {
 	ok(c, resp)
 }
 
+// SetExamIntro 编辑考试说明（Markdown，组织者/root）。
+func (h *Handlers) SetExamIntro(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Intro string `json:"intro" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "考试说明不能为空")
+		return
+	}
+	uid, _, role, _ := currentUser(c)
+	ctx := c.Request.Context()
+	e, err := h.repo.GetExam(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "考试不存在")
+		return
+	}
+	if !(uid == e.CreatedBy || role == repo.RoleRoot) {
+		fail(c, http.StatusForbidden, "只有考试创建者可以编辑说明")
+		return
+	}
+	if err := h.repo.SetExamIntro(ctx, id, req.Intro); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"id": id})
+}
+
 // DeleteExam 删除未开始的考试。
 func (h *Handlers) DeleteExam(c *gin.Context) {
 	id, okID := parseID(c, "id")

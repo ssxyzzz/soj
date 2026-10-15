@@ -123,33 +123,58 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 
 // ---- 系统设置（root） ----
 
-// GetSettings 读取系统设置（当前：default 角色每分钟提交上限）。
+// GetSettings 读取系统设置（root）。
 func (h *Handlers) GetSettings(c *gin.Context) {
 	s, err := h.repo.GetSystemSettings(c.Request.Context())
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取设置失败")
 		return
 	}
-	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute})
+	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute, "home_notice": s.HomeNotice})
+}
+
+// GetNotice 首页公告（公开，首页免登录展示）。
+func (h *Handlers) GetNotice(c *gin.Context) {
+	s, err := h.repo.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取公告失败")
+		return
+	}
+	ok(c, gin.H{"content": s.HomeNotice})
 }
 
 // UpdateSettings 更新系统设置。
 func (h *Handlers) UpdateSettings(c *gin.Context) {
 	var req struct {
-		RateLimitPerMinute *int `json:"rate_limit_per_minute" binding:"required"`
+		RateLimitPerMinute *int    `json:"rate_limit_per_minute"`
+		HomeNotice         *string `json:"home_notice"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	if *req.RateLimitPerMinute < 1 || *req.RateLimitPerMinute > 60 {
-		fail(c, http.StatusBadRequest, "每分钟提交上限需在 1-60 之间")
+	s, err := h.repo.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取设置失败")
 		return
 	}
-	if err := h.repo.UpdateSystemSettings(c.Request.Context(),
-		&repo.SystemSettings{RateLimitPerMinute: *req.RateLimitPerMinute}); err != nil {
+	if req.RateLimitPerMinute != nil {
+		if *req.RateLimitPerMinute < 1 || *req.RateLimitPerMinute > 60 {
+			fail(c, http.StatusBadRequest, "每分钟提交上限需在 1-60 之间")
+			return
+		}
+		s.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	if req.HomeNotice != nil {
+		if len(*req.HomeNotice) > 64<<10 {
+			fail(c, http.StatusBadRequest, "公告过长")
+			return
+		}
+		s.HomeNotice = *req.HomeNotice
+	}
+	if err := h.repo.UpdateSystemSettings(c.Request.Context(), s); err != nil {
 		fail(c, http.StatusInternalServerError, "更新失败")
 		return
 	}
-	ok(c, gin.H{"rate_limit_per_minute": *req.RateLimitPerMinute})
+	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute, "home_notice": s.HomeNotice})
 }

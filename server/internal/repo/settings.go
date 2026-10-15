@@ -9,7 +9,8 @@ import (
 
 // SystemSettings 系统设置（settings 集合，_id="system"）。
 type SystemSettings struct {
-	RateLimitPerMinute int `bson:"rateLimitPerMinute"` // default 角色每分钟提交上限
+	RateLimitPerMinute int    `bson:"rateLimitPerMinute"` // default 角色每分钟提交上限
+	HomeNotice         string `bson:"homeNotice"`         // 首页公告（Markdown，空 = 不展示）
 }
 
 const DefaultRateLimitPerMinute = 3
@@ -39,7 +40,10 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 	}
 	_, err := col.UpdateOne(ctx,
 		bson.M{"_id": "system"},
-		bson.M{"$set": bson.M{"rateLimitPerMinute": s.RateLimitPerMinute}},
+		bson.M{"$set": bson.M{
+			"rateLimitPerMinute": s.RateLimitPerMinute,
+			"homeNotice":         s.HomeNotice,
+		}},
 	)
 	return err
 }

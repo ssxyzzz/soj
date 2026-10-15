@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { contestApi } from '@/api'
+import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import type { ContestDetail, LeaderRow } from '@/types'
 
@@ -105,7 +106,7 @@ onUnmounted(() => {
             </el-button>
           </div>
         </template>
-        <p v-if="contest.intro" class="intro">{{ contest.intro }}</p>
+        <div v-if="contest.intro" class="intro"><MdView :content="contest.intro" /></div>
         <div class="meta">
           <span>
             {{ contest.status === 'scheduled' ? '开始倒计时：' : contest.status === 'running' ? '剩余时间：' : '' }}

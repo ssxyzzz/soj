@@ -88,7 +88,7 @@ func main() {
 		<-ctx.Done()
 		return
 	}
-	server.Run(&server.Deps{Cfg: cfg, Repo: r, Sandbox: sb})
+	server.Run(ctx, &server.Deps{Cfg: cfg, Repo: r, Sandbox: sb})
 }
 
 func hostname() string {
