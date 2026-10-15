@@ -2,7 +2,7 @@
 
 面向班级与社团的轻量级 Online Judge：一个 Go 程序 + MongoDB + go-judge 沙箱，三个容器就是一个完整的 OJ。
 支持班级作业（即时出分）、班级考试（OI 赛制）、主题库比赛、解题排名与完整的班级权限体系。
-设计决策与迭代记录见 [DEVELOPMENT.md](DEVELOPMENT.md)。
+设计决策与迭代记录见 [plan.md](plan.md)（本地文档，不入库）。
 
 | 模块 | 技术 |
 | --- | --- |
@@ -51,10 +51,24 @@ make down      # 停止（数据保留）
 ```bash
 docker compose up -d mongo sandbox   # 只起基础设施
 
-cd web && npm install && npm run dev        # 前端 :5173（/api 代理到 :8080）
+cd web && npm install && npm run dev        # 前端 :5173，vite 热更新（改代码即时生效）
 cd server && go run ./cmd/soj               # 主程序 :8080（连本机 mongo/sandbox）
 cd server && go run ./cmd/soj --judge-only  # 或：纯判题进程
 ```
+
+开发前端时的推荐姿势：起好基础设施后开两个终端——`npm run dev`（热更新）+ `go run ./cmd/soj`，改前端代码保存即生效，无需任何构建。
+
+## 手动编译（本机无需 Node/Go）
+
+两个脚本在容器内完成编译，带实时读秒计时、日志落盘（失败自动展示）、编译后自动重启网站：
+
+```bash
+./scripts/web-building.sh      # 编译前端 + 自动重启网站（一条命令看到线上效果）
+./scripts/server-building.sh   # 编译后端 + 自动重启网站（需先跑过前者）
+make bin                       # 等价于上面两步连做
+```
+
+产物：`server/bin/soj`（静态单文件，前端已嵌入），可直接拷到任何 Linux 服务器运行。
 
 ## 出一道题
 
@@ -132,5 +146,5 @@ make backup   # 产出 backups/<时间>/mongo.archive.gz + testdata.tar.gz
 
 ## 路线图
 
-v0.4.2 ✅（班级作业、班级考试）→ 第 2 批 代码可见性 → 第 3 批 富文本 → 第 4 批 题目管理/题解/Hydro 导入 → 标签（构思中）。
-细节与设计决策见 [DEVELOPMENT.md](DEVELOPMENT.md)。
+v0.4.2 ✅（班级作业、班级考试）→ v0.4.3 ✅（代码可见性）→ v0.4.4 ✅（富文本 Vditor）→ 第 4 批 题目管理/题解/Hydro 导入 → 标签（构思中）。
+细节与设计决策见 [plan.md](plan.md)（本地文档，不入库）。

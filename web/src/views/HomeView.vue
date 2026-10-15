@@ -53,8 +53,7 @@ onMounted(async () => {
 <template>
   <div class="page">
     <el-card v-if="notice" class="notice">
-      <template #header><span>📢 公告</span></template>
-      <h1 class="title">SOJ 在线判题系统</h1>
+      <h1 class="title">📢 公告</h1>
       <MdView :content="notice" />
     </el-card>
 
