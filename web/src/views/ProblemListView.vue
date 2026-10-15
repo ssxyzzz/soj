@@ -41,13 +41,26 @@ onMounted(load)
         v-loading="loading"
         :data="list"
         style="cursor: pointer"
-        @row-click="(row: ProblemListItem) => router.push(`/problems/${row.id}`)"
+        @row-click="(row: ProblemListItem) => row.locked && row.contest_id ? router.push(`/contests/${row.contest_id}`) : router.push(`/problems/${row.id}`)"
       >
         <el-table-column prop="id" label="ID" width="100" />
-        <el-table-column prop="title" label="题目" min-width="320" />
-        <el-table-column label="操作" width="120">
+        <el-table-column label="题目" min-width="320">
           <template #default="{ row }">
-            <el-link type="primary" @click.stop="router.push(`/problems/${row.id}`)">进入题目</el-link>
+            {{ row.title }}
+            <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏</el-tag>
+            <el-tag v-if="row.locked" size="small" type="warning" class="ml8">比赛中</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="140">
+          <template #default="{ row }">
+            <el-link
+              v-if="row.locked && row.contest_id"
+              type="warning"
+              @click.stop="router.push(`/contests/${row.contest_id}`)"
+            >
+              前往比赛
+            </el-link>
+            <el-link v-else type="primary" @click.stop="router.push(`/problems/${row.id}`)">进入题目</el-link>
           </template>
         </el-table-column>
       </el-table>
@@ -70,5 +83,9 @@ onMounted(load)
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.ml8 {
+  margin-left: 8px;
 }
 </style>

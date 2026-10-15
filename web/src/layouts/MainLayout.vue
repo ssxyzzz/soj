@@ -15,6 +15,9 @@ function onCommand(command: string) {
     userStore.logout()
     router.push('/login')
   }
+  if (command === 'admin') {
+    router.push('/admin')
+  }
 }
 </script>
 
@@ -26,6 +29,8 @@ function onCommand(command: string) {
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
           <el-menu-item index="/problems">题库</el-menu-item>
+          <el-menu-item index="/contests">比赛</el-menu-item>
+          <el-menu-item index="/classes">班级</el-menu-item>
           <el-menu-item index="/submissions">提交记录</el-menu-item>
           <el-menu-item index="/rank">排行榜</el-menu-item>
         </el-menu>
@@ -33,6 +38,7 @@ function onCommand(command: string) {
           <span class="username">{{ userStore.nickname || '已登录' }}</span>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item v-if="userStore.role === 'root'" command="admin">管理后台</el-dropdown-item>
               <el-dropdown-item command="logout">退出登录</el-dropdown-item>
             </el-dropdown-menu>
           </template>
@@ -43,7 +49,7 @@ function onCommand(command: string) {
     <el-main class="main">
       <router-view />
     </el-main>
-    <el-footer class="footer">SOJ · Gin + Vue 3 + go-judge 在线判题系统</el-footer>
+    <el-footer class="footer">SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统</el-footer>
   </el-container>
 </template>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -32,8 +32,12 @@ const codeTemplates: Record<string, string> = {
   python3: 'a, b = map(int, input().split())\nprint(a + b)\n',
 }
 
+const lockedRunning = computed(() => !!problem.value?.locked)
+const canSubmit = computed(() => !!userStore.token && !lockedRunning.value)
+const canSetHidden = computed(() => !!problem.value?.can_set_hidden)
+
 watch(language, (lang) => {
-  code.value = codeTemplates[lang] ?? ''
+  code.value = codeTemplates[lang] ?? code.value
 })
 
 async function load() {
@@ -45,6 +49,14 @@ async function load() {
   } finally {
     loading.value = false
   }
+}
+
+async function toggleHidden() {
+  if (!problem.value) return
+  const target = !problem.value.hidden
+  await problemApi.setHidden(problem.value.id, target)
+  problem.value.hidden = target
+  ElMessage.success(target ? '已设为主题库隐藏（default 不可见）' : '已取消隐藏')
 }
 
 async function submit() {
@@ -101,14 +113,42 @@ onUnmounted(stopPolling)
 <template>
   <div v-loading="loading" class="page">
     <template v-if="problem">
+      <el-alert
+        v-if="problem.locked && problem.contest_id"
+        title="该题正在比赛中"
+        type="warning"
+        :closable="false"
+        class="mb8"
+      >
+        <template #default>
+          <div class="lock-bar">
+            <span>比赛期间只能从比赛页面提交（{{ problem.contest_title ?? '' }}）</span>
+            <el-button type="warning" size="small" @click="router.push(`/contests/${problem!.contest_id}`)">
+              前往比赛
+            </el-button>
+          </div>
+        </template>
+      </el-alert>
+
       <el-card>
         <template #header>
           <div class="head">
-            <span class="title">#{{ problem.id }} {{ problem.title }}</span>
-            <span class="limits">
+            <div class="title-wrap">
+              <span class="title">#{{ problem.id }} {{ problem.title }}</span>
+              <el-tag v-if="problem.hidden" size="small" type="danger" class="ml8">主题库隐藏</el-tag>
+            </div>
+            <div class="head-right">
+              <el-button
+                v-if="canSetHidden"
+                size="small"
+                :type="problem.hidden ? 'warning' : 'default'"
+                @click="toggleHidden"
+              >
+                {{ problem.hidden ? '取消隐藏' : '设为隐藏' }}
+              </el-button>
               <el-tag size="small" type="info">{{ problem.time_limit_ms }} ms</el-tag>
               <el-tag size="small" type="info">{{ fmtMem(problem.memory_limit_kb) }}</el-tag>
-            </span>
+            </div>
           </div>
         </template>
         <div class="description">{{ problem.description }}</div>
@@ -134,14 +174,11 @@ onUnmounted(stopPolling)
         <template #header><span>提交代码</span></template>
         <div class="submit-bar">
           <el-select v-model="language" style="width: 160px">
-            <el-option
-              v-for="opt in languageOptions"
-              :key="opt.value"
-              :value="opt.value"
-              :label="opt.label"
-            />
+            <el-option v-for="opt in languageOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
           </el-select>
-          <el-button type="primary" :loading="submitting" @click="submit">提交</el-button>
+          <el-button type="primary" :disabled="!canSubmit" :loading="submitting" @click="submit">
+            {{ lockedRunning ? '比赛中，请从比赛页提交' : '提交' }}
+          </el-button>
         </div>
         <el-input
           v-model="code"
@@ -172,19 +209,41 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
+.mb8 {
+  margin-bottom: 8px;
+}
+
+.lock-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
 .head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+}
+
+.title-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .title {
   font-weight: 600;
 }
 
-.limits {
-  display: flex;
-  gap: 8px;
+.ml8 {
+  margin-left: 8px;
 }
 
 .description {

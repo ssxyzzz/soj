@@ -2,7 +2,11 @@
 //
 // 与沙箱的交互分两步：
 //  1. 编译请求：源码经 stdin 交给编译器，产物通过 copyOutCached 缓存为 fileId；
-//  2. 运行请求：每个测试点一次，通过 copyIn(fileId) 复用编译产物，测完删除。
+//  2. 运行请求：每个测试点一次，通过 copyIn(fileId) 复用，测完删除。
+//
+// 任务来源是循环用 findOneAndUpdate 从数据库原子领取；
+// 测试数据通过 testdata.Provider 按需逐点读取。
+// 给分：无子任务配置时单点等分（首个失败即终止）；配置子任务时组内全过才得分。
 package judge
 
 import (
@@ -13,11 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
-
 	"soj/internal/lang"
-	"soj/internal/model"
+	"soj/internal/repo"
 	"soj/internal/sandbox"
+	"soj/internal/testdata"
 )
 
 const (
@@ -25,144 +28,250 @@ const (
 	compileMemoryLimit = 1 << 30 // 1GiB
 	maxStdout          = 64 << 20
 	maxStderr          = 1 << 20
+	pollInterval       = time.Second
 )
 
+// Judger 组合判题所需依赖，可挂在 Web 进程内或独立进程运行。
 type Judger struct {
-	Sandbox *sandbox.Client
-	Redis   *redis.Client
+	Repo     *repo.Repo
+	Sandbox  *sandbox.Client
+	Provider testdata.Provider
+	Name     string // 判题进程标识，写入提交便于排查
 }
 
-type verdict struct {
-	status   string
-	timeMS   int
-	memoryKB int
-	score    int
-	info     string
+// Pool 启动 workers 个判题循环，直到 ctx 取消。
+func (j *Judger) Pool(ctx context.Context, workers int) {
+	if workers < 1 {
+		workers = 1
+	}
+	for i := 0; i < workers; i++ {
+		go j.loop(ctx, i)
+	}
 }
 
-// Judge 处理一条提交（作为 RabbitMQ 消费回调被调用）。
-func (j *Judger) Judge(ctx context.Context, submissionID int64) {
-	sub, err := model.GetSubmission(ctx, submissionID)
-	if err != nil {
-		log.Printf("[judge] 获取提交 #%d 失败: %v", submissionID, err)
-		return
+func (j *Judger) loop(ctx context.Context, worker int) {
+	name := j.Name + "-" + strconv.Itoa(worker)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		sub, err := j.Repo.ClaimSubmission(ctx, name)
+		if err != nil {
+			log.Printf("[judge] 领取任务失败(%s): %v", name, err)
+			sleepCtx(ctx, pollInterval)
+			continue
+		}
+		if sub == nil {
+			sleepCtx(ctx, pollInterval)
+			continue
+		}
+		j.runOneSafely(ctx, sub)
 	}
-	// 只判 Pending 状态，消息重复投递时直接跳过
-	if sub.Status != model.StatusPending {
-		return
-	}
-	if err := model.UpdateSubmissionStatus(ctx, sub.ID, model.StatusJudging); err != nil {
-		log.Printf("[judge] 更新提交 #%d 状态失败: %v", sub.ID, err)
-		return
-	}
+}
 
-	v := j.judge(ctx, sub)
+// runOneSafely 单份提交的判题互相隔离：任何 panic 只影响当前提交。
+func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[judge] 提交 #%d 判题 panic: %v", sub.ID, r)
+			_ = j.Repo.FinishSubmission(ctx, sub.ID, repo.StatusSystemError, 0, 0, 0,
+				"判题器内部错误", nil)
+		}
+	}()
 
-	if err := model.FinishSubmission(ctx, sub.ID, v.status, v.timeMS, v.memoryKB, v.score, v.info); err != nil {
+	log.Printf("[judge] 开始判题 #%d uid=%d pid=%d lang=%s", sub.ID, sub.UID, sub.ProblemID, sub.Language)
+	status, timeMS, memKB, score, info, detail := j.evaluate(ctx, sub)
+	if err := j.Repo.FinishSubmission(ctx, sub.ID, status, timeMS, memKB, score, info, detail); err != nil {
 		log.Printf("[judge] 回写提交 #%d 结果失败: %v", sub.ID, err)
 	}
-	log.Printf("[judge] 提交 #%d uid=%d pid=%d lang=%s => %s (%dms / %dKB)",
-		sub.ID, sub.UserID, sub.ProblemID, sub.Language, v.status, v.timeMS, v.memoryKB)
-
-	if v.status == model.StatusAccepted {
-		j.updateRank(ctx, sub.UserID, sub.ProblemID)
-	}
+	log.Printf("[judge] 提交 #%d => %s (%dms / %dKB / %d分)", sub.ID, status, timeMS, memKB, score)
 }
 
-// updateRank 用 Redis zset 维护解题排行榜；set 记录用户已过的题，避免重复计分。
-func (j *Judger) updateRank(ctx context.Context, userID, problemID int64) {
-	acKey := fmt.Sprintf("soj:ac:%d", userID)
-	added, err := j.Redis.SAdd(ctx, acKey, problemID).Result()
-	if err != nil {
-		log.Printf("[judge] 更新解题集合失败 uid=%d: %v", userID, err)
-		return
-	}
-	if added > 0 {
-		if _, err := j.Redis.ZIncrBy(ctx, model.RankKey, 1, strconv.FormatInt(userID, 10)).Result(); err != nil {
-			log.Printf("[judge] 更新排行榜失败 uid=%d: %v", userID, err)
-		}
-	}
-}
-
-func (j *Judger) judge(ctx context.Context, sub *model.Submission) (v verdict) {
+// evaluate 完整评测一份提交，按题目配置选择计分方式。
+func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	language, ok := lang.Languages[sub.Language]
 	if !ok {
-		return verdict{status: model.StatusSystemError, info: "不支持的语言: " + sub.Language}
+		return repo.StatusSystemError, 0, 0, 0, "不支持的语言: " + sub.Language, nil
 	}
-	problem, err := model.GetProblem(ctx, sub.ProblemID)
+	problem, err := j.Repo.GetProblem(ctx, sub.ProblemID)
 	if err != nil {
-		return verdict{status: model.StatusSystemError, info: "题目不存在或读取失败"}
+		return repo.StatusSystemError, 0, 0, 0, "题目不存在或读取失败", nil
 	}
-	cases, err := model.ListAllCases(ctx, sub.ProblemID)
-	if err != nil || len(cases) == 0 {
-		return verdict{status: model.StatusSystemError, info: "题目没有测试数据"}
+	if len(problem.Cases) == 0 {
+		return repo.StatusSystemError, 0, 0, 0, "题目没有测试数据", nil
 	}
 
 	var fileID string
 	if language.NeedCompile {
-		id, cv, err := j.compile(ctx, language, sub.Code)
+		id, compileStatus, compileInfo, err := j.compile(ctx, language, sub.Code)
 		if err != nil {
-			return verdict{status: model.StatusSystemError, info: "沙箱调用失败: " + err.Error()}
+			return repo.StatusSystemError, 0, 0, 0, "沙箱调用失败: " + err.Error(), nil
 		}
-		if cv.status != "" {
-			return cv
+		if compileStatus != "" {
+			return compileStatus, 0, 0, 0, compileInfo, nil
 		}
 		fileID = id
 		defer j.releaseBinary(fileID)
 	}
 
-	maxTimeMS, maxMemKB := 0, 0
-	for i, tc := range cases {
-		res, err := j.runOne(ctx, language, fileID, sub.Code, tc.Input, problem)
-		if err != nil {
-			return verdict{status: model.StatusSystemError, info: "沙箱调用失败: " + err.Error()}
-		}
-		if t := int(res.Time / int64(time.Millisecond)); t > maxTimeMS {
-			maxTimeMS = t
-		}
-		if m := int(res.Memory / 1024); m > maxMemKB {
-			maxMemKB = m
-		}
-
-		fail := func(status, reason string) verdict {
-			return verdict{
-				status:   status,
-				timeMS:   maxTimeMS,
-				memoryKB: maxMemKB,
-				score:    i * 100 / len(cases),
-				info:     fmt.Sprintf("第 %d 个测试点: %s", i+1, reason),
-			}
-		}
-
-		switch res.Status {
-		case "Accepted":
-			if normalizeOutput(res.Stdout()) != normalizeOutput(tc.Output) {
-				return fail(model.StatusWrongAnswer, "输出与答案不一致")
-			}
-		case "Time Limit Exceeded":
-			return fail(model.StatusTLE, "超出时间限制")
-		case "Memory Limit Exceeded":
-			return fail(model.StatusMLE, "超出内存限制")
-		case "Non Zero Exit Status", "Signalled":
-			return fail(model.StatusRE, fmt.Sprintf("退出状态 %d, %s", res.ExitStatus, truncate(res.Stderr(), 512)))
-		case "Output Limit Exceeded":
-			return fail(model.StatusRE, "输出超过限制")
-		default:
-			return fail(model.StatusSystemError, "沙箱状态异常: "+res.Status)
-		}
+	if len(problem.Subtasks) > 0 {
+		return j.evaluateSubtasks(ctx, language, fileID, sub.Code, problem)
 	}
-	return verdict{status: model.StatusAccepted, timeMS: maxTimeMS, memoryKB: maxMemKB, score: 100}
+	return j.evaluatePoints(ctx, language, fileID, sub.Code, problem)
 }
 
-// compile 编译并缓存产物；返回的 verdict.status 非空表示编译失败（编译错误）。
-func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (string, verdict, error) {
+// evalState 评测过程中的累计状态。
+type evalState struct {
+	maxTimeMS int
+	maxMemKB  int
+	detail    []*repo.CaseResult
+}
+
+func (s *evalState) observe(res *sandbox.Result) (timeMS, memKB int) {
+	timeMS = int(res.Time / int64(time.Millisecond))
+	memKB = int(res.Memory / 1024)
+	if timeMS > s.maxTimeMS {
+		s.maxTimeMS = timeMS
+	}
+	if memKB > s.maxMemKB {
+		s.maxMemKB = memKB
+	}
+	return timeMS, memKB
+}
+
+// caseVerdict 把沙箱单点结果归一为 (点位状态缩写, 终止状态, 原因)。
+// 终止状态非空表示该点导致整份提交按此状态失败（单点模式用）。
+func caseVerdict(res *sandbox.Result, ans string) (caseStatus, finalStatus, reason string) {
+	switch res.Status {
+	case "Accepted":
+		if normalizeOutput(res.Stdout()) != normalizeOutput(ans) {
+			return "WA", repo.StatusWrongAnswer, "输出与答案不一致"
+		}
+		return "AC", "", ""
+	case "Time Limit Exceeded":
+		return "TLE", repo.StatusTLE, "超出时间限制"
+	case "Memory Limit Exceeded":
+		return "MLE", repo.StatusMLE, "超出内存限制"
+	case "Nonzero Exit Status", "Non Zero Exit Status", "Signalled": // 两种拼写均兼容（实测为 Nonzero）
+		return "RE", repo.StatusRE,
+			fmt.Sprintf("退出状态 %d, %s", res.ExitStatus, truncate(res.Stderr(), 512))
+	case "Output Limit Exceeded":
+		return "OLE", repo.StatusRE, "输出超过限制"
+	default:
+		return "SE", repo.StatusSystemError, "沙箱状态异常: " + res.Status
+	}
+}
+
+// evaluatePoints 单点等分模式：每点 100/n 分，首个失败即终止（历史行为）。
+func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+	st := &evalState{}
+	for i, tc := range problem.Cases {
+		res, err := j.runOne(ctx, language, fileID, code, tc, problem)
+		if err != nil {
+			return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
+				"沙箱调用失败: " + err.Error(), st.detail
+		}
+		t, m := st.observe(res)
+		caseStatus, finalStatus, reason := "", "", ""
+		if res.Status == "Accepted" {
+			ans, err := testdata.ReadAll(j.Provider, problem.ID, tc.AnsName)
+			if err != nil {
+				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
+					"读取答案文件失败: " + err.Error(), st.detail
+			}
+			caseStatus, finalStatus, reason = caseVerdict(res, string(ans))
+		} else {
+			caseStatus, finalStatus, reason = caseVerdict(res, "")
+		}
+		if caseStatus != "" {
+			st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m})
+		}
+		if finalStatus != "" {
+			return finalStatus, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
+				fmt.Sprintf("第 %d 个测试点: %s", i+1, reason), st.detail
+		}
+	}
+	return repo.StatusAccepted, st.maxTimeMS, st.maxMemKB, 100, "", st.detail
+}
+
+// evaluateSubtasks 子任务模式：组内测试点全过才得该组分；组内失败跳过该组剩余点继续下一组。
+// 总分 100 判 Accepted；否则以第一个失败点的状态作为整份提交状态（保留部分分）。
+func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+	byIndex := map[int]repo.CaseMeta{}
+	for _, tc := range problem.Cases {
+		byIndex[tc.Index] = tc
+	}
+	st := &evalState{}
+	total := 0
+	firstFailStatus, firstFailReason := "", ""
+
+	for _, subtask := range problem.Subtasks {
+		passed := true
+		for _, caseIdx := range subtask.Cases {
+			tc, ok := byIndex[caseIdx]
+			if !ok {
+				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+					"子任务配置引用了不存在的测试点", st.detail
+			}
+			res, err := j.runOne(ctx, language, fileID, code, tc, problem)
+			if err != nil {
+				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+					"沙箱调用失败: " + err.Error(), st.detail
+			}
+			t, m := st.observe(res)
+			caseStatus, finalStatus, reason := "", "", ""
+			if res.Status == "Accepted" {
+				ans, err := testdata.ReadAll(j.Provider, problem.ID, tc.AnsName)
+				if err != nil {
+					return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+						"读取答案文件失败: " + err.Error(), st.detail
+				}
+				caseStatus, finalStatus, reason = caseVerdict(res, string(ans))
+			} else {
+				caseStatus, finalStatus, reason = caseVerdict(res, "")
+			}
+			if caseStatus != "" {
+				st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m})
+			}
+			if finalStatus != "" {
+				passed = false
+				if firstFailStatus == "" {
+					firstFailStatus, firstFailReason = finalStatus,
+						fmt.Sprintf("子任务(测试点 %d): %s", tc.Index, reason)
+				}
+				break // 该组剩余测试点跳过
+			}
+		}
+		if passed {
+			total += subtask.Score
+		}
+	}
+
+	if total == 100 {
+		return repo.StatusAccepted, st.maxTimeMS, st.maxMemKB, 100, "", st.detail
+	}
+	if firstFailStatus == "" {
+		firstFailStatus, firstFailReason = repo.StatusWrongAnswer, "未通过全部子任务"
+	}
+	return firstFailStatus, st.maxTimeMS, st.maxMemKB, total, firstFailReason, st.detail
+}
+
+// partialScore 已通过的测试点数占比（单点等分模式）。
+func partialScore(passed, total int) int {
+	return passed * 100 / total
+}
+
+// compile 编译并缓存产物；返回的 status 非空表示编译失败。
+func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (fileID, status, info string, err error) {
 	cmd := sandbox.Cmd{
 		Args: l.CompileArgs,
 		Env:  []string{"PATH=/usr/local/bin:/usr/bin:/bin"},
 		Files: []sandbox.File{
-			{Content: code},                 // stdin：源码
-			{Name: "stdout", Max: 64 << 10}, // 管道收集
-			{Name: "stderr", Max: 256 << 10},
+			sandbox.Stdin(code),            // stdin：源码
+			sandbox.Pipe("stdout", 64<<10), // 管道收集
+			sandbox.Pipe("stderr", 256<<10),
 		},
 		CPULimit:      compileCPULimit,
 		MemoryLimit:   compileMemoryLimit,
@@ -172,27 +281,31 @@ func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (st
 	}
 	results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
 	if err != nil || len(results) == 0 {
-		return "", verdict{}, err
+		return "", "", "", err
 	}
 	r := results[0]
 	if r.Status != "Accepted" {
-		return "", verdict{status: model.StatusCompileError, info: "编译进程异常终止: " + r.Status}, nil
+		return "", repo.StatusCompileError, "编译进程异常终止: " + r.Status, nil
 	}
 	if id := r.FileIDs["main"]; id != "" {
-		return id, verdict{}, nil
+		return id, "", "", nil
 	}
-	return "", verdict{status: model.StatusCompileError, info: truncate(r.Stderr(), 8192)}, nil
+	return "", repo.StatusCompileError, truncate(r.Stderr(), 8192), nil
 }
 
-func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code, input string, p *model.Problem) (*sandbox.Result, error) {
+func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code string, tc repo.CaseMeta, p *repo.Problem) (*sandbox.Result, error) {
+	input, err := testdata.ReadAll(j.Provider, p.ID, tc.InName)
+	if err != nil {
+		return nil, fmt.Errorf("读取输入文件: %w", err)
+	}
 	cpuLimit := int64(p.TimeLimitMS) * int64(time.Millisecond)
 	cmd := sandbox.Cmd{
 		Args: l.RunArgs,
 		Env:  []string{"PATH=/usr/local/bin:/usr/bin:/bin"},
 		Files: []sandbox.File{
-			{Content: input},
-			{Name: "stdout", Max: maxStdout},
-			{Name: "stderr", Max: maxStderr},
+			sandbox.Stdin(string(input)),
+			sandbox.Pipe("stdout", maxStdout),
+			sandbox.Pipe("stderr", maxStderr),
 		},
 		CPULimit:    cpuLimit,
 		ClockLimit:  cpuLimit * 3, // 墙钟上限，防止 sleep 绕过 CPU 限制
@@ -201,9 +314,9 @@ func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code, inp
 		CopyOut:     []string{"stdout", "stderr"},
 	}
 	if l.NeedCompile {
-		cmd.CopyIn = map[string]sandbox.File{"main": {FileID: fileID}}
+		cmd.CopyIn = map[string]sandbox.CopyFile{"main": {FileID: fileID}}
 	} else {
-		cmd.CopyIn = map[string]sandbox.File{l.SourceFile: {Content: code}}
+		cmd.CopyIn = map[string]sandbox.CopyFile{l.SourceFile: {Content: code}}
 	}
 	results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
 	if err != nil || len(results) == 0 {
@@ -217,6 +330,13 @@ func (j *Judger) releaseBinary(fileID string) {
 	defer cancel()
 	if err := j.Sandbox.DeleteFile(ctx, fileID); err != nil {
 		log.Printf("[judge] 清理编译产物失败: %v", err)
+	}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) {
+	select {
+	case <-ctx.Done():
+	case <-time.After(d):
 	}
 }
 

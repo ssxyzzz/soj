@@ -1,5 +1,6 @@
 # 环境与部署
 .env
+backups/
 
 # 前端
 node_modules/
@@ -11,6 +12,14 @@ server/bin/
 *.test
 *.out
 
+# 前端 embed 产物（构建流程生成，.gitkeep 保留）
+server/internal/webui/dist/*
+!server/internal/webui/dist/.gitkeep
+
+# 本地运行时产生的测试数据（正式数据在卷/服务器上）
+/data/testdata/
+
 # 日志与系统文件
 *.log
 .DS_Store
+.zcode/

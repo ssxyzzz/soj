@@ -63,6 +63,9 @@ onUnmounted(() => {
             <el-link type="primary" @click="router.push(`/problems/${row.problem_id}`)">
               #{{ row.problem_id }} {{ row.problem_title }}
             </el-link>
+            <el-tag v-if="row.contest_id" size="small" type="success" class="ml8">
+              {{ row.contest_title || `比赛#${row.contest_id}` }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="username" label="用户" width="140" />
@@ -96,6 +99,10 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.ml8 {
+  margin-left: 8px;
 }
 
 .pager {

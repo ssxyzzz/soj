@@ -53,6 +53,24 @@ func AuthOptional(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
+// RequireRole 校验当前登录用户的全局角色（操作类权限查全局角色，见 DEVELOPMENT.md）。
+func RequireRole(roles ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		_, _, role, ok := currentUser(c)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录"})
+			return
+		}
+		for _, r := range roles {
+			if role == r {
+				c.Next()
+				return
+			}
+		}
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 1, "message": "权限不足"})
+	}
+}
+
 // currentUser 取出 AuthRequired/AuthOptional 写入的用户信息；未登录时第四个返回值为 false。
 func currentUser(c *gin.Context) (uid int64, username, role string, ok bool) {
 	v, exists := c.Get("uid")

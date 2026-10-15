@@ -1,6 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import MainLayout from '@/layouts/MainLayout.vue'
+import AdminView from '@/views/AdminView.vue'
+import ClassDetailView from '@/views/ClassDetailView.vue'
+import ClassesView from '@/views/ClassesView.vue'
+import ContestDetailView from '@/views/ContestDetailView.vue'
+import ContestProblemView from '@/views/ContestProblemView.vue'
+import ContestsView from '@/views/ContestsView.vue'
 import HomeView from '@/views/HomeView.vue'
 import LoginView from '@/views/LoginView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
@@ -13,6 +19,7 @@ declare module 'vue-router' {
   interface RouteMeta {
     title?: string
     requiresAuth?: boolean
+    requiresAdmin?: boolean
   }
 }
 
@@ -32,12 +39,48 @@ const router = createRouter({
           meta: { title: '题目' },
         },
         {
+          path: 'classes',
+          name: 'classes',
+          component: ClassesView,
+          meta: { title: '班级' },
+        },
+        {
+          path: 'classes/:id',
+          name: 'class-detail',
+          component: ClassDetailView,
+          meta: { title: '班级' },
+        },
+        {
+          path: 'contests',
+          name: 'contests',
+          component: ContestsView,
+          meta: { title: '比赛' },
+        },
+        {
+          path: 'contests/:id',
+          name: 'contest-detail',
+          component: ContestDetailView,
+          meta: { title: '比赛' },
+        },
+        {
+          path: 'contests/:id/problems/:pid',
+          name: 'contest-problem',
+          component: ContestProblemView,
+          meta: { title: '赛题' },
+        },
+        {
           path: 'submissions',
           name: 'submissions',
           component: SubmissionListView,
           meta: { title: '提交记录' },
         },
         { path: 'rank', name: 'rank', component: RankView, meta: { title: '排行榜' } },
+        {
+          path: 'admin',
+          name: 'admin',
+          component: AdminView,
+          meta: { title: '管理', requiresAdmin: true },
+        },
       ],
     },
     { path: '/login', name: 'login', component: LoginView, meta: { title: '登录' } },
@@ -51,6 +94,9 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  if (to.meta.requiresAdmin && localStorage.getItem('soj_role') !== 'root') {
+    return { path: '/' }
+  }
   if (to.meta.requiresAuth && !localStorage.getItem('soj_token')) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }

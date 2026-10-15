@@ -1,118 +1,60 @@
 name: soj
 
 services:
-  mysql:
-    image: mysql:8.0
+  mongo:
+    image: mongo:7
     restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-soj}
-      MYSQL_USER: ${MYSQL_USER:-soj}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-soj123}
+    # 单节点副本集：既是"一个 MongoDB"，又解锁事务能力（见 DEVELOPMENT.md 4.2）
+    command: ["--replSet", "rs0", "--bind_ip_all"]
     volumes:
-      - mysql-data:/var/lib/mysql
-      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+      - mongo-data:/data/db
     ports:
-      - "3306:3306" # 本地开发时供宿主机连接，生产环境建议移除
+      - "27017:27017" # 本地开发时供宿主机连接，上云建议移除
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      # 首次健康检查时自动完成副本集初始化
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try{rs.status().ok===1}catch(e){rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok===1}"]
       interval: 5s
-      timeout: 3s
+      timeout: 10s
       retries: 30
+      start_period: 20s
 
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    ports:
-      - "6379:6379" # 本地开发时供宿主机连接，生产环境建议移除
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-
-  rabbitmq:
-    image: rabbitmq:3-management
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-soj}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-soj123}
-    ports:
-      - "5672:5672" # AMQP
-      - "15672:15672" # 管理控制台 http://localhost:15672
-    volumes:
-      - rabbit-data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-
-  # go-judge 判题沙箱：https://github.com/criyle/go-judge
-  # 沙箱会 bind-mount 镜像自身的 /usr 等目录，编译器装在 deploy/sandbox/Dockerfile 里；
-  # 依赖 cgroup 等内核能力做资源限制，本地开发直接使用特权模式
+  # go-judge 判题沙箱：依赖 cgroup 等内核能力做资源限制，使用特权模式；
+  # 沙箱会 bind-mount 镜像自身的 /usr，编译器装在镜像里（deploy/sandbox/Dockerfile）
   sandbox:
     build: ./deploy/sandbox
     restart: unless-stopped
     privileged: true
     shm_size: 256m
     ports:
-      - "5050:5050" # 本地开发时供宿主机连接，生产环境建议移除
+      - "5050:5050" # 本地开发时供宿主机连接，上云建议移除
 
-  # Web API 服务（Gin）
-  server:
+  # SOJ 主程序：前端页面 + API + 内置判题线程池，单容器单进程
+  soj:
     build:
       context: ./server
-      args:
-        GOPROXY: https://goproxy.cn,direct
+      additional_contexts:
+        web: ./web
     restart: unless-stopped
     environment:
       SOJ_ADDR: ":8080"
-      SOJ_MYSQL_DSN: "${MYSQL_USER:-soj}:${MYSQL_PASSWORD:-soj123}@tcp(mysql:3306)/${MYSQL_DATABASE:-soj}?charset=utf8mb4&parseTime=true&loc=Local"
-      SOJ_REDIS_ADDR: "redis:6379"
-      SOJ_RABBIT_URL: "amqp://${RABBITMQ_DEFAULT_USER:-soj}:${RABBITMQ_DEFAULT_PASS:-soj123}@rabbitmq:5672/"
+      SOJ_MONGO_URI: "mongodb://mongo:27017/?replicaSet=rs0"
+      SOJ_MONGO_DB: soj
+      SOJ_DATA_DIR: /data/testdata
+      SOJ_SEED_DIR: /data/seed
       SOJ_JWT_SECRET: ${SOJ_JWT_SECRET:-soj-dev-secret-change-me}
-    ports:
-      - "8080:8080"
-    depends_on:
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-
-  # 判题 worker：消费 RabbitMQ 队列，调用 go-judge 沙箱
-  judge:
-    build:
-      context: ./server
-      args:
-        GOPROXY: https://goproxy.cn,direct
-    entrypoint: ["/app/judge"]
-    restart: unless-stopped
-    environment:
-      SOJ_MYSQL_DSN: "${MYSQL_USER:-soj}:${MYSQL_PASSWORD:-soj123}@tcp(mysql:3306)/${MYSQL_DATABASE:-soj}?charset=utf8mb4&parseTime=true&loc=Local"
-      SOJ_REDIS_ADDR: "redis:6379"
-      SOJ_RABBIT_URL: "amqp://${RABBITMQ_DEFAULT_USER:-soj}:${RABBITMQ_DEFAULT_PASS:-soj123}@rabbitmq:5672/"
+      SOJ_JUDGE_WORKERS: "2"
       SOJ_SANDBOX_ADDR: "http://sandbox:5050"
-      SOJ_JUDGE_WORKERS: "4"
+    ports:
+      - "80:8080" # 站点入口 http://localhost（容器内仍是 8080，主机侧只暴露 80）
+    volumes:
+      - testdata:/data/testdata
+      - ./data/seed:/data/seed:ro
     depends_on:
-      mysql:
-        condition: service_healthy
-      rabbitmq:
+      mongo:
         condition: service_healthy
       sandbox:
         condition: service_started
 
-  # 前端静态资源 + Nginx 反向代理（/ -> Vue 构建产物，/api -> server）
-  web:
-    build: ./web
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - server
-
 volumes:
-  mysql-data:
-  rabbit-data:
+  mongo-data:
+  testdata:

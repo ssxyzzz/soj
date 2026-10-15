@@ -8,30 +8,26 @@ import (
 )
 
 type Config struct {
-	Addr          string // HTTP 监听地址
-	MySQLDSN      string
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
-	RabbitURL     string
-	RabbitQueue   string // 判题队列名
-	SandboxAddr   string // go-judge 沙箱地址
-	JWTSecret     string
-	JudgeWorkers  int // 判题并发数
+	Addr         string // HTTP 监听地址（同时托管前端页面与 API）
+	MongoURI     string
+	MongoDB      string
+	DataDir      string // 测试数据根目录 /data/testdata
+	SeedDir      string // 启动时自动导入的种子题目目录（可为空）
+	SandboxAddr  string // go-judge 沙箱地址
+	JWTSecret    string
+	JudgeWorkers int // 判题并发数
 }
 
 func Load() *Config {
 	return &Config{
-		Addr:          getEnv("SOJ_ADDR", ":8080"),
-		MySQLDSN:      getEnv("SOJ_MYSQL_DSN", "soj:soj123@tcp(127.0.0.1:3306)/soj?charset=utf8mb4&parseTime=true&loc=Local"),
-		RedisAddr:     getEnv("SOJ_REDIS_ADDR", "127.0.0.1:6379"),
-		RedisPassword: getEnv("SOJ_REDIS_PASSWORD", ""),
-		RedisDB:       getEnvInt("SOJ_REDIS_DB", 0),
-		RabbitURL:     getEnv("SOJ_RABBIT_URL", "amqp://soj:soj123@127.0.0.1:5672/"),
-		RabbitQueue:   getEnv("SOJ_QUEUE", "soj.submissions"),
-		SandboxAddr:   getEnv("SOJ_SANDBOX_ADDR", "http://127.0.0.1:5050"),
-		JWTSecret:     getEnv("SOJ_JWT_SECRET", "soj-dev-secret"),
-		JudgeWorkers:  getEnvInt("SOJ_JUDGE_WORKERS", 4),
+		Addr:         getEnv("SOJ_ADDR", ":8080"),
+		MongoURI:     getEnv("SOJ_MONGO_URI", "mongodb://127.0.0.1:27017"),
+		MongoDB:      getEnv("SOJ_MONGO_DB", "soj"),
+		DataDir:      getEnv("SOJ_DATA_DIR", "./data/testdata"),
+		SeedDir:      getEnv("SOJ_SEED_DIR", ""),
+		SandboxAddr:  getEnv("SOJ_SANDBOX_ADDR", "http://127.0.0.1:5050"),
+		JWTSecret:    getEnv("SOJ_JWT_SECRET", "soj-dev-secret"),
+		JudgeWorkers: getEnvInt("SOJ_JUDGE_WORKERS", 2),
 	}
 }
 

@@ -1,0 +1,234 @@
+// Package repo 是 MongoDB 数据访问层：连接管理、计数器、索引与启动引导。
+package repo
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
+)
+
+// Repo 聚合所有集合的访问入口。
+type Repo struct {
+	cli         *mongo.Client
+	db          *mongo.Database
+	Users       *mongo.Collection
+	Problems    *mongo.Collection
+	Submissions *mongo.Collection
+	Counters    *mongo.Collection
+}
+
+// Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
+func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
+	var cli *mongo.Client
+	var err error
+	for i := 0; i < 30; i++ {
+		cli, err = mongo.Connect(options.Client().ApplyURI(uri))
+		if err == nil {
+			pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			err = cli.Ping(pingCtx, nil)
+			cancel()
+			if err == nil {
+				break
+			}
+		}
+		log.Printf("等待 MongoDB 就绪: %v", err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("连接 MongoDB 失败: %w", err)
+	}
+	db := cli.Database(dbName)
+	return &Repo{
+		cli:         cli,
+		db:          db,
+		Users:       db.Collection("users"),
+		Problems:    db.Collection("problems"),
+		Submissions: db.Collection("submissions"),
+		Counters:    db.Collection("counters"),
+	}, nil
+}
+
+func (r *Repo) Close(ctx context.Context) error { return r.cli.Disconnect(ctx) }
+
+// Ping 健康检查用。
+func (r *Repo) Ping(ctx context.Context) error { return r.cli.Ping(ctx, nil) }
+
+// Bootstrap 创建索引、初始化 admin 账号、把上次异常退出遗留的 Judging 重置为 Pending。
+// 幂等，每次启动都执行。
+func (r *Repo) Bootstrap(ctx context.Context) error {
+	_, err := r.Submissions.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "_id", Value: 1}}},
+		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "_id", Value: -1}}},
+		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "_id", Value: -1}}},
+		{Keys: bson.D{{Key: "contestId", Value: 1}, {Key: "uid", Value: 1}}},
+	})
+	if err != nil {
+		return err
+	}
+	_, err = r.Users.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "uname", Value: 1}},
+		Options: options.Index().SetUnique(true),
+	})
+	if err != nil {
+		return err
+	}
+
+	// 初始管理员：users 为空时创建 admin / admin123（root 角色）
+	if n, err := r.Users.CountDocuments(ctx, bson.M{}); err != nil {
+		return err
+	} else if n == 0 {
+		uid, err := r.CreateUserWithPassword(ctx, "admin", "admin123", "管理员", RoleRoot)
+		if err != nil {
+			return err
+		}
+		_ = uid
+		log.Printf("[boot] 已创建初始管理员: admin / admin123（请尽快修改密码）")
+	}
+
+	// 一次性数据迁移（角色体系、班级引用结构等），meta.migrations 记录完成标记
+	if err := r.runMigrations(ctx); err != nil {
+		return err
+	}
+
+	// 遗留的 Judging（进程被杀时没判完）重新排队
+	res, err := r.Submissions.UpdateMany(ctx,
+		bson.M{"status": "Judging"},
+		bson.M{"$set": bson.M{"status": "Pending"}, "$unset": bson.M{"judge": "", "claimedAt": ""}})
+	if err == nil && res.ModifiedCount > 0 {
+		log.Printf("[boot] 已把 %d 条遗留 Judging 提交重新排队", res.ModifiedCount)
+	}
+	return err
+}
+
+// runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
+func (r *Repo) runMigrations(ctx context.Context) error {
+	meta := r.db.Collection("meta")
+	var done bson.M
+	err := meta.FindOne(ctx, bson.M{"_id": "migrations"}).Decode(&done)
+	if err != nil && !IsNotFound(err) {
+		return err
+	}
+	flagDone := func(k string) bool {
+		b, _ := done[k].(bool)
+		return b
+	}
+	setFlag := func(k string) error {
+		if _, err := meta.InsertOne(ctx, bson.M{"_id": "migrations"}); err != nil && !mongo.IsDuplicateKeyError(err) {
+			return err
+		}
+		_, err := meta.UpdateOne(ctx, bson.M{"_id": "migrations"}, bson.M{"$set": bson.M{k: true}})
+		return err
+	}
+
+	if !flagDone("rolesV2") {
+		if err := r.migrateRoles(ctx); err != nil {
+			return err
+		}
+		if err := setFlag("rolesV2"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 角色体系已迁移到 default/admin/root")
+	}
+	if !flagDone("classRefsV1") {
+		if err := r.migrateClassRefs(ctx); err != nil {
+			return err
+		}
+		if err := setFlag("classRefsV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 班级题目引用结构已迁移（增加 hidden 标记）")
+	}
+	if !flagDone("memberRolesV1") {
+		if err := r.migrateMemberRoles(ctx); err != nil {
+			return err
+		}
+		if err := setFlag("memberRolesV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 班级成员角色已迁移（owner/admin/member）")
+	}
+	return nil
+}
+
+// migrateMemberRoles 班级成员角色迁移：建班人 → owner，其余无角色的 → member。
+func (r *Repo) migrateMemberRoles(ctx context.Context) error {
+	cursor, err := r.db.Collection("classes").Find(ctx, bson.M{})
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+	var classes []bson.M
+	if err := cursor.All(ctx, &classes); err != nil {
+		return err
+	}
+	for _, doc := range classes {
+		cid, ok1 := doc["_id"].(int64)
+		owner, ok2 := doc["ownerId"].(int64)
+		if !ok1 || !ok2 {
+			continue
+		}
+		if _, err := r.db.Collection("classmembers").UpdateMany(ctx,
+			bson.M{"classId": cid, "uid": owner},
+			bson.M{"$set": bson.M{"role": ClassRoleOwner}}); err != nil {
+			return err
+		}
+		if _, err := r.db.Collection("classmembers").UpdateMany(ctx,
+			bson.M{"classId": cid, "uid": bson.M{"$ne": owner}, "role": bson.M{"$in": bson.A{nil, ""}}},
+			bson.M{"$set": bson.M{"role": ClassRoleMember}}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// migrateClassRefs 班级引用结构迁移：旧 []int64 → []{pid, hidden:false}。
+func (r *Repo) migrateClassRefs(ctx context.Context) error {
+	// 只挑 problems 第一个元素仍是标量的旧文档
+	filter := bson.M{"problems.0": bson.M{"$type": bson.A{"long", "int", "double", "decimal"}}}
+	cursor, err := r.db.Collection("classes").Find(ctx, filter)
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var doc bson.M
+		if err := cursor.Decode(&doc); err != nil {
+			return err
+		}
+		raw, _ := doc["problems"].(bson.A)
+		refs := make(bson.A, 0, len(raw))
+		for _, v := range raw {
+			if pid, ok := v.(int64); ok {
+				refs = append(refs, ClassProblemRef{PID: pid})
+			}
+		}
+		if _, err := r.db.Collection("classes").UpdateOne(ctx,
+			bson.M{"_id": doc["_id"]},
+			bson.M{"$set": bson.M{"problems": refs}}); err != nil {
+			return err
+		}
+	}
+	return cursor.Err()
+}
+
+// nextSeq 原子自增计数器（_id 不够用时统一从这里取号）。
+func (r *Repo) nextSeq(ctx context.Context, name string) (int64, error) {
+	var doc struct {
+		Seq int64 `bson:"seq"`
+	}
+	err := r.Counters.FindOneAndUpdate(ctx,
+		bson.M{"_id": name},
+		bson.M{"$inc": bson.M{"seq": 1}},
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
+	).Decode(&doc)
+	return doc.Seq, err
+}

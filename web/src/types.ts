@@ -20,6 +20,10 @@ export interface LoginResult {
 export interface ProblemListItem {
   id: number
   title: string
+  hidden?: boolean
+  locked?: boolean
+  contest_id?: number
+  lock_phase?: string
 }
 
 export interface ProblemListResult {
@@ -40,6 +44,12 @@ export interface ProblemDetail {
   time_limit_ms: number
   memory_limit_kb: number
   samples: TestCase[]
+  has_subtasks?: boolean
+  hidden?: boolean
+  can_set_hidden?: boolean
+  locked?: boolean
+  contest_id?: number
+  contest_title?: string
 }
 
 export interface Submission {
@@ -56,6 +66,8 @@ export interface Submission {
   code?: string
   error_info?: string
   created_at: string
+  contest_id?: number
+  contest_title?: string
 }
 
 export interface SubmissionListResult {
@@ -69,4 +81,112 @@ export interface RankItem {
   username: string
   nickname: string
   solved: number
+}
+
+export interface ClassCard {
+  id: number
+  name: string
+  intro: string
+  member_count: number
+  problem_count: number
+}
+
+export interface ClassProblem {
+  id: number
+  title: string
+  hidden: boolean
+  contest_id?: number
+}
+
+export interface ClassMember {
+  uid: number
+  username: string
+  role: string
+  joined_at: string
+  is_owner: boolean
+}
+
+export interface ClassDetail {
+  id: number
+  name: string
+  intro: string
+  owner_id: number
+  problem_count: number
+  problems: ClassProblem[]
+  joined: boolean
+  manageable: boolean
+  invite_code?: string
+  members?: ClassMember[]
+}
+
+export interface AdminUser {
+  id: number
+  username: string
+  nickname: string
+  role: string
+}
+
+// ---------- 比赛（v0.4） ----------
+
+export interface ContestListItem {
+  id: number
+  title: string
+  class_id: number
+  class_name?: string
+  status: 'scheduled' | 'running' | 'ended'
+  start: string
+  end: string
+  hidden_until?: string
+  problem_count: number
+  is_organizer: boolean
+}
+
+export interface ContestProblem {
+  id: number
+  title: string
+  score: number
+}
+
+export interface ContestDetail {
+  id: number
+  title: string
+  intro: string
+  class_id: number
+  status: 'scheduled' | 'running' | 'ended'
+  start: string
+  end: string
+  hidden_until?: string
+  problem_count: number
+  participant: boolean
+  is_organizer: boolean
+  deletable: boolean
+  problems?: ContestProblem[]
+}
+
+export interface ContestMySubmission {
+  id: number
+  pid: number
+  created_at: string
+  status?: string
+  score?: number
+  language?: string
+  time_ms?: number
+  memory_kb?: number
+  error_info?: string
+}
+
+export interface LeaderCell {
+  pid: number
+  score: number
+  tries: number
+}
+
+export interface LeaderRow {
+  rank: number
+  uid: number
+  username: string
+  nickname: string
+  total: number
+  last_scoring_at?: string
+  problems: LeaderCell[]
 }

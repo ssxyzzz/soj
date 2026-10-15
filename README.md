@@ -1,148 +1,112 @@
 # SOJ — 在线判题系统
 
-从零搭建的 Online Judge 第一版骨架：Vue 3 前端 + Gin API + RabbitMQ 异步判题 + go-judge 沙箱。
+中小型、轻量化的 Online Judge：一个 Go 程序 + MongoDB + go-judge 沙箱，三个容器就是一个完整的 OJ。
+设计决策与迭代路线见 [DEVELOPMENT.md](DEVELOPMENT.md)。
 
-当前为 v0.1：镜像构建、docker compose 启动、判题链路冒烟测试均已实际跑通（WSL2 + Docker 环境）。
-
-## 技术选型
-
-| 模块      | 技术                                       |
-| --------- | ------------------------------------------ |
-| 前端      | Vue 3 + TypeScript + Vite + Element Plus   |
-| Web 后端  | Gin (Go 1.26)                              |
-| 数据库    | MySQL 8                                    |
-| 缓存/排行 | Redis（排行榜用 zset）                     |
-| 消息队列  | RabbitMQ                                   |
-| 沙箱      | go-judge (REST)                            |
-| 部署      | Docker + docker-compose + Nginx            |
-
-## 架构
+| 模块 | 技术 |
+| --- | --- |
+| 主程序 | Go 1.26 + Gin（前端页面 embed 进二进制，内置判题线程池） |
+| 数据库 | MongoDB 7（单节点副本集） |
+| 判题沙箱 | go-judge（gcc / g++ / python3） |
+| 前端 | Vue 3 + TypeScript + Vite + Element Plus |
+| 部署 | Docker Compose 三容器：soj / mongo / sandbox |
 
 ```
-浏览器 ──> Nginx (web:80)
-             │ /        -> Vue 静态资源
-             │ /api/    -> Gin API (server:8080)
-                             │ 提交代码 -> MySQL 落库
-                             │ 投递消息 -> RabbitMQ (soj.submissions)
-judge worker (cmd/judge) <── 消费队列
-             │ 读取题目/测试点 (MySQL)
-             │ 编译+运行    (go-judge 沙箱 :5050)
-             │ 结果回写     (MySQL)
-             │ AC 更新排行  (Redis zset soj:rank:ac)
+浏览器 ──> soj:8080（页面 + API 同端口）
+             └─ 判题线程池：每秒从 MongoDB 原子领取 Pending 提交
+                 ├─ 题目测试数据：按需逐点读取（/data/testdata 卷）
+                 └─ go-judge 沙箱（localhost:5050）编译运行并比较输出
 ```
 
-## 目录结构
-
-```
-soj/
-├── docker-compose.yml        # 全套服务编排
-├── .env.example              # 环境变量模板（复制为 .env 使用）
-├── Makefile                  # up / down / logs / dev 快捷命令
-├── deploy/
-│   ├── mysql/init/           # 首次启动自动执行的建表与种子 SQL
-│   └── sandbox/Dockerfile    # go-judge + gcc/g++/python3 沙箱镜像（已内置清华 apt 源）
-├── server/                   # Go 后端
-│   ├── cmd/web/              # API 服务入口
-│   ├── cmd/judge/            # 判题 worker 入口
-│   ├── cmd/hashpw/           # bcrypt 密码生成小工具（种子数据用）
-│   └── internal/
-│       ├── config/           # 环境变量配置
-│       ├── storage/          # MySQL / Redis 连接（带就绪重试）
-│       ├── model/            # 数据表结构与 SQL 访问
-│       ├── auth/             # bcrypt + JWT
-│       ├── lang/             # 判题语言在沙箱内的编译/运行定义
-│       ├── mq/               # RabbitMQ 生产者/消费者
-│       ├── sandbox/          # go-judge REST 客户端
-│       ├── judge/            # 判题核心流程
-│       └── server/           # Gin 路由 / 中间件 / handler
-└── web/                      # Vue 3 前端
-    └── src/
-        ├── api/              # axios 封装与各业务 API
-        ├── router/           # 路由与登录守卫
-        ├── stores/           # Pinia 登录态
-        ├── layouts/ views/   # 页面
-        └── utils/            # 状态文案/时间格式化
-```
-
-## 快速启动（Docker Compose）
+## 快速启动
 
 ```bash
-cp .env.example .env        # 按需修改密码/密钥
 docker compose up -d --build
 ```
 
-启动后访问：
+打开 **http://localhost**（主机侧只暴露 80 端口，容器内仍是 8080），默认管理员 `admin / admin123`。
+两道示例题（A + B Problem、Hello, SOJ!）在首次启动时自动导入，登录后即可提交体验完整判题流程。
 
-| 地址                        | 说明                                      |
-| --------------------------- | ----------------------------------------- |
-| http://localhost            | SOJ 站点（Nginx）                         |
-| http://localhost:8080/api/health | API 健康检查（db/redis 连接状态）    |
-| http://localhost:15672      | RabbitMQ 控制台（soj / soj123）           |
-
-默认管理员：`admin / admin123`（首次登录后请修改）。
-
-常用命令（或用 `make up / down / logs / ps`）：
+常用命令：
 
 ```bash
-docker compose ps        # 服务状态
-docker compose logs -f   # 跟踪全部日志
-docker compose down      # 停止（数据卷保留）
+make ps        # 服务状态
+make logs      # 跟踪日志
+make backup    # 备份 MongoDB + 测试数据到 ./backups/
+make down      # 停止（数据保留）
 ```
-
-> **网络受限环境（国内）**：仓库内 Dockerfile 已内置国内优化——Go 模块默认走 goproxy.cn（`server/Dockerfile`，海外环境用 `--build-arg GOPROXY=https://proxy.golang.org,direct` 覆盖），沙箱镜像构建时自动把 Debian 源替换为清华镜像。仅基础镜像需要访问 Docker Hub，拉取失败时二选一：
->
-> 1. 给 Docker 配置加速器：`/etc/docker/daemon.json` 的 `registry-mirrors` 设为如 `["https://docker.m.daocloud.io"]`，改后 `sudo systemctl restart docker`；
-> 2. 或手动经镜像源拉取并打回标准 tag：
->    ```bash
->    for img in mysql:8.0 redis:7-alpine rabbitmq:3-management golang:1.26-alpine node:22-alpine nginx:1.27-alpine alpine:3.21; do
->      docker pull docker.m.daocloud.io/$img && docker tag docker.m.daocloud.io/$img $img
->    done
->    # criyle 命名空间 daocloud 不代理，需走其他源
->    docker pull hub.rat.dev/criyle/go-judge:latest && docker tag hub.rat.dev/criyle/go-judge:latest criyle/go-judge:latest
->    ```
 
 ## 本地开发
 
-基础设施用 compose 起，业务代码本机跑：
-
 ```bash
-docker compose up -d mysql redis rabbitmq sandbox
+docker compose up -d mongo sandbox   # 只起基础设施
 
-make server-dev   # API 服务 :8080
-make judge-dev    # 判题 worker
-make web-dev      # 前端 :5173，/api 代理到 :8080
+cd web && npm install && npm run dev        # 前端 :5173（/api 代理到 :8080）
+cd server && go run ./cmd/soj               # 主程序 :8080（连本机 mongo/sandbox）
+cd server && go run ./cmd/soj --judge-only  # 或：纯判题进程
 ```
 
-沙箱、判题 worker 与 API 均支持环境变量覆盖，见 `server/internal/config/config.go`。
+### 出一道题
+
+按下面的目录结构准备好题目，然后 `make import DIR=路径`（或在启动时放进 `data/seed/` 自动导入）：
+
+```
+my-problem/
+├── problem.yaml      # title / timeLimitMs / memoryLimitKb / samples: [1]
+├── statement.md      # 题面
+└── cases/
+    ├── 1/in  1/ans   # 每个测试点一对输入/答案
+    └── 2/in  2/ans
+```
+
+目录名前缀数字作为题目 ID（如 `7_我的题目` → pid 7），省略则自动分配。
+
+## 配置
+
+全部走环境变量（见 `docker-compose.yml` 与 `server/internal/config/config.go`），常用的：
+
+| 变量 | 说明 | 默认 |
+| --- | --- | --- |
+| SOJ_ADDR | 监听地址 | :8080 |
+| SOJ_MONGO_URI | MongoDB 连接串 | mongodb://127.0.0.1:27017 |
+| SOJ_DATA_DIR | 测试数据根目录 | ./data/testdata |
+| SOJ_SEED_DIR | 启动时自动导入的种子题目录 | （空） |
+| SOJ_SANDBOX_ADDR | go-judge 地址 | http://127.0.0.1:5050 |
+| SOJ_JUDGE_WORKERS | 判题并发数 | 2 |
+| SOJ_JWT_SECRET | JWT 密钥（生产必改） | soj-dev-secret |
 
 ## API 一览（/api 前缀）
 
-| 方法 | 路径               | 说明                       | 登录 |
-| ---- | ------------------ | -------------------------- | ---- |
-| GET  | /health            | 健康检查                   | 否   |
-| POST | /auth/register     | 注册                       | 否   |
-| POST | /auth/login        | 登录，返回 JWT             | 否   |
-| GET  | /me                | 当前用户信息               | 是   |
-| GET  | /problems          | 题库分页列表               | 否   |
-| GET  | /problems/:id      | 题目详情（含样例）         | 否   |
-| POST | /submissions       | 提交代码，进入判题队列     | 是   |
-| GET  | /submissions       | 提交记录分页（可按题过滤） | 否   |
-| GET  | /submissions/:id   | 提交详情（代码仅本人/管理员可见） | 否 |
-| GET  | /rank              | 解题排行榜（Redis zset）   | 否   |
+| 方法 | 路径 | 说明 | 权限 |
+| --- | --- | --- | --- |
+| GET | /health | 健康检查（db / sandbox） | 公开 |
+| POST | /auth/register · /auth/login | 注册 / 登录（JWT） | 公开 |
+| GET | /me · /me/classes | 当前用户 / 我的班级 | 登录 |
+| GET | /problems · /problems/:id | 题库列表 / 详情（含样例；按视角过滤隐藏与比赛锁题） | 公开 |
+| PATCH | /problems/:id/hidden | 设置主题库隐藏 | root / 题目导入者 |
+| POST | /submissions | 提交代码（default 限速 1 分钟 3 次，root 可调） | 登录 |
+| GET | /submissions · /submissions/:id | 提交列表 / 详情（代码仅本人与管理员可见） | 公开 |
+| GET | /rank | 解题排行榜（30s 缓存；比赛提交隐藏期结束才计入） | 公开 |
+| GET | /classes · /classes/:id | 班级列表 / 详情（成员与邀请码仅管理身份可见） | 公开 |
+| POST | /classes | 创建班级 | admin+ |
+| POST | /classes/:id/join · /leave | 邀请码加入 / 退出 | 登录 |
+| POST/DELETE | /classes/:id/problems[/:pid] | 班级引用/移除题目 | 建班人 / 班级管理员 / root |
+| POST | /classes/:id/invite · /members · /members/:uid/role | 邀请码 / 名单导入 / 成员角色 | 建班人 / 班级管理员 / root |
+| GET | /contests · /contests/:id | 比赛列表 / 详情（赛前题目隐藏） | 公开 |
+| POST | /contests | 创建比赛（主题库=root；班级=班级管理员） | 登录 |
+| POST | /contests/:id/problems/:pid/submissions | 比赛提交（赛时唯一提交通道，不出分） | 参赛者 |
+| GET | /contests/:id/submissions/mine · /leaderboard | 我的比赛提交 / 榜单（赛时仅组织者可见） | 参赛者 |
+| GET/POST/PATCH | /admin/users[/:id] · /admin/settings | 用户管理 / 系统设置 | root |
 
-统一响应：`{"code":0,"data":...}` 成功；`{"code":1,"message":"..."}` 失败。
+## 备份与恢复
 
-## 判题流程
+```bash
+make backup   # 产出 backups/<时间>/mongo.archive.gz + testdata.tar.gz
+```
 
-1. 提交落库（`Pending`）→ 投递 `{submission_id}` 到 RabbitMQ 队列 `soj.submissions`；
-2. worker 消费（多并发，at-most-once，见 `mq.Consume` 注释可升级为 at-least-once）；
-3. 编译型语言先编译，产物以 `copyOutCached` 缓存为 fileId，各测试点 `copyIn` 复用，测完删除；
-4. 逐测试点运行：比较输出（忽略行尾空白与文末空行）、累计最大耗时/内存；
-5. 回写结果；AC 时 Redis `SADD soj:ac:<uid>` 去重后 `ZINCRBY soj:rank:ac`。
+恢复：`mongorestore --archive=mongo.archive.gz --gzip`，测试数据解包回 testdata 卷即可。
 
-## 已知边界（后续迭代方向）
+## 路线图
 
-- 题目/测试点后台管理（当前用 SQL 直接维护，见 `deploy/mysql/init/01-schema.sql`）；
-- 判题消息升级 at-least-once + 防重判；
-- 特判题（SPJ）、子任务计分、比赛模块；
-- 提交详情轮询升级为 WebSocket 推送。
+v0.2 换底盘 ✅ → v0.3 权限与班级 ✅ → v0.4 OI 比赛 ✅ → v0.5 体验优化（SSE 实时判题、zip 上题、Hydro/QDUOJ 导入、重测）。
+细节与设计决策见 [DEVELOPMENT.md](DEVELOPMENT.md)。

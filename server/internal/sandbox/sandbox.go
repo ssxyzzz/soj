@@ -9,32 +9,48 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 )
 
-// File 对应 go-judge 的文件描述：stdin/stdout/stderr 与 copyIn 均用它表达。
+// File 描述 stdio（stdin/stdout/stderr）三者的去向。
+// go-judge 语义：含 content 的条目被物化为绑定到该 fd 的文件；
+// 仅 name+max 的条目是内存收集管道（输出捕获必须用这种）。
+// 因此 stdin 用 Stdin()（内容可为空但字段必须存在），stdout/stderr 用 Pipe()。
 type File struct {
-	Src     string `json:"src,omitempty"`
+	Content *string `json:"content,omitempty"`
+	Name    string  `json:"name,omitempty"`
+	Max     int64   `json:"max,omitempty"`
+}
+
+// Stdin 以给定内容作为程序的标准输入（内容为空也必须显式传 "content": ""，
+// 空对象会被沙箱以 400 拒绝）。
+func Stdin(content string) File { return File{Content: &content} }
+
+// Pipe 声明一个内存收集管道（用于捕获 stdout/stderr）。
+func Pipe(name string, max int64) File { return File{Name: name, Max: max} }
+
+// CopyFile 描述 copyIn 的文件来源：内容或已缓存的 fileId 二选一。
+type CopyFile struct {
 	Content string `json:"content,omitempty"`
-	Name    string `json:"name,omitempty"`
 	FileID  string `json:"fileId,omitempty"`
-	Max     int64  `json:"max,omitempty"`
 }
 
 type Cmd struct {
-	Args          []string        `json:"args"`
-	Env           []string        `json:"env,omitempty"`
-	Files         []File          `json:"files"`                 // [0]=stdin [1]=stdout [2]=stderr
-	CPULimit      int64           `json:"cpuLimit,omitempty"`    // 纳秒
-	ClockLimit    int64           `json:"clockLimit,omitempty"`  // 墙钟时间，防 sleep 绕过 cpuLimit
-	MemoryLimit   int64           `json:"memoryLimit,omitempty"` // 字节
-	ProcLimit     int64           `json:"procLimit,omitempty"`
-	CopyIn        map[string]File `json:"copyIn,omitempty"`
-	CopyOut       []string        `json:"copyOut,omitempty"`
-	CopyOutCached []string        `json:"copyOutCached,omitempty"` // 编译产物以 fileId 形式缓存
+	Args          []string            `json:"args"`
+	Env           []string            `json:"env,omitempty"`
+	Files         []File              `json:"files"`                 // [0]=stdin [1]=stdout [2]=stderr
+	CPULimit      int64               `json:"cpuLimit,omitempty"`    // 纳秒
+	ClockLimit    int64               `json:"clockLimit,omitempty"`  // 墙钟时间，防 sleep 绕过 cpuLimit
+	MemoryLimit   int64               `json:"memoryLimit,omitempty"` // 字节
+	ProcLimit     int64               `json:"procLimit,omitempty"`
+	CopyIn        map[string]CopyFile `json:"copyIn,omitempty"`
+	CopyOut       []string            `json:"copyOut,omitempty"`
+	CopyOutCached []string            `json:"copyOutCached,omitempty"` // 编译产物以 fileId 形式缓存
 }
 
 // Result 中 Time 为纳秒、Memory 为字节（go-judge 约定）；
@@ -67,10 +83,27 @@ func New(addr string) *Client {
 	}
 }
 
+// Available 探测沙箱是否可达（任何 HTTP 响应都视为可用）。
+func (c *Client) Available(ctx context.Context) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/version", nil)
+	if err != nil {
+		return false
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	return true
+}
+
 func (c *Client) Run(ctx context.Context, cmds []Cmd) ([]Result, error) {
 	body, err := json.Marshal(map[string]any{"cmd": cmds})
 	if err != nil {
 		return nil, err
+	}
+	if os.Getenv("SOJ_DEBUG") != "" {
+		log.Printf("[sandbox] 请求: %s", truncate(string(body), 4096))
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/run", bytes.NewReader(body))
 	if err != nil {

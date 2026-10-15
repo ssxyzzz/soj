@@ -1,0 +1,9 @@
+title: Subtask A+B
+timeLimitMs: 1000
+memoryLimitKb: 262144
+samples: [1]
+subtasks:
+  - cases: [1, 2]
+    score: 40
+  - cases: [3]
+    score: 60

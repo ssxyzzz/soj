@@ -7,14 +7,15 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"soj/internal/auth"
-	"soj/internal/model"
+	"soj/internal/repo"
 )
 
 var usernameRE = regexp.MustCompile(`^[a-zA-Z0-9_]{3,32}$`)
 
-func userJSON(u *model.User) gin.H {
+func userJSON(u *repo.User) gin.H {
 	return gin.H{"id": u.ID, "username": u.Username, "nickname": u.Nickname, "role": u.Role}
 }
 
@@ -42,30 +43,29 @@ func (h *Handlers) Register(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if _, _, err := model.GetUserByUsername(ctx, req.Username); err == nil {
+	if _, _, err := h.repo.GetUserByUsername(ctx, req.Username); err == nil {
 		fail(c, http.StatusBadRequest, "用户名已存在")
 		return
-	} else if !errors.Is(err, model.ErrNotFound) {
+	} else if !repo.IsNotFound(err) {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
 
-	hash, err := auth.HashPassword(req.Password)
+	uid, err := h.repo.CreateUserWithPassword(ctx, req.Username, req.Password, nickname, repo.RoleDefault)
 	if err != nil {
-		fail(c, http.StatusInternalServerError, "服务器内部错误")
-		return
-	}
-	id, err := model.CreateUser(ctx, req.Username, hash, nickname)
-	if err != nil {
+		if isDupKey(err) {
+			fail(c, http.StatusBadRequest, "用户名已存在")
+			return
+		}
 		fail(c, http.StatusInternalServerError, "创建用户失败")
 		return
 	}
-	token, err := auth.GenerateToken(id, req.Username, "user", h.cfg.JWTSecret)
+	token, err := auth.GenerateToken(uid, req.Username, repo.RoleDefault, h.cfg.JWTSecret)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
-	ok(c, gin.H{"token": token, "user": userJSON(&model.User{ID: id, Username: req.Username, Nickname: nickname, Role: "user"})})
+	ok(c, gin.H{"token": token, "user": userJSON(&repo.User{ID: uid, Username: req.Username, Nickname: nickname, Role: repo.RoleDefault})})
 }
 
 func (h *Handlers) Login(c *gin.Context) {
@@ -78,8 +78,8 @@ func (h *Handlers) Login(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	u, hash, err := model.GetUserByUsername(ctx, req.Username)
-	if errors.Is(err, model.ErrNotFound) || (err == nil && !auth.CheckPassword(hash, req.Password)) {
+	u, hash, err := h.repo.GetUserByUsername(ctx, req.Username)
+	if repo.IsNotFound(err) || (err == nil && !auth.CheckPassword(hash, req.Password)) {
 		fail(c, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
@@ -101,7 +101,7 @@ func (h *Handlers) Me(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "未登录")
 		return
 	}
-	u, err := model.GetUserByID(c.Request.Context(), uid)
+	u, err := h.repo.GetUserByID(c.Request.Context(), uid)
 	if err != nil {
 		fail(c, http.StatusNotFound, "用户不存在")
 		return
@@ -117,4 +117,13 @@ func parseID(c *gin.Context, name string) (int64, bool) {
 		return 0, false
 	}
 	return id, true
+}
+
+// isDupKey MongoDB 唯一索引冲突（并发注册同名用户的兜底）。
+func isDupKey(err error) bool {
+	var we mongo.WriteException
+	if errors.As(err, &we) {
+		return we.HasErrorCode(11000)
+	}
+	return false
 }

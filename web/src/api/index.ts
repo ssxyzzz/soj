@@ -2,7 +2,14 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 import type {
+  AdminUser,
   ApiResponse,
+  ClassCard,
+  ClassDetail,
+  ContestDetail,
+  ContestListItem,
+  ContestMySubmission,
+  LeaderRow,
   LoginResult,
   ProblemDetail,
   ProblemListResult,
@@ -53,6 +60,11 @@ async function post<T>(url: string, body?: unknown): Promise<T> {
   return resp.data.data
 }
 
+async function put<T>(url: string, body?: unknown): Promise<T> {
+  const resp = await client.put<ApiResponse<T>>(url, body)
+  return resp.data.data
+}
+
 export const authApi = {
   login: (username: string, password: string) =>
     post<LoginResult>('/auth/login', { username, password }),
@@ -64,6 +76,8 @@ export const problemApi = {
   list: (page: number, pageSize: number) =>
     get<ProblemListResult>('/problems', { page, page_size: pageSize }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
+  setHidden: (id: number, hidden: boolean) =>
+    post<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
 }
 
 export const submissionApi = {
@@ -76,4 +90,59 @@ export const submissionApi = {
 
 export const rankApi = {
   top: () => get<RankItem[]>('/rank'),
+}
+
+export const classApi = {
+  list: () => get<ClassCard[]>('/classes'),
+  detail: (id: number) => get<ClassDetail>(`/classes/${id}`),
+  mine: () => get<ClassCard[]>('/me/classes'),
+  create: (name: string, intro: string) =>
+    post<{ id: number; name: string; invite_code: string }>('/classes', { name, intro }),
+  join: (id: number, code: string) => post<{ joined: boolean }>(`/classes/${id}/join`, { code }),
+  leave: (id: number) => post<{ left: boolean }>(`/classes/${id}/leave`),
+  addProblem: (id: number, problemId: number, hidden: boolean) =>
+    post<{ added: number; hidden: boolean }>(`/classes/${id}/problems`, { problem_id: problemId, hidden }),
+  removeProblem: (id: number, pid: number) =>
+    post<{ removed: number }>(`/classes/${id}/problems/${pid}`),
+  regenInvite: (id: number) => post<{ invite_code: string }>(`/classes/${id}/invite`),
+  importMembers: (id: number, usernames: string) =>
+    post<{ added: number; total: number }>(`/classes/${id}/members`, { usernames }),
+  setMemberRole: (id: number, uid: number, role: string) =>
+    post<{ updated: number; role: string }>(`/classes/${id}/members/${uid}/role`, { role }),
+}
+
+export const adminApi = {
+  listUsers: (page: number, pageSize: number) =>
+    get<{ list: AdminUser[]; total: number }>('/admin/users', { page, page_size: pageSize }),
+  createUser: (username: string, password: string, nickname: string, role: string) =>
+    post<{ id: number }>('/admin/users', { username, password, nickname, role }),
+  updateUser: (id: number, patch: { role?: string; password?: string; nickname?: string }) =>
+    post<{ updated: number }>(`/admin/users/${id}`, patch),
+  getSettings: () => get<{ rate_limit_per_minute: number }>('/admin/settings'),
+  updateSettings: (rateLimitPerMinute: number) =>
+    put<{ rate_limit_per_minute: number }>('/admin/settings', { rate_limit_per_minute: rateLimitPerMinute }),
+}
+
+// ---------- 比赛（v0.4） ----------
+
+export interface CreateContestPayload {
+  class_id?: number
+  title: string
+  intro?: string
+  start: string
+  end: string
+  hidden_days?: number
+  problem_ids: number[]
+}
+
+export const contestApi = {
+  list: () => get<ContestListItem[]>('/contests'),
+  detail: (id: number) => get<ContestDetail>(`/contests/${id}`),
+  create: (payload: CreateContestPayload) => post<{ id: number }>('/contests', payload),
+  remove: (id: number) => post<{ deleted: number }>(`/contests/${id}`),
+  submit: (contestId: number, pid: number, language: string, code: string) =>
+    post<{ id: number }>(`/contests/${contestId}/problems/${pid}/submissions`, { language, code }),
+  mySubmissions: (contestId: number) =>
+    get<{ revealed: boolean; list: ContestMySubmission[] }>(`/contests/${contestId}/submissions/mine`),
+  leaderboard: (contestId: number) => get<LeaderRow[]>(`/contests/${contestId}/leaderboard`),
 }
