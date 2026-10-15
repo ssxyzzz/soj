@@ -150,3 +150,7 @@ make backup   # 产出 backups/<时间>/mongo.archive.gz + testdata.tar.gz
 
 v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → 下一批 v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
 细节与排期见 [plan.md](plan.md)（本地文档，不入库）。
+
+## 许可证
+
+以 [AGPL-3.0](LICENSE) 协议开源。架构设计仅参考 Hydro 等开源 OJ 的公开思路、未复制其代码；随发行物分发的第三方组件（go-judge、Vditor、Element Plus 等）仍按各自原始协议提供。
