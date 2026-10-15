@@ -168,6 +168,39 @@ func (r *Repo) ListSubmissions(ctx context.Context, uid, pid int64, page, pageSi
 	return list, total, nil
 }
 
+// HasSolved 用户是否在该题拿到过满分（代码可见性解锁判定）。
+func (r *Repo) HasSolved(ctx context.Context, uid, pid int64) (bool, error) {
+	n, err := r.Submissions.CountDocuments(ctx,
+		bson.M{"uid": uid, "pid": pid, "score": 100})
+	return n > 0, err
+}
+
+// ListPidSubmissions 题目维提交列表（含代码，分页）。
+// uid > 0 时只看该用户的；published=true 过滤掉隐藏期内比赛/考试的提交。
+func (r *Repo) ListPidSubmissions(ctx context.Context, pid int64, uid int64, page, pageSize int) ([]*Submission, int64, error) {
+	filter := bson.M{"pid": pid, "published": true}
+	if uid > 0 {
+		filter["uid"] = uid
+	}
+	total, err := r.Submissions.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	cursor, err := r.Submissions.Find(ctx, filter,
+		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}).
+			SetLimit(int64(pageSize)).
+			SetSkip(int64((page-1)*pageSize)))
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+	list := make([]*Submission, 0)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
 // RankRow 排行榜一行。
 type RankRow struct {
 	UID      int64  `bson:"_id"`

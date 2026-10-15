@@ -49,12 +49,14 @@ export interface ProblemDetail {
   has_subtasks?: boolean
   hidden?: boolean
   can_set_hidden?: boolean
+  can_view_others?: boolean
   locked?: boolean
   lock_kind?: 'contest' | 'exam'
   contest_id?: number
   contest_title?: string
   exam_id?: number
   exam_title?: string
+  masked?: boolean
 }
 
 export interface Submission {

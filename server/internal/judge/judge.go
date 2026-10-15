@@ -264,34 +264,71 @@ func partialScore(passed, total int) int {
 }
 
 // compile 编译并缓存产物；返回的 status 非空表示编译失败。
+//
+// 稳健性措施（2026-10-15，针对并发编译偶发瞬时失败）：
+//   - 串行化：同一时刻只允许一个编译在沙箱内执行（编译只占判题前几秒，串行无碍吞吐）；
+//   - 隔离：编译环境 TMPDIR=. 指向本次判题的独立目录，配合 -pipe 避免 gcc 争抢共享 /tmp；
+//   - 重试：无 gcc 诊断（stderr 不含 "error:"）的异常终止视为瞬时失败，自动重试一次；
+//   - 可观测：无论重试与否，gcc 的 stderr 都会带回 errorInfo（真实语法错误学生直接可见）。
 func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (fileID, status, info string, err error) {
-	cmd := sandbox.Cmd{
-		Args: l.CompileArgs,
-		Env:  []string{"PATH=/usr/local/bin:/usr/bin:/bin"},
-		Files: []sandbox.File{
-			sandbox.Stdin(code),            // stdin：源码
-			sandbox.Pipe("stdout", 64<<10), // 管道收集
-			sandbox.Pipe("stderr", 256<<10),
-		},
-		CPULimit:      compileCPULimit,
-		MemoryLimit:   compileMemoryLimit,
-		ProcLimit:     64,
-		CopyOut:       []string{"stdout", "stderr"},
-		CopyOutCached: []string{"main"},
+	const maxAttempts = 2
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// 方案二：编译串行化
+		select {
+		case compileGate <- struct{}{}:
+		case <-ctx.Done():
+			return "", "", "", ctx.Err()
+		}
+		cmd := sandbox.Cmd{
+			Args: l.CompileArgs,
+			Env:  []string{"PATH=/usr/local/bin:/usr/bin:/bin", "TMPDIR=."}, // 方案三：临时文件写入本次判题目录
+			Files: []sandbox.File{
+				sandbox.Stdin(code),            // stdin：源码
+				sandbox.Pipe("stdout", 64<<10), // 管道收集
+				sandbox.Pipe("stderr", 256<<10),
+			},
+			CPULimit:      compileCPULimit,
+			MemoryLimit:   compileMemoryLimit,
+			ProcLimit:     64,
+			CopyOut:       []string{"stdout", "stderr"},
+			CopyOutCached: []string{"main"},
+		}
+		results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
+		<-compileGate
+		if err != nil || len(results) == 0 {
+			return "", "", "", err
+		}
+		r := results[0]
+		if r.Status == "Accepted" {
+			if id := r.FileIDs["main"]; id != "" {
+				return id, "", "", nil
+			}
+			return "", repo.StatusCompileError, "编译产物缺失（沙箱未返回 main）", nil
+		}
+
+		stderr := strings.TrimSpace(r.Stderr())
+		// gcc 标准诊断（file:line: error: ...）= 真实的代码编译错误，重试无意义，
+		// 直接把诊断信息作为 errorInfo 返回给学生
+		if strings.Contains(stderr, "error:") {
+			return "", repo.StatusCompileError, truncate(stderr, 4096), nil
+		}
+
+		// 方案一：无诊断的异常终止视为瞬时失败（资源竞争等），自动重试一次
+		detail := "编译进程异常终止: " + r.Status
+		if stderr != "" {
+			detail += "\n" + truncate(stderr, 4096)
+		}
+		if attempt < maxAttempts {
+			log.Printf("[judge] 编译瞬时失败(%s, stderr=%q)，自动重试", r.Status, truncate(stderr, 200))
+			continue
+		}
+		return "", repo.StatusCompileError, detail, nil
 	}
-	results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
-	if err != nil || len(results) == 0 {
-		return "", "", "", err
-	}
-	r := results[0]
-	if r.Status != "Accepted" {
-		return "", repo.StatusCompileError, "编译进程异常终止: " + r.Status, nil
-	}
-	if id := r.FileIDs["main"]; id != "" {
-		return id, "", "", nil
-	}
-	return "", repo.StatusCompileError, truncate(r.Stderr(), 8192), nil
+	return "", repo.StatusCompileError, "编译重试次数耗尽", nil
 }
+
+// compileGate 编译串行化信号量：同一时刻仅允许一个编译任务进入沙箱。
+var compileGate = make(chan struct{}, 1)
 
 func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code string, tc repo.CaseMeta, p *repo.Problem) (*sandbox.Result, error) {
 	input, err := testdata.ReadAll(j.Provider, p.ID, tc.InName)

@@ -99,8 +99,14 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		return
 	}
 
-	uid, _, role, _ := currentUser(c)
+	uid, _, role, logged := currentUser(c)
 	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	canViewOthers := privileged
+	if logged && !privileged {
+		if solved, err := h.repo.HasSolved(ctx, uid, id); err == nil && solved {
+			canViewOthers = true
+		}
+	}
 	lockMap, err := h.loadLockMap(ctx, uid, role)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取比赛状态失败")
@@ -151,6 +157,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"has_subtasks":    len(p.Subtasks) > 0,
 		"hidden":          p.Hidden,
 		"can_set_hidden":  role == repo.RoleRoot || (role == repo.RoleAdmin && p.CreatedBy == uid),
+		"can_view_others": canViewOthers, // 满分解锁后可在本页查看他人代码
 	}
 	if lk != nil {
 		resp["locked"] = true

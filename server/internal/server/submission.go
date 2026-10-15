@@ -127,10 +127,10 @@ func (h *Handlers) ListSubmissions(c *gin.Context) {
 	ok(c, gin.H{"list": items, "total": total})
 }
 
-// GetSubmission 提交详情。可见性规则：
-//   - 隐藏期内的比赛提交：仅 root 与比赛创建者可见；
-//   - 比赛锁题期间，default 查看自己赛前提交不返回代码（防抄旧代码）；
-//   - 代码本体仅本人 / admin / root 可见。
+// GetSubmission 提交详情。可见性规则（2026-10-15 定稿）：
+//   - 隐藏期内的比赛/考试提交：仅 root 与创建者可见；
+//   - 赛事锁题期间，赛前提交对 default 不回代码（防抄，含本人），优先级最高；
+//   - 代码：本人 / admin / root 恒可；其他人拿到该题满分后解锁查看。
 func (h *Handlers) GetSubmission(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -174,8 +174,80 @@ func (h *Handlers) GetSubmission(c *gin.Context) {
 		}
 	}
 
-	withCode := logged && (uid == s.UID || privileged) && !masked
-	ok(c, submissionJSON(s, withCode))
+	withCode := false
+	if logged && !masked {
+		switch {
+		case uid == s.UID || privileged:
+			withCode = true
+		case s.Published:
+			if solved, serr := h.repo.HasSolved(ctx, uid, s.ProblemID); serr == nil && solved {
+				withCode = true // 该题满分解锁：可看他人代码
+			}
+		}
+	}
+	resp := submissionJSON(s, withCode)
+	if masked {
+		resp["masked"] = true
+	}
+	ok(c, resp)
+}
+
+// ListProblemSubmissions 该题所有人的提交（含代码）。
+// 门槛（2026-10-15 定稿）：admin/root 天然可看；其他人拿到该题满分后解锁。
+func (h *Handlers) ListProblemSubmissions(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	uid, _, role, logged := currentUser(c)
+	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	solved := false
+	if logged {
+		if privileged {
+			solved = true
+		} else {
+			solved, _ = h.repo.HasSolved(c.Request.Context(), uid, id)
+		}
+	}
+	if !solved {
+		fail(c, http.StatusForbidden, "该题拿到满分后可查看他人的代码")
+		return
+	}
+	page, pageSize := queryPage(c)
+	list, total, err := h.repo.ListPidSubmissions(c.Request.Context(), id, 0, page, pageSize)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取提交失败")
+		return
+	}
+	items := make([]gin.H, 0, len(list))
+	for _, s := range list {
+		items = append(items, submissionJSON(s, true))
+	}
+	ok(c, gin.H{"list": items, "total": total})
+}
+
+// MyProblemSubmissions 我在该题的提交记录（自己的结果对自己恒可见）。
+func (h *Handlers) MyProblemSubmissions(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	uid, _, _, okAuth := currentUser(c)
+	if !okAuth {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	page, pageSize := queryPage(c)
+	list, total, err := h.repo.ListPidSubmissions(c.Request.Context(), id, uid, page, pageSize)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取提交失败")
+		return
+	}
+	items := make([]gin.H, 0, len(list))
+	for _, s := range list {
+		items = append(items, submissionJSON(s, true))
+	}
+	ok(c, gin.H{"list": items, "total": total})
 }
 
 func submissionJSON(s *repo.Submission, withCode bool) gin.H {

@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 
 import { problemApi, submissionApi } from '@/api'
 import { useUserStore } from '@/stores/user'
-import { fmtMem, statusStyle } from '@/utils/format'
+import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
 import type { ProblemDetail, Submission } from '@/types'
 
 const route = useRoute()
@@ -19,6 +19,13 @@ const code = ref('')
 const submitting = ref(false)
 const latest = ref<Submission | null>(null)
 let timer: ReturnType<typeof setInterval> | undefined
+
+// 我的提交 / 他人代码（v0.4.3 代码可见性）
+const mySubs = ref<Submission[]>([])
+const others = ref<Submission[]>([])
+const othersTotal = ref(0)
+const othersPage = ref(1)
+const expandedRows = ref<number[]>([])
 
 const languageOptions = [
   { value: 'cpp', label: 'C++ 14' },
@@ -51,10 +58,32 @@ async function load() {
   loading.value = true
   try {
     problem.value = await problemApi.detail(Number(route.params.id))
+    await Promise.all([loadMine(), loadOthers()])
   } catch {
     router.replace('/problems')
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMine() {
+  if (!userStore.token) return
+  try {
+    mySubs.value = (await problemApi.mySubmissions(Number(route.params.id), 1, 20)).list
+  } catch {
+    mySubs.value = []
+  }
+}
+
+async function loadOthers(p = 1) {
+  if (!problem.value?.can_view_others) return
+  try {
+    const r = await problemApi.submissions(Number(route.params.id), p, 20)
+    others.value = r.list
+    othersTotal.value = r.total
+    othersPage.value = p
+  } catch {
+    others.value = []
   }
 }
 
@@ -81,6 +110,7 @@ async function submit() {
     const r = await submissionApi.create(Number(route.params.id), language.value, code.value)
     ElMessage.success(`已提交 #${r.id}，正在判题`)
     startPolling(r.id)
+    loadMine()
   } catch {
     // 错误提示已由 axios 拦截器统一弹出
   } finally {
@@ -195,6 +225,76 @@ onUnmounted(stopPolling)
         />
       </el-card>
 
+      <el-card v-if="userStore.token && !lockedRunning" class="block">
+        <template #header><span>我的提交（{{ mySubs.length }}）</span></template>
+        <el-table :data="mySubs" size="small">
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column label="结果" width="130">
+            <template #default="{ row }">
+              <el-tag :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="得分" width="80">
+            <template #default="{ row }">{{ row.score }}</template>
+          </el-table-column>
+          <el-table-column label="耗时" width="90">
+            <template #default="{ row }">{{ row.time_ms }} ms</template>
+          </el-table-column>
+          <el-table-column prop="language" label="语言" width="90" />
+          <el-table-column label="提交时间" width="180">
+            <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+          </el-table-column>
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <pre v-if="row.code" class="mono expand-code">{{ row.code }}</pre>
+              <span v-else class="dim">（暂无代码）</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-empty v-if="!mySubs.length" description="还没有提交过" :image-size="50" />
+      </el-card>
+
+      <el-card v-if="problem.can_view_others" class="block">
+        <template #header>
+          <div class="head">
+            <span>他人代码（{{ othersTotal }}）——你已在该题拿到满分</span>
+            <el-button size="small" @click="loadOthers(othersPage)">刷新</el-button>
+          </div>
+        </template>
+        <el-table :data="others" size="small">
+          <el-table-column type="expand">
+            <template #default="{ row }">
+              <pre v-if="row.code" class="mono expand-code">{{ row.code }}</pre>
+            </template>
+          </el-table-column>
+          <el-table-column prop="id" label="ID" width="80" />
+          <el-table-column prop="username" label="用户名" min-width="120" />
+          <el-table-column label="结果" width="130">
+            <template #default="{ row }">
+              <el-tag :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="得分" width="80">
+            <template #default="{ row }">{{ row.score }}</template>
+          </el-table-column>
+          <el-table-column prop="language" label="语言" width="90" />
+          <el-table-column label="提交时间" width="180">
+            <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+          </el-table-column>
+        </el-table>
+        <div class="pager">
+          <el-pagination
+            background
+            layout="prev, pager, next, total"
+            :total="othersTotal"
+            :page-size="20"
+            :current-page="othersPage"
+            @current-change="(p: number) => loadOthers(p)"
+          />
+        </div>
+        <el-empty v-if="!others.length" description="还没有人提交过" :image-size="50" />
+      </el-card>
+
       <el-card v-if="latest" class="block">
         <template #header><span>判题结果（提交 #{{ latest.id }}）</span></template>
         <el-descriptions :column="4" border size="small">
@@ -212,6 +312,7 @@ onUnmounted(stopPolling)
     </template>
   </div>
 </template>
+
 
 <style scoped>
 .mb8 {
@@ -277,5 +378,24 @@ onUnmounted(stopPolling)
   background: #fef0f0;
   padding: 12px;
   border-radius: 4px;
+}
+
+.expand-code {
+  padding: 8px 12px;
+  background: #f8f8f8;
+  border-radius: 4px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.dim {
+  color: #909399;
+  font-size: 13px;
+}
+
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 </style>

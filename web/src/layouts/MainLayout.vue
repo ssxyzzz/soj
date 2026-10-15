@@ -29,7 +29,7 @@ function onCommand(command: string) {
           <el-menu-item index="/contests">比赛</el-menu-item>
           <el-menu-item index="/classes">班级</el-menu-item>
           <el-menu-item index="/rank">排名</el-menu-item>
-          <el-menu-item index="/submissions">提交记录</el-menu-item>
+          <el-menu-item v-if="userStore.role === 'admin' || userStore.role === 'root'" index="/submissions">提交记录</el-menu-item>
         </el-menu>
         <template v-if="userStore.token">
           <el-button

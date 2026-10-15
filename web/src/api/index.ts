@@ -83,6 +83,10 @@ export const problemApi = {
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   setHidden: (id: number, hidden: boolean) =>
     post<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
+  submissions: (id: number, page: number, pageSize: number) =>
+    get<SubmissionListResult>(`/problems/${id}/submissions`, { page, page_size: pageSize }),
+  mySubmissions: (id: number, page: number, pageSize: number) =>
+    get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
 }
 
 export const submissionApi = {

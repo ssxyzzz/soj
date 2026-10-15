@@ -23,6 +23,7 @@ declare module 'vue-router' {
     title?: string
     requiresAuth?: boolean
     requiresAdmin?: boolean
+    staffOnly?: boolean
   }
 }
 
@@ -93,7 +94,7 @@ const router = createRouter({
           path: 'submissions',
           name: 'submissions',
           component: SubmissionListView,
-          meta: { title: '提交记录' },
+          meta: { title: '提交记录', staffOnly: true },
         },
         { path: 'rank', name: 'rank', component: RankView, meta: { title: '排名' } },
         {
@@ -115,7 +116,11 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  if (to.meta.requiresAdmin && localStorage.getItem('soj_role') !== 'root') {
+  const role = localStorage.getItem('soj_role')
+  if (to.meta.requiresAdmin && role !== 'root') {
+    return { path: '/' }
+  }
+  if (to.meta.staffOnly && role !== 'admin' && role !== 'root') {
     return { path: '/' }
   }
   if (to.meta.requiresAuth && !localStorage.getItem('soj_token')) {

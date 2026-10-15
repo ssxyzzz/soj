@@ -15,14 +15,14 @@ var Languages = map[string]*Language{
 		Name:        "C (gcc)",
 		SourceFile:  "main.c",
 		NeedCompile: true,
-		CompileArgs: []string{"/usr/bin/gcc", "-x", "c", "-", "-o", "main", "-O2", "-w", "-std=c11"},
+		CompileArgs: []string{"/usr/bin/gcc", "-x", "c", "-", "-o", "main", "-O2", "-w", "-std=c11", "-pipe"},
 		RunArgs:     []string{"./main"},
 	},
 	"cpp": {
 		Name:        "C++ 14 (NOI)",
 		SourceFile:  "main.cpp",
 		NeedCompile: true,
-		CompileArgs: []string{"/usr/bin/g++", "-x", "c++", "-", "-o", "main", "-O2", "-w", "-std=c++14"},
+		CompileArgs: []string{"/usr/bin/g++", "-x", "c++", "-", "-o", "main", "-O2", "-w", "-std=c++14", "-pipe"},
 		RunArgs:     []string{"./main"},
 	},
 	"python3": {

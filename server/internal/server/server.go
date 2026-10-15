@@ -49,9 +49,12 @@ func Run(deps *Deps) {
 
 		api.GET("/problems", AuthOptional(cfg), h.ListProblems)
 		api.GET("/problems/:id", AuthOptional(cfg), h.GetProblem)
+		api.GET("/problems/:id/submissions", AuthRequired(cfg), h.ListProblemSubmissions)
+		api.GET("/problems/:id/my-submissions", AuthRequired(cfg), h.MyProblemSubmissions)
 
 		api.POST("/submissions", AuthRequired(cfg), h.CreateSubmission)
-		api.GET("/submissions", h.ListSubmissions)
+		// 提交记录总表仅 admin+（学生查自己的历史走题目页「我的提交」）
+		api.GET("/submissions", AuthRequired(cfg), RequireRole(repo.RoleAdmin, repo.RoleRoot), h.ListSubmissions)
 		api.GET("/submissions/:id", AuthOptional(cfg), h.GetSubmission)
 
 		api.GET("/rank", h.Rank)
