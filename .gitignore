@@ -1,0 +1,16 @@
+# 环境与部署
+.env
+
+# 前端
+node_modules/
+web/dist/
+*.local
+
+# Go
+server/bin/
+*.test
+*.out
+
+# 日志与系统文件
+*.log
+.DS_Store

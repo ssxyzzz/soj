@@ -1,0 +1,118 @@
+name: soj
+
+services:
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-soj}
+      MYSQL_USER: ${MYSQL_USER:-soj}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-soj123}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "3306:3306" # 本地开发时供宿主机连接，生产环境建议移除
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379" # 本地开发时供宿主机连接，生产环境建议移除
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-soj}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-soj123}
+    ports:
+      - "5672:5672" # AMQP
+      - "15672:15672" # 管理控制台 http://localhost:15672
+    volumes:
+      - rabbit-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # go-judge 判题沙箱：https://github.com/criyle/go-judge
+  # 沙箱会 bind-mount 镜像自身的 /usr 等目录，编译器装在 deploy/sandbox/Dockerfile 里；
+  # 依赖 cgroup 等内核能力做资源限制，本地开发直接使用特权模式
+  sandbox:
+    build: ./deploy/sandbox
+    restart: unless-stopped
+    privileged: true
+    shm_size: 256m
+    ports:
+      - "5050:5050" # 本地开发时供宿主机连接，生产环境建议移除
+
+  # Web API 服务（Gin）
+  server:
+    build:
+      context: ./server
+      args:
+        GOPROXY: https://goproxy.cn,direct
+    restart: unless-stopped
+    environment:
+      SOJ_ADDR: ":8080"
+      SOJ_MYSQL_DSN: "${MYSQL_USER:-soj}:${MYSQL_PASSWORD:-soj123}@tcp(mysql:3306)/${MYSQL_DATABASE:-soj}?charset=utf8mb4&parseTime=true&loc=Local"
+      SOJ_REDIS_ADDR: "redis:6379"
+      SOJ_RABBIT_URL: "amqp://${RABBITMQ_DEFAULT_USER:-soj}:${RABBITMQ_DEFAULT_PASS:-soj123}@rabbitmq:5672/"
+      SOJ_JWT_SECRET: ${SOJ_JWT_SECRET:-soj-dev-secret-change-me}
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  # 判题 worker：消费 RabbitMQ 队列，调用 go-judge 沙箱
+  judge:
+    build:
+      context: ./server
+      args:
+        GOPROXY: https://goproxy.cn,direct
+    entrypoint: ["/app/judge"]
+    restart: unless-stopped
+    environment:
+      SOJ_MYSQL_DSN: "${MYSQL_USER:-soj}:${MYSQL_PASSWORD:-soj123}@tcp(mysql:3306)/${MYSQL_DATABASE:-soj}?charset=utf8mb4&parseTime=true&loc=Local"
+      SOJ_REDIS_ADDR: "redis:6379"
+      SOJ_RABBIT_URL: "amqp://${RABBITMQ_DEFAULT_USER:-soj}:${RABBITMQ_DEFAULT_PASS:-soj123}@rabbitmq:5672/"
+      SOJ_SANDBOX_ADDR: "http://sandbox:5050"
+      SOJ_JUDGE_WORKERS: "4"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      sandbox:
+        condition: service_started
+
+  # 前端静态资源 + Nginx 反向代理（/ -> Vue 构建产物，/api -> server）
+  web:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+
+volumes:
+  mysql-data:
+  rabbit-data:
