@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 编译前端（在 node:22-alpine 容器内执行，本机无需安装 Node）。
+# 编译前端（本机 Node 工具链，npm 走 npmmirror）。
 # 产物:
 #   web/dist/                    前端静态资源
 #   server/internal/webui/dist/  供后端 embed 的副本（server-building 依赖它）
@@ -41,13 +41,19 @@ on_fail() {
 }
 trap on_fail ERR
 
-banner "SOJ 前端编译开始（web-building）"
+banner "SOJ 前端编译开始（web-building，本机工具链）"
 
-step "[1/3] npm install + vite build（node:22-alpine 容器，实时读秒）"
+# 本机工具链：优先用户目录安装，其次系统 PATH
+[ -x "$HOME/.local/opt/go/bin/go" ] && export PATH="$HOME/.local/opt/go/bin:$PATH"
+[ -d "$HOME/.local/opt/node-v22.21.1-linux-x64" ] && export PATH="$HOME/.local/opt/node-v22.21.1-linux-x64/bin:$PATH"
+if ! command -v npm >/dev/null 2>&1; then
+  err "找不到 npm。安装方法见 plan.md 部署运维章节（用户目录免 sudo 安装）"
+  exit 1
+fi
+
+step "[1/3] npm install + vite build（实时读秒）"
 start_timer
-docker run --rm -v "$ROOT/web":/src -w /src -u "$(id -u):$(id -g)" \
-  -e HOME=/tmp node:22-alpine \
-  sh -c 'npm install --no-audit --no-fund && npm run build' > "$BUILD_LOG" 2>&1
+(cd "$ROOT/web" && npm install --no-audit --no-fund && npm run build) > "$BUILD_LOG" 2>&1
 stop_timer
 
 step "[2/3] 同步到后端 embed 目录"

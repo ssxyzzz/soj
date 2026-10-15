@@ -25,6 +25,9 @@ server/internal/webui/dist/*
 .DS_Store
 .zcode/
 
+# 安全扫描器本地状态（Mimosa）
+.mimosa/
+
 # 只忽略根目录下的 md（不含子目录）
 /*.md
 # 但根目录的 README*.md 保留

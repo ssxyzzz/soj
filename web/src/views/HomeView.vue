@@ -104,6 +104,7 @@ onMounted(async () => {
 
 <style scoped>
 .notice {
+  text-align: center;
   margin-bottom: 16px;
 }
 

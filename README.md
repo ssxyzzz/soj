@@ -27,6 +27,7 @@
 - **排名**：解题数排行（比赛提交在隐藏期结束后才计入，防赛中推测成绩）。
 - **权限**：全局角色 guest / default（学生）/ admin（班级管理）/ root（系统管理）。
 - **防刷**：default 用户提交限速 1 分钟 3 次（root 后台可调）。
+- **性能与安全**：响应 gzip 压缩；带哈希的静态资源一年期 immutable 缓存、其余每次回源校验；Vditor 懒加载分包不拖累首屏；题面/说明 256KB 上限（服务端拦截 + 查看端拒渲染）+ 渲染后 DOMPurify 消毒。
 
 ## 快速启动
 
@@ -58,16 +59,17 @@ cd server && go run ./cmd/soj --judge-only  # 或：纯判题进程
 
 开发前端时的推荐姿势：起好基础设施后开两个终端——`npm run dev`（热更新）+ `go run ./cmd/soj`，改前端代码保存即生效，无需任何构建。
 
-## 手动编译（本机无需 Node/Go）
+## 手动编译（本机 Node/Go 工具链）
 
-两个脚本在容器内完成编译，带实时读秒计时、日志落盘（失败自动展示）、编译后自动重启网站：
+两个脚本用本机工具链编译（Go 与 Node 装在用户目录 `~/.local/opt/` 免 sudo，安装方法见 plan.md 第 6 章；模块代理 goproxy.cn / npmmirror 已内置），带实时读秒计时、日志落盘（失败自动展示末 20 行）：
 
 ```bash
-./scripts/web-building.sh      # 编译前端 + 自动重启网站（一条命令看到线上效果）
-./scripts/server-building.sh   # 编译后端 + 自动重启网站（需先跑过前者）
+./scripts/web-building.sh      # 编译前端 → 同步 embed 目录 → 重建并重启容器
+./scripts/server-building.sh   # 编译后端 → 热替换进容器并重启（秒级发版，需先跑过前者）
 make bin                       # 等价于上面两步连做
 ```
 
+发版节奏：只改后端跑 `server-building.sh` 即可秒级更新；改了前端需跑 `web-building.sh`（前端嵌入镜像，走一次镜像重建）。
 产物：`server/bin/soj`（静态单文件，前端已嵌入），可直接拷到任何 Linux 服务器运行。
 
 ## 出一道题
@@ -146,5 +148,5 @@ make backup   # 产出 backups/<时间>/mongo.archive.gz + testdata.tar.gz
 
 ## 路线图
 
-v0.4.2 ✅（班级作业、班级考试）→ v0.4.3 ✅（代码可见性）→ v0.4.4 ✅（富文本 Vditor）→ 第 4 批 题目管理/题解/Hydro 导入 → 标签（构思中）。
-细节与设计决策见 [plan.md](plan.md)（本地文档，不入库）。
+v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → 下一批 v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
+细节与排期见 [plan.md](plan.md)（本地文档，不入库）。

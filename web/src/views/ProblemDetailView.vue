@@ -6,6 +6,7 @@ import { ElMessage } from 'element-plus'
 import { problemApi, submissionApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
+import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import type { ProblemDetail, Submission } from '@/types'
@@ -101,6 +102,10 @@ async function saveStatement() {
   if (!problem.value) return
   if (!editStatement.value.trim()) {
     ElMessage.warning('题面不能为空')
+    return
+  }
+  if (markdownBytes(editStatement.value) > MAX_MARKDOWN_BYTES) {
+    ElMessage.error('题面过长（上限 256KB）')
     return
   }
   savingStatement.value = true

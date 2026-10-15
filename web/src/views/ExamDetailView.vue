@@ -6,6 +6,7 @@ import { ElMessage } from 'element-plus'
 import { examApi } from '@/api'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
+import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
 import { useUserStore } from '@/stores/user'
 import type { ExamDetail, LeaderRow } from '@/types'
 
@@ -82,6 +83,10 @@ async function saveIntro() {
   if (!exam.value) return
   if (!editIntro.value.trim()) {
     ElMessage.warning('考试说明不能为空')
+    return
+  }
+  if (markdownBytes(editIntro.value) > MAX_MARKDOWN_BYTES) {
+    ElMessage.error('考试说明过长（上限 256KB）')
     return
   }
   savingIntro.value = true

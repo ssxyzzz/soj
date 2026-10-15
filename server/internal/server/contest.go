@@ -143,6 +143,10 @@ func (h *Handlers) CreateContest(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "赛后隐藏期最长 7 天")
 		return
 	}
+	if len(req.Intro) > maxStatementSize {
+		fail(c, http.StatusBadRequest, "比赛说明过长（上限 256KB）")
+		return
+	}
 	if role != repo.RoleRoot {
 		fail(c, http.StatusForbidden, "仅 root 可创建主题库比赛")
 		return

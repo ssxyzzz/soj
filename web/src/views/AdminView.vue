@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
 import MdEditor from '@/components/MdEditor.vue'
+import { markdownBytes } from '@/utils/vditor'
 import type { AdminUser } from '@/types'
 
 const list = ref<AdminUser[]>([])
@@ -43,6 +44,10 @@ async function loadSettings() {
 }
 
 async function saveNotice() {
+  if (markdownBytes(homeNotice.value) > 64 << 10) {
+    ElMessage.error('公告过长（上限 64KB）')
+    return
+  }
   savingNotice.value = true
   try {
     await adminApi.updateSettings({ home_notice: homeNotice.value })

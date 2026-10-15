@@ -49,6 +49,10 @@ func (h *Handlers) CreateExam(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "赛后隐藏期最长 7 天")
 		return
 	}
+	if len(req.Intro) > maxStatementSize {
+		fail(c, http.StatusBadRequest, "考试说明过长（上限 256KB）")
+		return
+	}
 
 	uid, _, _, _ := currentUser(c)
 	ctx := c.Request.Context()
@@ -205,6 +209,10 @@ func (h *Handlers) SetExamIntro(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "考试说明不能为空")
+		return
+	}
+	if len(req.Intro) > maxStatementSize {
+		fail(c, http.StatusBadRequest, "考试说明过长（上限 256KB）")
 		return
 	}
 	uid, _, role, _ := currentUser(c)

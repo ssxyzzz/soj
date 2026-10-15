@@ -30,18 +30,9 @@ function onCommand(command: string) {
           <el-menu-item index="/classes">班级</el-menu-item>
           <el-menu-item index="/rank">排名</el-menu-item>
           <el-menu-item v-if="userStore.role === 'admin' || userStore.role === 'root'" index="/submissions">提交记录</el-menu-item>
+          <el-menu-item v-if="userStore.role === 'root'" index="/admin">管理后台</el-menu-item>
         </el-menu>
         <template v-if="userStore.token">
-          <el-button
-            v-if="userStore.role === 'root'"
-            size="small"
-            type="warning"
-            plain
-            class="mr8"
-            @click="router.push('/admin')"
-          >
-            管理后台
-          </el-button>
           <el-dropdown @command="onCommand">
             <span class="username">{{ userStore.nickname || '已登录' }}</span>
             <template #dropdown>
@@ -64,10 +55,6 @@ function onCommand(command: string) {
 <style scoped>
 .layout {
   min-height: 100vh;
-}
-
-.mr8 {
-  margin-right: 8px;
 }
 
 .header {

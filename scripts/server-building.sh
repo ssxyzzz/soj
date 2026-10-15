@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 编译后端（在 golang:1.26-alpine 容器内执行，本机无需安装 Go）。
+# 编译后端（本机 Go 工具链，模块代理 goproxy.cn）。
 # 产物: server/bin/soj —— 静态单文件二进制，前端页面已嵌入。
 # 注意: 需要先执行 ./scripts/web-building.sh（前端构建产物会被嵌入）。
 set -euo pipefail
@@ -40,24 +40,31 @@ on_fail() {
 }
 trap on_fail ERR
 
-banner "SOJ 后端编译开始（server-building）"
+banner "SOJ 后端编译开始（server-building，本机工具链）"
 
-step "[1/2] go build（golang:1.26-alpine 容器，实时读秒）"
+# 本机工具链：优先用户目录安装，其次系统 PATH
+[ -x "$HOME/.local/opt/go/bin/go" ] && export PATH="$HOME/.local/opt/go/bin:$PATH"
+[ -d "$HOME/.local/opt/node-v22.21.1-linux-x64" ] && export PATH="$HOME/.local/opt/node-v22.21.1-linux-x64/bin:$PATH"
+if ! command -v npm >/dev/null 2>&1; then
+  err "找不到 npm。安装方法见 plan.md 部署运维章节（用户目录免 sudo 安装）"
+  exit 1
+fi
+
+step "[1/2] go build（实时读秒，增量编译有缓存）"
 start_timer
-docker run --rm -v "$ROOT/server":/src -w /src -u "$(id -u):$(id -g)" \
-  -e HOME=/tmp -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath \
-  -e GOPROXY=https://goproxy.cn,direct \
-  golang:1.26-alpine \
-  sh -c 'CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/soj ./cmd/soj' > "$BUILD_LOG" 2>&1
+(cd "$ROOT/server" && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bin/soj ./cmd/soj) > "$BUILD_LOG" 2>&1
 stop_timer
 
-step "[2/2] 重建并重启 SOJ 容器（网站即刻更新）"
-if [ -n "$(cd "$ROOT" && docker compose ps -q soj 2>/dev/null)" ]; then
-  (cd "$ROOT" && docker compose up -d --build soj)
-  ok "部署完成！浏览器 Ctrl+F5 强刷即可看到最新版本"
+step "[2/2] 热替换进运行中的 SOJ 容器（秒级）"
+SOJ_CID="$(cd "$ROOT" && docker compose ps -q soj)"
+if [ -n "$SOJ_CID" ]; then
+  docker cp "$ROOT/server/bin/soj" "$SOJ_CID":/app/soj
+  (cd "$ROOT" && docker compose restart soj)
+  ok "部署完成！本机新二进制已热替换（容器重建时会回退为镜像内版本，属正常）"
+  echo -e "    如需完整重建镜像: ${C_INFO}docker compose up -d --build soj${C_END}"
 else
   echo -e "${C_INFO}==> 未检测到 SOJ 容器，跳过部署${C_END}"
-  echo -e "    需要更新网站时执行: ${C_INFO}cd $ROOT && docker compose up -d --build soj${C_END}"
+  echo -e "    需要部署网站时执行: ${C_INFO}cd $ROOT && docker compose up -d --build soj${C_END}"
 fi
 
 ok "全部完成！"

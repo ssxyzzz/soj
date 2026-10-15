@@ -40,7 +40,7 @@ func Run(ctx context.Context, deps *Deps) {
 	}
 
 	r := gin.New()
-	r.Use(gin.Logger(), gin.Recovery(), CORS())
+	r.Use(gin.Logger(), gin.Recovery(), CORS(), Gzip())
 
 	api := r.Group("/api")
 	{

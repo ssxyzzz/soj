@@ -201,6 +201,22 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.mb8 :deep(.el-page-header__back) {
+  background: #ecf5ff;
+  border-radius: 16px;
+  padding: 4px 14px 4px 6px;
+  transition: background 0.2s;
+}
+
+.mb8 :deep(.el-page-header__back:hover) {
+  background: #d9ecff;
+}
+
+.mb8 :deep(.el-page-header__icon) {
+  color: #409eff;
+  font-size: 18px;
+}
+
 .mb8 {
   margin-bottom: 8px;
 }

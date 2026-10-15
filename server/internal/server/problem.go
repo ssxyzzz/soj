@@ -10,6 +10,10 @@ import (
 	"soj/internal/testdata"
 )
 
+// maxStatementSize 题面/说明类 Markdown 的体积上限。
+// Lute 在浏览器主线程渲染，巨型表格、深嵌套等病态内容会卡死页面，超限直接拒绝。
+const maxStatementSize = 256 << 10 // 256KB
+
 func queryPage(c *gin.Context) (page, pageSize int) {
 	page = atoiDefault(c.Query("page"), 1)
 	pageSize = atoiDefault(c.Query("page_size"), 20)
@@ -185,6 +189,10 @@ func (h *Handlers) SetProblemStatement(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "题面不能为空")
+		return
+	}
+	if len(req.Statement) > maxStatementSize {
+		fail(c, http.StatusBadRequest, "题面过长（上限 256KB）")
 		return
 	}
 	uid, _, role, _ := currentUser(c)
