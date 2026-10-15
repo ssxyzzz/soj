@@ -23,3 +23,9 @@ server/internal/webui/dist/*
 *.log
 .DS_Store
 .zcode/
+
+# 文档只保留主目录 README*，其他 md 不入库
+*.md
+!/README*
+# 例外：种子题面是判题数据的组成部分（导入器读取），随仓库分发
+!/data/seed/**
