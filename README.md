@@ -2,7 +2,7 @@
 
 面向班级与社团的轻量级 Online Judge：一个 Go 程序 + MongoDB + go-judge 沙箱，三个容器就是一个完整的 OJ。
 支持班级作业（即时出分）、班级考试（OI 赛制）、主题库比赛、解题排名与完整的班级权限体系。
-设计决策与迭代记录见 [plan.md](plan.md)（本地文档，不入库）。
+设计决策与实现记录见 [notes.md](notes.md)，排期计划见 [plan.md](plan.md)（均为本地文档，不入库）。
 
 | 模块 | 技术 |
 | --- | --- |
@@ -149,7 +149,7 @@ make backup   # 产出 backups/<时间>/mongo.archive.gz + testdata.tar.gz
 ## 路线图
 
 v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → 下一批 v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
-细节与排期见 [plan.md](plan.md)（本地文档，不入库）。
+实现记录见 [notes.md](notes.md)，排期与待对齐事项见 [plan.md](plan.md)（均为本地文档，不入库）。
 
 ## 许可证
 
