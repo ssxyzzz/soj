@@ -70,6 +70,16 @@ async function put<T>(url: string, body?: unknown): Promise<T> {
   return resp.data.data
 }
 
+async function patch<T>(url: string, body?: unknown): Promise<T> {
+  const resp = await client.patch<ApiResponse<T>>(url, body)
+  return resp.data.data
+}
+
+async function del<T>(url: string): Promise<T> {
+  const resp = await client.delete<ApiResponse<T>>(url)
+  return resp.data.data
+}
+
 export const authApi = {
   login: (username: string, password: string) =>
     post<LoginResult>('/auth/login', { username, password }),
@@ -82,13 +92,13 @@ export const problemApi = {
     get<ProblemListResult>('/problems', { page, page_size: pageSize }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   setHidden: (id: number, hidden: boolean) =>
-    post<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
+    patch<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
   submissions: (id: number, page: number, pageSize: number) =>
     get<SubmissionListResult>(`/problems/${id}/submissions`, { page, page_size: pageSize }),
   mySubmissions: (id: number, page: number, pageSize: number) =>
     get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
   setStatement: (id: number, statement: string) =>
-    post<{ id: number }>(`/problems/${id}/statement`, { statement }),
+    patch<{ id: number }>(`/problems/${id}/statement`, { statement }),
 }
 
 export const submissionApi = {
@@ -126,11 +136,11 @@ export const assignmentApi = {
   create: (classId: number, title: string, intro: string) =>
     post<{ id: number; title: string }>(`/classes/${classId}/assignments`, { title, intro }),
   detail: (id: number) => get<AssignmentDetail>(`/assignments/${id}`),
-  remove: (id: number) => post<{ deleted: number }>(`/assignments/${id}`),
+  remove: (id: number) => del<{ deleted: number }>(`/assignments/${id}`),
   addProblem: (id: number, problemId: number) =>
     post<{ added: number }>(`/assignments/${id}/problems`, { problem_id: problemId }),
   removeProblem: (id: number, pid: number) =>
-    post<{ removed: number }>(`/assignments/${id}/problems/${pid}`),
+    del<{ removed: number }>(`/assignments/${id}/problems/${pid}`),
   progress: (id: number) => get<ProgressRow[]>(`/assignments/${id}/progress`),
 }
 
@@ -139,8 +149,8 @@ export const adminApi = {
     get<{ list: AdminUser[]; total: number }>('/admin/users', { page, page_size: pageSize }),
   createUser: (username: string, password: string, nickname: string, role: string) =>
     post<{ id: number }>('/admin/users', { username, password, nickname, role }),
-  updateUser: (id: number, patch: { role?: string; password?: string; nickname?: string }) =>
-    post<{ updated: number }>(`/admin/users/${id}`, patch),
+  updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string }) =>
+    patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
     get<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings'),
   updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string }) =>
@@ -163,7 +173,7 @@ export const contestApi = {
   list: () => get<ContestListItem[]>('/contests'),
   detail: (id: number) => get<ContestDetail>(`/contests/${id}`),
   create: (payload: CreateContestPayload) => post<{ id: number }>('/contests', payload),
-  remove: (id: number) => post<{ deleted: number }>(`/contests/${id}`),
+  remove: (id: number) => del<{ deleted: number }>(`/contests/${id}`),
   submit: (contestId: number, pid: number, language: string, code: string) =>
     post<{ id: number }>(`/contests/${contestId}/problems/${pid}/submissions`, { language, code }),
   mySubmissions: (contestId: number) =>
@@ -188,14 +198,14 @@ export const examApi = {
   detail: (id: number) => get<ExamDetail>(`/exams/${id}`),
   create: (classId: number, payload: CreateExamPayload) =>
     post<{ id: number }>(`/classes/${classId}/exams`, { ...payload, class_id: classId }),
-  remove: (id: number) => post<{ deleted: number }>(`/exams/${id}`),
+  remove: (id: number) => del<{ deleted: number }>(`/exams/${id}`),
   submit: (examId: number, pid: number, language: string, code: string) =>
     post<{ id: number }>(`/exams/${examId}/problems/${pid}/submissions`, { language, code }),
   mySubmissions: (examId: number) =>
     get<{ revealed: boolean; list: ContestMySubmission[] }>(`/exams/${examId}/submissions/mine`),
   leaderboard: (examId: number) => get<LeaderRow[]>(`/exams/${examId}/leaderboard`),
   setIntro: (examId: number, intro: string) =>
-    post<{ id: number }>(`/exams/${examId}/intro`, { intro }),
+    patch<{ id: number }>(`/exams/${examId}/intro`, { intro }),
 }
 
 // ---------- 首页公告 ----------
