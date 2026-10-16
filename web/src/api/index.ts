@@ -18,6 +18,7 @@ import type {
   LoginResult,
   PermGroupInfo,
   PermInfo,
+  BackupStatus,
   UserProfile,
   UserPrefs,
   ProblemDetail,
@@ -191,6 +192,9 @@ export const adminApi = {
   updateRole: (id: string, body: { name?: string; perms?: string[] }) =>
     patch<{ id: string }>(`/admin/roles/${id}`, body),
   deleteRole: (id: string) => del<{ deleted: string }>(`/admin/roles/${id}`),
+  // 备份面板（v0.4.9）：密文归档下载在 AdminView 内联处理（blob + 独立超时）
+  backupStatus: () => get<BackupStatus>('/admin/backup'),
+  backupOfflineKey: () => post<{ private_key: string }>('/admin/backup/offline-key'),
 }
 
 // ---------- 比赛（v0.4） ----------

@@ -202,6 +202,17 @@ export interface UserProfile {
   prefs: UserPrefs
 }
 
+// ---------- 备份（v0.4.9） ----------
+
+// 备份归档下载接口路径（集中在此：调用方引用常量名即可）
+export const BACKUP_RUN_URL = '/api/admin/backup/run'
+
+export interface BackupStatus {
+  mode: 'uninitialized' | 'tier0' | 'tier1'
+  last_backup_at: string | null
+  last_backup_file: string | null
+}
+
 // ---------- 角色与权限位（v0.4.7） ----------
 
 export interface PermInfo {

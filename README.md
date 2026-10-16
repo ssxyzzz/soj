@@ -108,6 +108,8 @@ subtasks:
 | SOJ_ADDR | 监听地址 | :8080 |
 | SOJ_MONGO_URI | MongoDB 连接串 | mongodb://127.0.0.1:27017 |
 | SOJ_DATA_DIR | 测试数据根目录 | ./data/testdata |
+| SOJ_BACKUP_DIR | 备份密文归档目录（服务器留存） | ./data/backups |
+| SOJ_KEYS_DIR | 备份密钥卷目录（与数据卷分离） | ./data/keys |
 | SOJ_SEED_DIR | 启动时自动导入的种子题目录 | （空） |
 | SOJ_SANDBOX_ADDR | go-judge 地址 | http://127.0.0.1:5050 |
 | SOJ_JUDGE_WORKERS | 判题并发数 | 2 |
@@ -155,17 +157,34 @@ subtasks:
 
 ## 备份与恢复
 
+管理后台「备份」面板一键完成：mongodump + 测试数据卷打包 → age 加密 → 密文归档下载（`soj-backup-*.v1.tar.age`），服务器同步留存一份。**下载的永远是密文**——误传网盘、丢 U 盘、浏览器缓存都无害。
+
+密钥两级模式（状态存于服务器密钥卷，与数据卷分离）：
+
+| 模式 | 私钥位置 | 防护 |
+| --- | --- | --- |
+| Tier 0（默认，零操作） | 服务器密钥卷（首次备份自动生成） | 防备份文件单独泄露；防不了整机被入侵 |
+| Tier 1（推荐升级） | 仅启用时一次性展示，服务器只存公钥 | 防整机入侵读历史备份；**私钥丢失 = 加密备份永久无法恢复** |
+
+命令行等价（cron 可直接调用）：
+
 ```bash
-make backup   # 产出 backups/<时间>/mongo.archive.gz + testdata.tar.gz
+./scripts/backup.sh    # 走服务端同一加密模块，产物复制到 ./backups/
 ```
 
-备份为**整站全量**：`mongo.archive.gz` 是 MongoDB 整库导出（用户账号与密码哈希、提交记录含代码全文、班级/作业/考试/比赛及成绩、题目元数据、系统设置），`testdata.tar.gz` 是测试数据本体；两者合起来可完整重建站点。
+恢复（解密在一次性容器内完成，宿主机无需安装 age）：
 
-恢复：`mongorestore --archive=mongo.archive.gz --gzip`，测试数据解包回 testdata 卷即可；恢复后整站原样，账号可直接登录（密码是哈希存储，备份中没有明文密码）。
+```bash
+./scripts/restore.sh <soj-backup-*.v1.tar.age> <私钥文件>   # Tier 1：用启用时保存的私钥
+./scripts/restore.sh <归档> --pull-key                       # Tier 0：私钥从服务器密钥卷取
+./scripts/restore.sh <旧版明文备份目录>                       # 兼容 v0.4.9 之前的目录式备份
+```
+
+恢复会 `mongorestore --drop` 覆盖现有库并还原测试数据卷，默认二次确认（`--yes` 跳过）。
 
 ## 路线图
 
-v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → v0.4.8 个人设置（资料 + 偏好联动）✅ → 下一批 v0.4.9 备份加密与备份面板 → v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
+v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → v0.4.8 个人设置（资料 + 偏好联动）✅ → v0.4.9 备份加密与备份面板（Tier 0/1 + age 密文归档）✅ → 下一批 v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
 实现记录见 [notes.md](notes.md)，排期与待对齐事项见 [plan.md](plan.md)（均为本地文档，不入库）。
 
 ## 许可证

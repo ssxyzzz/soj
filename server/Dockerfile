@@ -20,6 +20,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # 运行阶段
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata
+# mongodb-tools 提供 mongodump（备份模块经 PATH 调用）；ca-certs 供外连，tzdata 时区
+RUN apk add --no-cache ca-certificates tzdata mongodb-tools
 COPY --from=build /out/soj /app/soj
 ENTRYPOINT ["/app/soj"]

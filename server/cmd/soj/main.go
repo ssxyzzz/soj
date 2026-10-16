@@ -3,6 +3,7 @@
 //	soj                 启动 HTTP 服务 + 内置判题线程池（默认方式）
 //	soj --judge-only    只运行判题线程池（需要独立扩容判题能力时用）
 //	soj --import <dir>  导入一个题目目录后退出
+//	soj --backup-run    执行一次全站加密备份后退出
 package main
 
 import (
@@ -14,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"soj/internal/backup"
 	"soj/internal/config"
 	"soj/internal/judge"
 	"soj/internal/repo"
@@ -25,6 +27,7 @@ import (
 func main() {
 	judgeOnly := flag.Bool("judge-only", false, "只运行判题线程池，不启动 HTTP 服务")
 	importDir := flag.String("import", "", "导入一个题目目录后退出")
+	backupRun := flag.Bool("backup-run", false, "执行一次全站加密备份后退出")
 	flag.Parse()
 
 	cfg := config.Load()
@@ -51,6 +54,38 @@ func main() {
 			log.Fatalf("[import] 导入失败: %v", err)
 		}
 		log.Printf("[import] 已导入题目 #%d（来自 %s）", pid, *importDir)
+		return
+	}
+
+	// 备份模式：执行一次全站加密备份后退出（供 scripts/backup.sh 与 cron 调用，
+	// 与管理后台 /admin/backup/run 走 internal/backup 同一模块、同一密钥卷）
+	if *backupRun {
+		path, err := backup.Run(ctx, backup.Options{
+			MongoURI:  cfg.MongoURI,
+			DataDir:   cfg.DataDir,
+			BackupDir: cfg.BackupDir,
+			KeysDir:   cfg.KeysDir,
+		})
+		if err != nil {
+			log.Fatalf("[backup] %v", err)
+		}
+		log.Printf("[backup] 已生成 %s", path)
+		return
+	}
+
+	// 备份模式：执行一次全站加密备份后退出（供 scripts/backup.sh 与 cron 调用，
+	// 与管理后台 /admin/backup/run 走 internal/backup 同一模块、同一密钥卷）
+	if *backupRun {
+		path, err := backup.Run(ctx, backup.Options{
+			MongoURI:  cfg.MongoURI,
+			DataDir:   cfg.DataDir,
+			BackupDir: cfg.BackupDir,
+			KeysDir:   cfg.KeysDir,
+		})
+		if err != nil {
+			log.Fatalf("[backup] %v", err)
+		}
+		log.Printf("[backup] 已生成 %s", path)
 		return
 	}
 
