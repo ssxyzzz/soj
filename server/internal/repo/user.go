@@ -102,15 +102,19 @@ func (r *Repo) CreateUserWithPassword(ctx context.Context, username, password, n
 
 func IsNotFound(err error) bool { return errors.Is(err, mongo.ErrNoDocuments) }
 
-// ListUsers 管理端用户分页列表（不含密码哈希）；keyword 非空时按用户名/昵称模糊过滤。
-func (r *Repo) ListUsers(ctx context.Context, page, pageSize int, keyword string) ([]*User, int64, error) {
+// ListUsers 管理端用户分页列表（不含密码哈希）；keyword 非空时按用户名/昵称模糊过滤，
+// role 非空时只取该角色（管理后台按权限分组展示）。
+func (r *Repo) ListUsers(ctx context.Context, page, pageSize int, keyword, role string) ([]*User, int64, error) {
 	filter := bson.M{}
+	if role != "" {
+		filter["role"] = role
+	}
 	if kw := strings.TrimSpace(keyword); kw != "" {
 		pattern := regexp.QuoteMeta(kw)
-		filter = bson.M{"$or": bson.A{
+		filter["$or"] = bson.A{
 			bson.M{"uname": bson.M{"$regex": pattern, "$options": "i"}},
 			bson.M{"nickname": bson.M{"$regex": pattern, "$options": "i"}},
-		}}
+		}
 	}
 	total, err := r.Users.CountDocuments(ctx, filter)
 	if err != nil {

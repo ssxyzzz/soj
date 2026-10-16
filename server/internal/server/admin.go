@@ -14,7 +14,7 @@ import (
 
 func (h *Handlers) AdminListUsers(c *gin.Context) {
 	page, pageSize := queryPage(c)
-	list, total, err := h.repo.ListUsers(c.Request.Context(), page, pageSize, c.Query("q"))
+	list, total, err := h.repo.ListUsers(c.Request.Context(), page, pageSize, c.Query("q"), c.Query("role"))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取用户失败")
 		return

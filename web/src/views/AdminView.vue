@@ -10,12 +10,23 @@ import type { AdminUser } from '@/types'
 // 管理后台独立布局（v0.4.6）：左列功能卡点选切换，主列显示对应内容
 const section = ref<'users' | 'notice' | 'settings'>('users')
 
-const list = ref<AdminUser[]>([])
-const total = ref(0)
-const page = ref(1)
+// 用户按权限分组展示（root → admin → default），每组独立分页；
+// 搜索关键词同时作用于三组
 const pageSize = 20
-const loading = ref(false)
 const keyword = ref('')
+const loading = ref(false)
+
+const ROLE_GROUPS = [
+  { role: 'root', title: '超级管理员' },
+  { role: 'admin', title: '管理员' },
+  { role: 'default', title: '默认用户' },
+] as const
+
+const groups = reactive<Record<string, { list: AdminUser[]; total: number; page: number }>>({
+  root: { list: [], total: 0, page: 1 },
+  admin: { list: [], total: 0, page: 1 },
+  default: { list: [], total: 0, page: 1 },
+})
 
 const rateLimit = ref(3)
 const savingSettings = ref(false)
@@ -29,23 +40,33 @@ const createForm = reactive({ username: '', password: '', nickname: '', role: 'd
 async function load() {
   loading.value = true
   try {
-    const r = await adminApi.listUsers(page.value, pageSize, keyword.value.trim() || undefined)
-    list.value = r.list
-    total.value = r.total
+    await Promise.all(ROLE_GROUPS.map((g) => loadGroup(g.role)))
   } finally {
     loading.value = false
   }
 }
 
+async function loadGroup(role: string) {
+  const g = groups[role]
+  const r = await adminApi.listUsers(g.page, pageSize, keyword.value.trim() || undefined, role)
+  g.list = r.list
+  g.total = r.total
+}
+
 function search() {
-  page.value = 1
+  for (const g of ROLE_GROUPS) groups[g.role].page = 1
   load()
 }
 
 function resetSearch() {
   keyword.value = ''
-  page.value = 1
+  for (const g of ROLE_GROUPS) groups[g.role].page = 1
   load()
+}
+
+function onGroupPage(role: string, p: number) {
+  groups[role].page = p
+  loadGroup(role)
 }
 
 async function loadSettings() {
@@ -80,11 +101,6 @@ async function saveSettings() {
   } finally {
     savingSettings.value = false
   }
-}
-
-function onPageChange(p: number) {
-  page.value = p
-  load()
 }
 
 async function changeRole(row: AdminUser, role: string) {
@@ -166,7 +182,7 @@ onMounted(() => {
       <el-card v-if="section === 'users'">
         <template #header>
           <div class="head">
-            <span>用户管理（共 {{ total }} 人）</span>
+            <span>用户管理</span>
             <el-button type="primary" size="small" @click="showCreate = true">新建用户</el-button>
           </div>
         </template>
@@ -182,35 +198,58 @@ onMounted(() => {
           <el-button type="primary" @click="search">搜索</el-button>
           <el-button v-if="keyword" @click="resetSearch">重置</el-button>
         </div>
-        <el-table v-loading="loading" :data="list">
-          <el-table-column prop="id" label="ID" width="90" />
-          <el-table-column prop="username" label="用户名" min-width="160" />
-          <el-table-column prop="nickname" label="昵称" min-width="160" />
-          <el-table-column label="角色" width="200">
-            <template #default="{ row }">
-              <el-select :model-value="row.role" size="small" @change="(v: string) => changeRole(row as AdminUser, v)">
-                <el-option value="default" label="默认 default" />
-                <el-option value="admin" label="管理员 admin" />
-                <el-option value="root" label="超级管理员 root" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="120">
-            <template #default="{ row }">
-              <el-button size="small" link type="warning" @click="resetPassword(row as AdminUser)">重置密码</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <div class="pager">
-          <el-pagination
-            background
-            layout="prev, pager, next, total"
-            :total="total"
-            :page-size="pageSize"
-            :current-page="page"
-            @current-change="onPageChange"
+
+        <el-card
+          v-for="g in ROLE_GROUPS"
+          :key="g.role"
+          class="role-group"
+          shadow="never"
+        >
+          <template #header>
+            <div class="group-head">
+              <span>
+                {{ g.title }}
+                <el-tag v-if="keyword" size="small" type="info" class="ml8">搜索命中 {{ groups[g.role].total }} 人</el-tag>
+              </span>
+            </div>
+          </template>
+          <el-table v-loading="loading" :data="groups[g.role].list" size="small">
+            <el-table-column prop="id" label="ID" width="90" />
+            <el-table-column prop="username" label="用户名" min-width="160" />
+            <el-table-column prop="nickname" label="昵称" min-width="160" />
+            <el-table-column label="操作" width="240">
+              <template #default="{ row }">
+                <el-select
+                  :model-value="row.role"
+                  size="small"
+                  style="width: 130px"
+                  @change="(v: string) => changeRole(row as AdminUser, v)"
+                >
+                  <el-option value="root" label="设为 root" />
+                  <el-option value="admin" label="设为 admin" />
+                  <el-option value="default" label="设为 default" />
+                </el-select>
+                <el-button size="small" link type="warning" @click="resetPassword(row as AdminUser)">重置密码</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="groups[g.role].total > pageSize" class="group-pager">
+            <el-pagination
+              size="small"
+              background
+              layout="prev, pager, next"
+              :total="groups[g.role].total"
+              :page-size="pageSize"
+              :current-page="groups[g.role].page"
+              @current-change="(p: number) => onGroupPage(g.role, p)"
+            />
+          </div>
+          <el-empty
+            v-if="!groups[g.role].list.length"
+            :description="keyword ? `没有匹配「${keyword}」的${g.title}` : `暂无${g.title}`"
+            :image-size="40"
           />
-        </div>
+        </el-card>
       </el-card>
 
       <el-card v-else-if="section === 'notice'">
@@ -342,14 +381,31 @@ onMounted(() => {
   margin-bottom: 12px;
 }
 
-.notice-save {
+.role-group {
   margin-top: 12px;
 }
 
-.pager {
+.role-group :deep(.el-card__header) {
+  padding: 10px 16px;
+  background: #fafcff;
+}
+
+.group-head {
+  font-weight: 600;
+}
+
+.group-pager {
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
+  margin-top: 12px;
+}
+
+.ml8 {
+  margin-left: 8px;
+}
+
+.notice-save {
+  margin-top: 12px;
 }
 
 @media (max-width: 992px) {

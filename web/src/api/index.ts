@@ -146,8 +146,13 @@ export const assignmentApi = {
 }
 
 export const adminApi = {
-  listUsers: (page: number, pageSize: number, q?: string) =>
-    get<{ list: AdminUser[]; total: number }>('/admin/users', { page, page_size: pageSize, ...(q ? { q } : {}) }),
+  listUsers: (page: number, pageSize: number, q?: string, role?: string) =>
+    get<{ list: AdminUser[]; total: number }>('/admin/users', {
+      page,
+      page_size: pageSize,
+      ...(q ? { q } : {}),
+      ...(role ? { role } : {}),
+    }),
   createUser: (username: string, password: string, nickname: string, role: string) =>
     post<{ id: number }>('/admin/users', { username, password, nickname, role }),
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string }) =>
