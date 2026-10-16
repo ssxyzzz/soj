@@ -36,12 +36,12 @@ func main() {
 		log.Fatalf("[boot] %v", err)
 	}
 	defer r.Close(context.Background())
-	if err := r.Bootstrap(ctx); err != nil {
+	store := testdata.NewLocalFS(cfg.DataDir)
+	if err := r.Bootstrap(ctx, store); err != nil {
 		log.Fatalf("[boot] 初始化失败: %v", err)
 	}
 
 	sb := sandbox.New(cfg.SandboxAddr)
-	store := testdata.NewLocalFS(cfg.DataDir)
 
 	// 题目导入模式：导入后退出
 	if *importDir != "" {

@@ -36,19 +36,8 @@ const statusText = computed(() => {
   }
 })
 
-// 在线编程左栏题面：题面 + 样例拼成一份 MD
-const workbenchStatement = computed(() => {
-  const p = problem.value
-  if (!p) return ''
-  let md = p.description
-  if (p.samples.length) {
-    md += '\n\n## 样例\n'
-    p.samples.forEach((s, i) => {
-      md += `\n**样例 ${i + 1} 输入**\n\n\`\`\`\n${s.input || '（空）'}\n\`\`\`\n\n**样例 ${i + 1} 输出**\n\n\`\`\`\n${s.output}\n\`\`\`\n`
-    })
-  }
-  return md
-})
+// 在线编程左栏题面：题面本身已含 Markdown 样例章节，直接渲染
+const workbenchStatement = computed(() => problem.value?.description ?? '')
 
 async function load() {
   loading.value = true
@@ -155,19 +144,6 @@ onUnmounted(() => {
           <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
         </div>
         <MdView :content="problem.description" />
-        <template v-if="problem.samples.length">
-          <el-divider content-position="left">样例</el-divider>
-          <div v-for="(s, i) in problem.samples" :key="s.id" class="sample">
-            <div class="sample-col">
-              <div class="sample-label">样例 {{ i + 1 }} 输入</div>
-              <pre class="mono sample-pre">{{ s.input || '（空）' }}</pre>
-            </div>
-            <div class="sample-col">
-              <div class="sample-label">样例 {{ i + 1 }} 输出</div>
-              <pre class="mono sample-pre">{{ s.output }}</pre>
-            </div>
-          </div>
-        </template>
       </el-card>
       <template #aside>
         <el-card class="aside-card">
@@ -268,33 +244,6 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   margin: 10px 0 14px;
-}
-
-.sample {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.sample-col {
-  flex: 1;
-  min-width: 0;
-}
-
-.sample-label {
-  font-size: 13px;
-  color: #909399;
-  margin-bottom: 4px;
-}
-
-.sample-pre {
-  margin: 0;
-  padding: 10px 12px;
-  background: #f8f8f8;
-  border-radius: 4px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
 }
 
 .aside-card + .aside-card {

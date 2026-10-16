@@ -138,6 +138,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (int64, error) {
 	}
 
 	cases := make([]CaseMeta, 0, len(indexes))
+	contents := make(map[int]SampleIO, len(indexes))
 	for _, i := range indexes {
 		inData, err := os.ReadFile(filepath.Join(casesDir, strconv.Itoa(i), "in"))
 		if err != nil {
@@ -147,6 +148,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (int64, error) {
 		if err != nil {
 			return 0, fmt.Errorf("读取测试点 %d 答案: %w", i, err)
 		}
+		contents[i] = SampleIO{Input: string(inData), Output: string(ansData)}
 		inName, ansName := fmt.Sprintf("cases/%d/in", i), fmt.Sprintf("cases/%d/ans", i)
 		if err := store.WriteFile(pid, inName, inData); err != nil {
 			return 0, err
@@ -169,6 +171,15 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (int64, error) {
 	if len(sampleSet) == 0 {
 		cases[0].Sample = true
 	}
+
+	// 样例并入题面：以 Markdown 章节追加，编辑题面即可一并维护样例
+	samples := make([]SampleIO, 0, 4)
+	for _, tc := range cases {
+		if tc.Sample {
+			samples = append(samples, contents[tc.Index])
+		}
+	}
+	statement = []byte(AppendSamplesMd(string(statement), samples))
 
 	// 子任务校验：测试点必须存在、分值合计 100
 	subtasks := make([]Subtask, 0, len(meta.Subtasks))

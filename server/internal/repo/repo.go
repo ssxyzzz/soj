@@ -10,6 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/testdata"
 )
 
 // Repo 聚合所有集合的访问入口。
@@ -63,8 +65,8 @@ func (r *Repo) Close(ctx context.Context) error { return r.cli.Disconnect(ctx) }
 func (r *Repo) Ping(ctx context.Context) error { return r.cli.Ping(ctx, nil) }
 
 // Bootstrap 创建索引、初始化 admin 账号、把上次异常退出遗留的 Judging 重置为 Pending。
-// 幂等，每次启动都执行。
-func (r *Repo) Bootstrap(ctx context.Context) error {
+// store 用于需要读测试数据文件的一次性迁移。幂等，每次启动都执行。
+func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	_, err := r.Submissions.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "_id", Value: 1}}},
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "_id", Value: -1}}},
@@ -95,7 +97,7 @@ func (r *Repo) Bootstrap(ctx context.Context) error {
 	}
 
 	// 一次性数据迁移（角色体系、班级引用结构等），meta.migrations 记录完成标记
-	if err := r.runMigrations(ctx); err != nil {
+	if err := r.runMigrations(ctx, store); err != nil {
 		return err
 	}
 
@@ -110,7 +112,7 @@ func (r *Repo) Bootstrap(ctx context.Context) error {
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
-func (r *Repo) runMigrations(ctx context.Context) error {
+func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error {
 	meta := r.db.Collection("meta")
 	var done bson.M
 	err := meta.FindOne(ctx, bson.M{"_id": "migrations"}).Decode(&done)
@@ -173,6 +175,15 @@ func (r *Repo) runMigrations(ctx context.Context) error {
 			return err
 		}
 		log.Printf("[boot] 班级比赛已迁移为考试（exams 集合）")
+	}
+	if !flagDone("samplesMdV1") {
+		if err := r.migrateSamplesMd(ctx, store); err != nil {
+			return err
+		}
+		if err := setFlag("samplesMdV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 样例已并入题面（Markdown）")
 	}
 	return nil
 }

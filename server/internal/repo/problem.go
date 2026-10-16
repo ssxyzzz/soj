@@ -2,11 +2,17 @@ package repo
 
 import (
 	"context"
+	"fmt"
+	"log"
+	"sort"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/testdata"
 )
 
 // 可见性（v0.2 仅 public；v0.3 班级引入后扩展）
@@ -44,6 +50,84 @@ type Problem struct {
 type Subtask struct {
 	Cases []int `bson:"cases"`
 	Score int   `bson:"score"`
+}
+
+// SampleIO 样例输入/输出文本（样例并入题面用）。
+type SampleIO struct{ Input, Output string }
+
+// samplesMdHeading 样例章节标题：迁移与导入共用，也用作幂等判断标记
+// （题面已含该章节则不再追加，避免重复）。
+const samplesMdHeading = "## 样例"
+
+// AppendSamplesMd 把样例以 Markdown 章节追加到题面末尾，返回新题面。
+// 题面已含「## 样例」或无样例时原样返回——手写样例的题面不会被重复追加。
+func AppendSamplesMd(statement string, samples []SampleIO) string {
+	if len(samples) == 0 || strings.Contains(statement, samplesMdHeading) {
+		return statement
+	}
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(statement, "\n\t "))
+	b.WriteString("\n\n")
+	b.WriteString(samplesMdHeading)
+	for i, s := range samples {
+		b.WriteString(fmt.Sprintf("\n\n### 样例 %d\n\n输入：\n\n```\n%s\n```\n\n输出：\n\n```\n%s\n```",
+			i+1, strings.TrimRight(s.Input, "\n"), strings.TrimRight(s.Output, "\n")))
+	}
+	return b.String()
+}
+
+// migrateSamplesMd 样例并入题面（2026-10-16）：存量题目的样例此前由前端单独渲染，
+// 现把样例内容以 Markdown 追加进题面正文，样例随「编辑题面」一并维护。
+// 逐题幂等：题面已含「## 样例」的跳过。
+func (r *Repo) migrateSamplesMd(ctx context.Context, store testdata.Provider) error {
+	cursor, err := r.Problems.Find(ctx, bson.M{})
+	if err != nil {
+		return err
+	}
+	defer cursor.Close(ctx)
+	var list []*Problem
+	if err := cursor.All(ctx, &list); err != nil {
+		return err
+	}
+	changed := 0
+	for _, p := range list {
+		if strings.Contains(p.Statement, samplesMdHeading) {
+			continue
+		}
+		// 按 Index 升序取样例内容
+		cases := append([]CaseMeta(nil), p.Cases...)
+		sort.Slice(cases, func(i, j int) bool { return cases[i].Index < cases[j].Index })
+		samples := make([]SampleIO, 0, len(cases))
+		for _, tc := range cases {
+			if !tc.Sample {
+				continue
+			}
+			in, err := testdata.ReadAll(store, p.ID, tc.InName)
+			if err != nil {
+				log.Printf("[migrate][samplesMd] 题目 %d 读取样例输入失败: %v", p.ID, err)
+				continue
+			}
+			out, err := testdata.ReadAll(store, p.ID, tc.AnsName)
+			if err != nil {
+				log.Printf("[migrate][samplesMd] 题目 %d 读取样例输出失败: %v", p.ID, err)
+				continue
+			}
+			samples = append(samples, SampleIO{Input: string(in), Output: string(out)})
+		}
+		if len(samples) == 0 {
+			continue
+		}
+		if _, err := r.Problems.UpdateOne(ctx,
+			bson.M{"_id": p.ID, "statement": bson.M{"$ne": p.Statement}},
+			bson.M{"$set": bson.M{"statement": AppendSamplesMd(p.Statement, samples)}}); err != nil {
+			return err
+		}
+		changed++
+	}
+	if changed > 0 {
+		log.Printf("[migrate][samplesMd] 已把样例并入 %d 道题的题面", changed)
+	}
+	return nil
 }
 
 // UpsertProblem 按 ID 整体覆盖题目（导入工具调用）。
