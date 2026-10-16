@@ -62,8 +62,22 @@ type Problem struct {
 	FileIO         bool       `bson:"fileIo,omitempty"`        // 文件 IO 模式（v0.5b-3 生效）
 	FileIOInput    string     `bson:"fileIoInput,omitempty"`
 	FileIOOutput   string     `bson:"fileIoOutput,omitempty"`
+	FileIODesc     string     `bson:"fileIoDesc,omitempty"` // 文件 IO 说明（Markdown，启用场景追加渲染）
 	CreatedAt      time.Time  `bson:"createdAt"`
 	UpdatedAt      time.Time  `bson:"updatedAt"`
+}
+
+// FileIONames 本题文件 IO 的文件名对：老师未显式配置时默认 problem.in / problem.out，
+// 保证任意题目都可以被「本场启用文件 IO」直接使用（无配置门槛）。
+func (p *Problem) FileIONames() (inName, outName string) {
+	inName, outName = p.FileIOInput, p.FileIOOutput
+	if inName == "" {
+		inName = "problem.in"
+	}
+	if outName == "" {
+		outName = "problem.out"
+	}
+	return inName, outName
 }
 
 // Subtask 子任务分组（problem.yaml 可选配置）：组内测试点全过才得该组分。

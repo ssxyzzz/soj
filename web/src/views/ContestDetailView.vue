@@ -44,6 +44,19 @@ async function openUserSubs(uid: number, uname: string, pid: number, ptitle: str
   }
 }
 
+const fileIOSaving = ref(false)
+
+async function toggleFileIO(v: boolean) {
+  fileIOSaving.value = true
+  try {
+    await contestApi.setFileIO(Number(route.params.id), v)
+    contest.value!.file_io = v
+    ElMessage.success(v ? '本场已启用文件 IO，之后的提交按文件读写判题' : '本场已关闭文件 IO，之后的提交按标准输入输出判题')
+  } finally {
+    fileIOSaving.value = false
+  }
+}
+
 const showEditIntro = ref(false)
 const editIntro = ref('')
 const savingIntro = ref(false)
@@ -274,6 +287,21 @@ onUnmounted(() => {
         </el-card>
 
       <template #aside>
+        <el-card v-if="contest.is_organizer" class="aside-card">
+          <template #header><span>本场场景</span></template>
+          <div class="scene-row">
+            <span>启用文件 IO</span>
+            <el-switch
+              :model-value="contest.file_io"
+              :loading="fileIOSaving"
+              @change="(v: string | number | boolean) => toggleFileIO(!!v)"
+            />
+          </div>
+          <div class="dim" style="margin-top: 8px; line-height: 1.6">
+            启用后本场所有题按各题文件名对以文件读写方式判题，题面下方展示文件 IO 说明；可随时开关，之后的提交按新设置判。
+          </div>
+        </el-card>
+
         <el-card class="aside-card">
           <template #header>
             <span>{{ contest.status === 'scheduled' ? '开始倒计时' : contest.status === 'running' ? '剩余时间' : '赛程' }}</span>
@@ -449,5 +477,12 @@ onUnmounted(() => {
 
 .user-subs-detail .sub-code {
   margin-bottom: 12px;
+}
+
+.scene-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 </style>

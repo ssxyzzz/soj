@@ -22,6 +22,7 @@ const form = ref({
   range: [] as string[],
   hiddenDays: 0,
   pids: '' as string,
+  fileIO: false,
 })
 
 const running = computed(() => list.value.filter((c) => c.status === 'running'))
@@ -59,6 +60,7 @@ async function create() {
       end: new Date(form.value.range[1]).toISOString(),
       hidden_days: form.value.hiddenDays,
       problem_ids: problemIds,
+      file_io: form.value.fileIO,
     })
     ElMessage.success('比赛创建成功')
     showCreate.value = false
@@ -165,6 +167,15 @@ onMounted(load)
       </el-form-item>
       <el-form-item label="题目 ID（从题库取，用空格/逗号分隔）" required>
         <el-input v-model="form.pids" placeholder="如：3 4 5" />
+      </el-form-item>
+      <el-form-item>
+        <div class="fileio-switch">
+          <el-switch v-model="form.fileIO" />
+          <span>
+            本场启用文件 IO
+            <span class="dim">（场内所有题按各题文件名对以文件读写判题，题面下会展示文件 IO 说明；可随时开关）</span>
+          </span>
+        </div>
       </el-form-item>
     </el-form>
     <template #footer>

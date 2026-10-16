@@ -191,6 +191,9 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"can_edit_statement": h.problemEditable(c, p),
 		"can_view_others":    canViewOthers,    // 满分解锁后可在本页查看他人代码
 		"can_view_solutions": canViewSolutions, // 满分 ∨ 老师群体：题解弹窗入口提示用
+		"file_io_input":      p.FileIOInput,    // 文件名对与说明：编辑配置用；说明段仅启用场景渲染
+		"file_io_output":     p.FileIOOutput,
+		"file_io_desc":       p.FileIODesc,
 	}
 	if lk != nil {
 		resp["locked"] = true

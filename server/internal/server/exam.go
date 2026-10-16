@@ -27,6 +27,7 @@ func (h *Handlers) CreateExam(c *gin.Context) {
 		End        time.Time `json:"end" binding:"required"`
 		HiddenDays int       `json:"hidden_days"`
 		ProblemIDs []int64   `json:"problem_ids" binding:"required"`
+		FileIO     bool      `json:"file_io"` // 本场启用文件 IO（v0.5b-3）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数不完整")
@@ -88,6 +89,7 @@ func (h *Handlers) CreateExam(c *gin.Context) {
 		End:       req.End,
 		Problems:  problems,
 		CreatedBy: uid,
+		FileIO:    req.FileIO,
 	}
 	if req.HiddenDays > 0 {
 		e.HiddenUntil = req.End.AddDate(0, 0, req.HiddenDays)
@@ -179,6 +181,7 @@ func (h *Handlers) ExamDetail(c *gin.Context) {
 		"participant":   member,
 		"is_organizer":  isOrganizer,
 		"deletable":     isOrganizer && status == "scheduled",
+		"file_io":       e.FileIO, // 本场启用文件 IO（v0.5b-3）
 	}
 	if !e.HiddenUntil.IsZero() {
 		resp["hidden_until"] = e.HiddenUntil
@@ -231,6 +234,42 @@ func (h *Handlers) SetExamIntro(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"id": id})
+}
+
+// SetExamFileIO 设置考试「本场启用文件 IO」场景开关（创建者/root，中途可改：
+// 改动只影响之后的提交，此前提交的结果不回滚——需要时用后续的重测功能）。
+func (h *Handlers) SetExamFileIO(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	uid, _, role, _ := currentUser(c)
+	ctx := c.Request.Context()
+	e, err := h.repo.GetExam(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "考试不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取考试失败")
+		return
+	}
+	if !(uid == e.CreatedBy || role == repo.RoleRoot) {
+		fail(c, http.StatusForbidden, "只有考试创建者可以修改场景开关")
+		return
+	}
+	if err := h.repo.SetExamFileIO(ctx, id, *req.Enabled); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"file_io": *req.Enabled})
 }
 
 // DeleteExam 删除未开始的考试。

@@ -121,6 +121,7 @@ func (h *Handlers) CreateContest(c *gin.Context) {
 		End        time.Time `json:"end" binding:"required"`
 		HiddenDays int       `json:"hidden_days"`
 		ProblemIDs []int64   `json:"problem_ids" binding:"required"`
+		FileIO     bool      `json:"file_io"` // 本场启用文件 IO（v0.5b-3）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数不完整")
@@ -174,6 +175,7 @@ func (h *Handlers) CreateContest(c *gin.Context) {
 		End:       req.End,
 		Problems:  problems,
 		CreatedBy: uid,
+		FileIO:    req.FileIO,
 	}
 	if req.HiddenDays > 0 {
 		ct.HiddenUntil = req.End.AddDate(0, 0, req.HiddenDays)
@@ -246,6 +248,7 @@ func (h *Handlers) ContestDetail(c *gin.Context) {
 		"participant":   participant,
 		"is_organizer":  isOrganizer,
 		"deletable":     isOrganizer && status == "scheduled",
+		"file_io":       ct.FileIO, // 本场启用文件 IO（v0.5b-3）
 	}
 	if !ct.HiddenUntil.IsZero() {
 		resp["hidden_until"] = ct.HiddenUntil
@@ -330,6 +333,42 @@ func (h *Handlers) SetContestIntro(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"id": id})
+}
+
+// SetContestFileIO 设置比赛「本场启用文件 IO」场景开关（创建者/root，中途可改：
+// 改动只影响之后的提交，此前提交的结果不回滚——需要时用后续的重测功能）。
+func (h *Handlers) SetContestFileIO(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Enabled == nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	uid, _, role, _ := currentUser(c)
+	ctx := c.Request.Context()
+	ct, err := h.repo.GetContest(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "比赛不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取比赛失败")
+		return
+	}
+	if !(uid == ct.CreatedBy || role == repo.RoleRoot) {
+		fail(c, http.StatusForbidden, "只有比赛创建者可以修改场景开关")
+		return
+	}
+	if err := h.repo.SetContestFileIO(ctx, id, *req.Enabled); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"file_io": *req.Enabled})
 }
 
 // SubmitToContest 比赛页提交入口（赛时唯一接受该题提交的通道）。

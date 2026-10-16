@@ -36,6 +36,7 @@ type Contest struct {
 	Problems    []ContestProblem `bson:"problems"`
 	CreatedBy   int64            `bson:"createdBy"`
 	Published   bool             `bson:"published"` // 隐藏期结束，提交/榜单已并入公开态
+	FileIO      bool             `bson:"fileIo,omitempty"` // 本场启用文件 IO：场内所有题按各题文件名对以文件读写方式判题（v0.5b-3）
 	CreatedAt   time.Time        `bson:"createdAt"`
 }
 
@@ -250,6 +251,32 @@ func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, rou
 		return nil, err
 	}
 	return list, nil
+}
+
+// SetContestFileIO 设置比赛「本场启用文件 IO」场景开关（创建者/root；中途可改，后续提交按新设置判题）。
+func (r *Repo) SetContestFileIO(ctx context.Context, id int64, enabled bool) error {
+	res, err := r.db.Collection("contests").UpdateOne(ctx,
+		bson.M{"_id": id}, bson.M{"$set": bson.M{"fileIo": enabled}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// SetExamFileIO 设置考试「本场启用文件 IO」场景开关（创建者/root；中途可改，后续提交按新设置判题）。
+func (r *Repo) SetExamFileIO(ctx context.Context, id int64, enabled bool) error {
+	res, err := r.db.Collection("exams").UpdateOne(ctx,
+		bson.M{"_id": id}, bson.M{"$set": bson.M{"fileIo": enabled}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 // ContestLeaderboard 计算比赛榜单（考试榜单走 ExamLeaderboard，同一实现）。

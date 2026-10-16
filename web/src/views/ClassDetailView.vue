@@ -39,6 +39,7 @@ const examForm = ref({
   range: [] as string[],
   hiddenDays: 0,
   selectedProblems: [] as number[],
+  fileIO: false,
 })
 
 async function loadExams() {
@@ -75,6 +76,7 @@ async function createExam() {
       end: new Date(examForm.value.range[1]).toISOString(),
       hidden_days: examForm.value.hiddenDays,
       problem_ids: examForm.value.selectedProblems,
+      file_io: examForm.value.fileIO,
     })
     ElMessage.success('考试创建成功')
     showExam.value = false
@@ -415,6 +417,15 @@ onMounted(() => {
               :label="`#${p.id} ${p.title}`"
             />
           </el-select>
+        </el-form-item>
+        <el-form-item>
+          <div class="fileio-switch">
+            <el-switch v-model="examForm.fileIO" />
+            <span>
+              本场启用文件 IO
+              <span class="dim">（场内所有题按各题文件名对以文件读写判题，题面下会展示文件 IO 说明；可随时开关）</span>
+            </span>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>

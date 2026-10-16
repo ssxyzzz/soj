@@ -139,6 +139,8 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
 			authed.PATCH("/exams/:id/intro", h.SetExamIntro)
+			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
+			authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
 
 			// 题目编辑：edit.all 或 edit.own（属主校验在 handler 内）
 			authed.PATCH("/problems/:id/hidden", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemHidden)

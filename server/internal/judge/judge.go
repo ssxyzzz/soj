@@ -122,10 +122,27 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 
 	cmp := newOutputComparer(problem)
 	chk := j.checkerRunnerFor(problem)
-	if len(problem.Subtasks) > 0 {
-		return j.evaluateSubtasks(ctx, language, fileID, sub.Code, problem, cmp, chk)
+
+	// 文件 IO 模式（v0.5b-3）：仅比赛/考试「本场启用文件 IO」时生效；
+	// 题库/练习/作业恒为 stdio。文件名对取题目配置，缺省 problem.in / problem.out。
+	fio := fileIOParams{}
+	if sub.ContestID > 0 {
+		if c, err := j.Repo.GetContest(ctx, sub.ContestID); err == nil {
+			fio.enabled = c.FileIO
+		}
+	} else if sub.ExamID > 0 {
+		if e, err := j.Repo.GetExam(ctx, sub.ExamID); err == nil {
+			fio.enabled = e.FileIO
+		}
 	}
-	return j.evaluatePoints(ctx, language, fileID, sub.Code, problem, cmp, chk)
+	if fio.enabled {
+		fio.inName, fio.outName = problem.FileIONames()
+	}
+
+	if len(problem.Subtasks) > 0 {
+		return j.evaluateSubtasks(ctx, language, fileID, sub.Code, problem, cmp, chk, fio)
+	}
+	return j.evaluatePoints(ctx, language, fileID, sub.Code, problem, cmp, chk, fio)
 }
 
 // evalState 评测过程中的累计状态。
@@ -200,10 +217,10 @@ func tolerantEqual(a, b string, tol float64) bool {
 
 // caseVerdict 把沙箱单点结果归一为 (点位状态缩写, 终止状态, 原因)。
 // 终止状态非空表示该点导致整份提交按此状态失败（单点模式用）。
-func caseVerdict(res *sandbox.Result, ans string, cmp outputComparer) (caseStatus, finalStatus, reason string) {
+func caseVerdict(res *sandbox.Result, progOut, ans string, cmp outputComparer) (caseStatus, finalStatus, reason string) {
 	switch res.Status {
 	case "Accepted":
-		if !cmp.equal(res.Stdout(), ans) {
+		if !cmp.equal(progOut, ans) {
 			return "WA", repo.StatusWrongAnswer, "输出与答案不一致"
 		}
 		return "AC", "", ""
@@ -221,11 +238,31 @@ func caseVerdict(res *sandbox.Result, ans string, cmp outputComparer) (caseStatu
 	}
 }
 
+// fileIOParams 文件 IO 判题参数：仅比赛/考试「本场启用文件 IO」时 enabled。
+// 文件名对取题目配置，缺省 problem.in / problem.out。
+type fileIOParams struct {
+	enabled bool
+	inName  string
+	outName string
+}
+
+// programOutput 取考生输出：stdio 模式为 stdout 管道；文件模式为收集到的输出文件。
+// 文件模式下未生成输出文件返回 ok=false（判 WA 并注明文件名）。
+func programOutput(res *sandbox.Result, fio fileIOParams) (string, bool) {
+	if !fio.enabled {
+		return res.Stdout(), true
+	}
+	if !res.HasFile(fio.outName) {
+		return "", false
+	}
+	return res.File(fio.outName), true
+}
+
 // evaluatePoints 单点等分模式：每点 100/n 分，首个失败即终止（历史行为）。
-func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	st := &evalState{}
 	for i, tc := range problem.Cases {
-		res, err := j.runOne(ctx, language, fileID, code, tc, problem)
+		res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 		if err != nil {
 			return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
 				"沙箱调用失败: " + err.Error(), st.detail
@@ -233,27 +270,39 @@ func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fi
 		t, m := st.observe(res)
 		caseStatus, finalStatus, reason := "", "", ""
 		if res.Status == "Accepted" {
-			ans, err := testdata.ReadAll(j.Provider, problem.ID, tc.AnsName)
-			if err != nil {
-				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
-					"读取答案文件失败: " + err.Error(), st.detail
-			}
-			if chk != nil {
-				ok, msg, serr := chk.run(ctx, tc, string(ans), res.Stdout())
-				if serr != nil {
-					return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
-						"校验器异常: " + serr.Error(), st.detail
-				}
-				if ok {
-					caseStatus, finalStatus, reason = "AC", "", ""
-				} else {
-					caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer, msg
-				}
+			progOut, progOK := programOutput(res, fio)
+			if !progOK {
+				caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer,
+					fmt.Sprintf("未生成输出文件 %s", fio.outName)
 			} else {
-				caseStatus, finalStatus, reason = caseVerdict(res, string(ans), cmp)
+				ans, err := testdata.ReadAll(j.Provider, problem.ID, tc.AnsName)
+				if err != nil {
+					return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
+						"读取答案文件失败: " + err.Error(), st.detail
+				}
+				if chk != nil {
+					ok, msg, serr := chk.run(ctx, tc, string(ans), progOut)
+					if serr != nil {
+						return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
+							"校验器异常: " + serr.Error(), st.detail
+					}
+					if ok {
+						caseStatus, finalStatus, reason = "AC", "", ""
+					} else {
+						caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer, msg
+					}
+				} else {
+					caseStatus, finalStatus, reason = caseVerdict(res, progOut, string(ans), cmp)
+				}
 			}
 		} else {
-			caseStatus, finalStatus, reason = caseVerdict(res, "", cmp)
+			if fio.enabled && res.Status == "File Error" {
+				// 文件模式：CopyOut 收集不到配置的输出文件（程序未写/freopen 名字错）
+				caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer,
+					fmt.Sprintf("未生成输出文件 %s", fio.outName)
+			} else {
+				caseStatus, finalStatus, reason = caseVerdict(res, res.Stdout(), "", cmp)
+			}
 		}
 		if caseStatus != "" {
 			st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m})
@@ -268,7 +317,7 @@ func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fi
 
 // evaluateSubtasks 子任务模式：组内测试点全过才得该组分；组内失败跳过该组剩余点继续下一组。
 // 总分 100 判 Accepted；否则以第一个失败点的状态作为整份提交状态（保留部分分）。
-func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	byIndex := map[int]repo.CaseMeta{}
 	for _, tc := range problem.Cases {
 		byIndex[tc.Index] = tc
@@ -285,7 +334,7 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, 
 				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
 					"子任务配置引用了不存在的测试点", st.detail
 			}
-			res, err := j.runOne(ctx, language, fileID, code, tc, problem)
+			res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 			if err != nil {
 				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
 					"沙箱调用失败: " + err.Error(), st.detail
@@ -293,27 +342,39 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, 
 			t, m := st.observe(res)
 			caseStatus, finalStatus, reason := "", "", ""
 			if res.Status == "Accepted" {
-				ans, err := testdata.ReadAll(j.Provider, problem.ID, tc.AnsName)
-				if err != nil {
-					return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
-						"读取答案文件失败: " + err.Error(), st.detail
-				}
-				if chk != nil {
-					ok, msg, serr := chk.run(ctx, tc, string(ans), res.Stdout())
-					if serr != nil {
-						return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
-							"校验器异常: " + serr.Error(), st.detail
-					}
-					if ok {
-						caseStatus, finalStatus, reason = "AC", "", ""
-					} else {
-						caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer, msg
-					}
+				progOut, progOK := programOutput(res, fio)
+				if !progOK {
+					caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer,
+						fmt.Sprintf("未生成输出文件 %s", fio.outName)
 				} else {
-					caseStatus, finalStatus, reason = caseVerdict(res, string(ans), cmp)
+					ans, err := testdata.ReadAll(j.Provider, problem.ID, tc.AnsName)
+					if err != nil {
+						return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+							"读取答案文件失败: " + err.Error(), st.detail
+					}
+					if chk != nil {
+						ok, msg, serr := chk.run(ctx, tc, string(ans), progOut)
+						if serr != nil {
+							return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+								"校验器异常: " + serr.Error(), st.detail
+						}
+						if ok {
+							caseStatus, finalStatus, reason = "AC", "", ""
+						} else {
+							caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer, msg
+						}
+					} else {
+						caseStatus, finalStatus, reason = caseVerdict(res, progOut, string(ans), cmp)
+					}
 				}
 			} else {
-				caseStatus, finalStatus, reason = caseVerdict(res, "", cmp)
+				if fio.enabled && res.Status == "File Error" {
+					// 文件模式：CopyOut 收集不到配置的输出文件（程序未写/freopen 名字错）
+					caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer,
+						fmt.Sprintf("未生成输出文件 %s", fio.outName)
+				} else {
+					caseStatus, finalStatus, reason = caseVerdict(res, res.Stdout(), "", cmp)
+				}
 			}
 			if caseStatus != "" {
 				st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m})
@@ -413,7 +474,7 @@ func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (fi
 // compileGate 编译串行化信号量：同一时刻仅允许一个编译任务进入沙箱。
 var compileGate = make(chan struct{}, 1)
 
-func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code string, tc repo.CaseMeta, p *repo.Problem) (*sandbox.Result, error) {
+func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code string, tc repo.CaseMeta, p *repo.Problem, fio fileIOParams) (*sandbox.Result, error) {
 	input, err := testdata.ReadAll(j.Provider, p.ID, tc.InName)
 	if err != nil {
 		return nil, fmt.Errorf("读取输入文件: %w", err)
@@ -423,8 +484,8 @@ func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code stri
 		Args: l.RunArgs,
 		Env:  []string{"PATH=/usr/local/bin:/usr/bin:/bin"},
 		Files: []sandbox.File{
-			sandbox.Stdin(string(input)),
-			sandbox.Pipe("stdout", maxStdout),
+			sandbox.Stdin(string(input)),      // 文件模式下程序不读 stdin，占位保持 fd 结构
+			sandbox.Pipe("stdout", maxStdout), // 文件模式下 stdout 仅留存展示，不参与比对（NOI 惯例）
 			sandbox.Pipe("stderr", maxStderr),
 		},
 		CPULimit:    cpuLimit,
@@ -437,6 +498,12 @@ func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code stri
 		cmd.CopyIn = map[string]sandbox.CopyFile{"main": {FileID: fileID}}
 	} else {
 		cmd.CopyIn = map[string]sandbox.CopyFile{l.SourceFile: {Content: code}}
+	}
+	if fio.enabled {
+		// 文件 IO：测试点输入按题目配置的文件名拷入工作目录，
+		// 程序 freopen 读入、把答案写到输出文件名，判题收集该文件比对
+		cmd.CopyIn[fio.inName] = sandbox.CopyFile{Content: string(input)}
+		cmd.CopyOut = append(cmd.CopyOut, fio.outName)
 	}
 	results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
 	if err != nil || len(results) == 0 {

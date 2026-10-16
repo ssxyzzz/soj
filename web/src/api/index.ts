@@ -237,6 +237,7 @@ export interface CreateContestPayload {
   end: string
   hidden_days?: number
   problem_ids: number[]
+  file_io?: boolean
 }
 
 export const contestApi = {
@@ -250,6 +251,8 @@ export const contestApi = {
   mySubmissions: (contestId: number) =>
     get<{ revealed: boolean; list: ContestMySubmission[] }>(`/contests/${contestId}/submissions/mine`),
   leaderboard: (contestId: number) => get<LeaderRow[]>(`/contests/${contestId}/leaderboard`),
+  setFileIO: (contestId: number, enabled: boolean) =>
+    patch<{ file_io: boolean }>(`/contests/${contestId}/file-io`, { enabled }),
   userSubmissions: (contestId: number, pid: number, uid: number) =>
     get<{ list: Submission[] }>(`/contests/${contestId}/problems/${pid}/submissions`, { uid }),
 }
@@ -263,6 +266,7 @@ export interface CreateExamPayload {
   end: string
   hidden_days?: number
   problem_ids: number[]
+  file_io?: boolean
 }
 
 export const examApi = {
@@ -277,6 +281,8 @@ export const examApi = {
   mySubmissions: (examId: number) =>
     get<{ revealed: boolean; list: ContestMySubmission[] }>(`/exams/${examId}/submissions/mine`),
   leaderboard: (examId: number) => get<LeaderRow[]>(`/exams/${examId}/leaderboard`),
+  setFileIO: (examId: number, enabled: boolean) =>
+    patch<{ file_io: boolean }>(`/exams/${examId}/file-io`, { enabled }),
   userSubmissions: (examId: number, pid: number, uid: number) =>
     get<{ list: Submission[] }>(`/exams/${examId}/problems/${pid}/submissions`, { uid }),
   setIntro: (examId: number, intro: string) =>

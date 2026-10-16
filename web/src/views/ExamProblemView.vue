@@ -37,7 +37,14 @@ const statusText = computed(() => {
 })
 
 // 在线编程左栏题面：题面本身已含 Markdown 样例章节，直接渲染
-const workbenchStatement = computed(() => problem.value?.description ?? '')
+// 在线编程左栏题面：本场启用文件 IO 时追加文件 IO 说明段
+const workbenchStatement = computed(() => {
+  const base = problem.value?.description ?? ''
+  if (exam.value?.file_io && problem.value?.file_io_desc) {
+    return `${base}\n\n## 文件 IO\n\n${problem.value.file_io_desc}\n`
+  }
+  return base
+})
 
 async function load() {
   loading.value = true
@@ -150,8 +157,13 @@ onUnmounted(() => {
         <div class="info-row">
           <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
           <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
+          <el-tag v-if="exam.file_io" size="small" type="danger">本场为文件 IO 模式</el-tag>
         </div>
         <MdView :content="problem.description" />
+        <el-card v-if="exam.file_io && problem.file_io_desc" shadow="never" class="fileio-card">
+          <template #header><span>📎 文件 IO 说明（本场启用文件 IO）</span></template>
+          <MdView :content="problem.file_io_desc" />
+        </el-card>
       </el-card>
 
       <template #aside>

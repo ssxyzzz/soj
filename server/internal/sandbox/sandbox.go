@@ -71,6 +71,15 @@ func (r *Result) Stdout() string { return DecodeContent(r.Files["stdout"]) }
 
 func (r *Result) Stderr() string { return DecodeContent(r.Files["stderr"]) }
 
+// File 取出 CopyOut 收集的具名文件内容（文件 IO 模式的考生输出）。
+func (r *Result) File(name string) string { return DecodeContent(r.Files[name]) }
+
+// HasFile 该具名文件是否被实际收集到（文件 IO 模式判断考生是否生成了输出文件）。
+func (r *Result) HasFile(name string) bool {
+	_, ok := r.Files[name]
+	return ok
+}
+
 type Client struct {
 	baseURL string
 	http    *http.Client

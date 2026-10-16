@@ -58,6 +58,9 @@ export interface ProblemDetail {
   can_edit_statement?: boolean
   can_view_others?: boolean
   can_view_solutions?: boolean
+  file_io_input?: string
+  file_io_output?: string
+  file_io_desc?: string
   locked?: boolean
   lock_kind?: 'contest' | 'exam'
   contest_id?: number
@@ -205,6 +208,7 @@ export interface UserPrefs {
   defaultLang?: string
   codeTemplates?: Record<string, string>
   mdEditMode?: '' | 'wysiwyg' | 'ir' | 'sv'
+  autocomplete?: boolean // 代码自动补全（默认开箱开启；后续按用户等级门槛放开）
 }
 
 // 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）
@@ -294,6 +298,7 @@ export interface ContestDetail {
   participant: boolean
   is_organizer: boolean
   deletable: boolean
+  file_io?: boolean // 本场启用文件 IO（v0.5b-3）
   problems?: ContestProblem[]
 }
 

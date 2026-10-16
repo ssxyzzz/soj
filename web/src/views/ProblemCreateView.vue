@@ -20,6 +20,9 @@ const form = reactive({
   compare: 'exact',
   float_tolerance: 0.0001,
   statement: '',
+  file_io_input: '',
+  file_io_output: '',
+  file_io_desc: '',
 })
 const fileList = ref<UploadUserFile[]>([])
 const checkerList = ref<UploadUserFile[]>([])
@@ -76,6 +79,9 @@ async function submit() {
       fd.append('float_tolerance', String(form.float_tolerance))
     }
     fd.append('statement', form.statement)
+    if (form.file_io_input.trim()) fd.append('file_io_input', form.file_io_input.trim())
+    if (form.file_io_output.trim()) fd.append('file_io_output', form.file_io_output.trim())
+    if (form.file_io_desc.trim()) fd.append('file_io_desc', form.file_io_desc)
     fd.append('zip', zip)
     const ck = checkerFile()
     if (ck) fd.append('checker', ck)
@@ -165,6 +171,19 @@ async function submit() {
           </div>
         </el-form-item>
         <el-form-item>
+          <div class="fileio-block">
+            <div class="fileio-title">
+              文件 IO（可选）
+              <span class="dim">仅比赛/考试「本场启用文件 IO」时生效；留空默认 problem.in / problem.out</span>
+            </div>
+            <div class="limits">
+              <el-input v-model="form.file_io_input" placeholder="输入文件名，如 problem.in" style="width: 240px" />
+              <el-input v-model="form.file_io_output" placeholder="输出文件名，如 problem.out" style="width: 240px" />
+            </div>
+            <MdEditor v-model="form.file_io_desc" height="200px" />
+          </div>
+        </el-form-item>
+        <el-form-item>
           <el-button type="primary" :loading="saving" @click="submit">创建题目</el-button>
         </el-form-item>
       </el-form>
@@ -189,6 +208,27 @@ async function submit() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.fileio-block {
+  width: 100%;
+}
+
+.fileio-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fileio-block :deep(.el-form-item__content) {
+  display: block;
+}
+
+.fileio-block .limits {
+  margin-bottom: 8px;
 }
 
 /* zip 拖拽区撑满表单，与题面编辑器同宽（zip-upload 类落在 el-upload 根元素上） */
