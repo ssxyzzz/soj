@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# 编译前端（本机 Node 工具链，npm 走 npmmirror）。
+# 编译前端并部署（本机 Node + Go 工具链，npm 走 npmmirror）。
+# 常规路径 = 宿主机全量构建（前端产物嵌入二进制）+ docker cp 热替换，秒级发版；
+# 镜像重建仅在容器不在运行时兜底（平时镜像内版本会落后，用 make image 对齐）。
 # 产物:
 #   web/dist/                    前端静态资源
 #   server/internal/webui/dist/  供后端 embed 的副本（server-building 依赖它）
+#   server/bin/soj               含最新前端的二进制（与 server-building 同一路径）
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_LOG=/tmp/soj-web-building.log
+LOG=/tmp/soj-web-npm.log            # 编译与热替换各步
+DOCKER_LOG=/tmp/soj-web-docker.log  # 兜底镜像重建
+CUR_LOG=$LOG                        # on_fail 展示当前失败步骤的日志（run_live 每步更新）
 
 C_INFO='\033[1;36m' C_OK='\033[1;32m' C_ERR='\033[1;31m' C_END='\033[0m'
 banner() { echo -e "${C_INFO}════════════════════════════════════════════\n  🚀 $1\n════════════════════════════════════════════${C_END}"; }
@@ -14,59 +19,98 @@ step()   { echo -e "${C_INFO}==> $1${C_END}"; }
 ok()     { echo -e "${C_OK}✅ $1${C_END}"; }
 err()    { echo -e "${C_ERR}❌ $1${C_END}"; }
 
-# 读秒计时器：后台进程每秒刷新一次"已用时"（青色）
-TIMER_START=0
-TIMER_PID=0
-start_timer() {
-  TIMER_START=$(date +%s)
-  (
-    while :; do
-      E=$(( $(date +%s) - TIMER_START ))
-      printf "\r${C_INFO}⏱ 编译中... %02d:%02d${C_END}    " $((E/60)) $((E%60))
-      sleep 1
-    done
-  ) &
-  TIMER_PID=$!
-}
-stop_timer() {
-  kill "$TIMER_PID" 2>/dev/null || true
-  wait "$TIMER_PID" 2>/dev/null || true
-  E=$(( $(date +%s) - TIMER_START ))
-  printf "\r${C_OK}⏱ 本次用时: %02d:%02d${C_END}                                        \n" $((E/60)) $((E%60))
+# ── 实时进度区 ──────────────────────────────────────────────────────────
+# run_live <说明> <日志文件> <命令...>：命令后台执行、输出全量落日志；
+# 前台每秒重画「计时 1 行 + 日志最新 LIVE_LINES 行」（光标上移重画，不刷屏）。
+# 失败时打 ❌ + 用时后返回非零，交由 on_fail 展示日志；Ctrl+C 会一并杀掉后台命令。
+LIVE_LINES=3
+run_live() {
+  local label="$1" log="$2"; shift 2
+  local pid start rc=0 e last have first=1
+  CUR_LOG="$log"
+  start=$(date +%s)
+  "$@" >"$log" 2>&1 &
+  pid=$!
+  trap 'kill "$pid" 2>/dev/null || true' INT TERM
+  while kill -0 "$pid" 2>/dev/null; do
+    e=$(( $(date +%s) - start ))
+    last="$(tail -n "$LIVE_LINES" "$log" 2>/dev/null | cut -c1-"${COLUMNS:-110}")"
+    have=0; [ -n "$last" ] && have=$(printf '%s\n' "$last" | wc -l)
+    if [ "$first" -eq 1 ]; then first=0; else printf '\033[%dA\033[J' "$((LIVE_LINES + 1))"; fi
+    printf "${C_INFO}⏱ %s... %02d:%02d${C_END}\n" "$label" $((e/60)) $((e%60))
+    if [ -n "$last" ]; then printf '%s\n' "$last" | sed 's/^/  │ /'; fi
+    while [ "$have" -lt "$LIVE_LINES" ]; do printf '\n'; have=$((have+1)); done
+    sleep 1
+  done
+  wait "$pid" || rc=$?
+  trap - INT TERM
+  e=$(( $(date +%s) - start ))
+  printf '\033[%dA\033[J' "$((LIVE_LINES + 1))"
+  if [ "$rc" -eq 0 ]; then
+    printf "${C_OK}⏱ %s完成，用时 %02d:%02d${C_END}\n" "$label" $((e/60)) $((e%60))
+  else
+    printf "${C_ERR}❌ %s失败，用时 %02d:%02d${C_END}\n" "$label" $((e/60)) $((e%60))
+    return "$rc"
+  fi
 }
 on_fail() {
-  kill "$TIMER_PID" 2>/dev/null || true
-  err "编译失败！日志最后 20 行（$BUILD_LOG）:"
-  tail -20 "$BUILD_LOG" 2>/dev/null || true
+  err "编译失败！日志最后 20 行（$CUR_LOG）:"
+  tail -20 "$CUR_LOG" 2>/dev/null || true
 }
 trap on_fail ERR
 
 banner "SOJ 前端编译开始（web-building，本机工具链）"
 
-# 本机工具链：优先用户目录安装，其次系统 PATH
+# 本机工具链：优先用户目录安装，其次系统 PATH（前端要 Node，嵌入二进制要 Go）
 [ -x "$HOME/.local/opt/go/bin/go" ] && export PATH="$HOME/.local/opt/go/bin:$PATH"
 [ -d "$HOME/.local/opt/node-v22.21.1-linux-x64" ] && export PATH="$HOME/.local/opt/node-v22.21.1-linux-x64/bin:$PATH"
-if ! command -v npm >/dev/null 2>&1; then
-  err "找不到 npm。安装方法见 plan.md 部署运维章节（用户目录免 sudo 安装）"
+if ! command -v npm >/dev/null 2>&1 || ! command -v go >/dev/null 2>&1; then
+  err "找不到 npm 或 go。安装方法见 plan.md 部署运维章节（用户目录免 sudo 安装）"
   exit 1
 fi
 
-step "[1/3] npm install + vite build（实时读秒）"
-start_timer
-(cd "$ROOT/web" && npm install --no-audit --no-fund && npm run build) > "$BUILD_LOG" 2>&1
-stop_timer
+web_build() {
+  cd "$ROOT/web"
+  npm install --no-audit --no-fund
+  npm run build
+}
+sync_embed() {
+  rm -rf "$ROOT/server/internal/webui/dist"
+  cp -r "$ROOT/web/dist" "$ROOT/server/internal/webui/dist"
+}
+go_build() {
+  cd "$ROOT/server"
+  # -v 把正在编译的包名打进行日志：实时区有真实进度可看；热缓存时几乎无输出、秒完
+  CGO_ENABLED=0 go build -v -trimpath -ldflags="-s -w" -o bin/soj ./cmd/soj
+}
+deploy_swap() {
+  docker cp "$ROOT/server/bin/soj" "$SOJ_CID":/app/soj
+  cd "$ROOT" && docker compose restart soj
+}
+docker_up() {
+  cd "$ROOT"
+  docker compose up -d --build soj
+}
 
-step "[2/3] 同步到后端 embed 目录"
-rm -rf "$ROOT/server/internal/webui/dist"
-cp -r "$ROOT/web/dist" "$ROOT/server/internal/webui/dist"
+step "[1/4] npm install + vite build（实时进度）"
+run_live "前端编译" "$LOG" web_build
 
-step "[3/3] 重建并重启 SOJ 容器（网站即刻更新）"
-if [ -n "$(cd "$ROOT" && docker compose ps -q soj 2>/dev/null)" ]; then
-  (cd "$ROOT" && docker compose up -d --build soj)
+step "[2/4] 同步到后端 embed 目录"
+run_live "同步 embed" "$LOG" sync_embed
+
+step "[3/4] 编译含新前端的二进制（增量编译有缓存）"
+run_live "go build" "$LOG" go_build
+
+step "[4/4] 部署（热替换，秒级）"
+SOJ_CID="$(cd "$ROOT" && docker compose ps -q soj)"
+if [ -n "$SOJ_CID" ]; then
+  run_live "热替换+重启" "$LOG" deploy_swap
   ok "部署完成！浏览器 Ctrl+F5 强刷即可看到最新版本"
+  echo -e "    镜像内版本暂落后于热替换版本（容器重建会回退），定期 ${C_INFO}make image${C_END} 对齐"
 else
-  echo -e "${C_INFO}==> 未检测到 SOJ 容器，跳过部署${C_END}"
-  echo -e "    需要更新网站时执行: ${C_INFO}cd $ROOT && docker compose up -d --build soj${C_END}"
+  step "  未检测到运行中的 SOJ 容器，兜底重建镜像并启动"
+  run_live "镜像重建+启动" "$DOCKER_LOG" docker_up
+  ok "部署完成！浏览器 Ctrl+F5 强刷即可看到最新版本"
 fi
 
 ok "全部完成！"

@@ -2,3 +2,6 @@ bin/
 *.exe
 *.test
 *.out
+# 前端产物由 web 上下文提供（Dockerfile COPY --from=web），不走 server 上下文
+internal/webui/dist/
+core.*

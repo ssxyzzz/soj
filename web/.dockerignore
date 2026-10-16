@@ -1,4 +1,4 @@
-node_modules/
-dist/
-*.local
-public/vditor/
+# 镜像构建只消费前端产物 dist/（宿主机 web-building.sh 产出）；
+# 源码与 node_modules 不进构建上下文，省上下文传输
+*
+!dist/

@@ -1,7 +1,8 @@
-.PHONY: up down restart logs ps backup
+.PHONY: up down restart logs ps backup bin image web-building server-building import webui-dist soj-dev web-dev help
 
-up: ## 构建并启动全部服务（3 容器）
-	docker compose up -d --build
+up: ## 构建并启动全部服务（3 容器；先编译前端产物，镜像缺失时自动构建）
+	./scripts/web-building.sh
+	docker compose up -d
 
 down: ## 停止并移除容器（数据卷保留）
 	docker compose down
@@ -17,6 +18,9 @@ ps: ## 查看服务状态
 
 backup: ## 备份 MongoDB 与测试数据到 ./backups/
 	./scripts/backup.sh
+
+image: ## 重建 soj 镜像并重启容器（让镜像内版本追上热替换版本，平时不必跑）
+	docker compose up -d --build soj
 
 bin: ## 编译前后端并产出 server/bin/soj（等价于 web-building + server-building）
 	./scripts/web-building.sh

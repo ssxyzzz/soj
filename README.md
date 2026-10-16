@@ -1,7 +1,7 @@
 # SOJ — 在线判题系统
 
 面向班级与社团的轻量级 Online Judge：一个 Go 程序 + MongoDB + go-judge 沙箱，三个容器就是一个完整的 OJ。
-支持班级作业（即时出分）、班级考试（OI 赛制）、主题库比赛、解题排名与完整的班级权限体系。
+支持班级作业（即时出分）、班级考试（OI 赛制）、主题库比赛、解题排名；权限采用**可配置角色 + 权限位**（对标 Hydro 的权限位/角色解耦、按单站点简化），root 可在管理后台自定义角色。
 设计决策与实现记录见 [notes.md](notes.md)，排期计划见 [plan.md](plan.md)（均为本地文档，不入库）。
 
 | 模块 | 技术 |
@@ -21,18 +21,18 @@
 
 ## 功能总览
 
-- **题库**：题目全局共享；支持主题库隐藏（default 不可见）、子任务分组给分（problem.yaml 可选）；比赛锁题期间全站指引到赛事页提交。
-- **班级**：老师建班、邀请码/名单导入拉学生；班级作业（题目清单，随时做、即时出分，老师可看每人各题完成情况）；班级考试（OI 赛制：考时不出分只记次数，考后出榜，支持赛后隐藏期）；班级多管理员。
-- **比赛**：主题库比赛由 root 发起，面向全体登录用户；与考试共用锁题规则。
+- **题库**：题目全局共享；支持主题库隐藏（普通用户不可见不可交）、子任务分组给分（problem.yaml 可选）；比赛锁题期间全站指引到赛事页提交。
+- **班级**：老师建班（可选公开/私密，私密班仅成员可见）、邀请码/名单导入拉学生；班级作业（题目清单，随时做、即时出分，老师可看每人各题完成情况）；班级考试（OI 赛制：考时不出分只记次数，考后出榜，支持赛后隐藏期）；班级多管理员。
+- **比赛**：主题库比赛面向全体登录用户；与考试共用锁题规则。
 - **排名**：解题数排行（比赛提交在隐藏期结束后才计入，防赛中推测成绩）。
-- **权限**：全局角色 guest / default（学生）/ admin（班级管理）/ root（系统管理）。
-- **防刷**：default 用户提交限速 1 分钟 3 次（root 后台可调）。
+- **权限**：13 个权限位 + 可配置角色——内置 default（学生）/ admin / root，root 可建自定义角色（如备份员、出题老师）；root 为代码级超角色；导航、路由与接口全按权限位判权，降权即时生效；班级内部两级（班级管理员/成员）独立不动。
+- **防刷**：提交限速 1 分钟 3 次（持「提交不限速」权限位者豁免，上限 root 后台可调）。
 - **性能与安全**：响应 gzip 压缩；带哈希的静态资源一年期 immutable 缓存、其余每次回源校验；Vditor 懒加载分包不拖累首屏；题面/说明 256KB 上限（服务端拦截 + 查看端拒渲染）+ 渲染后 DOMPurify 消毒。
 
 ## 快速启动
 
 ```bash
-docker compose up -d --build
+make up   # 自动先编译前端（需要本机 Node/Go 工具链），再起 3 容器
 ```
 
 打开 **http://localhost**（主机侧只暴露 80 端口，容器内仍是 8080），默认管理员 `admin / admin123`（root）。
@@ -59,17 +59,18 @@ cd server && go run ./cmd/soj --judge-only  # 或：纯判题进程
 
 开发前端时的推荐姿势：起好基础设施后开两个终端——`npm run dev`（热更新）+ `go run ./cmd/soj`，改前端代码保存即生效，无需任何构建。
 
-## 手动编译（本机 Node/Go 工具链）
+## 编译与发版（本机 Node/Go 工具链）
 
-两个脚本用本机工具链编译（Go 与 Node 装在用户目录 `~/.local/opt/` 免 sudo，安装方法见 notes.md 第 6 章；模块代理 goproxy.cn / npmmirror 已内置），带实时读秒计时、日志落盘（失败自动展示末 20 行）：
+脚本用本机工具链编译（Go 与 Node 装在用户目录 `~/.local/opt/` 免 sudo，安装方法见 notes.md 第 6 章；模块代理 goproxy.cn / npmmirror 已内置），每步实时显示「计时 + 最新日志」，全量日志落 /tmp（失败自动展示末 20 行）：
 
 ```bash
-./scripts/web-building.sh      # 编译前端 → 同步 embed 目录 → 重建并重启容器
-./scripts/server-building.sh   # 编译后端 → 热替换进容器并重启（秒级发版，需先跑过前者）
+./scripts/web-building.sh      # 前端全量构建 → 嵌入二进制 → docker cp 热替换重启（秒级发版）
+./scripts/server-building.sh   # 编译后端 → 热替换进容器并重启（秒级，需先跑过前者）
 make bin                       # 等价于上面两步连做
+make image                     # 重建 soj 镜像并重启容器（让镜像内版本追上热替换版本）
 ```
 
-发版节奏：只改后端跑 `server-building.sh` 即可秒级更新；改了前端需跑 `web-building.sh`（前端嵌入镜像，走一次镜像重建）。
+发版节奏：前后端改动都走热替换秒级发版。镜像仅在首次部署、容器不在运行（web-building 自动兜底）或基础镜像更新时重建——Dockerfile 不再内置前端构建（直接消费宿主机 `web/dist`），Go 阶段挂 BuildKit 缓存，重建也是秒级（实测前端变更后 `make image` 约 6 秒）。
 产物：`server/bin/soj`（静态单文件，前端已嵌入），可直接拷到任何 Linux 服务器运行。
 
 ## 出一道题
@@ -86,7 +87,7 @@ my-problem/
 ```
 
 - 目录名前缀数字作为题目 ID（如 `7_我的题目` → pid 7），省略则自动分配；
-- `hidden: true` 设为主题库隐藏（default 不可见，适合做考试题）；
+- `hidden: true` 设为主题库隐藏（普通用户不可见，适合做考试题）；
 - `subtasks` 可选子任务分组给分（组内测试点全过才得分，分值之和须为 100）：
 
 ```yaml
@@ -113,30 +114,43 @@ subtasks:
 
 ## API 一览（/api 前缀）
 
+「权限位」列均为可授予角色的权限位（root 恒通过）；无标注的按登录/公开/属主判定。
+
 | 方法 | 路径 | 说明 | 权限 |
 | --- | --- | --- | --- |
 | GET | /health | 健康检查（db / sandbox） | 公开 |
-| POST | /auth/register · /auth/login | 注册 / 登录（JWT） | 公开 |
-| GET | /me · /me/classes | 当前用户 / 我的班级 | 登录 |
+| POST | /auth/register · /auth/login | 注册 / 登录（JWT 仅含 uid/uname） | 公开 |
+| GET | /me · /me/classes | 当前用户（含生效权限位全集）/ 我的班级 | 登录 |
 | GET | /problems · /problems/:id | 题库列表 / 详情（按视角过滤隐藏与赛事锁题） | 公开 |
-| PATCH | /problems/:id/hidden | 设置主题库隐藏 | root / 题目导入者 |
-| POST | /submissions | 提交代码（default 限速 1 分钟 3 次，root 可调） | 登录 |
-| GET | /submissions · /submissions/:id | 提交列表 / 详情（代码仅本人与管理员可见） | 公开 |
-| GET | /rank | 解题排名（30s 缓存；比赛/考试提交隐藏期结束才计入） | 公开 |
-| GET | /classes · /classes/:id | 班级列表 / 详情 | 公开 |
-| POST | /classes | 创建班级 | admin+ |
-| POST | /classes/:id/join · /leave | 邀请码加入 / 退出 | 登录 |
-| POST | /classes/:id/assignments | 布置作业 | 班级管理员 |
-| GET | /classes/:id/assignments · /classes/:id/exams | 作业列表 / 考试列表（仅本班成员） | 登录 |
+| GET | /problems/:id/submissions | 他人代码（该题满分解锁） | 登录 |
+| GET | /problems/:id/my-submissions | 我在该题的提交 | 登录 |
+| PATCH | /problems/:id/hidden · /problems/:id/statement | 设置隐藏 / 编辑题面 | problem.edit.all，或 problem.edit.own 限自己导入的题 |
+| POST | /submissions | 提交代码（无 submission.rate_exempt 位者限速 1 分钟 3 次） | 登录 |
+| GET | /submissions | 提交记录总表（含隐藏期赛事提交） | submission.view.all |
+| GET | /submissions/:id | 提交详情（代码：本人/权限位恒可，他人满分解锁；隐藏期赛事提交仅组织者与持位者） | 公开（按身份返回） |
+| GET | /rank · /notice | 解题排名（30s 缓存）/ 首页公告 | 公开 |
+| GET | /classes · /classes/:id · /classes/:id/assignments | 班级列表 / 详情 / 作业列表（私密班三视角过滤） | 公开 |
+| POST | /classes | 创建班级 | class.create |
+| POST | /classes/:id/join · /classes/join-by-code · /classes/:id/leave | 加入 / 邀请码加入 / 退出 | 登录 |
+| PATCH | /classes/:id/private | 切换公开/私密 | 建班人 / root |
+| POST | /classes/:id/invite · /classes/:id/members | 重置邀请码 / 名单导入 | 班级管理员（建班人/root） |
+| POST | /classes/:id/members/:uid/role | 设置班级成员角色 | 班级管理员（建班人/root） |
+| POST | /classes/:id/assignments · /classes/:id/exams | 布置作业 / 发起考试 | 班级管理员（建班人/root） |
 | GET | /assignments/:id · /assignments/:id/progress | 作业详情 / 完成情况 | 成员 / 班级管理员 |
-| POST/DELETE | /assignments/:id/problems[/:pid] | 作业加题 / 移除题 | 班级管理员 |
+| POST/PUT/DELETE | /assignments/:id/problems[/:pid] | 作业加题 / 整体保存（拖动排序）/ 移除题 | 班级管理员（建班人/root） |
+| DELETE | /assignments/:id | 删除作业 | 班级管理员（建班人/root） |
 | GET | /contests · /contests/:id | 主题库比赛列表 / 详情 | 公开 |
-| POST | /contests | 创建主题库比赛 | root |
-| GET | /contests/:id/submissions/mine · /contests/:id/leaderboard | 比赛我的提交 / 榜单 | 参赛者 / 组织者 |
+| POST | /contests | 创建主题库比赛 | contest.bank.create |
+| PATCH/DELETE | /contests/:id（/intro） | 说明编辑 / 删除比赛（仅未开始） | 组织者（creator）/ root |
+| POST | /contests/:id/problems/:pid/submissions | 比赛提交（赛时唯一通道，不出分） | 参赛者 |
+| GET | /contests/:id/submissions/mine · /contests/:id/leaderboard | 比赛我的提交 / 榜单 | 参赛者（赛时榜单仅组织者） |
+| GET | /classes/:id/exams · /exams/:id · /exams/:id/submissions/mine · /exams/:id/leaderboard | 考试列表 / 详情 / 我的提交 / 榜单 | 本班成员（榜单按赛制门禁） |
 | POST | /exams/:id/problems/:pid/submissions | 考试提交（考时唯一通道，不出分） | 本班成员 |
-| GET | /exams/:id · /exams/:id/submissions/mine · /exams/:id/leaderboard | 考试详情 / 我的提交 / 榜单 | 本班成员 |
-| POST | /classes/:id/members/:uid/role | 设置班级成员角色 | 建班人 / 班级管理员 / root |
-| GET/POST/PUT | /admin/users[/:id] · /admin/settings | 用户管理 / 系统设置 | root |
+| PATCH/DELETE | /exams/:id（/intro） | 说明编辑 / 删除考试 | 组织者（creator）/ root |
+| GET/POST/PATCH | /admin/users[/:id] | 用户管理（搜索 / 建号 / 改角色 / 重置密码） | admin.user.manage |
+| GET/PUT | /admin/settings | 系统设置（限速 / 公告） | admin.settings |
+| GET | /admin/roles | 角色清单 + 权限位目录 | admin.user.manage |
+| POST/PATCH/DELETE | /admin/roles[/:id] | 角色增删改（不可下放） | root |
 
 ## 备份与恢复
 
@@ -144,13 +158,15 @@ subtasks:
 make backup   # 产出 backups/<时间>/mongo.archive.gz + testdata.tar.gz
 ```
 
-恢复：`mongorestore --archive=mongo.archive.gz --gzip`，测试数据解包回 testdata 卷即可。
+备份为**整站全量**：`mongo.archive.gz` 是 MongoDB 整库导出（用户账号与密码哈希、提交记录含代码全文、班级/作业/考试/比赛及成绩、题目元数据、系统设置），`testdata.tar.gz` 是测试数据本体；两者合起来可完整重建站点。
+
+恢复：`mongorestore --archive=mongo.archive.gz --gzip`，测试数据解包回 testdata 卷即可；恢复后整站原样，账号可直接登录（密码是哈希存储，备份中没有明文密码）。
 
 ## 路线图
 
-v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → 下一批 v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
+v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → 下一批 v0.4.8 个人设置 → v0.4.9 备份加密与备份面板 → v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
 实现记录见 [notes.md](notes.md)，排期与待对齐事项见 [plan.md](plan.md)（均为本地文档，不入库）。
 
 ## 许可证
 
-以 [AGPL-3.0](LICENSE) 协议开源。架构设计仅参考 Hydro 等开源 OJ 的公开思路、未复制其代码；随发行物分发的第三方组件（go-judge、Vditor、Element Plus 等）仍按各自原始协议提供。
+以 [AGPL-3.0](LICENSE) 协议开源。架构设计仅参考主流开源 OJ 的公开思路、未复制其代码；随发行物分发的第三方组件（go-judge、Vditor、Element Plus 等）仍按各自原始协议提供。
