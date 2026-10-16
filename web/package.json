@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "postinstall": "node -e \"require('fs').cpSync('node_modules/vditor/dist','public/vditor',{recursive:true})\"",
+    "postinstall": "node -e \"require('fs').cpSync('node_modules/vditor/dist','public/vditor/dist',{recursive:true})\"",
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview"
   },

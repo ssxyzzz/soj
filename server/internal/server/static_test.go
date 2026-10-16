@@ -10,10 +10,10 @@ func TestCacheControl(t *testing.T) {
 		{"assets/index-BwZDfCAb.js", "public, max-age=31536000, immutable"},
 		{"assets/ProblemDetailView-DeVkCRQr.css", "public, max-age=31536000, immutable"},
 		{"index.html", "no-cache"},
-		{"vditor/index.min.js", "no-cache"},
-		{"vditor/css/content-theme/light.css", "no-cache"},
+		{"vditor/dist/index.min.js", "no-cache"},
+		{"vditor/dist/css/content-theme/light.css", "no-cache"},
 		// 「-packages.」形似 8 位哈希，但 public/ 直拷文件不带哈希，不能 immutable
-		{"vditor/js/mathjax/input/tex/extensions/all-packages.js", "no-cache"},
+		{"vditor/dist/js/mathjax/input/tex/extensions/all-packages.js", "no-cache"},
 		{"assets/all-packages.js", "public, max-age=31536000, immutable"},
 		{"favicon.ico", "no-cache"},
 	}
