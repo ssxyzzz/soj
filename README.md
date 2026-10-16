@@ -26,6 +26,7 @@
 - **比赛**：主题库比赛面向全体登录用户；与考试共用锁题规则。
 - **排名**：解题数排行（比赛提交在隐藏期结束后才计入，防赛中推测成绩）。
 - **权限**：13 个权限位 + 可配置角色——内置 default（学生）/ admin / root，root 可建自定义角色（如备份员、出题老师）；root 为代码级超角色；导航、路由与接口全按权限位判权，降权即时生效；班级内部两级（班级管理员/成员）独立不动。
+- **个人设置**：真实姓名（仅管理员后台维护，班级名单对号）+ 性别/学校/年级/QQ（仅自己可见）+ 偏好（默认判题语言、按语言的代码模板、Markdown 编辑器初始模式），提交弹窗/在线编程/编辑器自动预填。
 - **防刷**：提交限速 1 分钟 3 次（持「提交不限速」权限位者豁免，上限 root 后台可调）。
 - **性能与安全**：响应 gzip 压缩；带哈希的静态资源一年期 immutable 缓存、其余每次回源校验；Vditor 懒加载分包不拖累首屏；题面/说明 256KB 上限（服务端拦截 + 查看端拒渲染）+ 渲染后 DOMPurify 消毒。
 
@@ -120,7 +121,7 @@ subtasks:
 | --- | --- | --- | --- |
 | GET | /health | 健康检查（db / sandbox） | 公开 |
 | POST | /auth/register · /auth/login | 注册 / 登录（JWT 仅含 uid/uname） | 公开 |
-| GET | /me · /me/classes | 当前用户（含生效权限位全集）/ 我的班级 | 登录 |
+| GET | /me · /me/classes · /me/profile | 当前用户（含权限位）/ 我的班级 / 个人信息与偏好（真实姓名只读，性别/学校/年级/QQ/偏好本人可改） | 登录 |
 | GET | /problems · /problems/:id | 题库列表 / 详情（按视角过滤隐藏与赛事锁题） | 公开 |
 | GET | /problems/:id/submissions | 他人代码（该题满分解锁） | 登录 |
 | GET | /problems/:id/my-submissions | 我在该题的提交 | 登录 |
@@ -147,7 +148,7 @@ subtasks:
 | GET | /classes/:id/exams · /exams/:id · /exams/:id/submissions/mine · /exams/:id/leaderboard | 考试列表 / 详情 / 我的提交 / 榜单 | 本班成员（榜单按赛制门禁） |
 | POST | /exams/:id/problems/:pid/submissions | 考试提交（考时唯一通道，不出分） | 本班成员 |
 | PATCH/DELETE | /exams/:id（/intro） | 说明编辑 / 删除考试 | 组织者（creator）/ root |
-| GET/POST/PATCH | /admin/users[/:id] | 用户管理（搜索 / 建号 / 改角色 / 重置密码） | admin.user.manage |
+| GET/POST/PATCH | /admin/users[/:id] | 用户管理（搜索 / 建号 / 改角色 / 重置密码 / 真实姓名） | admin.user.manage |
 | GET/PUT | /admin/settings | 系统设置（限速 / 公告） | admin.settings |
 | GET | /admin/roles | 角色清单 + 权限位目录 | admin.user.manage |
 | POST/PATCH/DELETE | /admin/roles[/:id] | 角色增删改（不可下放） | root |
@@ -164,7 +165,7 @@ make backup   # 产出 backups/<时间>/mongo.archive.gz + testdata.tar.gz
 
 ## 路线图
 
-v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → 下一批 v0.4.8 个人设置 → v0.4.9 备份加密与备份面板 → v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
+v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → v0.4.8 个人设置（资料 + 偏好联动）✅ → 下一批 v0.4.9 备份加密与备份面板 → v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
 实现记录见 [notes.md](notes.md)，排期与待对齐事项见 [plan.md](plan.md)（均为本地文档，不入库）。
 
 ## 许可证

@@ -53,7 +53,7 @@ onMounted(async () => {
 <template>
   <div class="page">
     <el-card v-if="notice" class="notice">
-      <h1 class="title">📢 公告</h1>
+      <template #header><span>📢 公告</span></template>
       <MdView :content="notice" />
     </el-card>
 
@@ -104,7 +104,6 @@ onMounted(async () => {
 
 <style scoped>
 .notice {
-  text-align: center;
   margin-bottom: 16px;
 }
 

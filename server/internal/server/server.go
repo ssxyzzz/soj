@@ -76,6 +76,8 @@ func Run(ctx context.Context, deps *Deps) {
 		authed := api.Group("", AuthRequired(h))
 		{
 			authed.GET("/me/classes", h.MyClasses)
+			authed.GET("/me/profile", h.GetMyProfile)
+			authed.PATCH("/me/profile", h.UpdateMyProfile)
 			authed.POST("/classes", RequirePerm(repo.PermClassCreate), h.CreateClass)
 			authed.POST("/classes/:id/join", h.JoinClass)
 			authed.POST("/classes/join-by-code", h.JoinByCode)

@@ -180,6 +180,26 @@ export interface AdminUser {
   username: string
   nickname: string
   role: string
+  real_name?: string // 真实姓名：仅管理员后台可见
+}
+
+// ---------- 个人设置（v0.4.8） ----------
+
+// 用户偏好：跟随账号存储，前端消费（默认语言/代码模板/MD 编辑模式）
+export interface UserPrefs {
+  defaultLang?: string
+  codeTemplates?: Record<string, string>
+  mdEditMode?: '' | 'wysiwyg' | 'ir' | 'sv'
+}
+
+// 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）
+export interface UserProfile {
+  real_name: string
+  gender: string
+  school: string
+  grade: string
+  qq: string
+  prefs: UserPrefs
 }
 
 // ---------- 角色与权限位（v0.4.7） ----------
@@ -188,6 +208,12 @@ export interface PermInfo {
   id: string
   label: string
   desc: string
+  group: string
+}
+
+export interface PermGroupInfo {
+  id: string
+  label: string
 }
 
 export interface RoleInfo {

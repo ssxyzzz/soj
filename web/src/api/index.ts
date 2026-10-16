@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
+import { useUserStore } from '@/stores/user'
 import type {
   AdminUser,
   ApiResponse,
@@ -15,7 +16,10 @@ import type {
   ExamListItem,
   LeaderRow,
   LoginResult,
+  PermGroupInfo,
   PermInfo,
+  UserProfile,
+  UserPrefs,
   ProblemDetail,
   ProblemListResult,
   ProgressRow,
@@ -28,7 +32,10 @@ import type {
 const client = axios.create({ baseURL: '/api', timeout: 20000 })
 
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('soj_token')
+  // token 取自 pinia store（每标签页一份内存态），不直接读 localStorage：
+  // localStorage 全标签页共享，B 标签页登录会覆盖 token，导致 A 标签页界面仍是
+  // 原会话、请求却带上了 B 的身份（多标签页串号，权限类操作 403）
+  const token = useUserStore().token
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -45,8 +52,7 @@ client.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('soj_token')
-      localStorage.removeItem('soj_nickname')
+      useUserStore().logout() // 清本标签页内存态与 localStorage（角色/权限一并清）
       if (!location.pathname.startsWith('/login')) {
         location.href = '/login'
       }
@@ -88,6 +94,15 @@ export const authApi = {
   register: (username: string, password: string, nickname: string) =>
     post<LoginResult>('/auth/register', { username, password, nickname }),
   me: () => get<{ id: number; username: string; nickname: string; role: string; perms: string[] }>('/me'),
+  // 个人设置（v0.4.8）：真实姓名仅管理员可改（走 adminApi.updateUser），本人自助字段 + 偏好走这里
+  getProfile: () => get<UserProfile>('/me/profile'),
+  updateProfile: (body: {
+    gender?: string
+    school?: string
+    grade?: string
+    qq?: string
+    prefs?: UserPrefs
+  }) => patch<UserProfile>('/me/profile', body),
 }
 
 export const problemApi = {
@@ -162,14 +177,15 @@ export const adminApi = {
     }),
   createUser: (username: string, password: string, nickname: string, role: string) =>
     post<{ id: number }>('/admin/users', { username, password, nickname, role }),
-  updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string }) =>
+  updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; real_name?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
     get<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings'),
   updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string }) =>
     put<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings', patch),
   // 角色管理（后端硬编码 root，不可下放）
-  listRoles: () => get<{ list: RoleInfo[]; catalog: PermInfo[] }>('/admin/roles'),
+  listRoles: () =>
+    get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),
   createRole: (id: string, name: string, permsList: string[]) =>
     post<{ id: string }>('/admin/roles', { id, name, perms: permsList }),
   updateRole: (id: string, body: { name?: string; perms?: string[] }) =>

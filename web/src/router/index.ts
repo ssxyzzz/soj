@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 import MainLayout from '@/layouts/MainLayout.vue'
+import { useUserStore } from '@/stores/user'
 import AdminView from '@/views/AdminView.vue'
 import ClassDetailView from '@/views/ClassDetailView.vue'
 import ClassesView from '@/views/ClassesView.vue'
@@ -16,6 +17,7 @@ import NotFoundView from '@/views/NotFoundView.vue'
 import ProblemDetailView from '@/views/ProblemDetailView.vue'
 import ProblemListView from '@/views/ProblemListView.vue'
 import RankView from '@/views/RankView.vue'
+import SettingsView from '@/views/SettingsView.vue'
 import SubmissionListView from '@/views/SubmissionListView.vue'
 
 declare module 'vue-router' {
@@ -98,6 +100,12 @@ const router = createRouter({
         },
         { path: 'rank', name: 'rank', component: RankView, meta: { title: '排名' } },
         {
+          path: 'settings',
+          name: 'settings',
+          component: SettingsView,
+          meta: { title: '个人设置', requiresAuth: true },
+        },
+        {
           path: 'admin',
           name: 'admin',
           component: AdminView,
@@ -116,19 +124,16 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const role = localStorage.getItem('soj_role')
-  // 能力判断与 stores/user.ts 的 can/canAdmin 同规则（守卫早于组件，直接读 localStorage）
-  const perms: string[] = JSON.parse(localStorage.getItem('soj_perms') ?? '[]')
-  const can = (perm: string) => role === 'root' || perms.includes(perm)
-  const canAdmin =
-    role === 'root' || perms.some((p) => ['admin.user.manage', 'admin.settings', 'backup.run', 'backup.keys'].includes(p))
-  if (to.meta.requiresAdmin && !canAdmin) {
+  // 与请求身份同一来源（pinia store，每标签页一份内存态）：
+  // 直接读共享 localStorage 会拿到其他标签页登录的账号，守卫与请求判权不一致
+  const userStore = useUserStore()
+  if (to.meta.requiresAdmin && !userStore.canAdmin) {
     return { path: '/' }
   }
-  if (to.meta.staffOnly && !can('submission.view.all')) {
+  if (to.meta.staffOnly && !userStore.can('submission.view.all')) {
     return { path: '/' }
   }
-  if (to.meta.requiresAuth && !localStorage.getItem('soj_token')) {
+  if (to.meta.requiresAuth && !userStore.token) {
     return { path: '/login', query: { redirect: to.fullPath } }
   }
   document.title = to.meta.title ? `${to.meta.title} - SOJ` : 'SOJ'

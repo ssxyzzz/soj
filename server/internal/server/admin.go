@@ -21,7 +21,9 @@ func (h *Handlers) AdminListUsers(c *gin.Context) {
 	}
 	items := make([]gin.H, 0, len(list))
 	for _, u := range list {
-		items = append(items, userJSON(u))
+		j := userJSON(u)
+		j["real_name"] = u.RealName // 真实姓名仅管理员后台可见
+		items = append(items, j)
 	}
 	ok(c, gin.H{"list": items, "total": total})
 }
@@ -81,6 +83,7 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		Role     *string `json:"role"`
 		Password *string `json:"password"`
 		Nickname *string `json:"nickname"`
+		RealName *string `json:"real_name"` // 真实姓名：仅管理员可改（本人只读，见 /me/profile）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -104,6 +107,9 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 	}
 	if req.Nickname != nil && *req.Nickname != "" {
 		set["nickname"] = *req.Nickname
+	}
+	if req.RealName != nil {
+		set["realName"] = trimTo(*req.RealName, 32) // 允许显式清空
 	}
 	if req.Password != nil {
 		if len(*req.Password) < 6 || len(*req.Password) > 64 {

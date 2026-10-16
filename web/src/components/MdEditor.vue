@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
+
+import { useUserStore } from '@/stores/user'
 import { loadVditor, type VditorInstance } from '@/utils/vditor'
 
 const props = defineProps<{ modelValue: string; height?: string }>()
@@ -12,10 +14,13 @@ let inner = props.modelValue // 防止 setValue 触发的回显循环
 onMounted(async () => {
   const Vditor = await loadVditor()
   if (!el.value) return // 等待 chunk 加载期间组件已卸载
+  // 初始编辑模式取个人设置（wysiwyg/ir/sv），未设置或非法值回退所见即所得；编辑中仍可随时切换
+  const m = useUserStore().prefs.mdEditMode
+  const mode = m === 'ir' || m === 'sv' ? m : 'wysiwyg'
   inst = new Vditor(el.value, {
     cdn: '/vditor', // 自托管资源（构建时随镜像分发，不依赖外网）
     height: props.height ?? '420px',
-    mode: 'wysiwyg',
+    mode,
     value: props.modelValue,
     cache: { enable: false },
     placeholder: '支持 Markdown 与所见即所得，右上角可切换编辑模式',

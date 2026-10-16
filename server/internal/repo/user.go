@@ -28,13 +28,27 @@ const (
 // 其 root 角色受保护不可修改，防止误降权把自己锁在 root 之外。
 const InitialAdminID int64 = 1
 
+// UserPrefs 用户偏好（v0.4.8 个人设置）：跟随账号存储，前端消费。
+// CodeTemplates 按语言各存一套（key 为判题语言 id）；空串表示该语言用系统默认模板。
+type UserPrefs struct {
+	DefaultLang   string            `bson:"defaultLang,omitempty" json:"defaultLang,omitempty"`
+	CodeTemplates map[string]string `bson:"codeTemplates,omitempty" json:"codeTemplates,omitempty"`
+	MdEditMode    string            `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"` // wysiwyg / ir / sv，空为默认所见即所得
+}
+
 type User struct {
-	ID           int64     `bson:"_id"`
-	Username     string    `bson:"uname"`
-	PasswordHash string    `bson:"pwdHash"`
-	Nickname     string    `bson:"nickname"`
-	Role         string    `bson:"role"`
-	CreatedAt    time.Time `bson:"createdAt"`
+	ID           int64      `bson:"_id"`
+	Username     string     `bson:"uname"`
+	PasswordHash string     `bson:"pwdHash"`
+	Nickname     string     `bson:"nickname"`
+	Role         string     `bson:"role"`
+	CreatedAt    time.Time  `bson:"createdAt"`
+	RealName     string     `bson:"realName,omitempty"` // 真实姓名：仅管理员可改，仅本人与管理员后台可见
+	Gender       string     `bson:"gender,omitempty"`   // 性别/学校/年级/QQ：本人自助修改，他人不可见
+	School       string     `bson:"school,omitempty"`
+	Grade        string     `bson:"grade,omitempty"`
+	QQ           string     `bson:"qq,omitempty"`
+	Prefs        *UserPrefs `bson:"prefs,omitempty"`
 }
 
 func (r *Repo) CreateUser(ctx context.Context, username, passwordHash, nickname, role string) (int64, error) {
