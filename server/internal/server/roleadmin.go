@@ -28,7 +28,7 @@ func (h *Handlers) AdminListRoles(c *gin.Context) {
 			"builtin": r.Builtin, "user_count": n,
 		})
 	}
-	ok(c, gin.H{"list": items, "catalog": repo.PermCatalog})
+	ok(c, gin.H{"list": items, "catalog": repo.PermCatalog, "groups": repo.PermGroups})
 }
 
 func (h *Handlers) AdminCreateRole(c *gin.Context) {

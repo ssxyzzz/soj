@@ -25,28 +25,46 @@ const (
 // PermAll 根角色通配权限，任何自定义角色不得持有。
 const PermAll = "*"
 
-// PermInfo 权限位条目（管理后台角色编辑用）。
+// PermInfo 权限位条目（管理后台角色编辑用）；Group 指向 PermGroups 中的分类 id。
 type PermInfo struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
 	Desc  string `json:"desc"`
+	Group string `json:"group"`
 }
 
-// PermCatalog 权限位目录（展示顺序即后台勾选顺序）。
+// PermGroup 权限分类（角色矩阵与新建角色按此顺序分组展示；无权限位的分类前端不渲染）。
+type PermGroup struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// PermGroups 权限分类目录（首页/排名暂无权限位，占位定义、前端跳过空组）。
+var PermGroups = []PermGroup{
+	{"home", "首页权限"},
+	{"problem", "题库权限"},
+	{"contest", "比赛权限"},
+	{"class", "班级权限"},
+	{"rank", "排名权限"},
+	{"submission", "提交记录权限"},
+	{"admin", "管理后台权限"},
+}
+
+// PermCatalog 权限位目录（展示顺序即后台勾选顺序；备份类操作归入管理后台权限）。
 var PermCatalog = []PermInfo{
-	{PermProblemViewAll, "题库全量可见", "可见隐藏题与比赛/考试锁定中的题，可直接向隐藏题提交"},
-	{PermProblemCreate, "新建题目", "新建/导入题目（网页出题功能上线后生效）"},
-	{PermProblemEditOwn, "编辑自己的题目", "编辑自己导入的题目的题面与隐藏标记"},
-	{PermProblemEditAll, "编辑任意题目", "不受题目属主限制"},
-	{PermContestBankCreate, "创建主题库比赛", "发起全站比赛"},
-	{PermClassCreate, "创建班级", "建班并成为建班人"},
-	{PermClassViewAll, "查看全部班级", "可见私密班级的详情、成员与邀请码"},
-	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码"},
-	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束"},
-	{PermAdminUserManage, "用户管理", "管理后台：建号/改角色/重置密码"},
-	{PermAdminSettings, "系统设置", "管理后台：公告与提交限速等站点设置"},
-	{PermBackupRun, "备份下载", "一键备份到本地（加密归档下载）"},
-	{PermBackupKeys, "备份密钥管理", "切换备份密钥模式、查看 Tier 1 私钥（敏感，建议仅 root）"},
+	{PermProblemViewAll, "题库全量可见", "可见隐藏题与比赛/考试锁定中的题，可直接向隐藏题提交", "problem"},
+	{PermProblemCreate, "新建题目", "新建/导入题目（网页出题功能上线后生效）", "problem"},
+	{PermProblemEditOwn, "编辑自己的题目", "编辑自己导入的题目的题面与隐藏标记", "problem"},
+	{PermProblemEditAll, "编辑任意题目", "不受题目属主限制", "problem"},
+	{PermContestBankCreate, "创建主题库比赛", "发起全站比赛", "contest"},
+	{PermClassCreate, "创建班级", "建班并成为建班人", "class"},
+	{PermClassViewAll, "查看全部班级", "可见私密班级的详情、成员与邀请码", "class"},
+	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码", "submission"},
+	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},
+	{PermAdminUserManage, "用户管理", "管理后台：建号/改角色/重置密码", "admin"},
+	{PermAdminSettings, "系统设置", "管理后台：公告与提交限速等站点设置", "admin"},
+	{PermBackupRun, "备份下载", "一键备份到本地（加密归档下载）", "admin"},
+	{PermBackupKeys, "备份密钥管理", "切换备份密钥模式、查看 Tier 1 私钥（敏感，建议仅 root）", "admin"},
 }
 
 // permIndex 目录索引。

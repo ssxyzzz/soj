@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
-import { languageOptions, templateFor } from '@/utils/code'
+import { defaultLang, languageOptions, templateFor } from '@/utils/code'
 
 // 提交弹窗（v0.4.6 右列入口）：语言选择 + 代码粘贴，提交动作由父组件
 // 通过 submit 事件接手（练习走 /submissions，比赛/考试走各自通道）。
@@ -19,7 +19,7 @@ const emit = defineEmits<{
   (e: 'submit', lang: string, code: string): void
 }>()
 
-const lang = ref('cpp')
+const lang = ref(defaultLang()) // 个人设置的默认语言优先
 const code = ref('')
 
 watch(() => props.modelValue, (open) => {
@@ -62,7 +62,7 @@ function doSubmit() {
       :rows="16"
       class="mono"
       spellcheck="false"
-      placeholder="选择语言后自动填入代码模板，可直接粘贴"
+      placeholder="在此编写或粘贴你的代码（系统不提供默认模板）"
     />
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>

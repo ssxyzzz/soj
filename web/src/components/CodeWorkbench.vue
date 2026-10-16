@@ -3,7 +3,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import MdView from '@/components/MdView.vue'
-import { languageOptions, templateFor } from '@/utils/code'
+import { defaultLang, languageOptions, templateFor } from '@/utils/code'
 
 // 在线编程（v0.4.6 右列入口）：全屏覆盖层，左侧题面（MdView 同引擎渲染）、
 // 右侧代码，中间分隔条可拖动调整两栏宽度；提交动作由父组件接手。
@@ -21,7 +21,7 @@ const emit = defineEmits<{
   (e: 'submit', lang: string, code: string): void
 }>()
 
-const lang = ref('cpp')
+const lang = ref(defaultLang()) // 个人设置的默认语言优先
 const code = ref('')
 const leftPct = ref(50)
 const divider = ref<HTMLElement>()
@@ -104,7 +104,7 @@ onBeforeUnmount(() => {
             v-model="code"
             class="wb-code mono"
             spellcheck="false"
-            placeholder="选择语言后自动填入代码模板"
+            placeholder="在此编写或粘贴你的代码（系统不提供默认模板）"
           />
         </section>
       </div>
