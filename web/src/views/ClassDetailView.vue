@@ -371,7 +371,7 @@ onMounted(() => {
       </template>
     </PageShell>
 
-    <el-dialog v-model="showCreateAssignment" title="布置作业" width="480">
+    <el-dialog v-model="showCreateAssignment" title="布置作业" width="560">
       <el-form label-position="top">
         <el-form-item label="作业名称" required>
           <el-input v-model="assignmentForm.title" maxlength="64" placeholder="如：第三章 循环练习" />
@@ -386,7 +386,7 @@ onMounted(() => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showExam" title="发起班级考试" width="560">
+    <el-dialog v-model="showExam" title="发起班级考试" width="660">
       <el-form label-position="top">
         <el-form-item label="考试名称" required>
           <el-input v-model="examForm.title" maxlength="64" />

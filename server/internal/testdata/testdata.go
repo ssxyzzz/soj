@@ -19,6 +19,7 @@ import (
 type Provider interface {
 	Open(problemID int64, relPath string) (io.ReadCloser, error)
 	WriteFile(problemID int64, relPath string, data []byte) error
+	Delete(problemID int64, relPath string) error
 }
 
 // LocalFS 本地文件系统实现，目录布局: <Root>/<problemID>/<relPath>。
@@ -50,6 +51,18 @@ func (p *LocalFS) Open(problemID int64, relPath string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	return os.Open(full)
+}
+
+// Delete 删除卷内单个文件（校验器移除等场景）；文件不存在视为成功。
+func (p *LocalFS) Delete(problemID int64, relPath string) error {
+	full, err := p.path(problemID, relPath)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func (p *LocalFS) WriteFile(problemID int64, relPath string, data []byte) error {

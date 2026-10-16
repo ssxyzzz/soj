@@ -83,6 +83,20 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.PATCH("/me/profile", h.UpdateMyProfile)
 			// 题面图片上传（v0.5a）：能打开编辑器的人群（题面编辑/系统设置权限位）
 			authed.POST("/uploads", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn, repo.PermAdminSettings), h.UploadImages)
+
+			// 网页建题（v0.5b-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
+			authed.POST("/problems", RequirePerm(repo.PermProblemCreate), h.CreateProblem)
+			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
+			authed.POST("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateChecker)
+			authed.DELETE("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveChecker)
+
+			// 题解（v0.5b-1，多作者）：满分 ∨ 老师群体可看可写；置顶/删他人需 solution.manage
+			authed.GET("/problems/:id/solutions", h.ListSolutions)
+			authed.POST("/problems/:id/solutions", h.PostSolution)
+			authed.PATCH("/problems/:id/solutions/:sid", h.UpdateSolution)
+			authed.DELETE("/problems/:id/solutions/:sid", h.DeleteSolution)
+			authed.PATCH("/problems/:id/solutions/:sid/pinned", h.PinSolution)
+
 			authed.POST("/classes", RequirePerm(repo.PermClassCreate), h.CreateClass)
 			authed.POST("/classes/:id/join", h.JoinClass)
 			authed.POST("/classes/join-by-code", h.JoinByCode)

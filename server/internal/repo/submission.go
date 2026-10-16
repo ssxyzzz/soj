@@ -174,18 +174,30 @@ func (r *Repo) HasSolved(ctx context.Context, uid, pid int64) (bool, error) {
 }
 
 // ListPidSubmissions 题目维提交列表（含代码，分页）。
-// uid > 0 时只看该用户的；published=true 过滤掉隐藏期内比赛/考试的提交。
-func (r *Repo) ListPidSubmissions(ctx context.Context, pid int64, uid int64, page, pageSize int) ([]*Submission, int64, error) {
+// uid > 0 时只看该用户的（我的提交，最新在前）；uid = 0 为他人代码视图：
+// sort=time（默认，耗时升序、并列按内存）/ sort=mem（内存升序、并列按耗时），
+// lang 非空时按语言过滤。published=true 过滤掉隐藏期内比赛/考试的提交。
+func (r *Repo) ListPidSubmissions(ctx context.Context, pid int64, uid int64, page, pageSize int, sort, lang string) ([]*Submission, int64, error) {
 	filter := bson.M{"pid": pid, "published": true}
 	if uid > 0 {
 		filter["uid"] = uid
+	}
+	if lang != "" {
+		filter["lang"] = lang
 	}
 	total, err := r.Submissions.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
+	sortSpec := bson.D{{Key: "_id", Value: -1}}
+	if uid == 0 {
+		sortSpec = bson.D{{Key: "timeMs", Value: 1}, {Key: "memKb", Value: 1}}
+		if sort == "mem" {
+			sortSpec = bson.D{{Key: "memKb", Value: 1}, {Key: "timeMs", Value: 1}}
+		}
+	}
 	cursor, err := r.Submissions.Find(ctx, filter,
-		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}).
+		options.Find().SetSort(sortSpec).
 			SetLimit(int64(pageSize)).
 			SetSkip(int64((page-1)*pageSize)))
 	if err != nil {
@@ -197,6 +209,44 @@ func (r *Repo) ListPidSubmissions(ctx context.Context, pid int64, uid int64, pag
 		return nil, 0, err
 	}
 	return list, total, nil
+}
+
+// ProblemStat 单题提交统计（题库通过率展示用）。
+type ProblemStat struct {
+	Total    int64
+	Accepted int64
+}
+
+// ListProblemStats 聚合各题的提交数与 AC 数（仅公开态提交，与排行榜口径一致）。
+func (r *Repo) ListProblemStats(ctx context.Context, pids []int64) (map[int64]ProblemStat, error) {
+	out := make(map[int64]ProblemStat, len(pids))
+	if len(pids) == 0 {
+		return out, nil
+	}
+	cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
+		{"$match": bson.M{"pid": bson.M{"$in": pids}, "published": true}},
+		{"$group": bson.M{
+			"_id":      "$pid",
+			"total":    bson.M{"$sum": 1},
+			"accepted": bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", StatusAccepted}}, 1, 0}}},
+		}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var row struct {
+			ID       int64 `bson:"_id"`
+			Total    int64 `bson:"total"`
+			Accepted int64 `bson:"accepted"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			return nil, err
+		}
+		out[row.ID] = ProblemStat{Total: row.Total, Accepted: row.Accepted}
+	}
+	return out, cursor.Err()
 }
 
 // RankRow 排行榜一行。

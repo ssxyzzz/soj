@@ -157,7 +157,7 @@ onMounted(load)
     <el-dialog
       v-model="showJoin"
       :title="`加入 ${joinTarget?.name ?? ''}`"
-      width="380"
+      width="460"
       @closed="joinTarget = null"
     >
       <el-input v-model="joinTargetCode" placeholder="请向老师索取邀请码" maxlength="8" @keyup.enter="joinTargetSubmit" />
@@ -168,7 +168,7 @@ onMounted(load)
     </el-dialog>
   </PageShell>
 
-  <el-dialog v-model="showCreate" title="创建班级" width="420">
+  <el-dialog v-model="showCreate" title="创建班级" width="500">
     <el-form label-position="top">
       <el-form-item label="班级名称" required>
         <el-input v-model="createForm.name" maxlength="64" placeholder="如：初二 3 班信息组" />

@@ -12,6 +12,7 @@ import type { UserPrefs } from '@/types'
 // localStorage 造成的身份串号。
 export const useUserStore = defineStore('user', () => {
   const token = ref(localStorage.getItem('soj_token') ?? '')
+  const uid = ref(Number(localStorage.getItem('soj_uid') ?? 0) || 0)
   const nickname = ref(localStorage.getItem('soj_nickname') ?? '')
   const role = ref(localStorage.getItem('soj_role') ?? '')
   const perms = ref<string[]>(JSON.parse(localStorage.getItem('soj_perms') ?? '[]'))
@@ -33,13 +34,15 @@ export const useUserStore = defineStore('user', () => {
     return role.value === 'root' || perms.value.includes(perm)
   }
 
-  function setLogin(newToken: string, newNickname: string, newRole: string, newPerms: string[] = []) {
+  function setLogin(newToken: string, newNickname: string, newRole: string, newPerms: string[] = [], newUid = 0) {
     token.value = newToken
+    uid.value = newUid
     nickname.value = newNickname
     role.value = newRole
     perms.value = newPerms
     prefs.value = {} // 新会话的偏好待 /me/profile 重新拉取
     localStorage.setItem('soj_token', newToken)
+    localStorage.setItem('soj_uid', String(newUid))
     localStorage.setItem('soj_nickname', newNickname)
     localStorage.setItem('soj_role', newRole)
     localStorage.setItem('soj_perms', JSON.stringify(newPerms))
@@ -51,15 +54,17 @@ export const useUserStore = defineStore('user', () => {
 
   function logout() {
     token.value = ''
+    uid.value = 0
     nickname.value = ''
     role.value = ''
     perms.value = []
     prefs.value = {}
     localStorage.removeItem('soj_token')
+    localStorage.removeItem('soj_uid')
     localStorage.removeItem('soj_nickname')
     localStorage.removeItem('soj_role')
     localStorage.removeItem('soj_perms')
   }
 
-  return { token, nickname, role, perms, prefs, canAdmin, can, setLogin, setPrefs, logout }
+  return { token, uid, nickname, role, perms, prefs, canAdmin, can, setLogin, setPrefs, logout }
 })

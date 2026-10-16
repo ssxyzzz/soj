@@ -143,7 +143,7 @@ onMounted(load)
     </template>
   </PageShell>
 
-  <el-dialog v-model="showCreate" title="创建主题库比赛" width="560">
+  <el-dialog v-model="showCreate" title="创建主题库比赛" width="660">
     <el-form label-position="top">
       <el-form-item label="比赛名称" required>
         <el-input v-model="form.title" maxlength="64" />

@@ -260,7 +260,7 @@ onMounted(() => {
       </template>
     </PageShell>
 
-    <el-dialog v-model="showAdjust" title="调整作业题目" width="640" top="6vh">
+    <el-dialog v-model="showAdjust" title="调整作业题目" width="760" top="6vh">
       <div class="adjust-pick">
         <el-select v-model="pickPid" filterable placeholder="从题库选择题目加入" style="flex: 1">
           <el-option

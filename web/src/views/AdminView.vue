@@ -467,7 +467,9 @@ async function loadBackup() {
 }
 
 function editGuide() {
-  guideDraft.value = backupGuide.value
+  // 预填当前展示的内容：从未自定义时即为内置默认，可直接在默认文本上改；
+  // 清空再保存仍回退到内置默认（见编辑弹窗标题提示）
+  guideDraft.value = guideText.value
   showGuideEdit.value = true
 }
 
@@ -890,7 +892,7 @@ onMounted(async () => {
         <el-dialog
           v-model="showOfflineKey"
           title="恢复钥匙（只显示这一次）"
-          width="640"
+          width="760"
           :close-on-click-modal="false"
           @closed="loadBackup()"
         >
@@ -924,7 +926,7 @@ onMounted(async () => {
         <el-dialog
           v-model="showGuideEdit"
           title="编辑使用说明（Markdown；清空保存即恢复内置默认）"
-          width="760"
+          width="900"
         >
           <MdEditor v-model="guideDraft" height="400px" />
           <template #footer>
@@ -935,7 +937,7 @@ onMounted(async () => {
       </el-card>
     </main>
 
-    <el-dialog v-model="showCreate" title="新建用户" width="420">
+    <el-dialog v-model="showCreate" title="新建用户" width="500">
       <el-form label-position="top">
         <el-form-item label="用户名" required>
           <el-input v-model="createForm.username" placeholder="3-32 位字母/数字/下划线" />
@@ -963,7 +965,7 @@ onMounted(async () => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showCreateRole" title="新建自定义角色" width="620">
+    <el-dialog v-model="showCreateRole" title="新建自定义角色" width="740">
       <el-form label-position="top">
         <el-form-item label="角色 ID（创建后不可改）" required>
           <el-input v-model="createRoleForm.id" placeholder="如 backup_op / author（2-32 位小写字母/数字/下划线）" />

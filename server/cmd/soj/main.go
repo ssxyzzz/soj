@@ -49,11 +49,11 @@ func main() {
 	// 题目导入模式：导入后退出
 	if *importDir != "" {
 		imp := &repo.Importer{Repo: r, DataDir: cfg.DataDir}
-		pid, err := imp.ImportDir(ctx, *importDir)
+		pr, err := imp.ImportDir(ctx, *importDir)
 		if err != nil {
 			log.Fatalf("[import] 导入失败: %v", err)
 		}
-		log.Printf("[import] 已导入题目 #%d（来自 %s）", pid, *importDir)
+		log.Printf("[import] 已导入题目 #%d（来自 %s）", pr.ID, *importDir)
 		return
 	}
 

@@ -30,20 +30,40 @@ type CaseMeta struct {
 	AnsSHA  string `bson:"ansSha"  json:"ansSha"`
 }
 
+// 比对模式（v0.5b-1）：exact = 现状语义（行尾空白/文末换行无关的全文比对）；
+// tolerant = 在 exact 基础上按空白分词、数字 token 按容差比较。空值 = exact（存量零迁移）。
+const (
+	CompareExact    = "exact"
+	CompareTolerant = "tolerant"
+
+	DefaultFloatTolerance = 1e-4
+)
+
+// ValidCompare 比对模式是否合法。
+func ValidCompare(c string) bool { return c == CompareExact || c == CompareTolerant }
+
 type Problem struct {
-	ID            int64      `bson:"_id"`
-	Title         string     `bson:"title"`
-	Statement     string     `bson:"statement"`
-	TimeLimitMS   int        `bson:"timeLimitMs"`
-	MemoryLimitKB int        `bson:"memoryLimitKb"`
-	Visibility    string     `bson:"visibility"`
-	Hidden        bool       `bson:"hidden"`    // 主题库隐藏：default/guest 永不可见不可交
-	CreatedBy     int64      `bson:"createdBy"` // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
-	Tags          []string   `bson:"tags"`
-	Subtasks      []Subtask  `bson:"subtasks,omitempty"` // nil = 单点等分
-	Cases         []CaseMeta `bson:"cases"`
-	CreatedAt     time.Time  `bson:"createdAt"`
-	UpdatedAt     time.Time  `bson:"updatedAt"`
+	ID             int64      `bson:"_id"`
+	Title          string     `bson:"title"`
+	Statement      string     `bson:"statement"`
+	TimeLimitMS    int        `bson:"timeLimitMs"`
+	MemoryLimitKB  int        `bson:"memoryLimitKb"`
+	Visibility     string     `bson:"visibility"`
+	Hidden         bool       `bson:"hidden"`    // 主题库隐藏：default/guest 永不可见不可交
+	CreatedBy      int64      `bson:"createdBy"` // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
+	Tags           []string   `bson:"tags"`
+	Subtasks       []Subtask  `bson:"subtasks,omitempty"` // nil = 单点等分
+	Cases          []CaseMeta `bson:"cases"`
+	Compare        string     `bson:"compare,omitempty"`        // 比对模式，空 = exact
+	FloatTolerance float64    `bson:"floatTolerance,omitempty"` // tolerant 时的浮点容差，0 = 默认 1e-4
+	CheckerFile    string     `bson:"checkerFile,omitempty"`    // 校验器源文件（存测试数据卷，非空 = checker 判定）
+	CheckerSHA     string     `bson:"checkerSha,omitempty"`
+	CheckerFileID  string     `bson:"checkerFileId,omitempty"` // 沙箱编译产物缓存（失效自动重编）
+	FileIO         bool       `bson:"fileIo,omitempty"`        // 文件 IO 模式（v0.5b-3 生效）
+	FileIOInput    string     `bson:"fileIoInput,omitempty"`
+	FileIOOutput   string     `bson:"fileIoOutput,omitempty"`
+	CreatedAt      time.Time  `bson:"createdAt"`
+	UpdatedAt      time.Time  `bson:"updatedAt"`
 }
 
 // Subtask 子任务分组（problem.yaml 可选配置）：组内测试点全过才得该组分。
@@ -201,6 +221,20 @@ func (r *Repo) SetProblemStatement(ctx context.Context, pid int64, statement str
 	res, err := r.Problems.UpdateOne(ctx,
 		bson.M{"_id": pid},
 		bson.M{"$set": bson.M{"statement": statement, "updatedAt": time.Now()}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// UpdateProblemMeta 网页编辑题目元数据（set 键值由调用方校验，自动带上 updatedAt）。
+func (r *Repo) UpdateProblemMeta(ctx context.Context, pid int64, set bson.M) error {
+	set["updatedAt"] = time.Now()
+	res, err := r.Problems.UpdateOne(ctx,
+		bson.M{"_id": pid}, bson.M{"$set": set})
 	if err != nil {
 		return err
 	}

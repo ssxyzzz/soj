@@ -16,6 +16,7 @@ const (
 	PermClassViewAll         = "class.view.all"         // 查看全部班级（含私密班详情/邀请码）
 	PermSubmissionViewAll    = "submission.view.all"    // 提交记录总表 + 他人提交详情
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
+	PermSolutionManage       = "solution.manage"        // 题解管理：置顶/删除他人题解（v0.5b-1）
 	PermAdminUserManage      = "admin.user.manage"      // 管理端用户管理
 	PermAdminSettings        = "admin.settings"         // 系统设置
 	PermBackupRun            = "backup.run"             // 一键备份下载（v0.4.9 备份面板）
@@ -56,6 +57,7 @@ var PermCatalog = []PermInfo{
 	{PermProblemCreate, "新建题目", "新建/导入题目（网页出题功能上线后生效）", "problem"},
 	{PermProblemEditOwn, "编辑自己的题目", "编辑自己导入的题目的题面与隐藏标记", "problem"},
 	{PermProblemEditAll, "编辑任意题目", "不受题目属主限制", "problem"},
+	{PermSolutionManage, "题解管理", "置顶题解、删除他人题解（满分用户均可发布自己的题解）", "problem"},
 	{PermContestBankCreate, "创建主题库比赛", "发起全站比赛", "contest"},
 	{PermClassCreate, "创建班级", "建班并成为建班人", "class"},
 	{PermClassViewAll, "查看全部班级", "可见私密班级的详情、成员与邀请码", "class"},

@@ -212,7 +212,7 @@ func (h *Handlers) ListProblemSubmissions(c *gin.Context) {
 		return
 	}
 	page, pageSize := queryPage(c)
-	list, total, err := h.repo.ListPidSubmissions(c.Request.Context(), id, 0, page, pageSize)
+	list, total, err := h.repo.ListPidSubmissions(c.Request.Context(), id, 0, page, pageSize, c.Query("sort"), c.Query("lang"))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取提交失败")
 		return
@@ -236,7 +236,7 @@ func (h *Handlers) MyProblemSubmissions(c *gin.Context) {
 		return
 	}
 	page, pageSize := queryPage(c)
-	list, total, err := h.repo.ListPidSubmissions(c.Request.Context(), id, uid, page, pageSize)
+	list, total, err := h.repo.ListPidSubmissions(c.Request.Context(), id, uid, page, pageSize, "", "")
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取提交失败")
 		return

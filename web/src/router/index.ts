@@ -15,6 +15,7 @@ import AssignmentView from '@/views/AssignmentView.vue'
 import LoginView from '@/views/LoginView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import ProblemDetailView from '@/views/ProblemDetailView.vue'
+import ProblemCreateView from '@/views/ProblemCreateView.vue'
 import ProblemListView from '@/views/ProblemListView.vue'
 import RankView from '@/views/RankView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -25,6 +26,7 @@ declare module 'vue-router' {
     title?: string
     requiresAuth?: boolean
     requiresAdmin?: boolean
+    requiresPerm?: string
     staffOnly?: boolean
   }
 }
@@ -38,6 +40,12 @@ const router = createRouter({
       children: [
         { path: '', name: 'home', component: HomeView, meta: { title: '首页' } },
         { path: 'problems', name: 'problems', component: ProblemListView, meta: { title: '题库' } },
+        {
+          path: 'problems/create',
+          name: 'problem-create',
+          component: ProblemCreateView,
+          meta: { title: '新建题目', requiresPerm: 'problem.create' },
+        },
         {
           path: 'problems/:id',
           name: 'problem-detail',
@@ -128,6 +136,10 @@ router.beforeEach((to) => {
   // 直接读共享 localStorage 会拿到其他标签页登录的账号，守卫与请求判权不一致
   const userStore = useUserStore()
   if (to.meta.requiresAdmin && !userStore.canAdmin) {
+    return { path: '/' }
+  }
+  // 通用权限位守卫：requiresPerm 为权限位 id（如 problem.create）
+  if (to.meta.requiresPerm && !userStore.can(to.meta.requiresPerm as string)) {
     return { path: '/' }
   }
   if (to.meta.staffOnly && !userStore.can('submission.view.all')) {

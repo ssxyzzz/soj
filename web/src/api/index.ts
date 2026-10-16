@@ -18,6 +18,7 @@ import type {
   LoginResult,
   PermGroupInfo,
   PermInfo,
+  SolutionItem,
   BackupStatus,
   UserProfile,
   UserPrefs,
@@ -110,10 +111,37 @@ export const problemApi = {
   list: (page: number, pageSize: number, q?: string) =>
     get<ProblemListResult>('/problems', { page, page_size: pageSize, ...(q ? { q } : {}) }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
+  create: (form: FormData) =>
+    client
+      .post<ApiResponse<{ id: number }>>('/problems', form, { timeout: 0 })
+      .then((r) => r.data.data),
+  updateMeta: (id: number, body: Record<string, unknown>) =>
+    patch<{ updated: number }>(`/problems/${id}/meta`, body),
+  uploadChecker: (id: number, form: FormData) =>
+    client.post(`/problems/${id}/checker`, form, { timeout: 0 }).then((r) => r.data.data),
+  removeChecker: (id: number) => del<{ removed: boolean }>(`/problems/${id}/checker`),
+  solutions: (id: number, page: number, pageSize: number) =>
+    get<{ list: SolutionItem[]; total: number; can_manage: boolean }>(`/problems/${id}/solutions`, {
+      page,
+      page_size: pageSize,
+    }),
+  postSolution: (id: number, content: string) =>
+    post<{ id: number }>(`/problems/${id}/solutions`, { content }),
+  updateSolution: (id: number, sid: number, content: string) =>
+    patch<{ updated: number }>(`/problems/${id}/solutions/${sid}`, { content }),
+  deleteSolution: (id: number, sid: number) =>
+    del<{ deleted: number }>(`/problems/${id}/solutions/${sid}`),
+  pinSolution: (id: number, sid: number, pinned: boolean) =>
+    patch<{ pinned: boolean }>(`/problems/${id}/solutions/${sid}/pinned`, { pinned }),
   setHidden: (id: number, hidden: boolean) =>
     patch<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
-  submissions: (id: number, page: number, pageSize: number) =>
-    get<SubmissionListResult>(`/problems/${id}/submissions`, { page, page_size: pageSize }),
+  submissions: (id: number, page: number, pageSize: number, sort?: string, lang?: string) =>
+    get<SubmissionListResult>(`/problems/${id}/submissions`, {
+      page,
+      page_size: pageSize,
+      ...(sort ? { sort } : {}),
+      ...(lang ? { lang } : {}),
+    }),
   mySubmissions: (id: number, page: number, pageSize: number) =>
     get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
   setStatement: (id: number, statement: string) =>

@@ -63,13 +63,20 @@ function problemRoute(row: { id?: number; locked?: boolean; lock_kind?: string; 
   router.push(`/problems/${row.id}`)
 }
 
+// 通过率 = AC 提交 / 总提交（百分比，整数省小数）
+function acceptRate(row: { submit_count?: number; accepted_count?: number }): string {
+  if (!row.submit_count) return '—'
+  const pct = ((row.accepted_count ?? 0) / row.submit_count) * 100
+  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
+}
+
 function onPageChange(p: number) {
   page.value = p
   load()
 }
 
 function comingSoon() {
-  ElMessage.info('题目创建 / 导入将在 v0.5b 提供，当前请使用命令行导入')
+  ElMessage.info('题包导入将在 v0.5b-2 提供，当前请使用命令行导入')
 }
 
 onMounted(() => {
@@ -122,12 +129,16 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="140">
+          <el-table-column label="通过率" width="110">
             <template #default="{ row }">
-              <el-link v-if="row.locked" type="warning" @click.stop="problemRoute(row)">
-                前往{{ row.lock_kind === 'exam' ? '考试' : '比赛' }}
-              </el-link>
-              <el-link v-else type="primary" @click.stop="router.push(`/problems/${row.id}`)">进入题目</el-link>
+              <el-tooltip
+                v-if="row.submit_count"
+                :content="`AC ${row.accepted_count ?? 0} / 提交 ${row.submit_count}`"
+                placement="top"
+              >
+                <span>{{ acceptRate(row) }}</span>
+              </el-tooltip>
+              <span v-else class="dim">—</span>
             </template>
           </el-table-column>
         </el-table>
@@ -137,7 +148,7 @@ onMounted(() => {
       <el-card v-if="userStore.can('problem.create')" class="aside-card">
         <template #header><span>题目管理</span></template>
         <div class="aside-actions">
-          <el-button type="primary" plain style="width: 100%" @click="comingSoon">新增题目</el-button>
+          <el-button type="primary" plain style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
           <el-button plain style="width: 100%" @click="comingSoon">导入题目</el-button>
         </div>
         <div class="dim tip">网页出题（含测试数据 zip 上传）在 v0.5b 上线</div>

@@ -90,7 +90,22 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 	if end > total {
 		end = total
 	}
-	ok(c, gin.H{"list": items[start:end], "total": total})
+	pageItems := items[start:end]
+	// 通过率统计：只聚合当前页题目的公开态提交；失败不阻塞列表（前端显示 -）
+	pids := make([]int64, 0, len(pageItems))
+	for _, it := range pageItems {
+		pids = append(pids, it["id"].(int64))
+	}
+	stats, err := h.repo.ListProblemStats(ctx, pids)
+	if err != nil {
+		stats = map[int64]repo.ProblemStat{}
+	}
+	for _, it := range pageItems {
+		st := stats[it["id"].(int64)]
+		it["submit_count"] = st.Total
+		it["accepted_count"] = st.Accepted
+	}
+	ok(c, gin.H{"list": pageItems, "total": total})
 }
 
 // GetProblem 题目详情（含按视角的锁题/隐藏判定与样例按需读取）。
@@ -118,6 +133,8 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 			canViewOthers = true
 		}
 	}
+	// 题解可见门槛与 solutionAllowed 同规则：老师群体（题面编辑权）∨ 该题满分
+	canViewSolutions := logged && h.solutionAllowed(c, uid, id)
 	lockMap, err := h.loadLockMap(ctx, uid, role)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取比赛状态失败")
@@ -164,12 +181,16 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"description":        p.Statement,
 		"time_limit_ms":      p.TimeLimitMS,
 		"memory_limit_kb":    p.MemoryLimitKB,
+		"compare":            p.Compare,
+		"float_tolerance":    p.FloatTolerance,
+		"has_checker":        p.CheckerFile != "",
 		"samples":            sampleItems,
 		"has_subtasks":       len(p.Subtasks) > 0,
 		"hidden":             p.Hidden,
 		"can_set_hidden":     h.problemEditable(c, p),
 		"can_edit_statement": h.problemEditable(c, p),
-		"can_view_others":    canViewOthers, // 满分解锁后可在本页查看他人代码
+		"can_view_others":    canViewOthers,    // 满分解锁后可在本页查看他人代码
+		"can_view_solutions": canViewSolutions, // 满分 ∨ 老师群体：题解弹窗入口提示用
 	}
 	if lk != nil {
 		resp["locked"] = true

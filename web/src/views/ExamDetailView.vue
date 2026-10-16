@@ -276,7 +276,7 @@ onUnmounted(() => {
       </template>
     </PageShell>
 
-    <el-dialog v-model="showEditIntro" title="编辑考试说明（Markdown / 所见即所得）" width="860" top="4vh">
+    <el-dialog v-model="showEditIntro" title="编辑考试说明（Markdown / 所见即所得）" width="1020" top="4vh">
       <MdEditor v-model="editIntro" height="380px" />
       <template #footer>
         <el-button @click="showEditIntro = false">取消</el-button>

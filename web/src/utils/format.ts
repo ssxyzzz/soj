@@ -14,6 +14,14 @@ const statusMap: Record<string, StatusStyle> = {
   'Memory Limit Exceeded': { label: '超内存', type: 'danger' },
   'Runtime Error': { label: '运行错误', type: 'danger' },
   'System Error': { label: '系统错误', type: 'info' },
+  // 测试点明细使用缩写（judge 写入 CaseResult.Status）
+  AC: { label: '通过', type: 'success' },
+  WA: { label: '答案错误', type: 'danger' },
+  TLE: { label: '超时', type: 'danger' },
+  MLE: { label: '超内存', type: 'danger' },
+  RE: { label: '运行错误', type: 'danger' },
+  OLE: { label: '答案超长', type: 'warning' },
+  SE: { label: '系统错误', type: 'info' },
 }
 
 export function statusStyle(status: string): StatusStyle {

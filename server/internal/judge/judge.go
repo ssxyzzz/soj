@@ -11,11 +11,15 @@ package judge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/lang"
 	"soj/internal/repo"
@@ -116,10 +120,12 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 		defer j.releaseBinary(fileID)
 	}
 
+	cmp := newOutputComparer(problem)
+	chk := j.checkerRunnerFor(problem)
 	if len(problem.Subtasks) > 0 {
-		return j.evaluateSubtasks(ctx, language, fileID, sub.Code, problem)
+		return j.evaluateSubtasks(ctx, language, fileID, sub.Code, problem, cmp, chk)
 	}
-	return j.evaluatePoints(ctx, language, fileID, sub.Code, problem)
+	return j.evaluatePoints(ctx, language, fileID, sub.Code, problem, cmp, chk)
 }
 
 // evalState 评测过程中的累计状态。
@@ -141,12 +147,63 @@ func (s *evalState) observe(res *sandbox.Result) (timeMS, memKB int) {
 	return timeMS, memKB
 }
 
+// outputComparer 输出比对器：按题目比对模式判定选手输出与答案是否等价。
+// exact = 现状语义（normalizeOutput 后全文比对，行尾空白/文末换行无关）；
+// tolerant = 在 normalize 后按空白分词逐 token 比较，数字 token 按容差比较。
+type outputComparer struct {
+	tolerant bool
+	tol      float64
+}
+
+func newOutputComparer(p *repo.Problem) outputComparer {
+	c := outputComparer{}
+	if p.Compare == repo.CompareTolerant {
+		c.tolerant = true
+		c.tol = p.FloatTolerance
+		if c.tol <= 0 {
+			c.tol = repo.DefaultFloatTolerance
+		}
+	}
+	return c
+}
+
+func (c outputComparer) equal(out, ans string) bool {
+	outN, ansN := normalizeOutput(out), normalizeOutput(ans)
+	if !c.tolerant {
+		return outN == ansN
+	}
+	return tolerantEqual(outN, ansN, c.tol)
+}
+
+// tolerantEqual 分词比对：按空白切分后逐 token 比较；两侧都是合法数字时按容差判定，
+// 否则精确比较。token 数不同直接不等。
+func tolerantEqual(a, b string, tol float64) bool {
+	ta, tb := strings.Fields(a), strings.Fields(b)
+	if len(ta) != len(tb) {
+		return false
+	}
+	for i := range ta {
+		na, errA := strconv.ParseFloat(ta[i], 64)
+		nb, errB := strconv.ParseFloat(tb[i], 64)
+		if errA == nil && errB == nil {
+			if math.Abs(na-nb) > tol {
+				return false
+			}
+			continue
+		}
+		if ta[i] != tb[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // caseVerdict 把沙箱单点结果归一为 (点位状态缩写, 终止状态, 原因)。
 // 终止状态非空表示该点导致整份提交按此状态失败（单点模式用）。
-func caseVerdict(res *sandbox.Result, ans string) (caseStatus, finalStatus, reason string) {
+func caseVerdict(res *sandbox.Result, ans string, cmp outputComparer) (caseStatus, finalStatus, reason string) {
 	switch res.Status {
 	case "Accepted":
-		if normalizeOutput(res.Stdout()) != normalizeOutput(ans) {
+		if !cmp.equal(res.Stdout(), ans) {
 			return "WA", repo.StatusWrongAnswer, "输出与答案不一致"
 		}
 		return "AC", "", ""
@@ -165,7 +222,7 @@ func caseVerdict(res *sandbox.Result, ans string) (caseStatus, finalStatus, reas
 }
 
 // evaluatePoints 单点等分模式：每点 100/n 分，首个失败即终止（历史行为）。
-func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	st := &evalState{}
 	for i, tc := range problem.Cases {
 		res, err := j.runOne(ctx, language, fileID, code, tc, problem)
@@ -181,9 +238,22 @@ func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fi
 				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
 					"读取答案文件失败: " + err.Error(), st.detail
 			}
-			caseStatus, finalStatus, reason = caseVerdict(res, string(ans))
+			if chk != nil {
+				ok, msg, serr := chk.run(ctx, tc, string(ans), res.Stdout())
+				if serr != nil {
+					return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
+						"校验器异常: " + serr.Error(), st.detail
+				}
+				if ok {
+					caseStatus, finalStatus, reason = "AC", "", ""
+				} else {
+					caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer, msg
+				}
+			} else {
+				caseStatus, finalStatus, reason = caseVerdict(res, string(ans), cmp)
+			}
 		} else {
-			caseStatus, finalStatus, reason = caseVerdict(res, "")
+			caseStatus, finalStatus, reason = caseVerdict(res, "", cmp)
 		}
 		if caseStatus != "" {
 			st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m})
@@ -198,7 +268,7 @@ func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fi
 
 // evaluateSubtasks 子任务模式：组内测试点全过才得该组分；组内失败跳过该组剩余点继续下一组。
 // 总分 100 判 Accepted；否则以第一个失败点的状态作为整份提交状态（保留部分分）。
-func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	byIndex := map[int]repo.CaseMeta{}
 	for _, tc := range problem.Cases {
 		byIndex[tc.Index] = tc
@@ -228,9 +298,22 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, 
 					return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
 						"读取答案文件失败: " + err.Error(), st.detail
 				}
-				caseStatus, finalStatus, reason = caseVerdict(res, string(ans))
+				if chk != nil {
+					ok, msg, serr := chk.run(ctx, tc, string(ans), res.Stdout())
+					if serr != nil {
+						return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+							"校验器异常: " + serr.Error(), st.detail
+					}
+					if ok {
+						caseStatus, finalStatus, reason = "AC", "", ""
+					} else {
+						caseStatus, finalStatus, reason = "WA", repo.StatusWrongAnswer, msg
+					}
+				} else {
+					caseStatus, finalStatus, reason = caseVerdict(res, string(ans), cmp)
+				}
 			} else {
-				caseStatus, finalStatus, reason = caseVerdict(res, "")
+				caseStatus, finalStatus, reason = caseVerdict(res, "", cmp)
 			}
 			if caseStatus != "" {
 				st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m})
@@ -391,4 +474,109 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n] + "\n...(已截断)"
+}
+
+// ---- checker（v0.5b-2）：自定义校验器 ----
+
+// checkerRunner checker 判定器：懒编译（编译产物 fileId 缓存进题目元数据，
+// 缓存失效自动重编一次）+ 三流执行。调用约定与 testlib 惯例一致：
+// checker <输入> <期望> <考生输出>，退出码 0 = AC，非 0 = WA（输出/报错作为失败原因）。
+type checkerRunner struct {
+	j *Judger
+	p *repo.Problem
+}
+
+func (j *Judger) checkerRunnerFor(p *repo.Problem) *checkerRunner {
+	if p == nil || p.CheckerFile == "" {
+		return nil
+	}
+	return &checkerRunner{j: j, p: p}
+}
+
+// ensureCompiled 编译校验器并缓存产物（题目元数据记录 fileId）。
+func (cr *checkerRunner) ensureCompiled(ctx context.Context) (string, error) {
+	if cr.p.CheckerFileID != "" {
+		return cr.p.CheckerFileID, nil
+	}
+	src, err := testdata.ReadAll(cr.j.Provider, cr.p.ID, cr.p.CheckerFile)
+	if err != nil {
+		return "", fmt.Errorf("读取校验器失败: %w", err)
+	}
+	lang := lang.Languages["cpp"]
+	if lang == nil {
+		return "", errors.New("C++ 语言未配置，无法编译校验器")
+	}
+	fileID, status, info, err := cr.j.compile(ctx, lang, string(src))
+	if err != nil {
+		return "", err
+	}
+	if status != "" {
+		return "", fmt.Errorf("校验器编译失败: %s", info)
+	}
+	if err := cr.j.Repo.UpdateProblemMeta(ctx, cr.p.ID, bson.M{"checkerFileId": fileID}); err == nil {
+		cr.p.CheckerFileID = fileID
+	}
+	return fileID, nil
+}
+
+// run 执行校验器，返回 (通过, 失败原因, 系统错误)。
+func (cr *checkerRunner) run(ctx context.Context, tc repo.CaseMeta, ans, stdout string) (ok bool, msg string, sysErr error) {
+	fileID, err := cr.ensureCompiled(ctx)
+	if err != nil {
+		return false, "", err
+	}
+	ok, msg, sysErr, retry := cr.tryRun(ctx, fileID, tc, ans, stdout)
+	if sysErr != nil && retry {
+		cr.p.CheckerFileID = "" // 产物缓存失效：重编一次再试
+		fileID, err = cr.ensureCompiled(ctx)
+		if err != nil {
+			return false, "", err
+		}
+		ok, msg, sysErr, _ = cr.tryRun(ctx, fileID, tc, ans, stdout)
+	}
+	return ok, msg, sysErr
+}
+
+func (cr *checkerRunner) tryRun(ctx context.Context, fileID string, tc repo.CaseMeta, ans, stdout string) (ok bool, msg string, sysErr error, retry bool) {
+	input, err := testdata.ReadAll(cr.j.Provider, cr.p.ID, tc.InName)
+	if err != nil {
+		return false, "", fmt.Errorf("读取输入文件失败: %w", err), false
+	}
+	in, ansS, out := string(input), ans, stdout
+	cmd := sandbox.Cmd{
+		Args: []string{"./main", "input", "answer", "output"}, // 产物约定名 main，相对工作目录
+		Files: []sandbox.File{
+			sandbox.Pipe("stderr", maxStderr),
+			sandbox.Pipe("stdout", maxStderr),
+		},
+		CopyIn: map[string]sandbox.CopyFile{
+			"main":   {FileID: fileID},
+			"input":  {Content: in},
+			"answer": {Content: ansS},
+			"output": {Content: out},
+		},
+		CPULimit:    int64(cr.p.TimeLimitMS) * int64(time.Millisecond),
+		ClockLimit:  int64(cr.p.TimeLimitMS) * int64(time.Millisecond) * 3,
+		MemoryLimit: int64(cr.p.MemoryLimitKB) << 10,
+		ProcLimit:   64,
+	}
+	results, err := cr.j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
+	if err != nil || len(results) == 0 {
+		return false, "", fmt.Errorf("沙箱调用失败: %v", err), false
+	}
+	res := results[0]
+	switch res.Status {
+	case "Accepted":
+		return true, "", nil, false
+	case "File Error":
+		return false, "", nil, true // 编译产物缓存失效：交由上层重编一次
+	case "Nonzero Exit Status", "Non Zero Exit Status", "Signalled":
+		reason := truncate(strings.TrimSpace(strings.TrimSpace(res.Stdout())+" "+strings.TrimSpace(res.Stderr())), 256)
+		if reason == "" {
+			reason = "校验器判定不通过"
+		}
+		return false, reason, nil, false
+	default:
+		return false, "", fmt.Errorf("校验器执行异常: %s", res.Status), false
+	}
 }

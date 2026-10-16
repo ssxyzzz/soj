@@ -46,7 +46,7 @@ function doSubmit() {
   <el-dialog
     :model-value="modelValue"
     :title="`提交代码 · ${title}`"
-    width="720"
+    width="860"
     top="6vh"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >

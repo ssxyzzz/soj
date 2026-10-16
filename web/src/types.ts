@@ -27,6 +27,8 @@ export interface ProblemListItem {
   exam_id?: number
   lock_kind?: 'contest' | 'exam'
   lock_phase?: string
+  submit_count?: number // 公开态提交数（通过率展示用）
+  accepted_count?: number // 其中 AC 的提交数
 }
 
 export interface ProblemListResult {
@@ -46,12 +48,16 @@ export interface ProblemDetail {
   description: string
   time_limit_ms: number
   memory_limit_kb: number
+  compare?: string
+  float_tolerance?: number
+  has_checker?: boolean
   samples: TestCase[]
   has_subtasks?: boolean
   hidden?: boolean
   can_set_hidden?: boolean
   can_edit_statement?: boolean
   can_view_others?: boolean
+  can_view_solutions?: boolean
   locked?: boolean
   lock_kind?: 'contest' | 'exam'
   contest_id?: number
@@ -79,6 +85,15 @@ export interface Submission {
   contest_title?: string
   exam_id?: number
   exam_title?: string
+  detail?: CaseResult[]
+}
+
+// 单个测试点结果（与后端 CaseResult 对应）
+export interface CaseResult {
+  index: number
+  status: string
+  time_ms: number
+  memory_kb: number
 }
 
 export interface SubmissionListResult {
@@ -200,6 +215,18 @@ export interface UserProfile {
   grade: string
   qq: string
   prefs: UserPrefs
+}
+
+// ---------- 题解（v0.5b-1） ----------
+
+export interface SolutionItem {
+  id: number
+  uid: number
+  nickname: string
+  content: string
+  pinned: boolean
+  created_at: string
+  updated_at: string
 }
 
 // ---------- 备份（v0.4.9） ----------

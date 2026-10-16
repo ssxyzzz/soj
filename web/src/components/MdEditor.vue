@@ -62,5 +62,15 @@ onUnmounted(() => inst?.destroy())
 </script>
 
 <template>
-  <div ref="el"></div>
+  <!-- 包装层撑满父容器（el-form-item__content 是 flex，子项不会自动拉伸）；
+       挂载点不能直接设宽——Vditor 初始化会改写挂载点的 class 与内联样式 -->
+  <div class="md-editor">
+    <div ref="el"></div>
+  </div>
 </template>
+
+<style scoped>
+.md-editor {
+  width: 100%;
+}
+</style>
