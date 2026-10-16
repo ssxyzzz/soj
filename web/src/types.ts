@@ -236,6 +236,7 @@ export interface ContestMySubmission {
   time_ms?: number
   memory_kb?: number
   error_info?: string
+  code?: string
 }
 
 export interface LeaderCell {

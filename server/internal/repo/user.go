@@ -3,6 +3,8 @@ package repo
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -100,13 +102,21 @@ func (r *Repo) CreateUserWithPassword(ctx context.Context, username, password, n
 
 func IsNotFound(err error) bool { return errors.Is(err, mongo.ErrNoDocuments) }
 
-// ListUsers 管理端用户分页列表（不含密码哈希）。
-func (r *Repo) ListUsers(ctx context.Context, page, pageSize int) ([]*User, int64, error) {
-	total, err := r.Users.CountDocuments(ctx, bson.M{})
+// ListUsers 管理端用户分页列表（不含密码哈希）；keyword 非空时按用户名/昵称模糊过滤。
+func (r *Repo) ListUsers(ctx context.Context, page, pageSize int, keyword string) ([]*User, int64, error) {
+	filter := bson.M{}
+	if kw := strings.TrimSpace(keyword); kw != "" {
+		pattern := regexp.QuoteMeta(kw)
+		filter = bson.M{"$or": bson.A{
+			bson.M{"uname": bson.M{"$regex": pattern, "$options": "i"}},
+			bson.M{"nickname": bson.M{"$regex": pattern, "$options": "i"}},
+		}}
+	}
+	total, err := r.Users.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := r.Users.Find(ctx, bson.M{},
+	cursor, err := r.Users.Find(ctx, filter,
 		options.Find().
 			SetProjection(bson.M{"pwdHash": 0}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}).

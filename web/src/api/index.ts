@@ -85,11 +85,12 @@ export const authApi = {
     post<LoginResult>('/auth/login', { username, password }),
   register: (username: string, password: string, nickname: string) =>
     post<LoginResult>('/auth/register', { username, password, nickname }),
+  me: () => get<{ id: number; username: string; nickname: string; role: string }>('/me'),
 }
 
 export const problemApi = {
-  list: (page: number, pageSize: number) =>
-    get<ProblemListResult>('/problems', { page, page_size: pageSize }),
+  list: (page: number, pageSize: number, q?: string) =>
+    get<ProblemListResult>('/problems', { page, page_size: pageSize, ...(q ? { q } : {}) }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   setHidden: (id: number, hidden: boolean) =>
     patch<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
@@ -145,8 +146,8 @@ export const assignmentApi = {
 }
 
 export const adminApi = {
-  listUsers: (page: number, pageSize: number) =>
-    get<{ list: AdminUser[]; total: number }>('/admin/users', { page, page_size: pageSize }),
+  listUsers: (page: number, pageSize: number, q?: string) =>
+    get<{ list: AdminUser[]; total: number }>('/admin/users', { page, page_size: pageSize, ...(q ? { q } : {}) }),
   createUser: (username: string, password: string, nickname: string, role: string) =>
     post<{ id: number }>('/admin/users', { username, password, nickname, role }),
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string }) =>

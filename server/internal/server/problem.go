@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -38,6 +39,9 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 	uid, _, role, _ := currentUser(c)
 	page, pageSize := queryPage(c)
 	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	// 题库搜索：标题包含（忽略大小写）或 ID 精确匹配
+	q := strings.TrimSpace(c.Query("q"))
+	ql := strings.ToLower(q)
 
 	ctx := c.Request.Context()
 	lockMap, err := h.loadLockMap(ctx, uid, role)
@@ -53,6 +57,9 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 
 	items := make([]gin.H, 0)
 	for _, p := range all {
+		if q != "" && strconv.FormatInt(p.ID, 10) != q && !strings.Contains(strings.ToLower(p.Title), ql) {
+			continue
+		}
 		lk := lockMap[p.ID]
 		if !privileged {
 			hiddenBlocked := p.Hidden && !(lk != nil && lk.Phase == "running" && lk.Bank)

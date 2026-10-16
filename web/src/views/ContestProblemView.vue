@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { contestApi, problemApi } from '@/api'
-import { fmtMem, statusStyle } from '@/utils/format'
+import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import MdView from '@/components/MdView.vue'
+import PageShell from '@/components/PageShell.vue'
+import SubmitDialog from '@/components/SubmitDialog.vue'
+import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
 import type { ContestDetail, ContestMySubmission, ProblemDetail } from '@/types'
 
 const route = useRoute()
@@ -14,33 +17,47 @@ const router = useRouter()
 const contest = ref<ContestDetail | null>(null)
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
-const language = ref('cpp')
-const code = ref('')
-const submitting = ref(false)
 const mine = ref<ContestMySubmission[]>([])
 const revealed = ref(false)
 
-const languageOptions = [
-  { value: 'cpp', label: 'C++ 14' },
-  { value: 'c', label: 'C' },
-  { value: 'python3', label: 'Python 3' },
-]
+const showSubmit = ref(false)
+const showWorkbench = ref(false)
+const submitting = ref(false)
+const expandedMine = ref<number[]>([])
 
-const codeTemplates: Record<string, string> = {
-  cpp: '#include <iostream>\n\nint main() {\n    std::ios::sync_with_stdio(false);\n    int a, b;\n    std::cin >> a >> b;\n    std::cout << a + b << std::endl;\n    return 0;\n}\n',
-  c: '#include <stdio.h>\n\nint main(void) {\n    int a, b;\n    scanf("%d %d", &a, &b);\n    printf("%d\\n", a + b);\n    return 0;\n}\n',
-  python3: 'a, b = map(int, input().split())\nprint(a + b)\n',
-}
+const contestId = computed(() => Number(route.params.id))
+const pid = computed(() => Number(route.params.pid))
+const running = computed(() => contest.value?.status === 'running')
+const statusText = computed(() => {
+  switch (contest.value?.status) {
+    case 'running': return '进行中'
+    case 'scheduled': return '未开始'
+    default: return '已结束'
+  }
+})
+
+// 在线编程左栏题面：题面 + 样例拼成一份 MD
+const workbenchStatement = computed(() => {
+  const p = problem.value
+  if (!p) return ''
+  let md = p.description
+  if (p.samples.length) {
+    md += '\n\n## 样例\n'
+    p.samples.forEach((s, i) => {
+      md += `\n**样例 ${i + 1} 输入**\n\n\`\`\`\n${s.input || '（空）'}\n\`\`\`\n\n**样例 ${i + 1} 输出**\n\n\`\`\`\n${s.output}\n\`\`\`\n`
+    })
+  }
+  return md
+})
 
 async function load() {
   loading.value = true
   try {
-    const contestId = Number(route.params.id)
-    contest.value = await contestApi.detail(contestId)
-    problem.value = await problemApi.detail(Number(route.params.pid))
+    contest.value = await contestApi.detail(contestId.value)
+    problem.value = await problemApi.detail(pid.value)
     await loadMine()
   } catch {
-    router.replace(`/contests/${route.params.id}`)
+    router.replace(`/contests/${contestId.value}`)
   } finally {
     loading.value = false
   }
@@ -48,33 +65,35 @@ async function load() {
 
 async function loadMine() {
   try {
-    const r = await contestApi.mySubmissions(Number(route.params.id))
-    mine.value = r.list.filter((s) => s.pid === Number(route.params.pid))
+    const r = await contestApi.mySubmissions(contestId.value)
+    mine.value = r.list.filter((s) => s.pid === pid.value)
     revealed.value = r.revealed
   } catch {
     mine.value = []
   }
 }
 
-async function submit() {
-  if (!code.value.trim()) {
-    ElMessage.warning('代码不能为空')
-    return
-  }
+function goProblem(targetPid: number) {
+  if (targetPid === pid.value) return
+  router.push(`/contests/${contestId.value}/problems/${targetPid}`)
+}
+
+function toggleExpand(id: number) {
+  const i = expandedMine.value.indexOf(id)
+  if (i >= 0) expandedMine.value.splice(i, 1)
+  else expandedMine.value.push(id)
+}
+
+async function handleSubmit(_lang: string, code: string) {
   submitting.value = true
   try {
-    const r = await contestApi.submit(
-      Number(route.params.id),
-      Number(route.params.pid),
-      language.value,
-      code.value,
-    )
+    const r = await contestApi.submit(contestId.value, pid.value, _lang, code)
     ElMessage.success('已提交')
+    showSubmit.value = false
+    showWorkbench.value = false
     await loadMine()
     // 赛时不轮询结果（不出分）；已公开时轮询刷新
-    if (revealed.value) {
-      pollRevealed(r.id)
-    }
+    if (revealed.value) pollRevealed(r.id)
   } finally {
     submitting.value = false
   }
@@ -92,10 +111,7 @@ function pollRevealed(sid: number) {
   }, 1500)
 }
 
-onMounted(() => {
-  code.value = codeTemplates.cpp
-  load()
-})
+onMounted(load)
 
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
@@ -103,145 +119,241 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-loading="loading" class="page">
-    <template v-if="contest && problem">
-      <el-page-header class="mb8" @back="router.push(`/contests/${contest.id}`)">
-        <template #content>
-          <span>{{ contest.title }} · #{{ problem.id }} {{ problem.title }}</span>
-        </template>
-      </el-page-header>
+  <div v-loading="loading">
+    <PageShell v-if="contest && problem">
+      <template #standalone>
+        <el-card class="standalone-card" :body-style="{ padding: '10px 20px' }">
+          <div class="sa-time">
+            <el-link type="primary" @click="router.push(`/contests/${contest.id}`)">{{ contest.title }}</el-link>
+            <el-tag size="small" :type="running ? 'success' : 'info'">{{ statusText }}</el-tag>
+            <span class="dim">比赛时间：{{ fmtDate(contest.start) }} ~ {{ fmtDate(contest.end) }}</span>
+            <span v-if="!revealed" class="dim">OI 赛制：赛时只记录提交次数，不出分</span>
+          </div>
+          <div class="sa-switch">
+            <el-button
+              v-for="(p, i) in contest.problems"
+              :key="p.id"
+              :type="p.id === pid ? 'primary' : 'default'"
+              circle
+              size="small"
+              class="switch-btn"
+              @click="goProblem(p.id)"
+            >
+              {{ i + 1 }}
+            </el-button>
+            <el-link class="sa-board" type="primary" @click="router.push(`/contests/${contest.id}`)">返回比赛</el-link>
+          </div>
+        </el-card>
+      </template>
 
-      <el-alert
-        v-if="contest.status === 'running' && !revealed"
-        title="OI 赛制进行中：正常评测但看不到得分与判定结果，只记录提交次数"
-        type="warning"
-        :closable="false"
+      <div class="page">
+        <el-card>
+          <div class="title-row">
+            <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
+          </div>
+          <div class="info-row">
+            <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
+            <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
+          </div>
+          <MdView :content="problem.description" />
+          <template v-if="problem.samples.length">
+            <el-divider content-position="left">样例</el-divider>
+            <div v-for="(s, i) in problem.samples" :key="s.id" class="sample">
+              <div class="sample-col">
+                <div class="sample-label">样例 {{ i + 1 }} 输入</div>
+                <pre class="mono sample-pre">{{ s.input || '（空）' }}</pre>
+              </div>
+              <div class="sample-col">
+                <div class="sample-label">样例 {{ i + 1 }} 输出</div>
+                <pre class="mono sample-pre">{{ s.output }}</pre>
+              </div>
+            </div>
+          </template>
+        </el-card>
+      </div>
+
+      <template #aside>
+        <el-card class="aside-card">
+          <div class="entry-actions">
+            <el-button type="primary" style="width: 100%" :disabled="!running" @click="showSubmit = true">
+              提交
+            </el-button>
+            <el-button plain style="width: 100%" :disabled="!running" @click="showWorkbench = true">
+              在线编程
+            </el-button>
+            <div v-if="!running" class="dim center">比赛未在进行中</div>
+          </div>
+        </el-card>
+
+        <el-card class="aside-card">
+          <template #header>
+            <span>我的提交（{{ mine.length }}）{{ revealed ? '' : ' · 赛时仅记录次数' }}</span>
+          </template>
+          <div v-for="s in mine" :key="s.id" class="sub-row" @click="toggleExpand(s.id)">
+            <div class="sub-line">
+              <span class="dim">#{{ s.id }}</span>
+              <template v-if="revealed && s.status">
+                <el-tag size="small" :type="statusStyle(s.status).type">{{ statusStyle(s.status).label }}</el-tag>
+                <span v-if="s.score != null">{{ s.score }} 分</span>
+                <span v-if="s.time_ms != null" class="dim">{{ s.time_ms }} ms</span>
+              </template>
+              <span v-else class="dim">已记录</span>
+              <span class="dim sub-time">{{ fmtDate(s.created_at) }}</span>
+            </div>
+            <pre v-if="revealed && expandedMine.includes(s.id) && s.code" class="mono sub-code">{{ s.code }}</pre>
+          </div>
+          <el-empty v-if="!mine.length" description="还没有提交" :image-size="40" />
+        </el-card>
+      </template>
+    </PageShell>
+
+    <template v-if="contest && problem">
+      <SubmitDialog
+        v-model="showSubmit"
+        :title="`#${problem.id} ${problem.title}`"
+        :submitting="submitting"
+        @submit="handleSubmit"
       />
 
-      <el-card class="block">
-        <template #header>
-          <div class="head">
-            <span>题目信息</span>
-            <span class="dim">{{ problem.time_limit_ms }} ms · {{ fmtMem(problem.memory_limit_kb) }}</span>
-          </div>
-        </template>
-        <MdView :content="problem.description" />
-        <el-table v-if="problem.samples.length" :data="problem.samples" class="mt8">
-          <el-table-column label="输入">
-            <template #default="{ row }"><pre class="mono">{{ row.input || '（空）' }}</pre></template>
-          </el-table-column>
-          <el-table-column label="输出">
-            <template #default="{ row }"><pre class="mono">{{ row.output }}</pre></template>
-          </el-table-column>
-        </el-table>
-      </el-card>
-
-      <el-card class="block">
-        <template #header>
-          <div class="head">
-            <span>提交代码</span>
-            <span class="dim">已提交 {{ mine.length }} 次</span>
-          </div>
-        </template>
-        <div class="submit-bar">
-          <el-select v-model="language" style="width: 160px" @change="code = codeTemplates[language] ?? code">
-            <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
-          </el-select>
-          <el-button type="primary" :disabled="contest.status !== 'running'" :loading="submitting" @click="submit">
-            {{ contest.status === 'running' ? '提交' : '比赛未在进行中' }}
-          </el-button>
-        </div>
-        <el-input
-          v-model="code"
-          type="textarea"
-          :rows="12"
-          class="mono"
-          spellcheck="false"
-        />
-      </el-card>
-
-      <el-card class="block">
-        <template #header><span>我的提交（{{ revealed ? '已公开' : '赛时仅记录次数' }}）</span></template>
-        <el-table :data="mine">
-          <el-table-column prop="id" label="ID" width="90" />
-          <template v-if="revealed">
-            <el-table-column label="结果" width="130">
-              <template #default="{ row }">
-                <el-tag v-if="row.status" :type="statusStyle(row.status).type">
-                  {{ statusStyle(row.status).label }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="score" label="得分" width="80" />
-            <el-table-column label="耗时" width="90">
-              <template #default="{ row }">{{ row.time_ms ?? '-' }} ms</template>
-            </el-table-column>
-          </template>
-          <el-table-column label="提交时间">
-            <template #default="{ row }">
-              {{ new Date(row.created_at).toLocaleString('zh-CN', { hour12: false }) }}
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-empty v-if="!mine.length" description="还没有提交" :image-size="60" />
-      </el-card>
+      <CodeWorkbench
+        v-model="showWorkbench"
+        :title="`#${problem.id} ${problem.title}`"
+        :statement="workbenchStatement"
+        :submitting="submitting"
+        @submit="handleSubmit"
+      />
     </template>
   </div>
 </template>
 
 <style scoped>
-.mb8 :deep(.el-page-header__back) {
-  background: #ecf5ff;
-  border-radius: 16px;
-  padding: 4px 14px 4px 6px;
-  transition: background 0.2s;
+.standalone-card {
+  margin-bottom: 0;
 }
 
-.mb8 :deep(.el-page-header__back:hover) {
-  background: #d9ecff;
+.sa-time {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 14px;
 }
 
-.mb8 :deep(.el-page-header__icon) {
-  color: #409eff;
-  font-size: 18px;
-}
-
-.mb8 {
-  margin-bottom: 8px;
-}
-
-.mt8 {
+.sa-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 8px;
 }
 
-.block {
-  margin-top: 12px;
+.switch-btn {
+  font-weight: 600;
 }
 
-.head {
+.sa-board {
+  margin-left: auto;
+}
+
+.title-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+
+.big-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.sample {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.sample-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.sample-label {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.sample-pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: #f8f8f8;
+  border-radius: 4px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.aside-card + .aside-card {
+  margin-top: 16px;
+}
+
+.entry-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.center {
+  text-align: center;
+}
+
+.sub-row {
+  padding: 6px 4px;
+  border-bottom: 1px dashed #ebeef5;
+  cursor: pointer;
+}
+
+.sub-row:hover {
+  background: #f5f7fa;
+}
+
+.sub-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.sub-time {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.sub-code {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #f8f8f8;
+  border-radius: 4px;
+  max-height: 280px;
+  overflow: auto;
+  font-size: 12px;
+  cursor: auto;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
 }
 
 .dim {
   color: #909399;
   font-size: 13px;
-}
-
-.description {
-  white-space: pre-wrap;
-  line-height: 1.8;
-}
-
-.submit-bar {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.mono :deep(textarea) {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
-  line-height: 1.5;
 }
 </style>
