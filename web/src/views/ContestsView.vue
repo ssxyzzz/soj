@@ -81,7 +81,6 @@ onMounted(load)
 
 <template>
   <PageShell>
-    <div class="page">
       <el-card v-loading="loading" class="group">
         <template #header>
           <div class="group-head running-head">
@@ -125,7 +124,6 @@ onMounted(load)
           <el-table-column prop="problem_count" label="题数" width="80" />
         </el-table>
       </el-card>
-    </div>
 
     <template #aside>
       <el-card v-if="userStore.role === 'root'" class="aside-card">

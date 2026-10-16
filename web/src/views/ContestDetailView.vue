@@ -158,7 +158,6 @@ onUnmounted(() => {
 <template>
   <div v-loading="loading">
     <PageShell v-if="contest">
-      <div class="page">
         <el-card>
           <div class="title-row">
             <span class="big-title">{{ contest.title }}</span>
@@ -239,7 +238,6 @@ onUnmounted(() => {
             </el-tab-pane>
           </el-tabs>
         </el-card>
-      </div>
 
       <template #aside>
         <el-card class="aside-card">

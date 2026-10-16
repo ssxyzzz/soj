@@ -61,7 +61,7 @@ cd server && go run ./cmd/soj --judge-only  # 或：纯判题进程
 
 ## 手动编译（本机 Node/Go 工具链）
 
-两个脚本用本机工具链编译（Go 与 Node 装在用户目录 `~/.local/opt/` 免 sudo，安装方法见 plan.md 第 6 章；模块代理 goproxy.cn / npmmirror 已内置），带实时读秒计时、日志落盘（失败自动展示末 20 行）：
+两个脚本用本机工具链编译（Go 与 Node 装在用户目录 `~/.local/opt/` 免 sudo，安装方法见 notes.md 第 6 章；模块代理 goproxy.cn / npmmirror 已内置），带实时读秒计时、日志落盘（失败自动展示末 20 行）：
 
 ```bash
 ./scripts/web-building.sh      # 编译前端 → 同步 embed 目录 → 重建并重启容器

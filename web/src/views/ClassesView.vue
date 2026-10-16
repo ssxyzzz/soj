@@ -107,7 +107,6 @@ onMounted(load)
 
 <template>
   <PageShell>
-    <div class="page">
       <el-empty v-if="!loading && !list.length" description="还没有你能看到的班级，用右侧邀请码加入吧" />
       <el-row v-loading="loading" :gutter="16">
         <el-col v-for="c in list" :key="c.id" :xs="24" :sm="12">
@@ -136,7 +135,6 @@ onMounted(load)
           </el-card>
         </el-col>
       </el-row>
-    </div>
 
     <template #aside>
       <el-card v-if="canCreate()" class="aside-card">

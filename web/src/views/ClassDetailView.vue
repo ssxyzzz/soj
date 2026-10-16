@@ -213,7 +213,6 @@ onMounted(() => {
 <template>
   <div v-loading="loading">
     <PageShell v-if="cl">
-      <div class="page">
         <el-card>
           <div class="title-row">
             <span class="big-title">{{ cl.name }}</span>
@@ -334,7 +333,6 @@ onMounted(() => {
             </div>
           </template>
         </el-card>
-      </div>
 
       <template #aside>
         <el-card class="aside-card">

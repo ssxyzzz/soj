@@ -167,7 +167,6 @@ onMounted(() => {
 <template>
   <div v-loading="loading">
     <PageShell v-if="assignment">
-      <div class="page">
         <el-card class="mb8">
           <template #header>
             <div class="head">
@@ -249,7 +248,6 @@ onMounted(() => {
           </el-table>
           <el-empty v-if="!progress.length" description="班里还没有学生" :image-size="60" />
         </el-card>
-      </div>
 
       <template #aside>
         <el-card v-if="assignment.manageable" class="aside-card">
