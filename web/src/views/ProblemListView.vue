@@ -80,7 +80,7 @@ onMounted(() => {
 
 <template>
   <PageShell>
-    <el-card>
+      <el-card>
         <div class="search-row">
           <el-input
             v-model="keyword"
@@ -92,7 +92,15 @@ onMounted(() => {
           />
           <el-button type="primary" @click="search">搜索</el-button>
           <el-button v-if="keyword" @click="resetSearch">重置</el-button>
-          <span class="dim">共 {{ total }} 题</span>
+          <el-pagination
+            class="search-pager"
+            background
+            layout="total, prev, pager, next"
+            :total="total"
+            :page-size="pageSize"
+            :current-page="page"
+            @current-change="onPageChange"
+          />
         </div>
         <div class="tag-row">
           <span class="dim">标签筛选</span>
@@ -123,16 +131,6 @@ onMounted(() => {
             </template>
           </el-table-column>
         </el-table>
-        <div class="pager">
-          <el-pagination
-            background
-            layout="prev, pager, next, total"
-            :total="total"
-            :page-size="pageSize"
-            :current-page="page"
-            @current-change="onPageChange"
-          />
-        </div>
       </el-card>
 
     <template #aside>
@@ -168,7 +166,12 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.search-pager {
+  margin-left: auto;
 }
 
 .tag-row {

@@ -22,13 +22,16 @@ const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
 let timer: ReturnType<typeof setInterval> | undefined
 
-// 右列：提交弹窗 / 在线编程 / 我的提交与他人代码（Tab）/ 编辑题面
+// 右列：提交弹窗 / 在线编程 / 我的提交与他人代码（Tab，各 5 条分页）/ 编辑题面
 const showSubmit = ref(false)
 const showWorkbench = ref(false)
 const submitting = ref(false)
 const activeTab = ref('mine')
 
+const SIDE_PAGE_SIZE = 5
 const mySubs = ref<Submission[]>([])
+const myTotal = ref(0)
+const myPage = ref(1)
 const expandedMine = ref<number[]>([])
 const others = ref<Submission[]>([])
 const othersTotal = ref(0)
@@ -80,10 +83,13 @@ async function load() {
   }
 }
 
-async function loadMine() {
+async function loadMine(p = 1) {
   if (!userStore.token) return
   try {
-    mySubs.value = (await problemApi.mySubmissions(Number(route.params.id), 1, 20)).list
+    const r = await problemApi.mySubmissions(Number(route.params.id), p, SIDE_PAGE_SIZE)
+    mySubs.value = r.list
+    myTotal.value = r.total
+    myPage.value = p
   } catch {
     mySubs.value = []
   }
@@ -92,7 +98,7 @@ async function loadMine() {
 async function loadOthers(p = 1) {
   if (!problem.value?.can_view_others) return
   try {
-    const r = await problemApi.submissions(Number(route.params.id), p, 20)
+    const r = await problemApi.submissions(Number(route.params.id), p, SIDE_PAGE_SIZE)
     others.value = r.list
     othersTotal.value = r.total
     othersPage.value = p
@@ -134,7 +140,7 @@ async function handleSubmit(_lang: string, code: string) {
     showSubmit.value = false
     showWorkbench.value = false
     activeTab.value = 'mine'
-    loadMine()
+    loadMine(1)
     startPolling(r.id)
   } catch {
     // 错误提示已由 axios 拦截器统一弹出
@@ -260,6 +266,11 @@ onUnmounted(stopPolling)
         </el-card>
 
       <template #aside>
+        <el-card v-if="problem.can_edit_statement" class="aside-card">
+          <template #header><span>管理</span></template>
+          <el-button type="primary" plain style="width: 100%" @click="openEditStatement">编辑题面</el-button>
+        </el-card>
+
         <el-card class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" :disabled="submitDisabled" @click="openSubmitEntry">
@@ -299,6 +310,17 @@ onUnmounted(stopPolling)
                 <pre v-if="expandedMine.includes(s.id) && s.code" class="mono sub-code">{{ s.code }}</pre>
               </div>
               <el-empty v-if="!mySubs.length" description="还没有提交过" :image-size="40" />
+              <div v-if="myTotal > SIDE_PAGE_SIZE" class="side-pager">
+                <el-pagination
+                  size="small"
+                  background
+                  layout="prev, pager, next"
+                  :total="myTotal"
+                  :page-size="SIDE_PAGE_SIZE"
+                  :current-page="myPage"
+                  @current-change="(p: number) => loadMine(p)"
+                />
+              </div>
             </template>
             <div v-else class="dim">登录后查看提交记录</div>
           </template>
@@ -319,24 +341,19 @@ onUnmounted(stopPolling)
               </div>
               <pre v-if="expandedOthers.includes(s.id) && s.code" class="mono sub-code">{{ s.code }}</pre>
             </div>
-            <div class="pager">
+            <div v-if="othersTotal > SIDE_PAGE_SIZE" class="side-pager">
               <el-pagination
-                small
+                size="small"
                 background
                 layout="prev, pager, next"
                 :total="othersTotal"
-                :page-size="20"
+                :page-size="SIDE_PAGE_SIZE"
                 :current-page="othersPage"
                 @current-change="(p: number) => loadOthers(p)"
               />
             </div>
             <el-empty v-if="!others.length" description="还没有人提交过" :image-size="40" />
           </template>
-        </el-card>
-
-        <el-card v-if="problem.can_edit_statement" class="aside-card">
-          <template #header><span>管理</span></template>
-          <el-button type="primary" plain style="width: 100%" @click="openEditStatement">编辑题面</el-button>
         </el-card>
       </template>
     </PageShell>
@@ -503,7 +520,7 @@ onUnmounted(stopPolling)
   font-size: 13px;
 }
 
-.pager {
+.side-pager {
   display: flex;
   justify-content: center;
   margin-top: 10px;
