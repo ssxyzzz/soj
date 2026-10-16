@@ -85,6 +85,11 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 	}
 	set := bson.M{}
 	if req.Role != nil {
+		// 初始管理员（ID=1）的角色不可修改：防止误降权把自己锁在 root 之外
+		if id == repo.InitialAdminID && *req.Role != repo.RoleRoot {
+			fail(c, http.StatusBadRequest, "初始管理员（ID=1）的 root 角色受保护，不可修改")
+			return
+		}
 		if !repo.ValidRoles[*req.Role] {
 			fail(c, http.StatusBadRequest, "角色非法")
 			return

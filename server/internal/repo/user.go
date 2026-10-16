@@ -25,6 +25,10 @@ const (
 // ValidRoles 合法角色集合（管理端改角色时校验）。
 var ValidRoles = map[string]bool{RoleDefault: true, RoleAdmin: true, RoleRoot: true}
 
+// InitialAdminID 初始管理员（Bootstrap 创建的 admin 账号）固定 ID；
+// 其 root 角色受保护不可修改，防止误降权把自己锁在 root 之外。
+const InitialAdminID int64 = 1
+
 type User struct {
 	ID           int64     `bson:"_id"`
 	Username     string    `bson:"uname"`

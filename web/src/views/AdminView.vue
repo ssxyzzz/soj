@@ -219,16 +219,23 @@ onMounted(() => {
             <el-table-column prop="nickname" label="昵称" min-width="160" />
             <el-table-column label="操作" width="240">
               <template #default="{ row }">
-                <el-select
-                  :model-value="row.role"
-                  size="small"
-                  style="width: 130px"
-                  @change="(v: string) => changeRole(row as AdminUser, v)"
+                <el-tooltip
+                  :disabled="row.id !== 1"
+                  content="初始管理员（ID=1）的 root 角色受保护，不可修改"
+                  placement="top"
                 >
-                  <el-option value="root" label="设为 root" />
-                  <el-option value="admin" label="设为 admin" />
-                  <el-option value="default" label="设为 default" />
-                </el-select>
+                  <el-select
+                    :model-value="row.role"
+                    size="small"
+                    style="width: 130px"
+                    :disabled="row.id === 1"
+                    @change="(v: string) => changeRole(row as AdminUser, v)"
+                  >
+                    <el-option value="root" label="设为 root" />
+                    <el-option value="admin" label="设为 admin" />
+                    <el-option value="default" label="设为 default" />
+                  </el-select>
+                </el-tooltip>
                 <el-button size="small" link type="warning" @click="resetPassword(row as AdminUser)">重置密码</el-button>
               </template>
             </el-table-column>
