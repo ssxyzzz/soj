@@ -61,26 +61,11 @@ func main() {
 	// 与管理后台 /admin/backup/run 走 internal/backup 同一模块、同一密钥卷）
 	if *backupRun {
 		path, err := backup.Run(ctx, backup.Options{
-			MongoURI:  cfg.MongoURI,
-			DataDir:   cfg.DataDir,
-			BackupDir: cfg.BackupDir,
-			KeysDir:   cfg.KeysDir,
-		})
-		if err != nil {
-			log.Fatalf("[backup] %v", err)
-		}
-		log.Printf("[backup] 已生成 %s", path)
-		return
-	}
-
-	// 备份模式：执行一次全站加密备份后退出（供 scripts/backup.sh 与 cron 调用，
-	// 与管理后台 /admin/backup/run 走 internal/backup 同一模块、同一密钥卷）
-	if *backupRun {
-		path, err := backup.Run(ctx, backup.Options{
-			MongoURI:  cfg.MongoURI,
-			DataDir:   cfg.DataDir,
-			BackupDir: cfg.BackupDir,
-			KeysDir:   cfg.KeysDir,
+			MongoURI:   cfg.MongoURI,
+			DataDir:    cfg.DataDir,
+			UploadsDir: cfg.UploadsDir,
+			BackupDir:  cfg.BackupDir,
+			KeysDir:    cfg.KeysDir,
 		})
 		if err != nil {
 			log.Fatalf("[backup] %v", err)

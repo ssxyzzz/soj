@@ -76,6 +76,13 @@ $COMPOSE exec -T mongo mongorestore --drop --archive --gzip < "$WORK/mongo.archi
 echo "==> 恢复测试数据卷"
 $COMPOSE exec -T soj sh -c 'tar -xzf - -C /data/testdata' < "$WORK/testdata.tar.gz"
 
+if [ -f "$WORK/uploads.tar.gz" ]; then
+  echo "==> 恢复题面图片"
+  $COMPOSE exec -T soj sh -c 'mkdir -p /data/uploads && tar -xzf - -C /data/uploads' < "$WORK/uploads.tar.gz"
+else
+  echo "==> 归档无题面图片包（v0.4.9 及更早的备份），跳过"
+fi
+
 echo "==> 重启站点容器（清掉内存缓存，按恢复后的数据重新加载）"
 $COMPOSE restart soj
 

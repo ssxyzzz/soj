@@ -43,6 +43,9 @@ func Run(ctx context.Context, deps *Deps) {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), CORS(), Gzip())
 
+	// 题面图片公开读取（v0.5a）：非 /api 前缀，随机文件名 + immutable 缓存
+	r.GET("/uploads/:file", h.ServeUpload)
+
 	api := r.Group("/api")
 	{
 		api.GET("/health", h.Health)
@@ -78,6 +81,8 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/me/classes", h.MyClasses)
 			authed.GET("/me/profile", h.GetMyProfile)
 			authed.PATCH("/me/profile", h.UpdateMyProfile)
+			// 题面图片上传（v0.5a）：能打开编辑器的人群（题面编辑/系统设置权限位）
+			authed.POST("/uploads", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn, repo.PermAdminSettings), h.UploadImages)
 			authed.POST("/classes", RequirePerm(repo.PermClassCreate), h.CreateClass)
 			authed.POST("/classes/:id/join", h.JoinClass)
 			authed.POST("/classes/join-by-code", h.JoinByCode)

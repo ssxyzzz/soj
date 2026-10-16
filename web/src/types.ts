@@ -211,6 +211,7 @@ export interface BackupStatus {
   mode: 'uninitialized' | 'tier0' | 'tier1'
   last_backup_at: string | null
   last_backup_file: string | null
+  guide?: string // 备份面板使用说明（Markdown，空 = 前端内置默认）
 }
 
 // ---------- 角色与权限位（v0.4.7） ----------

@@ -12,6 +12,7 @@ type Config struct {
 	MongoURI     string
 	MongoDB      string
 	DataDir      string // 测试数据根目录 /data/testdata
+	UploadsDir   string // 题面图片目录 /data/uploads
 	BackupDir    string // 备份密文归档目录（服务器留存） /data/backups
 	KeysDir      string // 备份密钥卷目录（与 testdata 卷分离） /data/keys
 	SeedDir      string // 启动时自动导入的种子题目目录（可为空）
@@ -26,6 +27,7 @@ func Load() *Config {
 		MongoURI:     getEnv("SOJ_MONGO_URI", "mongodb://127.0.0.1:27017"),
 		MongoDB:      getEnv("SOJ_MONGO_DB", "soj"),
 		DataDir:      getEnv("SOJ_DATA_DIR", "./data/testdata"),
+		UploadsDir:   getEnv("SOJ_UPLOADS_DIR", "./data/uploads"),
 		BackupDir:    getEnv("SOJ_BACKUP_DIR", "./data/backups"),
 		KeysDir:      getEnv("SOJ_KEYS_DIR", "./data/keys"),
 		SeedDir:      getEnv("SOJ_SEED_DIR", ""),

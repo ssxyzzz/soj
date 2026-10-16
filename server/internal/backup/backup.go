@@ -35,6 +35,7 @@ const (
 	manifestName  = "manifest.json"
 	mongoDumpName = "mongo.archive.gz"
 	testdataName  = "testdata.tar.gz"
+	uploadsName   = "uploads.tar.gz" // 题面图片（v0.5a 起；旧归档无此文件，恢复端自动跳过）
 	archivePrefix = "soj-backup-"
 	archiveSuffix = ".v1.tar.age"
 )
@@ -55,11 +56,12 @@ var runMu sync.Mutex
 // Options 一次备份所需的全部输入。所有字段均来自服务端配置（环境变量），
 // 不含任何用户输入；外部命令以 argv 数组固定调用 mongodump，不经 shell。
 type Options struct {
-	MongoURI  string    // 传给 mongodump 的连接串（SOJ_MONGO_URI）
-	DataDir   string    // 测试数据卷根目录（SOJ_DATA_DIR）
-	BackupDir string    // 密文归档输出目录（服务器留存一份）
-	KeysDir   string    // 密钥卷目录
-	Now       time.Time // 测试注入用；零值取当前时间
+	MongoURI   string    // 传给 mongodump 的连接串（SOJ_MONGO_URI）
+	DataDir    string    // 测试数据卷根目录（SOJ_DATA_DIR）
+	UploadsDir string    // 题面图片目录（SOJ_UPLOADS_DIR，v0.5a 起）
+	BackupDir  string    // 密文归档输出目录（服务器留存一份）
+	KeysDir    string    // 密钥卷目录
+	Now        time.Time // 测试注入用；零值取当前时间
 }
 
 // Status 密钥模式与最近一次备份信息（纯文件推导，不查库）。
@@ -136,6 +138,10 @@ func Run(ctx context.Context, o Options) (string, error) {
 	if err := tarDirTo(o.DataDir, tdPath); err != nil {
 		return "", fmt.Errorf("打包测试数据失败: %w", err)
 	}
+	upPath := filepath.Join(tmp, uploadsName)
+	if err := tarDirTo(o.UploadsDir, upPath); err != nil {
+		return "", fmt.Errorf("打包题面图片失败: %w", err)
+	}
 
 	out := filepath.Join(o.BackupDir, archivePrefix+now.Format("20060102-150405")+archiveSuffix)
 	tmpOut := out + ".part"
@@ -149,10 +155,15 @@ func Run(ctx context.Context, o Options) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("读取测试数据包失败: %w", err)
 	}
+	upData, err := os.ReadFile(upPath)
+	if err != nil {
+		return "", fmt.Errorf("读取题面图片包失败: %w", err)
+	}
 	if err := encryptArchive(tmpOut, rcpt, map[string][]byte{
 		manifestName:  []byte(manifest),
 		mongoDumpName: mongoData,
 		testdataName:  tdData,
+		uploadsName:   upData,
 	}); err != nil {
 		os.Remove(tmpOut)
 		return "", fmt.Errorf("加密打包失败: %w", err)
@@ -304,7 +315,7 @@ func encryptArchive(outPath string, rcpt age.Recipient, files map[string][]byte)
 	tw := tar.NewWriter(w)
 
 	// 固定写入顺序：manifest 在前，保证恢复端可先读元数据
-	for _, name := range []string{manifestName, mongoDumpName, testdataName} {
+	for _, name := range []string{manifestName, mongoDumpName, testdataName, uploadsName} {
 		data, ok := files[name]
 		if !ok {
 			continue

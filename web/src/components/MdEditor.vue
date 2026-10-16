@@ -17,13 +17,24 @@ onMounted(async () => {
   // 初始编辑模式取个人设置（wysiwyg/ir/sv），未设置或非法值回退所见即所得；编辑中仍可随时切换
   const m = useUserStore().prefs.mdEditMode
   const mode = m === 'ir' || m === 'sv' ? m : 'wysiwyg'
+  const token = useUserStore().token
   inst = new Vditor(el.value, {
     cdn: '/vditor', // 自托管资源（构建时随镜像分发，不依赖外网）
     height: props.height ?? '420px',
     mode,
     value: props.modelValue,
     cache: { enable: false },
-    placeholder: '支持 Markdown 与所见即所得，右上角可切换编辑模式',
+    placeholder: '支持 Markdown 与所见即所得，右上角可切换编辑模式；可直接粘贴/拖入图片',
+    // 题面图片上传（v0.5a）：粘贴截图或拖入图片自动上传，成功后插入 /uploads/ 引用。
+    // 后端响应即 Vditor 约定格式（succMap/errFiles）；鉴权头与全局拦截器同一身份源。
+    upload: {
+      url: '/api/uploads',
+      fieldName: 'file',
+      accept: 'image/png, image/jpeg, image/gif, image/webp',
+      max: 5 * 1024 * 1024,
+      multiple: true,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    },
     toolbar: [
       'headings', 'bold', 'italic', 'strike', '|',
       'list', 'ordered-list', 'check', 'outdent', 'indent', '|',

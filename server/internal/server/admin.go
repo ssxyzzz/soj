@@ -150,7 +150,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取设置失败")
 		return
 	}
-	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute, "home_notice": s.HomeNotice})
+	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute, "home_notice": s.HomeNotice, "backup_guide": s.BackupGuide})
 }
 
 // GetNotice 首页公告（公开，首页免登录展示）。
@@ -168,6 +168,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	var req struct {
 		RateLimitPerMinute *int    `json:"rate_limit_per_minute"`
 		HomeNotice         *string `json:"home_notice"`
+		BackupGuide        *string `json:"backup_guide"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -192,9 +193,16 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.HomeNotice = *req.HomeNotice
 	}
+	if req.BackupGuide != nil {
+		if len(*req.BackupGuide) > 16<<10 {
+			fail(c, http.StatusBadRequest, "备份使用说明过长（上限 16KB）")
+			return
+		}
+		s.BackupGuide = *req.BackupGuide
+	}
 	if err := h.repo.UpdateSystemSettings(c.Request.Context(), s); err != nil {
 		fail(c, http.StatusInternalServerError, "更新失败")
 		return
 	}
-	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute, "home_notice": s.HomeNotice})
+	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute, "home_notice": s.HomeNotice, "backup_guide": s.BackupGuide})
 }

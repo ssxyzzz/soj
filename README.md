@@ -108,6 +108,7 @@ subtasks:
 | SOJ_ADDR | 监听地址 | :8080 |
 | SOJ_MONGO_URI | MongoDB 连接串 | mongodb://127.0.0.1:27017 |
 | SOJ_DATA_DIR | 测试数据根目录 | ./data/testdata |
+| SOJ_UPLOADS_DIR | 题面图片目录 | ./data/uploads |
 | SOJ_BACKUP_DIR | 备份密文归档目录（服务器留存） | ./data/backups |
 | SOJ_KEYS_DIR | 备份密钥卷目录（与数据卷分离） | ./data/keys |
 | SOJ_SEED_DIR | 启动时自动导入的种子题目录 | （空） |
@@ -131,6 +132,8 @@ subtasks:
 | POST | /submissions | 提交代码（无 submission.rate_exempt 位者限速 1 分钟 3 次） | 登录 |
 | GET | /submissions | 提交记录总表（含隐藏期赛事提交） | submission.view.all |
 | GET | /submissions/:id | 提交详情（代码：本人/权限位恒可，他人满分解锁；隐藏期赛事提交仅组织者与持位者） | 公开（按身份返回） |
+| POST | /uploads | 题面图片上传（多文件；png/jpg/gif/webp ≤5MB/张，每人累计 200MB） | problem.edit.all/own 或 admin.settings |
+| GET | /uploads/:file | 题面图片公开读取（随机名 + immutable 长缓存） | 公开 |
 | GET | /rank · /notice | 解题排名（30s 缓存）/ 首页公告 | 公开 |
 | GET | /classes · /classes/:id · /classes/:id/assignments | 班级列表 / 详情 / 作业列表（私密班三视角过滤） | 公开 |
 | POST | /classes | 创建班级 | class.create |
@@ -184,7 +187,7 @@ subtasks:
 
 ## 路线图
 
-v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → v0.4.8 个人设置（资料 + 偏好联动）✅ → v0.4.9 备份加密与备份面板（Tier 0/1 + age 密文归档）✅ → 下一批 v0.5a 题面图片上传 → v0.5b 题目管理/题解/Hydro 导入；标签等暂缓。
+v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → v0.4.8 个人设置（资料 + 偏好联动）✅ → v0.4.9 备份加密与备份面板（Tier 0/1 + age 密文归档）✅ → v0.5a 题面图片上传（/data/uploads 卷 + 编辑器粘贴即传 + 并入备份）✅ → 下一批 v0.5b 题目管理/SPJ 与宽容比对/题解/题包导入导出 → v0.5c 老师教学闭环（成绩导出/题目统计/已通过列）；标签等暂缓。
 实现记录见 [notes.md](notes.md)，排期与待对齐事项见 [plan.md](plan.md)（均为本地文档，不入库）。
 
 ## 许可证

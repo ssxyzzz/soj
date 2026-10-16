@@ -17,14 +17,15 @@ import (
 
 func (h *Handlers) backupOptions() backup.Options {
 	return backup.Options{
-		MongoURI:  h.cfg.MongoURI,
-		DataDir:   h.cfg.DataDir,
-		BackupDir: h.cfg.BackupDir,
-		KeysDir:   h.cfg.KeysDir,
+		MongoURI:   h.cfg.MongoURI,
+		DataDir:    h.cfg.DataDir,
+		UploadsDir: h.cfg.UploadsDir,
+		BackupDir:  h.cfg.BackupDir,
+		KeysDir:    h.cfg.KeysDir,
 	}
 }
 
-// BackupStatus 当前密钥模式与上次备份时间。
+// BackupStatus 当前密钥模式、上次备份时间与使用说明（guide：空 = 前端用内置默认）。
 func (h *Handlers) BackupStatus(c *gin.Context) {
 	st := backup.Inspect(h.cfg.KeysDir, h.cfg.BackupDir)
 	var lastAt any
@@ -33,10 +34,15 @@ func (h *Handlers) BackupStatus(c *gin.Context) {
 	} else {
 		lastAt = st.LastBackupAt.Format(time.RFC3339)
 	}
+	guide := ""
+	if s, err := h.repo.GetSystemSettings(c.Request.Context()); err == nil {
+		guide = s.BackupGuide
+	}
 	ok(c, gin.H{
 		"mode":             st.Mode,
 		"last_backup_at":   lastAt,
 		"last_backup_file": st.LastBackupFile,
+		"guide":            guide,
 	})
 }
 

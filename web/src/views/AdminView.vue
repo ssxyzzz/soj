@@ -6,6 +6,7 @@ import { Check, Delete, Edit } from '@element-plus/icons-vue'
 
 import { adminApi } from '@/api'
 import MdEditor from '@/components/MdEditor.vue'
+import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import { markdownBytes } from '@/utils/vditor'
 import { BACKUP_RUN_URL } from '@/types'
@@ -397,7 +398,31 @@ function permsOfGroup(groupId: string): PermInfo[] {
   return catalog.value.filter((p) => p.group === groupId)
 }
 
-// ---- 备份面板（v0.4.9）----
+// ---- 备份面板（v0.4.9 / v0.5a）----
+
+// 使用说明默认内容（Markdown）：管理员可在面板里编辑并保存为站点自定义版本，
+// 清空保存即回退到这里的内容。
+const DEFAULT_BACKUP_GUIDE = [
+  '### 备份文件里有什么',
+  '整个网站的完整快照：用户账号、题目、提交记录、班级与考试成绩、题面图片。下载到本机的和服务器自动留存的都是加密的（age 格式），没有钥匙谁也打不开。',
+  '',
+  '### 备份建议',
+  '- 点一次「立即备份」= 本机下载一份 + 服务器自动留一份；',
+  '- 建议每周备份一次，文件多存几处（网盘 + U 盘最稳妥）。',
+  '',
+  '### 恢复',
+  '网站出问题时，把备份文件放进 soj 目录，按上方命令交给会命令行的人执行。恢复会把整个网站还原到备份那一刻（覆盖现有数据，脚本会再让你确认一次）。',
+  '',
+  '### 在自己的 Windows 电脑上查看备份内容',
+  '1. 下载解密小工具 age：github.com/FiloSottile/age/releases（zip 解压即用，无需安装）；',
+  '2. 准备恢复钥匙：高安全模式＝启用时保存的 txt；普通模式＝找管理员从服务器导出；',
+  '3. 解密并解包（PowerShell，在备份文件目录执行）：',
+  '    age -d -i 恢复钥匙.txt -o backup.tar soj-backup-xxxx.v1.tar.age',
+  '    tar -xf backup.tar',
+  '4. 图片、题目数据解开后直接看；数据库文件（mongo.archive.gz）是二进制，需要管理员恢复到站点查看，或本机起一个临时 MongoDB 后用 Compass 浏览。',
+  '',
+  '> 提醒：恢复钥匙和备份文件不要放在同一台电脑、同一个网盘。',
+].join('\n')
 
 const backupStatus = ref<BackupStatus | null>(null)
 const backupLoading = ref(false)
@@ -405,6 +430,12 @@ const backingUp = ref(false)
 const showOfflineKey = ref(false)
 const offlineKey = ref('')
 const keySaved = ref(false)
+
+// 使用说明（可编辑）：空 = 用 DEFAULT_BACKUP_GUIDE；保存在系统设置 backupGuide
+const backupGuide = ref('')
+const showGuideEdit = ref(false)
+const guideDraft = ref('')
+const guideText = computed(() => (backupGuide.value.trim() ? backupGuide.value : DEFAULT_BACKUP_GUIDE))
 
 const backupModeMeta: Record<string, { label: string; type: 'info' | 'warning' | 'success'; desc: string }> = {
   uninitialized: {
@@ -427,10 +458,24 @@ const backupModeMeta: Record<string, { label: string; type: 'info' | 'warning' |
 async function loadBackup() {
   backupLoading.value = true
   try {
-    backupStatus.value = await adminApi.backupStatus()
+    const st = await adminApi.backupStatus()
+    backupStatus.value = st
+    backupGuide.value = st.guide ?? ''
   } finally {
     backupLoading.value = false
   }
+}
+
+function editGuide() {
+  guideDraft.value = backupGuide.value
+  showGuideEdit.value = true
+}
+
+async function saveGuide() {
+  await adminApi.updateSettings({ backup_guide: guideDraft.value })
+  backupGuide.value = guideDraft.value
+  showGuideEdit.value = false
+  ElMessage.success('使用说明已保存')
 }
 
 async function runBackup() {
@@ -797,13 +842,6 @@ onMounted(async () => {
             </el-button>
           </div>
 
-          <el-divider content-position="left">如何备份（三步）</el-divider>
-          <div class="tips">
-            <p>① 点上方按钮：浏览器会自动下载一个加密备份文件（内含全部数据：用户账号、题目、提交记录、班级与考试成绩等）。</p>
-            <p>② 把这个文件多存几处（网盘 + U 盘最稳妥）。建议每周备份一次。</p>
-            <p>③ 不用记步骤 ① 之外的事：服务器上也会自动留一份同样的备份（服务器磁盘坏了可以拿回来用）。</p>
-          </div>
-
           <el-divider content-position="left">如何恢复（网站出问题时，交给会命令行的人执行）</el-divider>
           <div class="tips">
             <p>把下载的备份文件放到本系统文件夹（soj 目录）里，点「复制」后粘贴到终端执行：</p>
@@ -829,15 +867,24 @@ onMounted(async () => {
                 复制
               </el-button>
             </div>
-            <p class="cmd-note">上一条＝普通模式（钥匙在服务器上，自动取用）；下一条＝高安全模式（用启用时保存的「恢复钥匙.txt」，把 xxxx 换成实际备份文件名）</p>
-            <p>恢复会把整个网站还原到备份那一刻（会先覆盖现在的数据，脚本执行时会再让你确认一次）。</p>
+            <p class="cmd-note">上一条＝普通模式（钥匙在服务器上，自动取用）；下一条＝高安全模式（用启用时保存的「恢复钥匙.txt」，把 xxxx 换成实际备份文件名）。恢复会整体覆盖现有数据，脚本会再让你确认一次。</p>
           </div>
 
-          <el-divider content-position="left">两种模式怎么选</el-divider>
-          <div class="tips">
-            <p>普通模式：什么都不用管，钥匙放在服务器上——够防「备份文件外泄」，防不了服务器本身被入侵。</p>
-            <p>高安全模式：多一步「保存恢复钥匙」，换来「连服务器被入侵也解不开备份」。启用后旧钥匙和以前下载的备份立即作废，要马上重新备份一次。</p>
-          </div>
+          <el-divider content-position="left">
+            <div class="guide-head">
+              <span>使用说明（如何备份 / 恢复 / 在本机查看）</span>
+              <el-button
+                v-if="userStore.can('admin.settings')"
+                size="small"
+                link
+                type="primary"
+                @click="editGuide"
+              >
+                编辑
+              </el-button>
+            </div>
+          </el-divider>
+          <MdView :content="guideText" class="guide-md" />
         </div>
 
         <el-dialog
@@ -871,6 +918,18 @@ onMounted(async () => {
             <el-button type="primary" :disabled="!keySaved" @click="showOfflineKey = false">
               我已保存，关闭
             </el-button>
+          </template>
+        </el-dialog>
+
+        <el-dialog
+          v-model="showGuideEdit"
+          title="编辑使用说明（Markdown；清空保存即恢复内置默认）"
+          width="760"
+        >
+          <MdEditor v-model="guideDraft" height="400px" />
+          <template #footer>
+            <el-button @click="showGuideEdit = false">取消</el-button>
+            <el-button type="primary" @click="saveGuide">保存</el-button>
           </template>
         </el-dialog>
       </el-card>
@@ -1128,6 +1187,16 @@ onMounted(async () => {
   font-size: 12px;
   color: #f56c6c;
   font-weight: 600;
+}
+
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guide-md {
+  font-size: 13px;
 }
 
 .role-alert {

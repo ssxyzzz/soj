@@ -181,9 +181,9 @@ export const adminApi = {
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; real_name?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
-    get<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings'),
-  updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string }) =>
-    put<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings', patch),
+    get<{ rate_limit_per_minute: number; home_notice: string; backup_guide: string }>('/admin/settings'),
+  updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string; backup_guide?: string }) =>
+    put<{ rate_limit_per_minute: number; home_notice: string; backup_guide: string }>('/admin/settings', patch),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),
