@@ -158,6 +158,7 @@ function openEdit() {
   metaForm.time_limit_ms = p.time_limit_ms
   metaForm.memory_limit_mb = Math.max(16, Math.round(p.memory_limit_kb / 1024))
   metaForm.compare = (p as ProblemDetail & { compare?: string }).compare === 'tolerant' ? 'tolerant' : 'exact'
+  checkerFile.value = null
   showEdit.value = true
 }
 
@@ -194,8 +195,8 @@ async function saveEdit() {
   }
 }
 
-// 自定义校验器（v0.5b-2）：上传 .cpp 源文件，判题时懒编译；移除恢复按比对模式判定
-const showChecker = ref(false)
+// 自定义校验器（v0.5b-2）：上传 .cpp 源文件，判题时懒编译；移除恢复按比对模式判定。
+// 管理界面并入「编辑题目」弹窗，上传/移除为即时操作（不随弹窗「保存」提交）。
 const checkerFile = ref<File | null>(null)
 const savingChecker = ref(false)
 
@@ -211,7 +212,6 @@ async function saveChecker() {
     fd.append('checker', checkerFile.value)
     await problemApi.uploadChecker(problem.value.id, fd)
     ElMessage.success('校验器已上传，后续提交由校验器判定')
-    showChecker.value = false
     checkerFile.value = null
     await load()
   } finally {
@@ -228,7 +228,6 @@ async function removeChecker() {
   })
   await problemApi.removeChecker(problem.value.id)
   ElMessage.success('校验器已移除')
-  showChecker.value = false
   await load()
 }
 
@@ -408,9 +407,6 @@ onUnmounted(stopPolling)
         <el-card v-if="problem.can_edit_statement" class="aside-card">
           <template #header><span>管理</span></template>
           <el-button type="primary" plain style="width: 100%" @click="openEdit">编辑题目</el-button>
-          <el-button plain style="width: 100%" class="mt8" @click="showChecker = true">
-            校验器{{ problem.has_checker ? '（已启用）' : '' }}
-          </el-button>
         </el-card>
 
         <el-card class="aside-card">
@@ -446,10 +442,10 @@ onUnmounted(stopPolling)
     />
 
     <!-- 题解弹窗：置顶优先，10 条/页 -->
-    <el-dialog v-model="showSolutions" title="题解" width="900" top="4vh">
+    <el-dialog v-model="showSolutions" title="题解" width="1020" top="4vh">
       <div class="dlg-toolbar">
         <span class="dim">共 {{ solutionsTotal }} 篇</span>
-        <el-button type="primary" size="small" plain @click="openWriteSolution">发表题解</el-button>
+        <el-button type="primary" plain @click="openWriteSolution">发表题解</el-button>
       </div>
       <div v-for="s in solutions" :key="s.id" class="solution-item">
         <div class="solution-meta">
@@ -460,15 +456,14 @@ onUnmounted(stopPolling)
             <template v-if="s.updated_at !== s.created_at"> · 已编辑</template>
           </span>
           <span class="solution-actions">
-            <el-button v-if="canManageSolutions" size="small" link type="primary" @click="togglePin(s)">
+            <el-button v-if="canManageSolutions" link type="primary" @click="togglePin(s)">
               {{ s.pinned ? '取消置顶' : '置顶' }}
             </el-button>
-            <el-button v-if="s.uid === userStore.uid" size="small" link type="primary" @click="openEditSolution(s)">
+            <el-button v-if="s.uid === userStore.uid" link type="primary" @click="openEditSolution(s)">
               编辑
             </el-button>
             <el-button
               v-if="s.uid === userStore.uid || canManageSolutions"
-              size="small"
               link
               type="danger"
               @click="removeSolution(s)"
@@ -482,7 +477,6 @@ onUnmounted(stopPolling)
       <el-empty v-if="!solutions.length" description="还没有题解，快来发第一篇" :image-size="48" />
       <div v-if="solutionsTotal > PAGE_SIZE" class="side-pager">
         <el-pagination
-          size="small"
           background
           layout="prev, pager, next"
           :total="solutionsTotal"
@@ -494,9 +488,9 @@ onUnmounted(stopPolling)
     </el-dialog>
 
     <!-- 我的提交弹窗：列表点行 → 同弹窗切详情（代码/耗时/内存/错误信息/测试点明细） -->
-    <el-dialog v-model="showMine" title="我的提交" width="900" top="4vh" @closed="mineView = 'list'">
+    <el-dialog v-model="showMine" title="我的提交" width="1020" top="4vh" @closed="mineView = 'list'">
       <template v-if="mineView === 'list'">
-        <el-table :data="mySubs" size="small" highlight-current-row @row-click="openMineDetail">
+        <el-table :data="mySubs" highlight-current-row @row-click="openMineDetail">
           <el-table-column label="状态" width="170">
             <template #default="{ row }">
               <el-tag size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
@@ -517,7 +511,6 @@ onUnmounted(stopPolling)
         <el-empty v-if="!mySubs.length" description="还没有提交过" :image-size="48" />
         <div v-if="myTotal > PAGE_SIZE" class="side-pager">
           <el-pagination
-            size="small"
             background
             layout="prev, pager, next"
             :total="myTotal"
@@ -528,8 +521,8 @@ onUnmounted(stopPolling)
         </div>
       </template>
       <template v-else-if="mineDetail">
-        <el-button size="small" class="mb8" @click="mineView = 'list'">← 返回列表</el-button>
-        <el-descriptions :column="3" size="small" border class="detail-desc">
+        <el-button class="mb8" @click="mineView = 'list'">← 返回列表</el-button>
+        <el-descriptions :column="3" border class="detail-desc">
           <el-descriptions-item label="状态">
             <el-tag size="small" :type="statusStyle(mineDetail.status).type">{{ statusStyle(mineDetail.status).label }}</el-tag>
           </el-descriptions-item>
@@ -547,7 +540,7 @@ onUnmounted(stopPolling)
         <pre class="mono sub-code">{{ mineDetail.code }}</pre>
         <template v-if="mineDetail.detail?.length">
           <div class="detail-sub">测试点明细</div>
-          <el-table :data="mineDetail.detail" size="small" border>
+          <el-table :data="mineDetail.detail" border>
             <el-table-column prop="index" label="测试点" width="90" />
             <el-table-column label="结果">
               <template #default="{ row }">
@@ -566,25 +559,24 @@ onUnmounted(stopPolling)
     </el-dialog>
 
     <!-- 他人代码弹窗：耗时升序为默认（并列按内存），最多显示 10 条，可切排序与语言 -->
-    <el-dialog v-model="showOthers" title="他人代码" width="900" top="4vh">
+    <el-dialog v-model="showOthers" title="他人代码" width="1020" top="4vh">
       <div class="dlg-toolbar">
-        <el-radio-group v-model="othersSort" size="small" @change="loadOthers">
+        <el-radio-group v-model="othersSort" @change="loadOthers">
           <el-radio-button value="time">时间优先</el-radio-button>
           <el-radio-button value="mem">空间优先</el-radio-button>
         </el-radio-group>
         <el-select
           v-model="othersLang"
-          size="small"
           clearable
           placeholder="全部语言"
-          style="width: 140px"
+          style="width: 160px"
           @change="loadOthers"
         >
           <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
         </el-select>
         <span class="dim">共 {{ othersTotal }} 份，显示前 {{ PAGE_SIZE }} 份</span>
       </div>
-      <el-table :data="others" size="small" border>
+      <el-table :data="others" border>
         <el-table-column prop="username" label="提交者" min-width="110" />
         <el-table-column prop="language" label="语言" width="100" />
         <el-table-column label="耗时" width="100">
@@ -638,6 +630,35 @@ onUnmounted(stopPolling)
           <el-input-number v-model="metaForm.float_tolerance" :min="0.000001" :max="1" :step="0.0001" :precision="6" />
           <span class="dim ml8">数字按此精度判定等价</span>
         </el-form-item>
+        <el-form-item>
+          <div class="checker-block">
+            <div class="checker-status">
+              自定义校验器
+              <el-tag v-if="problem.has_checker" size="small" type="success">已启用 · 判题由校验器决定（比对模式不生效）</el-tag>
+              <el-tag v-else size="small" type="info">未启用 · 按比对模式判定</el-tag>
+            </div>
+            <el-upload
+              drag
+              accept=".cpp"
+              :limit="1"
+              :auto-upload="false"
+              :on-change="onCheckerChange"
+              :on-remove="() => (checkerFile = null)"
+              class="checker-upload"
+            >
+              <div class="checker-hint">
+                <p>{{ problem.has_checker ? '已有校验器，拖入新文件可替换' : '拖入 C++ 校验器源文件或点击选择（.cpp，≤256KB）' }}</p>
+                <p class="dim">调用约定：checker 输入 期望 考生输出，退出码 0 = 通过</p>
+              </div>
+            </el-upload>
+            <div class="checker-actions">
+              <el-button v-if="problem.has_checker" type="danger" plain @click="removeChecker">移除校验器</el-button>
+              <el-button type="primary" :loading="savingChecker" :disabled="!checkerFile" @click="saveChecker">
+                上传并启用
+              </el-button>
+            </div>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEdit = false">取消</el-button>
@@ -650,34 +671,6 @@ onUnmounted(stopPolling)
       <template #footer>
         <el-button @click="showSolutionEditor = false">取消</el-button>
         <el-button type="primary" @click="saveSolution">发布</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="showChecker" title="自定义校验器（checker）" width="640">
-      <el-alert
-        type="info"
-        :closable="false"
-        show-icon
-        title="配置校验器后，判题由校验器决定（比对模式不再生效）。调用约定：checker 输入 期望 考生输出，退出码 0 = 通过。"
-      />
-      <el-upload
-        drag
-        accept=".cpp"
-        :limit="1"
-        :auto-upload="false"
-        :on-change="onCheckerChange"
-        :on-remove="() => (checkerFile = null)"
-        class="mt8"
-      >
-        <div class="checker-hint">
-          <p>{{ problem.has_checker ? '已有校验器，拖入新文件可替换' : '拖入 C++ 校验器源文件或点击选择（.cpp，≤256KB）' }}</p>
-        </div>
-      </el-upload>
-      <template #footer>
-        <el-button v-if="problem.has_checker" type="danger" plain @click="removeChecker">移除校验器</el-button>
-        <el-button type="primary" :loading="savingChecker" :disabled="!checkerFile" @click="saveChecker">
-          上传并启用
-        </el-button>
       </template>
     </el-dialog>
     </template>
@@ -703,6 +696,33 @@ onUnmounted(stopPolling)
 
 .checker-hint p {
   margin: 2px 0;
+}
+
+.checker-block {
+  width: 100%;
+}
+
+.checker-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.checker-upload {
+  width: 100%;
+}
+
+.checker-upload :deep(.el-upload),
+.checker-upload :deep(.el-upload-dragger) {
+  width: 100%;
+}
+
+.checker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .mt8 {

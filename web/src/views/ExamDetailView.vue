@@ -8,9 +8,9 @@ import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUserStore } from '@/stores/user'
-import { fmtDate } from '@/utils/format'
+import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
 import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
-import type { ExamDetail, LeaderRow } from '@/types'
+import type { ExamDetail, LeaderRow, Submission } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,6 +25,27 @@ const tab = ref('problems')
 const leaders = ref<LeaderRow[]>([])
 const leadersLoading = ref(false)
 const myUid = ref<number | null>(null)
+
+// 榜单单元格点看用户提交明细：创建者本人 ∨「查看用户提交明细」权限位
+const canInspectSubs = computed(
+  () => !!exam.value?.is_organizer || userStore.can('submission.view.user'),
+)
+const showUserSubs = ref(false)
+const userSubsLoading = ref(false)
+const userSubs = ref<Submission[]>([])
+const userSubsTitle = ref('')
+
+async function openUserSubs(uid: number, uname: string, pid: number, ptitle: string) {
+  showUserSubs.value = true
+  userSubsLoading.value = true
+  userSubsTitle.value = `${uname} · ${ptitle}`
+  try {
+    const r = await examApi.userSubmissions(Number(route.params.id), pid, uid)
+    userSubs.value = r.list
+  } finally {
+    userSubsLoading.value = false
+  }
+}
 let timer: ReturnType<typeof setInterval> | undefined
 
 const now = ref(Date.now())
@@ -218,14 +239,27 @@ onUnmounted(() => {
                 <el-table-column
                   v-for="cp in exam.problems"
                   :key="cp.id"
-                  :label="'P' + cp.id"
-                  width="100"
+                  min-width="150"
                   align="center"
                 >
+                  <template #header>
+                    <el-link type="primary" @click="router.push(`/exams/${exam!.id}/problems/${cp.id}`)">
+                      {{ cp.title }}
+                    </el-link>
+                  </template>
                   <template #default="{ row }">
                     <template v-for="cell in row.problems" :key="cell.pid">
                       <span v-if="cell.pid === cp.id">
-                        {{ cell.score }} 分<span v-if="cell.tries"> / {{ cell.tries }} 次</span>
+                        {{ cell.score }} 分
+                        <el-link
+                          v-if="cell.tries && canInspectSubs"
+                          type="primary"
+                          class="cell-tries"
+                          @click="openUserSubs(row.uid, row.username, cp.id, cp.title)"
+                        >
+                          / {{ cell.tries }} 次
+                        </el-link>
+                        <span v-else-if="cell.tries"> / {{ cell.tries }} 次</span>
                       </span>
                     </template>
                   </template>
@@ -282,6 +316,50 @@ onUnmounted(() => {
         <el-button @click="showEditIntro = false">取消</el-button>
         <el-button type="primary" :loading="savingIntro" @click="saveIntro">保存</el-button>
       </template>
+    </el-dialog>
+
+    <!-- 榜单单元格点看的用户提交明细（含代码展开） -->
+    <el-dialog v-model="showUserSubs" :title="`提交明细 · ${userSubsTitle}`" width="1020" top="4vh">
+      <el-table v-loading="userSubsLoading" :data="userSubs" border>
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="user-subs-detail">
+              <pre v-if="row.code" class="mono sub-code">{{ row.code }}</pre>
+              <el-table v-if="row.detail?.length" :data="row.detail" size="small" border>
+                <el-table-column prop="index" label="测试点" width="90" />
+                <el-table-column label="结果">
+                  <template #default="{ row: c }">
+                    <el-tag size="small" :type="statusStyle(c.status).type">{{ statusStyle(c.status).label }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="耗时" width="120">
+                  <template #default="{ row: c }">{{ c.time_ms }} ms</template>
+                </el-table-column>
+                <el-table-column label="内存" width="120">
+                  <template #default="{ row: c }">{{ fmtMem(c.memory_kb) }}</template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="170">
+          <template #default="{ row }">
+            <el-tag size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="language" label="语言" width="100" />
+        <el-table-column label="耗时" width="100">
+          <template #default="{ row }">{{ row.time_ms }} ms</template>
+        </el-table-column>
+        <el-table-column label="内存" width="110">
+          <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
+        </el-table-column>
+        <el-table-column prop="score" label="得分" width="80" />
+        <el-table-column label="提交时间">
+          <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!userSubsLoading && !userSubs.length" description="该用户在此题没有提交" :image-size="48" />
     </el-dialog>
   </div>
 </template>
@@ -341,6 +419,27 @@ onUnmounted(() => {
   justify-content: space-between;
   padding: 4px 0;
   font-size: 14px;
+}
+
+.cell-tries {
+  vertical-align: baseline;
+}
+
+.sub-code {
+  margin: 0;
+  padding: 8px 10px;
+  background: #f8f8f8;
+  border-radius: 4px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.user-subs-detail {
+  padding: 8px 20px 16px;
+}
+
+.user-subs-detail .sub-code {
+  margin-bottom: 12px;
 }
 
 .entry-actions {

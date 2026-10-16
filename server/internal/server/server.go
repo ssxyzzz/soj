@@ -126,6 +126,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.DELETE("/contests/:id", h.DeleteContest)
 			authed.POST("/contests/:id/problems/:pid/submissions", h.SubmitToContest)
 			authed.GET("/contests/:id/submissions/mine", h.ContestMySubmissions)
+			authed.GET("/contests/:id/problems/:pid/submissions", h.ContestUserSubmissions)
 			authed.GET("/contests/:id/leaderboard", h.ContestLeaderboard)
 
 			// 班级考试：发起（班级管理员）/删除/考时提交/我的提交/榜单
@@ -135,6 +136,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id", h.ExamDetail)
 			authed.POST("/exams/:id/problems/:pid/submissions", h.SubmitToExam)
 			authed.GET("/exams/:id/submissions/mine", h.ExamMySubmissions)
+			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
 			authed.PATCH("/exams/:id/intro", h.SetExamIntro)
 

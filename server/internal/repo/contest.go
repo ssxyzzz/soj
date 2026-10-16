@@ -231,6 +231,27 @@ func (r *Repo) RoundSubmissions(ctx context.Context, kind string, roundID int64,
 	return list, nil
 }
 
+// RoundUserProblemSubmissions 指定用户在某轮次（比赛/考试）某题的全部提交（含代码与测试点明细），
+// 供榜单/进度表的「查看用户提交明细」弹窗使用（门槛由 handler 校验）。
+func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, roundID, uid, pid int64) ([]*Submission, error) {
+	filter := bson.M{
+		roundsIDField(kind): roundID,
+		"uid":               uid,
+		"pid":               pid,
+	}
+	cursor, err := r.Submissions.Find(ctx, filter,
+		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	list := make([]*Submission, 0)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // ContestLeaderboard 计算比赛榜单（考试榜单走 ExamLeaderboard，同一实现）。
 // 排名规则：总分降序 → 最后得分提交时间早者靠前 → 并列。
 func (r *Repo) ContestLeaderboard(ctx context.Context, c *Contest) ([]*LeaderRow, error) {

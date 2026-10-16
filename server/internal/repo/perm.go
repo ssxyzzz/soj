@@ -15,6 +15,7 @@ const (
 	PermClassCreate          = "class.create"           // 创建班级
 	PermClassViewAll         = "class.view.all"         // 查看全部班级（含私密班详情/邀请码）
 	PermSubmissionViewAll    = "submission.view.all"    // 提交记录总表 + 他人提交详情
+	PermSubmissionViewUser   = "submission.view.user"   // 榜单/进度表中点看指定用户在某题的提交明细（含代码）
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
 	PermSolutionManage       = "solution.manage"        // 题解管理：置顶/删除他人题解（v0.5b-1）
 	PermAdminUserManage      = "admin.user.manage"      // 管理端用户管理
@@ -62,6 +63,7 @@ var PermCatalog = []PermInfo{
 	{PermClassCreate, "创建班级", "建班并成为建班人", "class"},
 	{PermClassViewAll, "查看全部班级", "可见私密班级的详情、成员与邀请码", "class"},
 	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码", "submission"},
+	{PermSubmissionViewUser, "查看用户提交明细", "榜单/进度表中点看指定用户在某题的全部提交（含代码与测试点明细）", "submission"},
 	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},
 	{PermAdminUserManage, "用户管理", "管理后台：建号/改角色/重置密码", "admin"},
 	{PermAdminSettings, "系统设置", "管理后台：公告与提交限速等站点设置", "admin"},

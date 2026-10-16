@@ -3,10 +3,11 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { assignmentApi, authApi, problemApi } from '@/api'
+import { assignmentApi, authApi, contestApi, problemApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import { useUserStore } from '@/stores/user'
-import type { AssignmentDetail, AssignmentProblem, ProgressRow } from '@/types'
+import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
+import type { AssignmentDetail, AssignmentProblem, ProgressRow, Submission } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -64,6 +65,28 @@ async function loadProgress() {
 
 function cellOf(row: ProgressRow, pid: number) {
   return row.problems.find((c) => c.pid === pid) ?? { pid, tries: 0, best: 0, solved: false }
+}
+
+// 完成情况单元格点看用户提交明细：老师（作业可管理）∨「查看用户提交明细」权限位
+const canInspectSubs = computed(
+  () => !!assignment.value?.manageable || userStore.can('submission.view.user'),
+)
+const showUserSubs = ref(false)
+const userSubsLoading = ref(false)
+const userSubs = ref<Submission[]>([])
+const userSubsTitle = ref('')
+
+async function openUserSubs(uid: number, uname: string, ap: AssignmentProblem) {
+  if (!ap.contest_id) return
+  showUserSubs.value = true
+  userSubsLoading.value = true
+  userSubsTitle.value = `${uname} · ${ap.title}`
+  try {
+    const r = await contestApi.userSubmissions(ap.contest_id, ap.id, uid)
+    userSubs.value = r.list
+  } finally {
+    userSubsLoading.value = false
+  }
 }
 
 function problemRoute(row: { id: number; contest_id?: number; exam_id?: number }) {
@@ -235,7 +258,17 @@ onMounted(() => {
               align="center"
             >
               <template #default="{ row }">
-                <el-tag v-if="cellOf(row as ProgressRow, ap.id).solved" size="small" type="success">通过</el-tag>
+                <el-link
+                  v-if="canInspectSubs && cellOf(row as ProgressRow, ap.id).tries > 0"
+                  class="cell-link"
+                  @click="openUserSubs((row as ProgressRow).uid, (row as ProgressRow).username, ap)"
+                >
+                  <el-tag v-if="cellOf(row as ProgressRow, ap.id).solved" size="small" type="success">通过</el-tag>
+                  <el-tag v-else size="small" type="warning">
+                    {{ cellOf(row as ProgressRow, ap.id).best }} 分 / {{ cellOf(row as ProgressRow, ap.id).tries }} 次
+                  </el-tag>
+                </el-link>
+                <el-tag v-else-if="cellOf(row as ProgressRow, ap.id).solved" size="small" type="success">通过</el-tag>
                 <el-tag v-else-if="cellOf(row as ProgressRow, ap.id).tries > 0" size="small" type="warning">
                   {{ cellOf(row as ProgressRow, ap.id).best }} 分 / {{ cellOf(row as ProgressRow, ap.id).tries }} 次
                 </el-tag>
@@ -295,10 +328,75 @@ onMounted(() => {
         <el-button type="primary" :loading="savingOrder" @click="saveOrder">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 完成情况单元格点看的用户提交明细（含代码展开） -->
+    <el-dialog v-model="showUserSubs" :title="`提交明细 · ${userSubsTitle}`" width="1020" top="4vh">
+      <el-table v-loading="userSubsLoading" :data="userSubs" border>
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="user-subs-detail">
+              <pre v-if="row.code" class="mono sub-code">{{ row.code }}</pre>
+              <el-table v-if="row.detail?.length" :data="row.detail" size="small" border>
+                <el-table-column prop="index" label="测试点" width="90" />
+                <el-table-column label="结果">
+                  <template #default="{ row: c }">
+                    <el-tag size="small" :type="statusStyle(c.status).type">{{ statusStyle(c.status).label }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="耗时" width="120">
+                  <template #default="{ row: c }">{{ c.time_ms }} ms</template>
+                </el-table-column>
+                <el-table-column label="内存" width="120">
+                  <template #default="{ row: c }">{{ fmtMem(c.memory_kb) }}</template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="170">
+          <template #default="{ row }">
+            <el-tag size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="language" label="语言" width="100" />
+        <el-table-column label="耗时" width="100">
+          <template #default="{ row }">{{ row.time_ms }} ms</template>
+        </el-table-column>
+        <el-table-column label="内存" width="110">
+          <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
+        </el-table-column>
+        <el-table-column prop="score" label="得分" width="80" />
+        <el-table-column label="提交时间">
+          <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!userSubsLoading && !userSubs.length" description="该学生在此题没有提交" :image-size="48" />
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
+.cell-link {
+  vertical-align: baseline;
+}
+
+.sub-code {
+  margin: 0;
+  padding: 8px 10px;
+  background: #f8f8f8;
+  border-radius: 4px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.user-subs-detail {
+  padding: 8px 20px 16px;
+}
+
+.user-subs-detail .sub-code {
+  margin-bottom: 12px;
+}
+
 .mb8 {
   margin-bottom: 16px;
 }

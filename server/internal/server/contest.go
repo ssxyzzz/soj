@@ -440,6 +440,100 @@ func (h *Handlers) ContestMySubmissions(c *gin.Context) {
 	ok(c, gin.H{"revealed": revealed, "list": items})
 }
 
+// ContestUserSubmissions 查看指定用户在某比赛某题的全部提交（榜单单元格点看）。
+// 门槛：比赛组织者本人 ∨「查看用户提交明细」权限位（root 恒过）。
+func (h *Handlers) ContestUserSubmissions(c *gin.Context) {
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	contestID, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	pid, okPID := parseID(c, "pid")
+	if !okPID {
+		return
+	}
+	targetUID := int64(atoiDefault(c.Query("uid"), 0))
+	if targetUID <= 0 {
+		fail(c, http.StatusBadRequest, "缺少 uid 参数")
+		return
+	}
+	ctx := c.Request.Context()
+	ct, err := h.repo.GetContest(ctx, contestID)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "比赛不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取比赛失败")
+		return
+	}
+	if uid != ct.CreatedBy && !hasPerm(c, repo.PermSubmissionViewUser) {
+		fail(c, http.StatusForbidden, "需要「查看用户提交明细」权限或为该比赛组织者")
+		return
+	}
+	subs, err := h.repo.RoundUserProblemSubmissions(ctx, repo.KindContest, ct.ID, targetUID, pid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取提交失败")
+		return
+	}
+	items := make([]gin.H, 0, len(subs))
+	for _, s := range subs {
+		items = append(items, submissionJSON(s, true))
+	}
+	ok(c, gin.H{"list": items})
+}
+
+// ExamUserSubmissions 查看指定用户在某考试某题的全部提交（榜单单元格点看）。
+// 门槛：考试创建者本人 ∨「查看用户提交明细」权限位（root 恒过）。
+func (h *Handlers) ExamUserSubmissions(c *gin.Context) {
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	examID, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	pid, okPID := parseID(c, "pid")
+	if !okPID {
+		return
+	}
+	targetUID := int64(atoiDefault(c.Query("uid"), 0))
+	if targetUID <= 0 {
+		fail(c, http.StatusBadRequest, "缺少 uid 参数")
+		return
+	}
+	ctx := c.Request.Context()
+	e, err := h.repo.GetExam(ctx, examID)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "考试不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取考试失败")
+		return
+	}
+	if uid != e.CreatedBy && !hasPerm(c, repo.PermSubmissionViewUser) {
+		fail(c, http.StatusForbidden, "需要「查看用户提交明细」权限或为该考试创建者")
+		return
+	}
+	subs, err := h.repo.RoundUserProblemSubmissions(ctx, repo.KindExam, e.ID, targetUID, pid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取提交失败")
+		return
+	}
+	items := make([]gin.H, 0, len(subs))
+	for _, s := range subs {
+		items = append(items, submissionJSON(s, true))
+	}
+	ok(c, gin.H{"list": items})
+}
+
 // ContestLeaderboard 比赛榜单：赛时与隐藏期内仅组织者/root 可见。
 func (h *Handlers) ContestLeaderboard(c *gin.Context) {
 	uid, _, role, logged := currentUser(c)

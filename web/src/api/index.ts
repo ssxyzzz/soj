@@ -142,6 +142,8 @@ export const problemApi = {
       ...(sort ? { sort } : {}),
       ...(lang ? { lang } : {}),
     }),
+  userSubmissions: (id: number, pid: number, uid: number) =>
+    get<{ list: Submission[] }>(`/contests/${id}/problems/${pid}/submissions`, { uid }),
   mySubmissions: (id: number, page: number, pageSize: number) =>
     get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
   setStatement: (id: number, statement: string) =>
@@ -248,6 +250,8 @@ export const contestApi = {
   mySubmissions: (contestId: number) =>
     get<{ revealed: boolean; list: ContestMySubmission[] }>(`/contests/${contestId}/submissions/mine`),
   leaderboard: (contestId: number) => get<LeaderRow[]>(`/contests/${contestId}/leaderboard`),
+  userSubmissions: (contestId: number, pid: number, uid: number) =>
+    get<{ list: Submission[] }>(`/contests/${contestId}/problems/${pid}/submissions`, { uid }),
 }
 
 // ---------- 考试（班级级赛事，v0.4.2） ----------
@@ -273,6 +277,8 @@ export const examApi = {
   mySubmissions: (examId: number) =>
     get<{ revealed: boolean; list: ContestMySubmission[] }>(`/exams/${examId}/submissions/mine`),
   leaderboard: (examId: number) => get<LeaderRow[]>(`/exams/${examId}/leaderboard`),
+  userSubmissions: (examId: number, pid: number, uid: number) =>
+    get<{ list: Submission[] }>(`/exams/${examId}/problems/${pid}/submissions`, { uid }),
   setIntro: (examId: number, intro: string) =>
     patch<{ id: number }>(`/exams/${examId}/intro`, { intro }),
 }

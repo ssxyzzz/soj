@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -101,6 +101,14 @@ function pollRevealed(sid: number) {
 }
 
 onMounted(load)
+
+// 序号切题：同路由复用组件实例，pid 变化需重载数据
+watch(
+  () => route.params.pid,
+  (nv, ov) => {
+    if (nv && nv !== ov) load()
+  },
+)
 
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer)
