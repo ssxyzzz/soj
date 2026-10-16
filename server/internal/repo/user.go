@@ -34,6 +34,7 @@ type UserPrefs struct {
 	DefaultLang   string            `bson:"defaultLang,omitempty" json:"defaultLang,omitempty"`
 	CodeTemplates map[string]string `bson:"codeTemplates,omitempty" json:"codeTemplates,omitempty"`
 	MdEditMode    string            `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"` // wysiwyg / ir / sv，空为默认所见即所得
+	Autocomplete  *bool             `bson:"autocomplete,omitempty" json:"autocomplete,omitempty"` // 代码自动补全（v0.5d，默认开箱开启；后续按用户等级门槛放开——预留接口）
 }
 
 type User struct {

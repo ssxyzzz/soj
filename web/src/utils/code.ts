@@ -21,3 +21,15 @@ export function templateFor(lang: string): string {
   const pref = useUserStore().prefs.codeTemplates?.[lang]
   return pref && pref.trim() ? pref : ''
 }
+
+// ---- 自动补全可用性（预留等级接口，v0.5d） ----
+// 后续上线用户等级功能后，由等级决定能否开启自动补全：
+// 届时只需改这一个判断点（如 `level >= 门槛等级`），编辑器与个人设置都走这里，不各自为政。
+export function autocompleteAvailable(): boolean {
+  return true
+}
+
+// 实际生效：可用且未显式关闭（默认开箱开启，见 v0.5d 功能基线）。
+export function autocompleteOn(): boolean {
+  return autocompleteAvailable() && useUserStore().prefs.autocomplete !== false
+}

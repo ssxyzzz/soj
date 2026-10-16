@@ -82,6 +82,7 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 			DefaultLang   *string            `json:"defaultLang"`
 			CodeTemplates *map[string]string `json:"codeTemplates"`
 			MdEditMode    *string            `json:"mdEditMode"`
+			Autocomplete  *bool              `json:"autocomplete"`
 		} `json:"prefs"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -144,6 +145,9 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 				m[k] = v
 			}
 			prefs.CodeTemplates = m
+		}
+		if req.Prefs.Autocomplete != nil {
+			prefs.Autocomplete = req.Prefs.Autocomplete
 		}
 		set["prefs"] = &prefs
 	}

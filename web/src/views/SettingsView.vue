@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import PageShell from '@/components/PageShell.vue'
 import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
-import { languageOptions } from '@/utils/code'
+import { autocompleteAvailable, languageOptions } from '@/utils/code'
 
 // 个人设置（v0.4.8）：本人自助字段（性别/学校/年级/QQ）+ 偏好（默认语言/代码模板/MD 编辑模式）。
 // 真实姓名只读展示——仅管理员后台可改（班级名单对号用）。
@@ -23,7 +23,8 @@ const prefsForm = reactive<{
   defaultLang: string
   mdEditMode: '' | 'wysiwyg' | 'ir' | 'sv'
   codeTemplates: Record<string, string>
-}>({ defaultLang: '', mdEditMode: '', codeTemplates: {} })
+  autocomplete: boolean
+}>({ defaultLang: '', mdEditMode: '', codeTemplates: {}, autocomplete: true })
 
 // 模板编辑器当前编辑的语言（按语言各存一套，切换带出对应模板）
 const tplLang = ref('cpp')
@@ -40,6 +41,7 @@ async function load() {
     prefsForm.defaultLang = p.prefs?.defaultLang ?? ''
     prefsForm.mdEditMode = p.prefs?.mdEditMode ?? ''
     prefsForm.codeTemplates = { ...(p.prefs?.codeTemplates ?? {}) }
+    prefsForm.autocomplete = p.prefs?.autocomplete ?? true
   } finally {
     loading.value = false
   }
@@ -68,6 +70,7 @@ async function savePrefs() {
         defaultLang: prefsForm.defaultLang,
         mdEditMode: prefsForm.mdEditMode,
         codeTemplates: prefsForm.codeTemplates,
+        autocomplete: prefsForm.autocomplete,
       },
     })
     ElMessage.success('偏好已保存，提交弹窗 / 在线编程 / 编辑器即刻生效')
@@ -139,6 +142,18 @@ onMounted(load)
             <el-option value="sv" label="分屏" />
           </el-select>
         </el-form-item>
+        <el-form-item label="代码自动补全">
+          <div class="ac-row">
+            <el-switch
+              v-model="prefsForm.autocomplete"
+              :disabled="!autocompleteAvailable()"
+              @change="savePrefs"
+            />
+            <span class="dim">
+              {{ autocompleteAvailable() ? '代码编辑器中的关键字 / 词法补全，默认开启' : '达到指定等级后可开启自动补全' }}
+            </span>
+          </div>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" :loading="savingPrefs" @click="savePrefs">保存</el-button>
         </el-form-item>
@@ -174,5 +189,11 @@ onMounted(load)
 
 .tips p {
   margin: 0 0 8px;
+}
+
+.ac-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 </style>

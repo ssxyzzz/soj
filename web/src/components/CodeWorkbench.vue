@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
+import CodeEditor from '@/components/CodeEditor.vue'
 import MdView from '@/components/MdView.vue'
-import { defaultLang, languageOptions, templateFor } from '@/utils/code'
+import { useUserStore } from '@/stores/user'
+import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
 
 // 在线编程（v0.4.6 右列入口）：全屏覆盖层，左侧题面（MdView 同引擎渲染）、
 // 右侧代码，中间分隔条可拖动调整两栏宽度；提交动作由父组件接手。
@@ -25,6 +27,8 @@ const lang = ref(defaultLang()) // 个人设置的默认语言优先
 const code = ref('')
 const leftPct = ref(50)
 const divider = ref<HTMLElement>()
+const userStore = useUserStore()
+const acOn = computed(() => autocompleteOn())
 
 watch(() => props.modelValue, (open) => {
   if (open) code.value = code.value || templateFor(lang.value)
@@ -100,10 +104,12 @@ onBeforeUnmount(() => {
         </section>
         <div ref="divider" class="wb-divider" @mousedown="onDragStart" title="拖动调整分栏" />
         <section class="wb-right">
-          <textarea
+          <CodeEditor
             v-model="code"
-            class="wb-code mono"
-            spellcheck="false"
+            class="wb-editor"
+            :language="lang"
+            :autocomplete="acOn"
+            height="100%"
             placeholder="在此编写或粘贴你的代码（系统不提供默认模板）"
           />
         </section>
@@ -184,15 +190,9 @@ onBeforeUnmount(() => {
   display: flex;
 }
 
-.wb-code {
+.wb-editor {
   flex: 1;
-  border: none;
-  outline: none;
-  resize: none;
-  padding: 16px;
-  font-size: 14px;
-  line-height: 1.6;
-  background: #fafafa;
+  height: 100%;
 }
 
 .mono {

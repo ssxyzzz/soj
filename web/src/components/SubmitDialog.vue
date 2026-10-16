@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
-import { defaultLang, languageOptions, templateFor } from '@/utils/code'
+import CodeEditor from '@/components/CodeEditor.vue'
+import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
+import { useUserStore } from '@/stores/user'
 
 // 提交弹窗（v0.4.6 右列入口）：语言选择 + 代码粘贴，提交动作由父组件
 // 通过 submit 事件接手（练习走 /submissions，比赛/考试走各自通道）。
@@ -21,6 +23,8 @@ const emit = defineEmits<{
 
 const lang = ref(defaultLang()) // 个人设置的默认语言优先
 const code = ref('')
+const userStore = useUserStore()
+const acOn = computed(() => autocompleteOn())
 
 watch(() => props.modelValue, (open) => {
   if (open) code.value = templateFor(lang.value)
@@ -56,12 +60,11 @@ function doSubmit() {
       </el-select>
       <span v-if="disabled" class="dim">{{ disabledReason }}</span>
     </div>
-    <el-input
+    <CodeEditor
       v-model="code"
-      type="textarea"
-      :rows="16"
-      class="mono"
-      spellcheck="false"
+      :language="lang"
+      :autocomplete="acOn"
+      height="460px"
       placeholder="在此编写或粘贴你的代码（系统不提供默认模板）"
     />
     <template #footer>

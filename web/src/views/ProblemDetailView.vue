@@ -149,6 +149,9 @@ const metaForm = reactive({
   memory_limit_mb: 256,
   compare: 'exact',
   float_tolerance: 0.0001,
+  file_io_input: '',
+  file_io_output: '',
+  file_io_desc: '',
 })
 
 function openEdit() {
@@ -158,6 +161,9 @@ function openEdit() {
   metaForm.time_limit_ms = p.time_limit_ms
   metaForm.memory_limit_mb = Math.max(16, Math.round(p.memory_limit_kb / 1024))
   metaForm.compare = (p as ProblemDetail & { compare?: string }).compare === 'tolerant' ? 'tolerant' : 'exact'
+  metaForm.file_io_input = p.file_io_input ?? ''
+  metaForm.file_io_output = p.file_io_output ?? ''
+  metaForm.file_io_desc = p.file_io_desc ?? ''
   checkerFile.value = null
   showEdit.value = true
 }
@@ -185,6 +191,9 @@ async function saveEdit() {
       time_limit_ms: metaForm.time_limit_ms,
       memory_limit_kb: metaForm.memory_limit_mb * 1024,
       compare: metaForm.compare,
+      file_io_input: metaForm.file_io_input.trim(),
+      file_io_output: metaForm.file_io_output.trim(),
+      file_io_desc: metaForm.file_io_desc,
       ...(metaForm.compare === 'tolerant' ? { float_tolerance: metaForm.float_tolerance } : {}),
     })
     ElMessage.success('题目已保存')
@@ -606,6 +615,33 @@ onUnmounted(stopPolling)
             <span class="dim">MB</span>
           </div>
         </el-form-item>
+        <el-form-item>
+          <div class="fileio-edit">
+            <span class="fileio-edit-label">
+              文件 IO（文件名对与说明）
+              <el-tooltip
+                placement="top"
+                content="仅比赛/考试「本场启用文件 IO」时生效；题库/练习/作业恒为标准输入输出。名字留空默认 problem.in / problem.out；说明启用时会展示给学生"
+              >
+                <el-icon class="dim"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
+            <div class="edit-limits">
+              <el-input
+                v-model="metaForm.file_io_input"
+                placeholder="输入文件名，默认 problem.in"
+                style="width: 240px"
+              />
+              <el-input
+                v-model="metaForm.file_io_output"
+                placeholder="输出文件名，默认 problem.out"
+                style="width: 240px"
+              />
+            </div>
+            <div class="fileio-desc-label dim">文件 IO 说明（Markdown，启用场景展示给学生）</div>
+            <MdEditor v-model="metaForm.file_io_desc" height="200px" />
+          </div>
+        </el-form-item>
         <el-form-item label="题面" required>
           <MdEditor v-model="editStatement" height="480px" />
         </el-form-item>
@@ -905,6 +941,27 @@ onUnmounted(stopPolling)
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.fileio-edit {
+  width: 100%;
+}
+
+.fileio-edit-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.fileio-edit .edit-limits {
+  margin-bottom: 8px;
+}
+
+.fileio-desc-label {
+  margin-bottom: 6px;
 }
 
 .compare-label {
