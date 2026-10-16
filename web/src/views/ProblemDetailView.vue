@@ -210,7 +210,6 @@ onUnmounted(stopPolling)
   <div v-loading="loading">
     <template v-if="problem">
       <PageShell>
-      <div class="page">
         <el-alert
           v-if="problem.locked"
           :title="`该题正在${lockWhat}中`"
@@ -259,7 +258,6 @@ onUnmounted(stopPolling)
             </div>
           </template>
         </el-card>
-      </div>
 
       <template #aside>
         <el-card class="aside-card">
@@ -440,6 +438,7 @@ onUnmounted(stopPolling)
 .entry-actions {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 

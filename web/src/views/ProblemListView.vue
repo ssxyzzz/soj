@@ -80,8 +80,7 @@ onMounted(() => {
 
 <template>
   <PageShell>
-    <div class="page">
-      <el-card>
+    <el-card>
         <div class="search-row">
           <el-input
             v-model="keyword"
@@ -135,7 +134,6 @@ onMounted(() => {
           />
         </div>
       </el-card>
-    </div>
 
     <template #aside>
       <el-card v-if="userStore.role === 'admin' || userStore.role === 'root'" class="aside-card">
@@ -201,6 +199,7 @@ onMounted(() => {
 .aside-actions {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 

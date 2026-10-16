@@ -48,6 +48,12 @@
   top: 76px;
 }
 
+/* 右列纵向堆叠的按钮组居中；重置 Element Plus 相邻按钮的默认左移
+   （.el-button + .el-button 的 margin-left 会让纵向排列的第二个按钮右错位） */
+.side-col :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 @media (max-width: 992px) {
   .cols {
     flex-direction: column;

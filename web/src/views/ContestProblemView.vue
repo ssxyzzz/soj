@@ -146,32 +146,29 @@ onUnmounted(() => {
         </el-card>
       </template>
 
-      <div class="page">
-        <el-card>
-          <div class="title-row">
-            <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
-          </div>
-          <div class="info-row">
-            <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
-            <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
-          </div>
-          <MdView :content="problem.description" />
-          <template v-if="problem.samples.length">
-            <el-divider content-position="left">样例</el-divider>
-            <div v-for="(s, i) in problem.samples" :key="s.id" class="sample">
-              <div class="sample-col">
-                <div class="sample-label">样例 {{ i + 1 }} 输入</div>
-                <pre class="mono sample-pre">{{ s.input || '（空）' }}</pre>
-              </div>
-              <div class="sample-col">
-                <div class="sample-label">样例 {{ i + 1 }} 输出</div>
-                <pre class="mono sample-pre">{{ s.output }}</pre>
-              </div>
+      <el-card>
+        <div class="title-row">
+          <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
+        </div>
+        <div class="info-row">
+          <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
+          <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
+        </div>
+        <MdView :content="problem.description" />
+        <template v-if="problem.samples.length">
+          <el-divider content-position="left">样例</el-divider>
+          <div v-for="(s, i) in problem.samples" :key="s.id" class="sample">
+            <div class="sample-col">
+              <div class="sample-label">样例 {{ i + 1 }} 输入</div>
+              <pre class="mono sample-pre">{{ s.input || '（空）' }}</pre>
             </div>
-          </template>
-        </el-card>
-      </div>
-
+            <div class="sample-col">
+              <div class="sample-label">样例 {{ i + 1 }} 输出</div>
+              <pre class="mono sample-pre">{{ s.output }}</pre>
+            </div>
+          </div>
+        </template>
+      </el-card>
       <template #aside>
         <el-card class="aside-card">
           <div class="entry-actions">
@@ -307,6 +304,7 @@ onUnmounted(() => {
 .entry-actions {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 

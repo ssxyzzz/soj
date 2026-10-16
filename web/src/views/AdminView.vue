@@ -267,7 +267,9 @@ onMounted(() => {
   margin: 0 auto;
   display: flex;
   gap: 24px;
-  align-items: flex-start;
+  /* stretch：主列卡片随左列高度拉伸，两列上沿与下沿对齐；
+     不用 sticky——切换分区时内容高度变化会让吸附列来回跳动 */
+  align-items: stretch;
 }
 
 .admin-nav {
@@ -276,8 +278,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  position: sticky;
-  top: 76px;
 }
 
 .nav-item {
@@ -320,6 +320,13 @@ onMounted(() => {
 .admin-main {
   flex: 1 1 auto;
   min-width: 0;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-main :deep(> .el-card) {
+  flex: 1 1 auto;
 }
 
 .head {
