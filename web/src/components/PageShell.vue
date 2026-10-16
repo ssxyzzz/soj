@@ -44,8 +44,6 @@
 .side-col {
   flex: 0 0 300px;
   width: 300px;
-  position: sticky;
-  top: 76px;
 }
 
 /* 右列纵向堆叠的按钮组居中；重置 Element Plus 相邻按钮的默认左移
@@ -60,7 +58,6 @@
   }
 
   .side-col {
-    position: static;
     width: auto;
     flex: 1 1 auto;
   }
