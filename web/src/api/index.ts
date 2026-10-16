@@ -118,10 +118,13 @@ export const classApi = {
   list: () => get<ClassCard[]>('/classes'),
   detail: (id: number) => get<ClassDetail>(`/classes/${id}`),
   mine: () => get<ClassCard[]>('/me/classes'),
-  create: (name: string, intro: string) =>
-    post<{ id: number; name: string; invite_code: string }>('/classes', { name, intro }),
+  create: (name: string, intro: string, priv = false) =>
+    post<{ id: number; name: string; invite_code: string }>('/classes', { name, intro, private: priv }),
   join: (id: number, code: string) => post<{ joined: boolean }>(`/classes/${id}/join`, { code }),
+  joinByCode: (code: string) =>
+    post<{ joined: boolean; class_id: number; name: string }>('/classes/join-by-code', { code }),
   leave: (id: number) => post<{ left: boolean }>(`/classes/${id}/leave`),
+  setPrivate: (id: number, priv: boolean) => patch<{ private: boolean }>(`/classes/${id}/private`, { private: priv }),
   regenInvite: (id: number) => post<{ invite_code: string }>(`/classes/${id}/invite`),
   importMembers: (id: number, usernames: string) =>
     post<{ added: number; total: number }>(`/classes/${id}/members`, { usernames }),
@@ -138,6 +141,8 @@ export const assignmentApi = {
     post<{ id: number; title: string }>(`/classes/${classId}/assignments`, { title, intro }),
   detail: (id: number) => get<AssignmentDetail>(`/assignments/${id}`),
   remove: (id: number) => del<{ deleted: number }>(`/assignments/${id}`),
+  setProblems: (id: number, pids: number[]) =>
+    put<{ count: number }>(`/assignments/${id}/problems`, { pids }),
   addProblem: (id: number, problemId: number) =>
     post<{ added: number }>(`/assignments/${id}/problems`, { problem_id: problemId }),
   removeProblem: (id: number, pid: number) =>
@@ -179,6 +184,7 @@ export const contestApi = {
   list: () => get<ContestListItem[]>('/contests'),
   detail: (id: number) => get<ContestDetail>(`/contests/${id}`),
   create: (payload: CreateContestPayload) => post<{ id: number }>('/contests', payload),
+  setIntro: (id: number, intro: string) => patch<{ id: number }>(`/contests/${id}/intro`, { intro }),
   remove: (id: number) => del<{ deleted: number }>(`/contests/${id}`),
   submit: (contestId: number, pid: number, language: string, code: string) =>
     post<{ id: number }>(`/contests/${contestId}/problems/${pid}/submissions`, { language, code }),

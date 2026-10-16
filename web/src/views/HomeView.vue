@@ -93,7 +93,7 @@ onMounted(async () => {
             <p class="class-intro">{{ c.intro || '暂无简介' }}</p>
             <div class="class-meta">
               <el-tag size="small" type="info">{{ c.member_count }} 名成员</el-tag>
-              <el-tag size="small" type="info">{{ c.problem_count }} 道题</el-tag>
+              <el-tag size="small" type="info">{{ c.assignment_count }} 个作业</el-tag>
             </div>
           </el-card>
         </el-col>

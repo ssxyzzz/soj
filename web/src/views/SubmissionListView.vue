@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
 
 import { submissionApi } from '@/api'
+import PageShell from '@/components/PageShell.vue'
 import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
 import type { Submission } from '@/types'
 
@@ -40,10 +41,22 @@ onMounted(() => {
 onUnmounted(() => {
   if (timer) clearInterval(timer)
 })
+
+const statusDocs: { status: string; meaning: string; cause?: string }[] = [
+  { status: 'Pending', meaning: '排队中，等待评测' },
+  { status: 'Judging', meaning: '正在评测' },
+  { status: 'Accepted', meaning: '通过，拿到满分' },
+  { status: 'Wrong Answer', meaning: '答案错误', cause: '输出与期望不一致：检查输出格式、多余空格/换行、边界情况' },
+  { status: 'Time Limit Exceeded', meaning: '超出时间限制', cause: '算法复杂度过高或死循环：优化算法，确认循环能终止' },
+  { status: 'Memory Limit Exceeded', meaning: '超出内存限制', cause: '数组/递归开太大：减小规模或改用更省内存的写法' },
+  { status: 'Runtime Error', meaning: '运行时错误', cause: '常见原因：数组越界、除零、空指针、栈溢出（递归过深）' },
+  { status: 'Compile Error', meaning: '编译错误', cause: '代码无法编译：查看提交详情里的编译器报错信息定位行号' },
+  { status: 'System Error', meaning: '系统错误', cause: '评测机内部异常（不是你的问题），可重新提交' },
+]
 </script>
 
 <template>
-  <div class="page">
+  <PageShell>
     <el-card>
       <template #header>
         <div class="head">
@@ -94,7 +107,20 @@ onUnmounted(() => {
         />
       </div>
     </el-card>
-  </div>
+
+    <template #aside>
+      <el-card class="aside-card">
+        <template #header><span>评测状态说明</span></template>
+        <div v-for="d in statusDocs" :key="d.status" class="doc-row">
+          <div class="doc-head">
+            <el-tag size="small" :type="statusStyle(d.status).type">{{ statusStyle(d.status).label }}</el-tag>
+          </div>
+          <div class="doc-meaning">{{ d.meaning }}</div>
+          <div v-if="d.cause" class="doc-cause">常见原因：{{ d.cause }}</div>
+        </div>
+      </el-card>
+    </template>
+  </PageShell>
 </template>
 
 <style scoped>
@@ -112,5 +138,30 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.aside-card {
+  position: static;
+}
+
+.doc-row {
+  padding: 8px 4px;
+  border-bottom: 1px dashed #ebeef5;
+}
+
+.doc-head {
+  margin-bottom: 4px;
+}
+
+.doc-meaning {
+  font-size: 13px;
+  color: #606266;
+}
+
+.doc-cause {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 2px;
+  line-height: 1.5;
 }
 </style>

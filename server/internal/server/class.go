@@ -26,8 +26,9 @@ func (h *Handlers) classManageable(c *gin.Context, cl *repo.Class) bool {
 func (h *Handlers) CreateClass(c *gin.Context) {
 	uid, uname, _, _ := currentUser(c)
 	var req struct {
-		Name  string `json:"name" binding:"required"`
-		Intro string `json:"intro"`
+		Name    string `json:"name" binding:"required"`
+		Intro   string `json:"intro"`
+		Private *bool  `json:"private"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "班级名称不能为空")
@@ -38,7 +39,8 @@ func (h *Handlers) CreateClass(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "班级名称需为 1-64 字符")
 		return
 	}
-	cl, err := h.repo.CreateClass(c.Request.Context(), req.Name, strings.TrimSpace(req.Intro), uid, uname)
+	private := req.Private != nil && *req.Private
+	cl, err := h.repo.CreateClass(c.Request.Context(), req.Name, strings.TrimSpace(req.Intro), private, uid, uname)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "创建班级失败")
 		return
@@ -46,13 +48,47 @@ func (h *Handlers) CreateClass(c *gin.Context) {
 	ok(c, gin.H{"id": cl.ID, "name": cl.Name, "invite_code": cl.InviteCode})
 }
 
+// ListClasses 班级列表（按视角过滤私密班）：
+//   - root/admin 全部可见；
+//   - 登录用户可见公开班 + 自己加入的私密班（带 joined 标记）；
+//   - 游客仅公开班。
 func (h *Handlers) ListClasses(c *gin.Context) {
+	uid, _, role, logged := currentUser(c)
 	cards, err := h.repo.ListClasses(c.Request.Context())
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取班级失败")
 		return
 	}
-	ok(c, cards)
+	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	mine := map[int64]bool{}
+	if logged && !privileged {
+		ids, err := h.repo.MyClassIDs(c.Request.Context(), uid)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取班级失败")
+			return
+		}
+		for _, id := range ids {
+			mine[id] = true
+		}
+	}
+	visible := make([]repo.ClassCard, 0, len(cards))
+	for _, card := range cards {
+		if card.Private && !privileged {
+			if !logged || !mine[card.ID] {
+				continue
+			}
+		}
+		if logged {
+			if privileged {
+				ok2, _ := h.repo.IsMember(c.Request.Context(), card.ID, uid)
+				card.Joined = ok2
+			} else {
+				card.Joined = mine[card.ID]
+			}
+		}
+		visible = append(visible, card)
+	}
+	ok(c, visible)
 }
 
 func (h *Handlers) MyClasses(c *gin.Context) {
@@ -69,7 +105,7 @@ func (h *Handlers) MyClasses(c *gin.Context) {
 	ok(c, cards)
 }
 
-// GetClass 班级详情：基础信息任何人可见；成员列表与邀请码仅班级管理员可见；
+// GetClass 班级详情：私密班仅本班成员（与 root/admin）可见；成员列表与邀请码仅班级管理员可见；
 // 作业列表单独走 /classes/:id/assignments（仅本班成员可见）。
 func (h *Handlers) GetClass(c *gin.Context) {
 	id, okID := parseID(c, "id")
@@ -87,10 +123,16 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		return
 	}
 
-	uid, _, _, logged := currentUser(c)
+	uid, _, role, logged := currentUser(c)
 	isMember := false
 	if logged {
 		isMember, _ = h.repo.IsMember(ctx, id, uid)
+	}
+	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	// 私密班对非成员隐藏存在本身
+	if cl.Private && !privileged && !isMember {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
 	}
 	manage := h.classManageable(c, cl)
 
@@ -99,6 +141,8 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		"name":       cl.Name,
 		"intro":      cl.Intro,
 		"owner_id":   cl.OwnerID,
+		"private":    cl.Private,
+		"created_at": cl.CreatedAt,
 		"joined":     isMember,
 		"manageable": manage,
 	}
@@ -206,6 +250,71 @@ func (h *Handlers) RegenInvite(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"invite_code": code})
+}
+
+// SetClassPrivate 切换班级公开/私密（建班人/root）。
+func (h *Handlers) SetClassPrivate(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	cl, err := h.repo.GetClass(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取班级失败")
+		return
+	}
+	uid, _, role, logged := currentUser(c)
+	if !logged || !(uid == cl.OwnerID || role == repo.RoleRoot) {
+		fail(c, http.StatusForbidden, "仅建班人或 root 可切换班级可见性")
+		return
+	}
+	var req struct {
+		Private *bool `json:"private" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Private == nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if err := h.repo.SetClassPrivate(c.Request.Context(), id, *req.Private); err != nil {
+		fail(c, http.StatusInternalServerError, "切换失败")
+		return
+	}
+	ok(c, gin.H{"private": *req.Private})
+}
+
+// JoinByCode 纯邀请码入班（班级列表里无需先知道班级 ID）。
+func (h *Handlers) JoinByCode(c *gin.Context) {
+	uid, uname, _, okAuth := currentUser(c)
+	if !okAuth {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "请输入邀请码")
+		return
+	}
+	code := strings.ToUpper(strings.TrimSpace(req.Code))
+	cl, err := h.repo.GetClassByInviteCode(c.Request.Context(), code)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusBadRequest, "邀请码错误")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "加入班级失败")
+		return
+	}
+	if err := h.repo.JoinClass(c.Request.Context(), cl.ID, uid, uname, code); err != nil {
+		fail(c, http.StatusInternalServerError, "加入班级失败")
+		return
+	}
+	ok(c, gin.H{"joined": true, "class_id": cl.ID, "name": cl.Name})
 }
 
 // ImportMembers 按用户名批量导入（换行/逗号/空格分隔）。

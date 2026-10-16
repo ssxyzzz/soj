@@ -20,12 +20,14 @@ type ClassProblemRef struct {
 }
 
 // Class 班级。题目全局共享（引用实现）：班级通过 Problems 引用题目，不持有题目。
+// Private=true 私密班：仅本班成员（与 root/admin）在班级列表可见。
 type Class struct {
 	ID         int64             `bson:"_id"`
 	Name       string            `bson:"name"`
 	Intro      string            `bson:"intro"`
 	OwnerID    int64             `bson:"ownerId"`
 	InviteCode string            `bson:"inviteCode"`
+	Private    bool              `bson:"private"`
 	Problems   []ClassProblemRef `bson:"problems"`
 	CreatedAt  time.Time         `bson:"createdAt"`
 }
@@ -61,7 +63,7 @@ func genInviteCode() (string, error) {
 	return string(b), nil
 }
 
-func (r *Repo) CreateClass(ctx context.Context, name, intro string, ownerID int64, ownerUname string) (*Class, error) {
+func (r *Repo) CreateClass(ctx context.Context, name, intro string, private bool, ownerID int64, ownerUname string) (*Class, error) {
 	code, err := genInviteCode()
 	if err != nil {
 		return nil, err
@@ -72,6 +74,7 @@ func (r *Repo) CreateClass(ctx context.Context, name, intro string, ownerID int6
 		Intro:      intro,
 		OwnerID:    ownerID,
 		InviteCode: code,
+		Private:    private,
 		Problems:   []ClassProblemRef{},
 		CreatedAt:  time.Now(),
 	}
@@ -102,14 +105,17 @@ func (r *Repo) GetClass(ctx context.Context, id int64) (*Class, error) {
 
 // ClassCard 班级卡片（主页/班级列表）。
 type ClassCard struct {
-	ID           int64  `bson:"_id"          json:"id"`
-	Name         string `bson:"name"         json:"name"`
-	Intro        string `bson:"intro"        json:"intro"`
-	MemberCount  int64  `bson:"memberCount"  json:"member_count"`
-	ProblemCount int64  `bson:"problemCount" json:"problem_count"`
+	ID              int64     `bson:"_id"             json:"id"`
+	Name            string    `bson:"name"            json:"name"`
+	Intro           string    `bson:"intro"           json:"intro"`
+	MemberCount     int64     `bson:"memberCount"     json:"member_count"`
+	AssignmentCount int64     `bson:"assignmentCount" json:"assignment_count"`
+	Private         bool      `bson:"private"         json:"private"`
+	CreatedAt       time.Time `bson:"createdAt"       json:"created_at"`
+	Joined          bool      `json:"joined"` // 由 handler 按视角填写，不落库
 }
 
-// ListClasses 全部班级卡片（按创建时间正序）。题数 = 各作业题目数之和。
+// ListClasses 班级卡片（按创建时间正序）：作业数 = 该班 assignments 数量。
 func (r *Repo) ListClasses(ctx context.Context) ([]ClassCard, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$lookup", Value: bson.M{
@@ -127,15 +133,10 @@ func (r *Repo) ListClasses(ctx context.Context) ([]ClassCard, error) {
 		{{Key: "$project", Value: bson.M{
 			"name":        1,
 			"intro":       1,
+			"private":     bson.M{"$ifNull": bson.A{"$private", false}},
+			"createdAt":   1,
 			"memberCount": bson.M{"$size": "$m"},
-			"problemCount": bson.M{"$reduce": bson.M{
-				"input":        "$a",
-				"initialValue": 0,
-				"in": bson.M{"$add": bson.A{
-					"$$value",
-					bson.M{"$size": bson.M{"$ifNull": bson.A{"$$this.problems", bson.A{}}}},
-				}},
-			}},
+			"assignmentCount": bson.M{"$size": "$a"},
 		}}},
 		{{Key: "$sort", Value: bson.M{"_id": 1}}},
 	}
@@ -149,6 +150,29 @@ func (r *Repo) ListClasses(ctx context.Context) ([]ClassCard, error) {
 		return nil, err
 	}
 	return cards, nil
+}
+
+// SetClassPrivate 切换班级公开/私密（建班人/root）。
+func (r *Repo) SetClassPrivate(ctx context.Context, classID int64, private bool) error {
+	res, err := r.db.Collection("classes").UpdateOne(ctx,
+		bson.M{"_id": classID}, bson.M{"$set": bson.M{"private": private}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// GetClassByInviteCode 按邀请码找班级（码即凭证：输入邀请码加入班级用）。
+func (r *Repo) GetClassByInviteCode(ctx context.Context, code string) (*Class, error) {
+	var c Class
+	if err := r.db.Collection("classes").FindOne(ctx,
+		bson.M{"inviteCode": code}).Decode(&c); err != nil {
+		return nil, err
+	}
+	return &c, nil
 }
 
 func (r *Repo) JoinClass(ctx context.Context, classID, uid int64, uname, code string) error {

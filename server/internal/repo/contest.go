@@ -76,6 +76,19 @@ func (r *Repo) roundsCol(kind string) *mongo.Collection {
 	return r.db.Collection("contests")
 }
 
+// SetContestIntro 更新主题库比赛说明（Markdown）。
+func (r *Repo) SetContestIntro(ctx context.Context, id int64, intro string) error {
+	res, err := r.db.Collection("contests").UpdateOne(ctx,
+		bson.M{"_id": id}, bson.M{"$set": bson.M{"intro": intro}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
 // roundsIDField 比赛/考试提交在 submissions 中的引用字段名。
 func roundsIDField(kind string) string {
 	if kind == KindExam {

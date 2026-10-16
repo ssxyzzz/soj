@@ -68,7 +68,7 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/contests/:id", AuthOptional(cfg), h.ContestDetail)
 
 		// 班级：列表公开；详情公开（成员/邀请码按身份返回）；其余需登录
-		api.GET("/classes", h.ListClasses)
+		api.GET("/classes", AuthOptional(cfg), h.ListClasses)
 		api.GET("/classes/:id", AuthOptional(cfg), h.GetClass)
 		api.GET("/classes/:id/assignments", AuthOptional(cfg), h.ListClassAssignments)
 
@@ -77,7 +77,9 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/me/classes", h.MyClasses)
 			authed.POST("/classes", RequireRole(repo.RoleAdmin, repo.RoleRoot), h.CreateClass)
 			authed.POST("/classes/:id/join", h.JoinClass)
+			authed.POST("/classes/join-by-code", h.JoinByCode)
 			authed.POST("/classes/:id/leave", h.LeaveClass)
+			authed.PATCH("/classes/:id/private", h.SetClassPrivate)
 
 			// 班级管理：handler 内按 classManageable 校验（建班人 / 班级管理员 / root）
 			managed := authed.Group("/classes/:id")
@@ -92,11 +94,13 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.DELETE("/assignments/:id", h.DeleteAssignment)
 			authed.GET("/assignments/:id", h.GetAssignmentDetail)
 			authed.POST("/assignments/:id/problems", h.AddAssignmentProblem)
+			authed.PUT("/assignments/:id/problems", h.SetAssignmentProblems)
 			authed.DELETE("/assignments/:id/problems/:pid", h.RemoveAssignmentProblem)
 			authed.GET("/assignments/:id/progress", h.AssignmentProgress)
 
 			// 比赛：创建（主题库=root，班级=班级管理员，handler 内校验）/删除/赛时提交/我的提交/榜单
 			authed.POST("/contests", h.CreateContest)
+			authed.PATCH("/contests/:id/intro", h.SetContestIntro)
 			authed.DELETE("/contests/:id", h.DeleteContest)
 			authed.POST("/contests/:id/problems/:pid/submissions", h.SubmitToContest)
 			authed.GET("/contests/:id/submissions/mine", h.ContestMySubmissions)

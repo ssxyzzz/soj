@@ -98,7 +98,10 @@ export interface ClassCard {
   name: string
   intro: string
   member_count: number
-  problem_count: number
+  assignment_count: number
+  private: boolean
+  created_at: string
+  joined: boolean
 }
 
 export interface ClassProblem {
@@ -163,6 +166,8 @@ export interface ClassDetail {
   name: string
   intro: string
   owner_id: number
+  private: boolean
+  created_at: string
   joined: boolean
   manageable: boolean
   invite_code?: string

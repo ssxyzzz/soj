@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { contestApi } from '@/api'
+import PageShell from '@/components/PageShell.vue'
 import { useUserStore } from '@/stores/user'
+import { fmtDate } from '@/utils/format'
 import type { ContestListItem } from '@/types'
 
 const router = useRouter()
@@ -22,11 +24,9 @@ const form = ref({
   pids: '' as string,
 })
 
-const statusMap: Record<string, { label: string; type: 'success' | 'warning' | 'info' }> = {
-  running: { label: '进行中', type: 'success' },
-  scheduled: { label: '未开始', type: 'warning' },
-  ended: { label: '已结束', type: 'info' },
-}
+const running = computed(() => list.value.filter((c) => c.status === 'running'))
+const scheduled = computed(() => list.value.filter((c) => c.status === 'scheduled'))
+const ended = computed(() => list.value.filter((c) => c.status === 'ended'))
 
 async function load() {
   loading.value = true
@@ -68,83 +68,164 @@ async function create() {
   }
 }
 
+function timeRange(c: ContestListItem): string {
+  return `${fmtDate(c.start)} ~ ${fmtDate(c.end)}`
+}
+
+function openContest(c: ContestListItem) {
+  router.push(`/contests/${c.id}`)
+}
+
 onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <el-card>
-      <template #header>
-        <div class="head">
-          <span>比赛</span>
-          <el-button
-            v-if="userStore.role === 'root'"
-            type="primary"
-            size="small"
-            @click="showCreate = true"
-          >
-            创建主题库比赛
-          </el-button>
-        </div>
-      </template>
-      <el-table v-loading="loading" :data="list" style="cursor: pointer" @row-click="(row: ContestListItem) => router.push(`/contests/${row.id}`)">
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="statusMap[row.status]?.type ?? 'info'">
-              {{ statusMap[row.status]?.label ?? row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="title" label="比赛" min-width="220" />
-        <el-table-column label="范围" width="140">
-          <template #default>
-            <el-tag size="small">主题库 · 全员</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="时间" min-width="280">
-          <template #default="{ row }">{{ new Date(row.start).toLocaleString('zh-CN', { hour12: false }) }} ~ {{ new Date(row.end).toLocaleString('zh-CN', { hour12: false }) }}</template>
-        </el-table-column>
-        <el-table-column prop="problem_count" label="题数" width="80" />
-      </el-table>
-      <el-empty v-if="!loading && !list.length" description="还没有比赛" />
-    </el-card>
+  <PageShell>
+    <div class="page">
+      <el-card v-loading="loading" class="group">
+        <template #header>
+          <div class="group-head running-head">
+            <span class="dot running-dot" /> 进行中的比赛
+          </div>
+        </template>
+        <el-empty v-if="!running.length" description="当前没有进行中的比赛" :image-size="50" />
+        <el-table v-else :data="running" style="cursor: pointer" @row-click="openContest">
+          <el-table-column prop="title" label="比赛" min-width="220" />
+          <el-table-column label="时间" min-width="280">
+            <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
+          </el-table-column>
+          <el-table-column prop="problem_count" label="题数" width="80" />
+        </el-table>
+      </el-card>
 
-    <el-dialog v-model="showCreate" title="创建主题库比赛" width="560">
-      <el-form label-position="top">
-        <el-form-item label="比赛名称" required>
-          <el-input v-model="form.title" maxlength="64" />
-        </el-form-item>
-        <el-form-item label="简介">
-          <el-input v-model="form.intro" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="起止时间（最长 7 天）" required>
-          <el-date-picker
-            v-model="form.range"
-            type="datetimerange"
-            start-placeholder="开始"
-            end-placeholder="结束"
-            style="width: 100%"
-          />
-        </el-form-item>
-        <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
-          <el-input-number v-model="form.hiddenDays" :min="0" :max="7" />
-        </el-form-item>
-        <el-form-item label="题目 ID（从题库取，用空格/逗号分隔）" required>
-          <el-input v-model="form.pids" placeholder="如：3 4 5" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showCreate = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="create">创建</el-button>
-      </template>
-    </el-dialog>
-  </div>
+      <el-card v-loading="loading" class="group">
+        <template #header>
+          <div class="group-head scheduled-head"><span class="dot scheduled-dot" /> 近期比赛</div>
+        </template>
+        <el-empty v-if="!scheduled.length" description="近期暂无比赛" :image-size="50" />
+        <el-table v-else :data="scheduled" style="cursor: pointer" @row-click="openContest">
+          <el-table-column prop="title" label="比赛" min-width="220" />
+          <el-table-column label="时间" min-width="280">
+            <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
+          </el-table-column>
+          <el-table-column prop="problem_count" label="题数" width="80" />
+        </el-table>
+      </el-card>
+
+      <el-card v-loading="loading" class="group">
+        <template #header>
+          <div class="group-head"><span class="dot ended-dot" /> 已结束的比赛</div>
+        </template>
+        <el-empty v-if="!ended.length" description="还没有已结束的比赛" :image-size="50" />
+        <el-table v-else :data="ended" style="cursor: pointer" @row-click="openContest">
+          <el-table-column prop="title" label="比赛" min-width="220" />
+          <el-table-column label="时间" min-width="280">
+            <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
+          </el-table-column>
+          <el-table-column prop="problem_count" label="题数" width="80" />
+        </el-table>
+      </el-card>
+    </div>
+
+    <template #aside>
+      <el-card v-if="userStore.role === 'root'" class="aside-card">
+        <template #header><span>管理</span></template>
+        <el-button type="primary" style="width: 100%" @click="showCreate = true">创建主题库比赛</el-button>
+      </el-card>
+
+      <el-card class="aside-card">
+        <template #header><span>赛制说明</span></template>
+        <div class="dim rule-text">
+          <p>· OI 赛制：赛时正常评测但不出分，只记录提交次数；</p>
+          <p>· 每题满分 100，按测试点 / 子任务计分；</p>
+          <p>· 赛后统一出榜，按总分排名；</p>
+          <p>· 比赛期间锁题：请从比赛页提交。</p>
+        </div>
+      </el-card>
+    </template>
+  </PageShell>
+
+  <el-dialog v-model="showCreate" title="创建主题库比赛" width="560">
+    <el-form label-position="top">
+      <el-form-item label="比赛名称" required>
+        <el-input v-model="form.title" maxlength="64" />
+      </el-form-item>
+      <el-form-item label="简介">
+        <el-input v-model="form.intro" type="textarea" :rows="2" />
+      </el-form-item>
+      <el-form-item label="起止时间（最长 7 天）" required>
+        <el-date-picker
+          v-model="form.range"
+          type="datetimerange"
+          start-placeholder="开始"
+          end-placeholder="结束"
+          style="width: 100%"
+        />
+      </el-form-item>
+      <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
+        <el-input-number v-model="form.hiddenDays" :min="0" :max="7" />
+      </el-form-item>
+      <el-form-item label="题目 ID（从题库取，用空格/逗号分隔）" required>
+        <el-input v-model="form.pids" placeholder="如：3 4 5" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="showCreate = false">取消</el-button>
+      <el-button type="primary" :loading="creating" @click="create">创建</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
-.head {
+.group {
+  margin-bottom: 16px;
+}
+
+.group-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.running-dot {
+  background: #67c23a;
+}
+
+.scheduled-dot {
+  background: #e6a23c;
+}
+
+.ended-dot {
+  background: #c0c4cc;
+}
+
+.running-head {
+  color: #529b2e;
+}
+
+.scheduled-head {
+  color: #b88230;
+}
+
+.aside-card + .aside-card {
+  margin-top: 16px;
+}
+
+.rule-text p {
+  margin: 0 0 6px;
+  line-height: 1.6;
+}
+
+.dim {
+  color: #909399;
+  font-size: 13px;
 }
 </style>

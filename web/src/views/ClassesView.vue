@@ -4,7 +4,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { classApi } from '@/api'
+import PageShell from '@/components/PageShell.vue'
 import { useUserStore } from '@/stores/user'
+import { fmtDate } from '@/utils/format'
 import type { ClassCard } from '@/types'
 
 const router = useRouter()
@@ -14,9 +16,7 @@ const list = ref<ClassCard[]>([])
 const loading = ref(false)
 const showCreate = ref(false)
 const creating = ref(false)
-const createForm = reactive({ name: '', intro: '' })
-const joinTarget = ref<ClassCard | null>(null)
-const showJoin = ref(false)
+const createForm = reactive({ name: '', intro: '', private: false })
 const joinCode = ref('')
 const joining = ref(false)
 
@@ -39,17 +39,44 @@ async function create() {
   }
   creating.value = true
   try {
-    const r = await classApi.create(createForm.name.trim(), createForm.intro.trim())
+    const r = await classApi.create(createForm.name.trim(), createForm.intro.trim(), createForm.private)
     ElMessage.success(`班级创建成功，邀请码 ${r.invite_code}`)
     showCreate.value = false
     createForm.name = ''
     createForm.intro = ''
+    createForm.private = false
     await load()
     router.push(`/classes/${r.id}`)
   } finally {
     creating.value = false
   }
 }
+
+async function joinByCode() {
+  if (!joinCode.value.trim()) {
+    ElMessage.warning('请输入邀请码')
+    return
+  }
+  if (!userStore.token) {
+    ElMessage.warning('请先登录')
+    router.push({ path: '/login', query: { redirect: '/classes' } })
+    return
+  }
+  joining.value = true
+  try {
+    const r = await classApi.joinByCode(joinCode.value.trim())
+    ElMessage.success(`已加入「${r.name}」`)
+    joinCode.value = ''
+    router.push(`/classes/${r.class_id}`)
+  } finally {
+    joining.value = false
+  }
+}
+
+const joinTarget = ref<ClassCard | null>(null)
+const showJoin = ref(false)
+const joinTargetCode = ref('')
+const joiningTarget = ref(false)
 
 function openJoin(c: ClassCard) {
   if (!userStore.token) {
@@ -58,20 +85,20 @@ function openJoin(c: ClassCard) {
     return
   }
   joinTarget.value = c
-  joinCode.value = ''
+  joinTargetCode.value = ''
   showJoin.value = true
 }
 
-async function join() {
+async function joinTargetSubmit() {
   if (!joinTarget.value) return
-  joining.value = true
+  joiningTarget.value = true
   try {
-    await classApi.join(joinTarget.value.id, joinCode.value)
-    ElMessage.success('加入成功')
+    await classApi.join(joinTarget.value.id, joinTargetCode.value)
+    ElMessage.success(`已加入「${joinTarget.value.name}」`)
     showJoin.value = false
-    router.push(`/classes/${joinTarget.value.id}`)
+    await load()
   } finally {
-    joining.value = false
+    joiningTarget.value = false
   }
 }
 
@@ -79,89 +106,145 @@ onMounted(load)
 </script>
 
 <template>
-  <div class="page">
-    <el-card>
-      <template #header>
-        <div class="head">
-          <span>全部班级</span>
-          <el-button v-if="canCreate()" type="primary" size="small" @click="showCreate = true">
-            创建班级
-          </el-button>
-        </div>
-      </template>
-      <el-empty v-if="!loading && !list.length" description="还没有班级，等一位老师来创建吧" />
+  <PageShell>
+    <div class="page">
+      <el-empty v-if="!loading && !list.length" description="还没有你能看到的班级，用右侧邀请码加入吧" />
       <el-row v-loading="loading" :gutter="16">
-        <el-col v-for="c in list" :key="c.id" :xs="24" :sm="12" :md="8">
+        <el-col v-for="c in list" :key="c.id" :xs="24" :sm="12">
           <el-card class="card" shadow="hover">
-            <h4 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h4>
+            <div class="name-row">
+              <h4 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h4>
+              <el-tag v-if="c.private" size="small" type="warning">私密</el-tag>
+              <el-tag v-if="c.joined" size="small" type="success">已加入</el-tag>
+            </div>
             <p class="intro">{{ c.intro || '暂无简介' }}</p>
             <div class="meta">
               <el-tag size="small" type="info">{{ c.member_count }} 名成员</el-tag>
-              <el-tag size="small" type="info">{{ c.problem_count }} 道题</el-tag>
-              <el-button size="small" type="primary" link @click="openJoin(c)">加入</el-button>
+              <el-tag size="small" type="info">{{ c.assignment_count }} 个作业</el-tag>
+              <span class="dim">创建于 {{ fmtDate(c.created_at) }}</span>
+              <el-button
+                v-if="!c.joined"
+                size="small"
+                type="primary"
+                link
+                class="join-btn"
+                @click="openJoin(c)"
+              >
+                加入
+              </el-button>
             </div>
           </el-card>
         </el-col>
       </el-row>
-    </el-card>
+    </div>
 
-    <el-dialog v-model="showCreate" title="创建班级" width="420">
-      <el-form label-position="top">
-        <el-form-item label="班级名称" required>
-          <el-input v-model="createForm.name" maxlength="64" placeholder="如：初二 3 班信息组" />
-        </el-form-item>
-        <el-form-item label="班级简介">
-          <el-input v-model="createForm.intro" type="textarea" :rows="3" placeholder="选填" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showCreate = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="create">创建</el-button>
-      </template>
-    </el-dialog>
+    <template #aside>
+      <el-card v-if="canCreate()" class="aside-card">
+        <template #header><span>管理</span></template>
+        <el-button type="primary" style="width: 100%" @click="showCreate = true">创建班级</el-button>
+      </el-card>
 
+      <el-card class="aside-card">
+        <template #header><span>邀请码加入</span></template>
+        <div class="entry-actions">
+          <el-input
+            v-model="joinCode"
+            placeholder="请向老师索取邀请码"
+            maxlength="8"
+            @keyup.enter="joinByCode"
+          />
+          <el-button type="primary" :loading="joining" style="width: 100%" @click="joinByCode">加入班级</el-button>
+        </div>
+      </el-card>
+    </template>
     <el-dialog
       v-model="showJoin"
       :title="`加入 ${joinTarget?.name ?? ''}`"
       width="380"
       @closed="joinTarget = null"
     >
-      <el-input v-model="joinCode" placeholder="请向老师索取邀请码" maxlength="8" />
+      <el-input v-model="joinTargetCode" placeholder="请向老师索取邀请码" maxlength="8" @keyup.enter="joinTargetSubmit" />
       <template #footer>
         <el-button @click="showJoin = false">取消</el-button>
-        <el-button type="primary" :loading="joining" @click="join">加入</el-button>
+        <el-button type="primary" :loading="joiningTarget" @click="joinTargetSubmit">加入</el-button>
       </template>
     </el-dialog>
-  </div>
+  </PageShell>
+
+  <el-dialog v-model="showCreate" title="创建班级" width="420">
+    <el-form label-position="top">
+      <el-form-item label="班级名称" required>
+        <el-input v-model="createForm.name" maxlength="64" placeholder="如：初二 3 班信息组" />
+      </el-form-item>
+      <el-form-item label="班级简介">
+        <el-input v-model="createForm.intro" type="textarea" :rows="3" placeholder="选填" />
+      </el-form-item>
+      <el-form-item label="可见性">
+        <el-radio-group v-model="createForm.private">
+          <el-radio-button :value="false">公开（所有人可见）</el-radio-button>
+          <el-radio-button :value="true">私密（仅成员可见）</el-radio-button>
+        </el-radio-group>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="showCreate = false">取消</el-button>
+      <el-button type="primary" :loading="creating" @click="create">创建</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
 .card {
   margin-bottom: 16px;
 }
 
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .name {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 16px;
   cursor: pointer;
   color: #409eff;
+  font-weight: 600;
 }
 
 .intro {
   color: #909399;
   font-size: 13px;
   min-height: 36px;
+  margin: 6px 0 8px;
 }
 
 .meta {
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.join-btn {
+  margin-left: auto;
+}
+
+.aside-card + .aside-card {
+  margin-top: 16px;
+}
+
+.entry-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.dim {
+  color: #909399;
+  font-size: 13px;
 }
 </style>

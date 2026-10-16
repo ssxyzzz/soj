@@ -293,6 +293,45 @@ func (h *Handlers) DeleteContest(c *gin.Context) {
 	ok(c, gin.H{"deleted": id})
 }
 
+// SetContestIntro 编辑比赛说明（Markdown，创建者/root）——与考试说明同款。
+func (h *Handlers) SetContestIntro(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Intro string `json:"intro" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "比赛说明不能为空")
+		return
+	}
+	if len(req.Intro) > maxStatementSize {
+		fail(c, http.StatusBadRequest, "比赛说明过长（上限 256KB）")
+		return
+	}
+	uid, _, role, _ := currentUser(c)
+	ctx := c.Request.Context()
+	ct, err := h.repo.GetContest(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "比赛不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取比赛失败")
+		return
+	}
+	if !(uid == ct.CreatedBy || role == repo.RoleRoot) {
+		fail(c, http.StatusForbidden, "只有比赛创建者可以编辑说明")
+		return
+	}
+	if err := h.repo.SetContestIntro(ctx, id, req.Intro); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"id": id})
+}
+
 // SubmitToContest 比赛页提交入口（赛时唯一接受该题提交的通道）。
 func (h *Handlers) SubmitToContest(c *gin.Context) {
 	uid, uname, role, _ := currentUser(c)

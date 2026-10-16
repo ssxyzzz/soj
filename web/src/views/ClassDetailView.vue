@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { assignmentApi, classApi, examApi, problemApi } from '@/api'
+import MdView from '@/components/MdView.vue'
+import PageShell from '@/components/PageShell.vue'
 import { fmtDate } from '@/utils/format'
 import type { AssignmentListItem, ClassDetail, ClassMember } from '@/types'
 
@@ -12,6 +14,7 @@ const router = useRouter()
 
 const cl = ref<ClassDetail | null>(null)
 const loading = ref(true)
+const section = ref<'assignments' | 'exams' | 'members'>('assignments')
 const assignments = ref<AssignmentListItem[]>([])
 const assignmentsVisible = ref(false)
 
@@ -20,11 +23,10 @@ const joining = ref(false)
 const showCreateAssignment = ref(false)
 const creatingAssignment = ref(false)
 const assignmentForm = reactive({ title: '', intro: '' })
-const addPid = ref<number | null>(null)
-const addingProblem = ref(false)
 const problemOptions = ref<{ id: number; title: string }[]>([])
 const importText = ref('')
 const importing = ref(false)
+const togglingPrivate = ref(false)
 
 // 发起考试
 const exams = ref<{ id: number; title: string; status: string; start: string; end: string; problem_count: number }[]>([])
@@ -132,6 +134,18 @@ async function regenInvite() {
   ElMessage.success('已重置邀请码')
 }
 
+async function togglePrivate() {
+  if (!cl.value) return
+  togglingPrivate.value = true
+  try {
+    const r = await classApi.setPrivate(cl.value.id, !cl.value.private)
+    cl.value.private = r.private
+    ElMessage.success(r.private ? '已设为私密班（仅成员可见）' : '已设为公开班')
+  } finally {
+    togglingPrivate.value = false
+  }
+}
+
 async function loadProblemOptions() {
   const r = await problemApi.list(1, 100)
   problemOptions.value = r.list
@@ -190,8 +204,6 @@ async function createAssignment() {
   }
 }
 
-
-
 onMounted(() => {
   load()
   loadProblemOptions()
@@ -199,220 +211,244 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-loading="loading" class="page">
-    <template v-if="cl">
-      <el-card>
-        <template #header>
-          <div class="head">
-            <span class="title">{{ cl.name }}</span>
-            <span class="actions">
-              <template v-if="cl.manageable">
-                <el-button size="small" type="success" plain @click="showExam = true; loadProblemOptions()">
-                  发起考试
-                </el-button>
-                <el-button size="small" type="primary" plain @click="showCreateAssignment = true">
-                  布置作业
-                </el-button>
-                <el-button size="small" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
-                <el-button size="small" type="warning" plain @click="regenInvite">重置邀请码</el-button>
-              </template>
-              <el-button v-else-if="cl.joined" size="small" type="danger" plain @click="leave">
-                退出班级
-              </el-button>
-            </span>
+  <div v-loading="loading">
+    <PageShell v-if="cl">
+      <div class="page">
+        <el-card>
+          <div class="title-row">
+            <span class="big-title">{{ cl.name }}</span>
+            <el-tag v-if="cl.private" size="small" type="warning">私密班</el-tag>
+            <el-tag v-if="cl.joined" size="small" type="success">已加入</el-tag>
           </div>
-        </template>
-        <p class="intro">{{ cl.intro || '暂无简介' }}</p>
-        <div v-if="!cl.joined && !cl.manageable" class="join-bar">
-          <el-input
-            v-model="joinCode"
-            placeholder="输入邀请码加入班级"
-            style="width: 240px"
-            maxlength="8"
-          />
-          <el-button type="primary" :loading="joining" @click="join">加入班级</el-button>
-        </div>
-      </el-card>
-
-      <el-card class="block">
-        <template #header>
-          <div class="head">
-            <span>班级作业（{{ assignments.length }}）</span>
+          <div v-if="cl.intro" class="intro"><MdView :content="cl.intro" /></div>
+          <div class="meta">
+            <el-tag size="small" type="info">创建于 {{ fmtDate(cl.created_at) }}</el-tag>
           </div>
-        </template>
-        <el-alert
-          v-if="!assignmentsVisible"
-          title="加入班级后才能查看和完成作业"
-          type="info"
-          :closable="false"
-        />
-        <template v-else>
-          <el-table
-            :data="assignments"
-            style="cursor: pointer"
-            @row-click="(row: AssignmentListItem) => router.push(`/assignments/${row.id}`)"
-          >
-            <el-table-column prop="title" label="作业" min-width="220" />
-            <el-table-column prop="intro" label="说明" min-width="220">
-              <template #default="{ row }">{{ row.intro || '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="problem_count" label="题数" width="90" />
-            <el-table-column label="布置时间" width="200">
-              <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!assignments.length" description="还没有作业" :image-size="60" />
-        </template>
-      </el-card>
-
-      <el-card class="block">
-        <template #header>
-          <div class="head">
-            <span>班级考试（{{ exams.length }}）</span>
-          </div>
-        </template>
-        <el-table
-          v-if="examsVisible"
-          :data="exams"
-          style="cursor: pointer"
-          @row-click="openExam"
-        >
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag :type="row.status === 'running' ? 'success' : row.status === 'scheduled' ? 'warning' : 'info'">
-                {{ row.status === 'running' ? '进行中' : row.status === 'scheduled' ? '未开始' : '已结束' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="title" label="考试" min-width="200" />
-          <el-table-column label="时间" min-width="280">
-            <template #default="{ row }">
-              {{ new Date(row.start).toLocaleString('zh-CN', { hour12: false }) }} ~
-              {{ new Date(row.end).toLocaleString('zh-CN', { hour12: false }) }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="problem_count" label="题数" width="80" />
-        </el-table>
-        <el-empty v-if="!exams.length" description="还没有考试" :image-size="60" />
-      </el-card>
-
-      <el-card v-if="cl.members" class="block">
-        <template #header>
-          <div class="head">
-            <span>成员（{{ cl.members.length }}）</span>
-          </div>
-        </template>
-        <el-table :data="cl.members">
-          <el-table-column prop="uid" label="ID" width="100" />
-          <el-table-column prop="username" label="用户名" min-width="160" />
-          <el-table-column label="身份" width="200">
-            <template #default="{ row }">
-              <el-tag v-if="row.is_owner" size="small" type="warning">建班人</el-tag>
-              <el-select
-                v-else-if="cl.manageable"
-                :model-value="row.role"
-                size="small"
-                @change="(v: string) => changeMemberRole(row as ClassMember, v)"
-              >
-                <el-option value="admin" label="班级管理员" />
-                <el-option value="member" label="普通成员" />
-              </el-select>
-              <el-tag v-else size="small" :type="row.role === 'admin' ? 'success' : 'info'">
-                {{ row.role === 'admin' ? '班级管理员' : '成员' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="加入时间" width="200">
-            <template #default="{ row }">{{ fmtDate(row.joined_at) }}</template>
-          </el-table-column>
-        </el-table>
-        <div v-if="cl.manageable" class="import">
-          <el-input
-            v-model="importText"
-            type="textarea"
-            :rows="2"
-            placeholder="批量导入：输入已注册用户名，用空格 / 逗号 / 换行分隔"
-          />
-          <el-button type="primary" :loading="importing" @click="importMembers">导入成员</el-button>
-        </div>
-      </el-card>
-
-      <el-dialog v-model="showCreateAssignment" title="布置作业" width="480">
-        <el-form label-position="top">
-          <el-form-item label="作业名称" required>
-            <el-input v-model="assignmentForm.title" maxlength="64" placeholder="如：第三章 循环练习" />
-          </el-form-item>
-          <el-form-item label="作业说明">
-            <el-input v-model="assignmentForm.intro" type="textarea" :rows="2" placeholder="选填" />
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="showCreateAssignment = false">取消</el-button>
-          <el-button type="primary" :loading="creatingAssignment" @click="createAssignment">创建</el-button>
-        </template>
-      </el-dialog>
-
-      <el-dialog v-model="showExam" title="发起班级考试" width="560">
-        <el-form label-position="top">
-          <el-form-item label="考试名称" required>
-            <el-input v-model="examForm.title" maxlength="64" />
-          </el-form-item>
-          <el-form-item label="考试说明">
-            <el-input v-model="examForm.intro" type="textarea" :rows="2" />
-          </el-form-item>
-          <el-form-item label="起止时间（最长 7 天）" required>
-            <el-date-picker
-              v-model="examForm.range"
-              type="datetimerange"
-              start-placeholder="开始"
-              end-placeholder="结束"
-              style="width: 100%"
+          <div v-if="!cl.joined && !cl.manageable" class="join-bar">
+            <el-input
+              v-model="joinCode"
+              placeholder="输入邀请码加入班级"
+              style="width: 240px"
+              maxlength="8"
+              @keyup.enter="join"
             />
-          </el-form-item>
-          <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
-            <el-input-number v-model="examForm.hiddenDays" :min="0" :max="7" />
-          </el-form-item>
-          <el-form-item label="考试题目（从题库多选）" required>
-            <el-select v-model="examForm.selectedProblems" multiple filterable style="width: 100%">
-              <el-option
-                v-for="p in problemOptions"
-                :key="p.id"
-                :value="p.id"
-                :label="`#${p.id} ${p.title}`"
+            <el-button type="primary" :loading="joining" @click="join">加入班级</el-button>
+          </div>
+        </el-card>
+
+        <div class="section-switch">
+          <el-radio-group v-model="section" size="large">
+            <el-radio-button value="assignments">作业</el-radio-button>
+            <el-radio-button value="exams">考试</el-radio-button>
+            <el-radio-button v-if="cl.members" value="members">学生</el-radio-button>
+          </el-radio-group>
+        </div>
+
+        <el-card>
+          <template v-if="section === 'assignments'">
+            <el-alert
+              v-if="!assignmentsVisible"
+              title="加入班级后才能查看和完成作业"
+              type="info"
+              :closable="false"
+            />
+            <template v-else>
+              <el-table
+                :data="assignments"
+                style="cursor: pointer"
+                @row-click="(row: AssignmentListItem) => router.push(`/assignments/${row.id}`)"
+              >
+                <el-table-column prop="title" label="作业" min-width="220" />
+                <el-table-column prop="intro" label="说明" min-width="220">
+                  <template #default="{ row }">{{ row.intro || '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="problem_count" label="题数" width="90" />
+                <el-table-column label="布置时间" width="200">
+                  <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+                </el-table-column>
+              </el-table>
+              <el-empty v-if="!assignments.length" description="还没有作业" :image-size="60" />
+            </template>
+          </template>
+
+          <template v-else-if="section === 'exams'">
+            <el-table
+              v-if="examsVisible"
+              :data="exams"
+              style="cursor: pointer"
+              @row-click="openExam"
+            >
+              <el-table-column label="状态" width="100">
+                <template #default="{ row }">
+                  <el-tag :type="row.status === 'running' ? 'success' : row.status === 'scheduled' ? 'warning' : 'info'">
+                    {{ row.status === 'running' ? '进行中' : row.status === 'scheduled' ? '未开始' : '已结束' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="title" label="考试" min-width="200" />
+              <el-table-column label="时间" min-width="280">
+                <template #default="{ row }">
+                  {{ new Date(row.start).toLocaleString('zh-CN', { hour12: false }) }} ~
+                  {{ new Date(row.end).toLocaleString('zh-CN', { hour12: false }) }}
+                </template>
+              </el-table-column>
+              <el-table-column prop="problem_count" label="题数" width="80" />
+            </el-table>
+            <el-alert v-else title="加入班级后才能查看考试" type="info" :closable="false" />
+            <el-empty v-if="examsVisible && !exams.length" description="还没有考试" :image-size="60" />
+          </template>
+
+          <template v-else>
+            <el-table :data="cl.members">
+              <el-table-column prop="uid" label="ID" width="100" />
+              <el-table-column prop="username" label="用户名" min-width="160" />
+              <el-table-column label="身份" width="200">
+                <template #default="{ row }">
+                  <el-tag v-if="row.is_owner" size="small" type="warning">建班人</el-tag>
+                  <el-select
+                    v-else-if="cl.manageable"
+                    :model-value="row.role"
+                    size="small"
+                    @change="(v: string) => changeMemberRole(row as ClassMember, v)"
+                  >
+                    <el-option value="admin" label="班级管理员" />
+                    <el-option value="member" label="普通成员" />
+                  </el-select>
+                  <el-tag v-else size="small" :type="row.role === 'admin' ? 'success' : 'info'">
+                    {{ row.role === 'admin' ? '班级管理员' : '成员' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="加入时间" width="200">
+                <template #default="{ row }">{{ fmtDate(row.joined_at) }}</template>
+              </el-table-column>
+            </el-table>
+            <div v-if="cl.manageable" class="import">
+              <el-input
+                v-model="importText"
+                type="textarea"
+                :rows="2"
+                placeholder="批量导入：输入已注册用户名，用空格 / 逗号 / 换行分隔"
               />
-            </el-select>
-          </el-form-item>
-        </el-form>
-        <template #footer>
-          <el-button @click="showExam = false">取消</el-button>
-          <el-button type="primary" :loading="creatingExam" @click="createExam">创建</el-button>
-        </template>
-      </el-dialog>
-    </template>
+              <el-button type="primary" :loading="importing" @click="importMembers">导入成员</el-button>
+            </div>
+          </template>
+        </el-card>
+      </div>
+
+      <template #aside>
+        <el-card class="aside-card">
+          <template #header><span>班级信息</span></template>
+          <div class="info-line"><span>成员</span><b>{{ cl.members?.length ?? '—' }}</b></div>
+          <div class="info-line"><span>作业</span><b>{{ assignmentsVisible ? assignments.length : '—' }}</b></div>
+          <div class="info-line"><span>考试</span><b>{{ examsVisible ? exams.length : '—' }}</b></div>
+          <div class="info-line"><span>创建时间</span><b class="small">{{ fmtDate(cl.created_at) }}</b></div>
+        </el-card>
+
+        <el-card v-if="cl.manageable" class="aside-card">
+          <template #header><span>管理</span></template>
+          <div class="entry-actions">
+            <el-button type="primary" style="width: 100%" @click="showCreateAssignment = true">布置作业</el-button>
+            <el-button type="success" plain style="width: 100%" @click="showExam = true; loadProblemOptions()">发起考试</el-button>
+            <el-button style="width: 100%" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
+            <el-button type="warning" plain style="width: 100%" @click="regenInvite">重置邀请码</el-button>
+            <el-button
+              :disabled="togglingPrivate"
+              type="info"
+              plain
+              style="width: 100%"
+              title="仅建班人与 root 可切换"
+              @click="togglePrivate"
+            >
+              {{ cl.private ? '切换为公开班' : '切换为私密班' }}
+            </el-button>
+          </div>
+          <div class="dim tip">公开班所有人可见；私密班仅成员与 root/admin 可见</div>
+        </el-card>
+
+        <el-card v-else-if="cl.joined" class="aside-card">
+          <template #header><span>管理</span></template>
+          <el-button type="danger" plain style="width: 100%" @click="leave">退出班级</el-button>
+        </el-card>
+      </template>
+    </PageShell>
+
+    <el-dialog v-model="showCreateAssignment" title="布置作业" width="480">
+      <el-form label-position="top">
+        <el-form-item label="作业名称" required>
+          <el-input v-model="assignmentForm.title" maxlength="64" placeholder="如：第三章 循环练习" />
+        </el-form-item>
+        <el-form-item label="作业说明">
+          <el-input v-model="assignmentForm.intro" type="textarea" :rows="2" placeholder="选填" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreateAssignment = false">取消</el-button>
+        <el-button type="primary" :loading="creatingAssignment" @click="createAssignment">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showExam" title="发起班级考试" width="560">
+      <el-form label-position="top">
+        <el-form-item label="考试名称" required>
+          <el-input v-model="examForm.title" maxlength="64" />
+        </el-form-item>
+        <el-form-item label="考试说明">
+          <el-input v-model="examForm.intro" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="起止时间（最长 7 天）" required>
+          <el-date-picker
+            v-model="examForm.range"
+            type="datetimerange"
+            start-placeholder="开始"
+            end-placeholder="结束"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
+          <el-input-number v-model="examForm.hiddenDays" :min="0" :max="7" />
+        </el-form-item>
+        <el-form-item label="考试题目（从题库多选）" required>
+          <el-select v-model="examForm.selectedProblems" multiple filterable style="width: 100%">
+            <el-option
+              v-for="p in problemOptions"
+              :key="p.id"
+              :value="p.id"
+              :label="`#${p.id} ${p.title}`"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showExam = false">取消</el-button>
+        <el-button type="primary" :loading="creatingExam" @click="createExam">创建</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <style scoped>
-.head {
+.title-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-}
-
-.title {
-  font-weight: 600;
-  font-size: 17px;
-}
-
-.actions {
-  display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.big-title {
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .intro {
-  margin: 0 0 8px;
+  margin: 10px 0 4px;
   color: #606266;
+}
+
+.meta {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .join-bar {
@@ -421,8 +457,35 @@ onMounted(() => {
   margin-top: 16px;
 }
 
-.block {
+.section-switch {
+  margin: 16px 0;
+}
+
+.aside-card + .aside-card {
   margin-top: 16px;
+}
+
+.info-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 14px;
+  color: #606266;
+}
+
+.info-line b.small {
+  font-size: 13px;
+}
+
+.entry-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.tip {
+  margin-top: 8px;
 }
 
 .import {
@@ -431,5 +494,10 @@ onMounted(() => {
   flex-direction: column;
   gap: 8px;
   align-items: flex-start;
+}
+
+.dim {
+  color: #909399;
+  font-size: 13px;
 }
 </style>

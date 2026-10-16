@@ -91,6 +91,23 @@ func (r *Repo) RemoveAssignmentProblem(ctx context.Context, id, pid int64) error
 	return err
 }
 
+// SetAssignmentProblems 整体替换作业题目清单（含顺序）——「调整题目」弹窗一次保存
+// 增删与拖动排序；调用方需已做班级管理权限校验。
+func (r *Repo) SetAssignmentProblems(ctx context.Context, id int64, pids []int64) error {
+	if pids == nil {
+		pids = []int64{}
+	}
+	res, err := r.db.Collection("assignments").UpdateOne(ctx,
+		bson.M{"_id": id}, bson.M{"$set": bson.M{"problems": pids}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
 // ProgressCell 某学生在某题的做题情况。
 type ProgressCell struct {
 	Tries   int

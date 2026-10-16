@@ -79,6 +79,47 @@ func (h *Handlers) ListClassAssignments(c *gin.Context) {
 	ok(c, gin.H{"visible": true, "list": items})
 }
 
+// SetAssignmentProblems 整体保存作业题目清单（顺序即展示顺序）。
+// 「调整题目」弹窗一次保存增删与拖动排序；pids 为最终清单。
+func (h *Handlers) SetAssignmentProblems(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Pids []int64 `json:"pids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	ctx := c.Request.Context()
+	a, err := h.repo.GetAssignment(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "作业不存在")
+		return
+	}
+	cl, cerr := h.repo.GetClass(ctx, a.ClassID)
+	if cerr != nil || !h.classManageable(c, cl) {
+		fail(c, http.StatusForbidden, "仅班级管理员可调整作业题目")
+		return
+	}
+	// 去重并保持给定顺序
+	seen := map[int64]bool{}
+	pids := make([]int64, 0, len(req.Pids))
+	for _, pid := range req.Pids {
+		if pid > 0 && !seen[pid] {
+			seen[pid] = true
+			pids = append(pids, pid)
+		}
+	}
+	if err := h.repo.SetAssignmentProblems(ctx, id, pids); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"count": len(pids)})
+}
+
 // GetAssignmentDetail 作业详情（题目清单按视角带锁题信息）。
 func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 	id, okID := parseID(c, "id")
@@ -236,23 +277,30 @@ func (h *Handlers) AssignmentProgress(c *gin.Context) {
 		fail(c, http.StatusNotFound, "作业不存在")
 		return
 	}
+	if !h.assignmentAccessible(ctx, a.ClassID, uid, role, logged) {
+		fail(c, http.StatusForbidden, "加入班级后才能查看")
+		return
+	}
 	cl, cerr := h.repo.GetClass(ctx, a.ClassID)
-	if cerr != nil || !h.classManageable(c, cl) {
-		fail(c, http.StatusForbidden, "仅班级管理员可查看完成情况")
+	if cerr != nil {
+		fail(c, http.StatusInternalServerError, "读取班级失败")
 		return
 	}
-	_ = uid
-	_ = role
-	_ = logged
+	manage := h.classManageable(c, cl)
 
-	members, err := h.repo.ListMembers(ctx, a.ClassID)
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取成员失败")
-		return
-	}
-	uids := make([]int64, 0, len(members))
-	for _, m := range members {
-		uids = append(uids, m.UID)
+	uids := make([]int64, 0, 8)
+	if manage {
+		members, err := h.repo.ListMembers(ctx, a.ClassID)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取成员失败")
+			return
+		}
+		for _, m := range members {
+			uids = append(uids, m.UID)
+		}
+	} else {
+		// 学生视角：只统计自己（用于「我的完成进度」）
+		uids = append(uids, uid)
 	}
 	rows, err := h.repo.AssignmentProgress(ctx, a, uids)
 	if err != nil {
