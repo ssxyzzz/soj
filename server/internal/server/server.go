@@ -36,6 +36,7 @@ func Run(ctx context.Context, deps *Deps) {
 		sandbox:     deps.Sandbox,
 		rank:        newRankCache(deps.Repo),
 		limiter:     newRateLimiter(),
+		idents:      newIdentCache(),
 		leaderCache: map[string]leaderEntry{},
 	}
 
@@ -48,34 +49,34 @@ func Run(ctx context.Context, deps *Deps) {
 
 		api.POST("/auth/register", h.Register)
 		api.POST("/auth/login", h.Login)
-		api.GET("/me", AuthRequired(cfg), h.Me)
+		api.GET("/me", AuthRequired(h), h.Me)
 
-		api.GET("/problems", AuthOptional(cfg), h.ListProblems)
-		api.GET("/problems/:id", AuthOptional(cfg), h.GetProblem)
-		api.GET("/problems/:id/submissions", AuthRequired(cfg), h.ListProblemSubmissions)
-		api.GET("/problems/:id/my-submissions", AuthRequired(cfg), h.MyProblemSubmissions)
+		api.GET("/problems", AuthOptional(h), h.ListProblems)
+		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)
+		api.GET("/problems/:id/submissions", AuthRequired(h), h.ListProblemSubmissions)
+		api.GET("/problems/:id/my-submissions", AuthRequired(h), h.MyProblemSubmissions)
 
-		api.POST("/submissions", AuthRequired(cfg), h.CreateSubmission)
-		// 提交记录总表仅 admin+（学生查自己的历史走题目页「我的提交」）
-		api.GET("/submissions", AuthRequired(cfg), RequireRole(repo.RoleAdmin, repo.RoleRoot), h.ListSubmissions)
-		api.GET("/submissions/:id", AuthOptional(cfg), h.GetSubmission)
+		api.POST("/submissions", AuthRequired(h), h.CreateSubmission)
+		// 提交记录总表需「查看全部提交」权限位（学生查自己的历史走题目页「我的提交」）
+		api.GET("/submissions", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.ListSubmissions)
+		api.GET("/submissions/:id", AuthOptional(h), h.GetSubmission)
 
 		api.GET("/rank", h.Rank)
 		api.GET("/notice", h.GetNotice)
 
 		// 比赛
-		api.GET("/contests", AuthOptional(cfg), h.ListContests)
-		api.GET("/contests/:id", AuthOptional(cfg), h.ContestDetail)
+		api.GET("/contests", AuthOptional(h), h.ListContests)
+		api.GET("/contests/:id", AuthOptional(h), h.ContestDetail)
 
 		// 班级：列表公开；详情公开（成员/邀请码按身份返回）；其余需登录
-		api.GET("/classes", AuthOptional(cfg), h.ListClasses)
-		api.GET("/classes/:id", AuthOptional(cfg), h.GetClass)
-		api.GET("/classes/:id/assignments", AuthOptional(cfg), h.ListClassAssignments)
+		api.GET("/classes", AuthOptional(h), h.ListClasses)
+		api.GET("/classes/:id", AuthOptional(h), h.GetClass)
+		api.GET("/classes/:id/assignments", AuthOptional(h), h.ListClassAssignments)
 
-		authed := api.Group("", AuthRequired(cfg))
+		authed := api.Group("", AuthRequired(h))
 		{
 			authed.GET("/me/classes", h.MyClasses)
-			authed.POST("/classes", RequireRole(repo.RoleAdmin, repo.RoleRoot), h.CreateClass)
+			authed.POST("/classes", RequirePerm(repo.PermClassCreate), h.CreateClass)
 			authed.POST("/classes/:id/join", h.JoinClass)
 			authed.POST("/classes/join-by-code", h.JoinByCode)
 			authed.POST("/classes/:id/leave", h.LeaveClass)
@@ -116,18 +117,23 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
 			authed.PATCH("/exams/:id/intro", h.SetExamIntro)
 
-			// 题目隐藏（root 任意题；admin 仅自己导入的题，handler 内校验）
-			authed.PATCH("/problems/:id/hidden", RequireRole(repo.RoleAdmin, repo.RoleRoot), h.SetProblemHidden)
-			authed.PATCH("/problems/:id/statement", RequireRole(repo.RoleAdmin, repo.RoleRoot), h.SetProblemStatement)
+			// 题目编辑：edit.all 或 edit.own（属主校验在 handler 内）
+			authed.PATCH("/problems/:id/hidden", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemHidden)
+			authed.PATCH("/problems/:id/statement", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemStatement)
 
-			// 管理端：仅 root
-			adminG := authed.Group("/admin", RequireRole(repo.RoleRoot))
+			// 管理端：按权限位鉴权（可授予自定义角色）；角色管理硬编码 root 不下放
+			adminG := authed.Group("/admin")
 			{
-				adminG.GET("/users", h.AdminListUsers)
-				adminG.POST("/users", h.AdminCreateUser)
-				adminG.PATCH("/users/:id", h.AdminUpdateUser)
-				adminG.GET("/settings", h.GetSettings)
-				adminG.PUT("/settings", h.UpdateSettings)
+				adminG.GET("/users", RequirePerm(repo.PermAdminUserManage), h.AdminListUsers)
+				adminG.POST("/users", RequirePerm(repo.PermAdminUserManage), h.AdminCreateUser)
+				adminG.PATCH("/users/:id", RequirePerm(repo.PermAdminUserManage), h.AdminUpdateUser)
+				adminG.GET("/settings", RequirePerm(repo.PermAdminSettings), h.GetSettings)
+				adminG.PUT("/settings", RequirePerm(repo.PermAdminSettings), h.UpdateSettings)
+				// 角色读取放宽到用户管理员（改角色下拉需要角色清单）；增删改硬编码 root 不下放
+				adminG.GET("/roles", RequirePerm(repo.PermAdminUserManage), h.AdminListRoles)
+				adminG.POST("/roles", RequireRoot(), h.AdminCreateRole)
+				adminG.PATCH("/roles/:id", RequireRoot(), h.AdminUpdateRole)
+				adminG.DELETE("/roles/:id", RequireRoot(), h.AdminDeleteRole)
 			}
 		}
 	}

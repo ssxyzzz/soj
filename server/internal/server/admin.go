@@ -49,8 +49,11 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 	if role == "" {
 		role = repo.RoleDefault
 	}
-	if !repo.ValidRoles[role] {
-		fail(c, http.StatusBadRequest, "角色非法")
+	if _, err := h.repo.GetRole(c.Request.Context(), role); repo.IsNotFound(err) {
+		fail(c, http.StatusBadRequest, "角色不存在")
+		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "读取角色失败")
 		return
 	}
 	nickname := req.Nickname
@@ -90,8 +93,11 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "初始管理员（ID=1）的 root 角色受保护，不可修改")
 			return
 		}
-		if !repo.ValidRoles[*req.Role] {
-			fail(c, http.StatusBadRequest, "角色非法")
+		if _, err := h.repo.GetRole(c.Request.Context(), *req.Role); repo.IsNotFound(err) {
+			fail(c, http.StatusBadRequest, "角色不存在")
+			return
+		} else if err != nil {
+			fail(c, http.StatusInternalServerError, "读取角色失败")
 			return
 		}
 		set["role"] = *req.Role
@@ -122,6 +128,9 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		}
 		fail(c, http.StatusInternalServerError, "更新失败")
 		return
+	}
+	if req.Role != nil {
+		h.idents.flush() // 角色变更即时生效（不等缓存 TTL）
 	}
 	ok(c, gin.H{"updated": id})
 }

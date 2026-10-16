@@ -19,9 +19,10 @@ body {
 }
 
 .page {
-  max-width: 1080px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 16px;
+  /* 左右不留内边距：与 PageShell（1280px 容器 + el-main 20px 内边距）左右边缘对齐 */
+  padding: 16px 0;
 }
 
 .mono {

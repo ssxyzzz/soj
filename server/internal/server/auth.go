@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"regexp"
@@ -17,6 +18,17 @@ var usernameRE = regexp.MustCompile(`^[a-zA-Z0-9_]{3,32}$`)
 
 func userJSON(u *repo.User) gin.H {
 	return gin.H{"id": u.ID, "username": u.Username, "nickname": u.Nickname, "role": u.Role}
+}
+
+// userWithPermsJSON 登录态响应用：附生效权限位（root 展开为全目录，前端据此显隐入口）。
+func (h *Handlers) userWithPermsJSON(ctx context.Context, u *repo.User) gin.H {
+	perms := []string{}
+	if role, err := h.repo.GetRole(ctx, u.Role); err == nil {
+		perms = repo.EffectivePerms(role)
+	}
+	j := userJSON(u)
+	j["perms"] = perms
+	return j
 }
 
 func (h *Handlers) Register(c *gin.Context) {
@@ -60,12 +72,13 @@ func (h *Handlers) Register(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "创建用户失败")
 		return
 	}
-	token, err := auth.GenerateToken(uid, req.Username, repo.RoleDefault, h.cfg.JWTSecret)
+	token, err := auth.GenerateToken(uid, req.Username, h.cfg.JWTSecret)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
-	ok(c, gin.H{"token": token, "user": userJSON(&repo.User{ID: uid, Username: req.Username, Nickname: nickname, Role: repo.RoleDefault})})
+	u := &repo.User{ID: uid, Username: req.Username, Nickname: nickname, Role: repo.RoleDefault}
+	ok(c, gin.H{"token": token, "user": h.userWithPermsJSON(c.Request.Context(), u)})
 }
 
 func (h *Handlers) Login(c *gin.Context) {
@@ -87,12 +100,13 @@ func (h *Handlers) Login(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
-	token, err := auth.GenerateToken(u.ID, u.Username, u.Role, h.cfg.JWTSecret)
+	token, err := auth.GenerateToken(u.ID, u.Username, h.cfg.JWTSecret)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
-	ok(c, gin.H{"token": token, "user": userJSON(u)})
+	h.idents.flush() // 登录时失效缓存，确保拿到最新角色/昵称
+	ok(c, gin.H{"token": token, "user": h.userWithPermsJSON(c.Request.Context(), u)})
 }
 
 func (h *Handlers) Me(c *gin.Context) {
@@ -106,7 +120,7 @@ func (h *Handlers) Me(c *gin.Context) {
 		fail(c, http.StatusNotFound, "用户不存在")
 		return
 	}
-	ok(c, userJSON(u))
+	ok(c, h.userWithPermsJSON(c.Request.Context(), u))
 }
 
 // parseID 解析路径参数中的数字 ID。

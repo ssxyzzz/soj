@@ -126,7 +126,7 @@ onMounted(load)
       </el-card>
 
     <template #aside>
-      <el-card v-if="userStore.role === 'root'" class="aside-card">
+      <el-card v-if="userStore.can('contest.bank.create')" class="aside-card">
         <template #header><span>管理</span></template>
         <el-button type="primary" style="width: 100%" @click="showCreate = true">创建主题库比赛</el-button>
       </el-card>

@@ -134,7 +134,7 @@ onMounted(() => {
       </el-card>
 
     <template #aside>
-      <el-card v-if="userStore.role === 'admin' || userStore.role === 'root'" class="aside-card">
+      <el-card v-if="userStore.can('problem.create')" class="aside-card">
         <template #header><span>题目管理</span></template>
         <div class="aside-actions">
           <el-button type="primary" plain style="width: 100%" @click="comingSoon">新增题目</el-button>

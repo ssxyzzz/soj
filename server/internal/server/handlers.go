@@ -28,6 +28,7 @@ type Handlers struct {
 	store   testdata.Provider // 测试数据读取（题目样例展示用）
 	rank    *rankCache
 	limiter *rateLimiter
+	idents  *identCache
 
 	leaderMu    sync.Mutex
 	leaderCache map[string]leaderEntry

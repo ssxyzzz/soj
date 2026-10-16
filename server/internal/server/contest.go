@@ -113,7 +113,7 @@ func (l *rateLimiter) allow(uid int64, limit int, now time.Time) bool {
 
 // CreateContest 创建主题库比赛（仅 root；班级赛事走考试接口）。
 func (h *Handlers) CreateContest(c *gin.Context) {
-	uid, _, role, _ := currentUser(c)
+	uid, _, _, _ := currentUser(c)
 	var req struct {
 		Title      string    `json:"title" binding:"required"`
 		Intro      string    `json:"intro"`
@@ -147,8 +147,8 @@ func (h *Handlers) CreateContest(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "比赛说明过长（上限 256KB）")
 		return
 	}
-	if role != repo.RoleRoot {
-		fail(c, http.StatusForbidden, "仅 root 可创建主题库比赛")
+	if !hasPerm(c, repo.PermContestBankCreate) {
+		fail(c, http.StatusForbidden, "需要「创建主题库比赛」权限")
 		return
 	}
 
@@ -334,7 +334,7 @@ func (h *Handlers) SetContestIntro(c *gin.Context) {
 
 // SubmitToContest 比赛页提交入口（赛时唯一接受该题提交的通道）。
 func (h *Handlers) SubmitToContest(c *gin.Context) {
-	uid, uname, role, _ := currentUser(c)
+	uid, uname, _, _ := currentUser(c)
 	contestID, okID := parseID(c, "id")
 	if !okID {
 		return
@@ -375,8 +375,8 @@ func (h *Handlers) SubmitToContest(c *gin.Context) {
 		return
 	}
 
-	// default 角色限速（练习与比赛通用）
-	if role == repo.RoleDefault {
+	// 全局限速；持有「提交不限速」权限位者豁免
+	if !hasPerm(c, repo.PermSubmissionRateExempt) {
 		s, err := h.repo.GetSystemSettings(ctx)
 		if err == nil && !h.limiter.allow(uid, s.RateLimitPerMinute, time.Now()) {
 			fail(c, http.StatusTooManyRequests,

@@ -65,7 +65,7 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		return
 	}
 	lk := lockMap[p.ID]
-	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	privileged := hasPerm(c, repo.PermProblemViewAll)
 	if p.Hidden && !privileged && !(lk != nil && lk.Phase == "running" && lk.Bank) {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
@@ -83,8 +83,8 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		return
 	}
 
-	// default 角色全局限速（练习与比赛通用，root 后台可调）
-	if role == repo.RoleDefault {
+	// 全局限速（练习与比赛通用，root 后台可调）；持有「提交不限速」权限位者豁免
+	if !hasPerm(c, repo.PermSubmissionRateExempt) {
 		s, err := h.repo.GetSystemSettings(ctx)
 		if err == nil && !h.limiter.allow(uid, s.RateLimitPerMinute, time.Now()) {
 			fail(c, http.StatusTooManyRequests,
@@ -111,11 +111,9 @@ func (h *Handlers) ListSubmissions(c *gin.Context) {
 	if v, err := strconv.ParseInt(c.Query("problem_id"), 10, 64); err == nil {
 		problemID = v
 	}
-	// 隐藏期内的比赛提交只对 root 可见（组织者经比赛页查看）
-	_, _, role, _ := currentUser(c)
-	includeContest := role == repo.RoleRoot
-
-	list, total, err := h.repo.ListSubmissions(c.Request.Context(), userID, problemID, page, pageSize, includeContest)
+	// 隐藏期赛事提交的可见性已并入「查看全部提交」权限位（2026-10-16 定稿），
+	// 路由 RequirePerm 把门后这里不再过滤
+	list, total, err := h.repo.ListSubmissions(c.Request.Context(), userID, problemID, page, pageSize)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取提交记录失败")
 		return
@@ -127,10 +125,10 @@ func (h *Handlers) ListSubmissions(c *gin.Context) {
 	ok(c, gin.H{"list": items, "total": total})
 }
 
-// GetSubmission 提交详情。可见性规则（2026-10-15 定稿）：
-//   - 隐藏期内的比赛/考试提交：仅 root 与创建者可见；
+// GetSubmission 提交详情。可见性规则（隐藏期可见性 2026-10-16 并入 submission.view.all）：
+//   - 隐藏期内的比赛/考试提交：创建者（组织者）与持「查看全部提交」权限位者可见；
 //   - 赛事锁题期间，赛前提交对 default 不回代码（防抄，含本人），优先级最高；
-//   - 代码：本人 / admin / root 恒可；其他人拿到该题满分后解锁查看。
+//   - 代码：本人或持「查看全部提交」权限位者恒可；其他人拿到该题满分后解锁查看。
 func (h *Handlers) GetSubmission(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -148,19 +146,19 @@ func (h *Handlers) GetSubmission(c *gin.Context) {
 	}
 
 	uid, _, role, logged := currentUser(c) // 挂了 AuthOptional
-	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	privileged := hasPerm(c, repo.PermSubmissionViewAll)
 	masked := false
 
 	if s.ContestID != 0 {
 		ct, err := h.repo.GetContest(ctx, s.ContestID)
-		if err == nil && !ct.Published && !(logged && (uid == ct.CreatedBy || role == repo.RoleRoot)) {
+		if err == nil && !ct.Published && !(logged && (uid == ct.CreatedBy || privileged)) {
 			fail(c, http.StatusNotFound, "该提交来自隐藏期内的比赛")
 			return
 		}
 	}
 	if s.ExamID != 0 {
 		e, err := h.repo.GetExam(ctx, s.ExamID)
-		if err == nil && !e.Published && !(logged && (uid == e.CreatedBy || role == repo.RoleRoot)) {
+		if err == nil && !e.Published && !(logged && (uid == e.CreatedBy || privileged)) {
 			fail(c, http.StatusNotFound, "该提交来自隐藏期内的考试")
 			return
 		}
@@ -199,8 +197,8 @@ func (h *Handlers) ListProblemSubmissions(c *gin.Context) {
 	if !okID {
 		return
 	}
-	uid, _, role, logged := currentUser(c)
-	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	uid, _, _, logged := currentUser(c)
+	privileged := hasPerm(c, repo.PermSubmissionViewAll)
 	solved := false
 	if logged {
 		if privileged {

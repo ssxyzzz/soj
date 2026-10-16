@@ -53,13 +53,13 @@ func (h *Handlers) CreateClass(c *gin.Context) {
 //   - 登录用户可见公开班 + 自己加入的私密班（带 joined 标记）；
 //   - 游客仅公开班。
 func (h *Handlers) ListClasses(c *gin.Context) {
-	uid, _, role, logged := currentUser(c)
+	uid, _, _, logged := currentUser(c)
 	cards, err := h.repo.ListClasses(c.Request.Context())
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取班级失败")
 		return
 	}
-	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	privileged := hasPerm(c, repo.PermClassViewAll)
 	mine := map[int64]bool{}
 	if logged && !privileged {
 		ids, err := h.repo.MyClassIDs(c.Request.Context(), uid)
@@ -123,12 +123,12 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		return
 	}
 
-	uid, _, role, logged := currentUser(c)
+	uid, _, _, logged := currentUser(c)
 	isMember := false
 	if logged {
 		isMember, _ = h.repo.IsMember(ctx, id, uid)
 	}
-	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	privileged := hasPerm(c, repo.PermClassViewAll)
 	// 私密班对非成员隐藏存在本身
 	if cl.Private && !privileged && !isMember {
 		fail(c, http.StatusNotFound, "班级不存在")

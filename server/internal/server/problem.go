@@ -38,7 +38,7 @@ func atoiDefault(s string, def int) int {
 func (h *Handlers) ListProblems(c *gin.Context) {
 	uid, _, role, _ := currentUser(c)
 	page, pageSize := queryPage(c)
-	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	privileged := hasPerm(c, repo.PermProblemViewAll)
 	// 题库搜索：标题包含（忽略大小写）或 ID 精确匹配
 	q := strings.TrimSpace(c.Query("q"))
 	ql := strings.ToLower(q)
@@ -111,7 +111,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	}
 
 	uid, _, role, logged := currentUser(c)
-	privileged := role == repo.RoleAdmin || role == repo.RoleRoot
+	privileged := hasPerm(c, repo.PermProblemViewAll)
 	canViewOthers := privileged
 	if logged && !privileged {
 		if solved, err := h.repo.HasSolved(ctx, uid, id); err == nil && solved {
@@ -167,8 +167,8 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"samples":            sampleItems,
 		"has_subtasks":       len(p.Subtasks) > 0,
 		"hidden":             p.Hidden,
-		"can_set_hidden":     role == repo.RoleRoot || (role == repo.RoleAdmin && p.CreatedBy == uid),
-		"can_edit_statement": role == repo.RoleRoot || (role == repo.RoleAdmin && p.CreatedBy == uid),
+		"can_set_hidden":     h.problemEditable(c, p),
+		"can_edit_statement": h.problemEditable(c, p),
 		"can_view_others":    canViewOthers, // 满分解锁后可在本页查看他人代码
 	}
 	if lk != nil {
@@ -202,15 +202,15 @@ func (h *Handlers) SetProblemStatement(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "题面过长（上限 256KB）")
 		return
 	}
-	uid, _, role, _ := currentUser(c)
+	_, _, _, _ = currentUser(c)
 	ctx := c.Request.Context()
 	p, err := h.repo.GetProblem(ctx, id)
 	if repo.IsNotFound(err) {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}
-	if role != repo.RoleRoot && !(role == repo.RoleAdmin && p.CreatedBy == uid) {
-		fail(c, http.StatusForbidden, "只有 root 或题目导入者可以编辑题面")
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
 		return
 	}
 	if err := h.repo.SetProblemStatement(ctx, id, req.Statement); err != nil {
@@ -233,15 +233,15 @@ func (h *Handlers) SetProblemHidden(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	uid, _, role, _ := currentUser(c)
+	_, _, _, _ = currentUser(c)
 	ctx := c.Request.Context()
 	p, err := h.repo.GetProblem(ctx, id)
 	if repo.IsNotFound(err) {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}
-	if role != repo.RoleRoot && !(role == repo.RoleAdmin && p.CreatedBy == uid) {
-		fail(c, http.StatusForbidden, "只有 root 或题目导入者可以设置隐藏")
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
 		return
 	}
 	if err := h.repo.SetProblemHidden(ctx, id, *req.Hidden); err != nil {
@@ -249,4 +249,16 @@ func (h *Handlers) SetProblemHidden(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"id": id, "hidden": *req.Hidden})
+}
+
+// problemEditable 题目编辑判定：edit.all 任意题；edit.own 仅题目导入者。
+func (h *Handlers) problemEditable(c *gin.Context, p *repo.Problem) bool {
+	if hasPerm(c, repo.PermProblemEditAll) {
+		return true
+	}
+	if !hasPerm(c, repo.PermProblemEditOwn) {
+		return false
+	}
+	uid, _, _, logged := currentUser(c)
+	return logged && p.CreatedBy == uid
 }

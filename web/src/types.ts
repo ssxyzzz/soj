@@ -10,6 +10,7 @@ export interface User {
   username: string
   nickname: string
   role: string
+  perms?: string[] // 生效权限位（root 展开为全目录）；仅登录态接口返回
 }
 
 export interface LoginResult {
@@ -179,6 +180,22 @@ export interface AdminUser {
   username: string
   nickname: string
   role: string
+}
+
+// ---------- 角色与权限位（v0.4.7） ----------
+
+export interface PermInfo {
+  id: string
+  label: string
+  desc: string
+}
+
+export interface RoleInfo {
+  id: string
+  name: string
+  perms: string[]
+  builtin: boolean
+  user_count: number
 }
 
 // ---------- 比赛（v0.4） ----------

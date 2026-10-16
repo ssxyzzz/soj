@@ -1,32 +1,44 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Check, Delete, Edit } from '@element-plus/icons-vue'
 
 import { adminApi } from '@/api'
 import MdEditor from '@/components/MdEditor.vue'
+import { useUserStore } from '@/stores/user'
 import { markdownBytes } from '@/utils/vditor'
-import type { AdminUser } from '@/types'
+import type { AdminUser, PermInfo, RoleInfo } from '@/types'
 
-// 管理后台独立布局（v0.4.6）：左列功能卡点选切换，主列显示对应内容
-const section = ref<'users' | 'notice' | 'settings'>('users')
+const userStore = useUserStore()
 
-// 用户按权限分组展示（root → admin → default），每组独立分页；
-// 搜索关键词同时作用于三组
+// 管理后台独立布局（v0.4.6）：左列功能卡点选切换，主列显示对应内容。
+// 角色管理（v0.4.7）仅 root 可见（后端同样硬编码 root，增删改不可下放）。
+const section = ref<'users' | 'roles' | 'notice' | 'settings'>('users')
+
+// 用户按角色分组展示，分组随角色列表动态生成（root → admin → 自定义 → default）；
+// 搜索关键词同时作用于所有组
 const pageSize = 20
 const keyword = ref('')
 const loading = ref(false)
 
-const ROLE_GROUPS = [
-  { role: 'root', title: '超级管理员' },
-  { role: 'admin', title: '管理员' },
-  { role: 'default', title: '默认用户' },
-] as const
+const roles = ref<RoleInfo[]>([])
+const catalog = ref<PermInfo[]>([])
 
-const groups = reactive<Record<string, { list: AdminUser[]; total: number; page: number }>>({
-  root: { list: [], total: 0, page: 1 },
-  admin: { list: [], total: 0, page: 1 },
-  default: { list: [], total: 0, page: 1 },
+// 展示顺序：root、admin、自定义（按 id）、default（学生组最大放最后）
+const roleGroups = computed<RoleInfo[]>(() => {
+  const pick = (id: string) => roles.value.find((r) => r.id === id)
+  const out: RoleInfo[] = []
+  const root = pick('root')
+  const admin = pick('admin')
+  const def = pick('default')
+  if (root) out.push(root)
+  if (admin) out.push(admin)
+  out.push(...roles.value.filter((r) => !r.builtin))
+  if (def) out.push(def)
+  return out
 })
+
+const groups = reactive<Record<string, { list: AdminUser[]; total: number; page: number }>>({})
 
 const rateLimit = ref(3)
 const savingSettings = ref(false)
@@ -37,10 +49,30 @@ const showCreate = ref(false)
 const creating = ref(false)
 const createForm = reactive({ username: '', password: '', nickname: '', role: 'default' })
 
+// 角色管理：Hydro 风格二维矩阵（权限为行、角色为列），点选即保存
+const permDraft = reactive<Record<string, string[]>>({})
+const showCreateRole = ref(false)
+const creatingRole = ref(false)
+const createRoleForm = reactive({ id: '', name: '', perms: [] as string[] })
+
+function roleName(id: string): string {
+  return roles.value.find((r) => r.id === id)?.name ?? id
+}
+
+async function loadRoles() {
+  const r = await adminApi.listRoles()
+  roles.value = r.list
+  catalog.value = r.catalog
+  for (const role of r.list) {
+    if (!groups[role.id]) groups[role.id] = { list: [], total: 0, page: 1 }
+    permDraft[role.id] = [...role.perms]
+  }
+}
+
 async function load() {
   loading.value = true
   try {
-    await Promise.all(ROLE_GROUPS.map((g) => loadGroup(g.role)))
+    await Promise.all(roleGroups.value.map((g) => loadGroup(g.id)))
   } finally {
     loading.value = false
   }
@@ -54,13 +86,13 @@ async function loadGroup(role: string) {
 }
 
 function search() {
-  for (const g of ROLE_GROUPS) groups[g.role].page = 1
+  for (const g of roleGroups.value) groups[g.id].page = 1
   load()
 }
 
 function resetSearch() {
   keyword.value = ''
-  for (const g of ROLE_GROUPS) groups[g.role].page = 1
+  for (const g of roleGroups.value) groups[g.id].page = 1
   load()
 }
 
@@ -105,7 +137,7 @@ async function saveSettings() {
 
 async function changeRole(row: AdminUser, role: string) {
   await adminApi.updateUser(row.id, { role })
-  ElMessage.success(`已把 ${row.username} 的角色改为 ${role}`)
+  ElMessage.success(`已把 ${row.username} 的角色改为 ${roleName(role)}（${role}）`)
   load()
 }
 
@@ -143,7 +175,65 @@ async function create() {
   }
 }
 
-onMounted(() => {
+// 点选即保存：先调接口，成功后才更新本地草稿；失败勾选自动回弹（拦截器已报错）
+async function togglePerm(role: RoleInfo, perm: string) {
+  const cur = permDraft[role.id] ?? []
+  const next = cur.includes(perm) ? cur.filter((p) => p !== perm) : [...cur, perm]
+  await adminApi.updateRole(role.id, { perms: next })
+  permDraft[role.id] = next
+  await loadRoles()
+}
+
+async function renameRole(role: RoleInfo) {
+  const { value } = await ElMessageBox.prompt('修改角色名称', '改名', {
+    inputValue: role.name,
+    inputPattern: /^.{1,32}$/,
+    inputErrorMessage: '名称需在 1-32 字符',
+  })
+  await adminApi.updateRole(role.id, { name: value })
+  ElMessage.success('已改名')
+  await loadRoles()
+}
+
+async function removeRole(role: RoleInfo) {
+  await ElMessageBox.confirm(
+    `确定删除自定义角色「${role.name}（${role.id}）」？删除后不可恢复。`,
+    '删除角色',
+    { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+  )
+  await adminApi.deleteRole(role.id)
+  ElMessage.success('角色已删除')
+  await loadRoles()
+  load()
+}
+
+async function createRole() {
+  if (!/^[a-z][a-z0-9_]{1,31}$/.test(createRoleForm.id)) {
+    ElMessage.warning('角色 ID 需为 2-32 位小写字母/数字/下划线，且以字母开头')
+    return
+  }
+  if (!createRoleForm.name) {
+    ElMessage.warning('请填写角色名称')
+    return
+  }
+  creatingRole.value = true
+  try {
+    await adminApi.createRole(createRoleForm.id, createRoleForm.name, createRoleForm.perms)
+    ElMessage.success('角色已创建')
+    showCreateRole.value = false
+    createRoleForm.id = ''
+    createRoleForm.name = ''
+    createRoleForm.perms = []
+    await loadRoles()
+  } finally {
+    creatingRole.value = false
+  }
+}
+
+onMounted(async () => {
+  // 无 admin.user.manage 权限位时拉角色清单会 403：角色表留空并继续初始化，
+  // 保证有权限的面板（公告/系统设置）正常加载
+  await loadRoles().catch(() => {})
   load()
   loadSettings()
 })
@@ -159,6 +249,15 @@ onMounted(() => {
       >
         <span class="nav-title">编辑用户</span>
         <span class="nav-sub">搜索 / 建号 / 角色 / 重置密码</span>
+      </div>
+      <div
+        v-if="userStore.role === 'root'"
+        class="nav-item"
+        :class="{ active: section === 'roles' }"
+        @click="section = 'roles'"
+      >
+        <span class="nav-title">角色管理</span>
+        <span class="nav-sub">权限位 / 自定义角色</span>
       </div>
       <div
         class="nav-item"
@@ -200,24 +299,24 @@ onMounted(() => {
         </div>
 
         <el-card
-          v-for="g in ROLE_GROUPS"
-          :key="g.role"
+          v-for="g in roleGroups"
+          :key="g.id"
           class="role-group"
           shadow="never"
         >
           <template #header>
             <div class="group-head">
               <span>
-                {{ g.title }}
-                <el-tag v-if="keyword" size="small" type="info" class="ml8">搜索命中 {{ groups[g.role].total }} 人</el-tag>
+                {{ g.name }}（{{ g.id }}）
+                <el-tag v-if="keyword" size="small" type="info" class="ml8">搜索命中 {{ groups[g.id].total }} 人</el-tag>
               </span>
             </div>
           </template>
-          <el-table v-loading="loading" :data="groups[g.role].list" size="small">
+          <el-table v-loading="loading" :data="groups[g.id].list" size="small">
             <el-table-column prop="id" label="ID" width="90" />
             <el-table-column prop="username" label="用户名" min-width="160" />
             <el-table-column prop="nickname" label="昵称" min-width="160" />
-            <el-table-column label="操作" width="240">
+            <el-table-column label="操作" width="260">
               <template #default="{ row }">
                 <el-tooltip
                   :disabled="row.id !== 1"
@@ -227,36 +326,106 @@ onMounted(() => {
                   <el-select
                     :model-value="row.role"
                     size="small"
-                    style="width: 130px"
+                    style="width: 150px"
                     :disabled="row.id === 1"
                     @change="(v: string) => changeRole(row as AdminUser, v)"
                   >
-                    <el-option value="root" label="设为 root" />
-                    <el-option value="admin" label="设为 admin" />
-                    <el-option value="default" label="设为 default" />
+                    <el-option
+                      v-for="r in roles"
+                      :key="r.id"
+                      :value="r.id"
+                      :label="`${r.name}（${r.id}）`"
+                    />
                   </el-select>
                 </el-tooltip>
                 <el-button size="small" link type="warning" @click="resetPassword(row as AdminUser)">重置密码</el-button>
               </template>
             </el-table-column>
           </el-table>
-          <div v-if="groups[g.role].total > pageSize" class="group-pager">
+          <div v-if="groups[g.id].total > pageSize" class="group-pager">
             <el-pagination
               size="small"
               background
               layout="prev, pager, next"
-              :total="groups[g.role].total"
+              :total="groups[g.id].total"
               :page-size="pageSize"
-              :current-page="groups[g.role].page"
-              @current-change="(p: number) => onGroupPage(g.role, p)"
+              :current-page="groups[g.id].page"
+              @current-change="(p: number) => onGroupPage(g.id, p)"
             />
           </div>
           <el-empty
-            v-if="!groups[g.role].list.length"
-            :description="keyword ? `没有匹配「${keyword}」的${g.title}` : `暂无${g.title}`"
+            v-if="!groups[g.id].list.length"
+            :description="keyword ? `没有匹配「${keyword}」的${g.name}` : `暂无${g.name}`"
             :image-size="40"
           />
         </el-card>
+      </el-card>
+
+      <el-card v-else-if="section === 'roles'">
+        <template #header>
+          <div class="head">
+            <span>角色管理</span>
+            <el-button type="primary" size="small" @click="showCreateRole = true">新建角色</el-button>
+          </div>
+        </template>
+        <el-alert
+          class="role-alert"
+          type="info"
+          :closable="false"
+          show-icon
+          title="角色 = 一组权限位。勾选即保存、对所有挂靠用户即刻生效；root 为代码级超角色不可修改（整列锁定）；删除自定义角色前需先改派其挂靠用户。"
+        />
+
+        <el-table :data="catalog" border size="small" class="perm-matrix">
+          <el-table-column label="权限位" width="200" fixed>
+            <template #default="{ row }">
+              <el-tooltip :content="row.desc" placement="top">
+                <span>{{ row.label }}</span>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column
+            v-for="r in roleGroups"
+            :key="r.id"
+            min-width="130"
+            align="center"
+          >
+            <template #header>
+              <div class="col-head">
+                <div class="col-name">{{ r.name }}</div>
+                <div class="col-meta">
+                  <span class="muted">{{ r.user_count }} 人</span>
+                  <el-tag v-if="r.builtin" size="small" :type="r.id === 'root' ? 'danger' : 'warning'">
+                    {{ r.id === 'root' ? '锁定' : '内置' }}
+                  </el-tag>
+                  <template v-else>
+                    <el-icon class="col-act" title="改名" @click="renameRole(r)"><Edit /></el-icon>
+                    <el-tooltip
+                      :disabled="r.user_count === 0"
+                      content="仍有用户挂靠，请先改派后再删除"
+                      placement="top"
+                    >
+                      <el-icon
+                        class="col-act"
+                        :class="{ 'col-act-disabled': r.user_count > 0 }"
+                        title="删除角色"
+                        @click="r.user_count === 0 && removeRole(r)"
+                      ><Delete /></el-icon>
+                    </el-tooltip>
+                  </template>
+                </div>
+              </div>
+            </template>
+            <template #default="{ row }">
+              <el-icon v-if="r.id === 'root'" class="root-check"><Check /></el-icon>
+              <el-checkbox
+                v-else
+                :model-value="(permDraft[r.id] ?? []).includes(row.id)"
+                @change="togglePerm(r, row.id)"
+              />
+            </template>
+          </el-table-column>
+        </el-table>
       </el-card>
 
       <el-card v-else-if="section === 'notice'">
@@ -269,8 +438,8 @@ onMounted(() => {
 
       <el-card v-else>
         <template #header><span>系统设置</span></template>
-        <el-form label-position="left" label-width="200px" style="max-width: 480px">
-          <el-form-item label="default 用户每分钟提交上限">
+        <el-form label-position="left" label-width="220px" style="max-width: 520px">
+          <el-form-item label="普通用户每分钟提交上限">
             <el-input-number v-model="rateLimit" :min="1" :max="60" />
           </el-form-item>
           <el-form-item>
@@ -292,16 +461,41 @@ onMounted(() => {
           <el-input v-model="createForm.nickname" placeholder="默认与用户名相同" />
         </el-form-item>
         <el-form-item label="角色">
-          <el-radio-group v-model="createForm.role">
-            <el-radio-button value="default">默认</el-radio-button>
-            <el-radio-button value="admin">管理员</el-radio-button>
-            <el-radio-button value="root">超级管理员</el-radio-button>
-          </el-radio-group>
+          <el-select v-model="createForm.role" style="width: 100%">
+            <el-option
+              v-for="r in roles"
+              :key="r.id"
+              :value="r.id"
+              :label="`${r.name}（${r.id}）`"
+            />
+          </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showCreate = false">取消</el-button>
         <el-button type="primary" :loading="creating" @click="create">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showCreateRole" title="新建自定义角色" width="620">
+      <el-form label-position="top">
+        <el-form-item label="角色 ID（创建后不可改）" required>
+          <el-input v-model="createRoleForm.id" placeholder="如 backup_op / author（2-32 位小写字母/数字/下划线）" />
+        </el-form-item>
+        <el-form-item label="角色名称" required>
+          <el-input v-model="createRoleForm.name" placeholder="如 备份员 / 出题老师" maxlength="32" />
+        </el-form-item>
+        <el-form-item label="权限位（创建后可随时调整）">
+          <el-checkbox-group v-model="createRoleForm.perms" class="perm-group">
+            <el-checkbox v-for="p in catalog" :key="p.id" :value="p.id" :title="p.desc">
+              {{ p.label }}
+            </el-checkbox>
+          </el-checkbox-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCreateRole = false">取消</el-button>
+        <el-button type="primary" :loading="creatingRole" @click="createRole">创建</el-button>
       </template>
     </el-dialog>
   </div>
@@ -399,6 +593,9 @@ onMounted(() => {
 
 .group-head {
   font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .group-pager {
@@ -409,6 +606,74 @@ onMounted(() => {
 
 .ml8 {
   margin-left: 8px;
+}
+
+.muted {
+  color: #909399;
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.role-alert {
+  margin-top: 4px;
+}
+
+.perm-matrix {
+  margin-top: 12px;
+}
+
+.perm-matrix :deep(.el-table__cell) {
+  vertical-align: middle;
+}
+
+.col-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.4;
+}
+
+.col-name {
+  font-weight: 600;
+}
+
+.col-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.col-act {
+  cursor: pointer;
+  color: #909399;
+  font-size: 14px;
+}
+
+.col-act:hover {
+  color: #409eff;
+}
+
+.col-act-disabled {
+  color: #c0c4cc;
+  cursor: not-allowed;
+}
+
+.col-act-disabled:hover {
+  color: #c0c4cc;
+}
+
+.root-check {
+  color: #67c23a;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.perm-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
 }
 
 .notice-save {

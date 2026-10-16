@@ -117,10 +117,15 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const role = localStorage.getItem('soj_role')
-  if (to.meta.requiresAdmin && role !== 'root') {
+  // 能力判断与 stores/user.ts 的 can/canAdmin 同规则（守卫早于组件，直接读 localStorage）
+  const perms: string[] = JSON.parse(localStorage.getItem('soj_perms') ?? '[]')
+  const can = (perm: string) => role === 'root' || perms.includes(perm)
+  const canAdmin =
+    role === 'root' || perms.some((p) => ['admin.user.manage', 'admin.settings', 'backup.run', 'backup.keys'].includes(p))
+  if (to.meta.requiresAdmin && !canAdmin) {
     return { path: '/' }
   }
-  if (to.meta.staffOnly && role !== 'admin' && role !== 'root') {
+  if (to.meta.staffOnly && !can('submission.view.all')) {
     return { path: '/' }
   }
   if (to.meta.requiresAuth && !localStorage.getItem('soj_token')) {

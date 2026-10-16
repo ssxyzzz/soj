@@ -135,17 +135,15 @@ func (r *Repo) GetSubmission(ctx context.Context, id int64) (*Submission, error)
 }
 
 // ListSubmissions 按可选条件（uid/pid，0 表示不过滤）分页查询，不含代码字段。
-// includeContest 为 false 时过滤掉未发布比赛的比赛提交（隐藏期内的提交记录不可见）。
-func (r *Repo) ListSubmissions(ctx context.Context, uid, pid int64, page, pageSize int, includeContest bool) ([]*Submission, int64, error) {
+// 仅供提交记录总表使用：路由已按「查看全部提交」权限位把门，不再过滤隐藏期赛事提交
+// （2026-10-16 定稿：隐藏期可见性并入权限位）。
+func (r *Repo) ListSubmissions(ctx context.Context, uid, pid int64, page, pageSize int) ([]*Submission, int64, error) {
 	filter := bson.M{}
 	if uid > 0 {
 		filter["uid"] = uid
 	}
 	if pid > 0 {
 		filter["pid"] = pid
-	}
-	if !includeContest {
-		filter["published"] = true
 	}
 	total, err := r.Submissions.CountDocuments(ctx, filter)
 	if err != nil {

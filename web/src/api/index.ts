@@ -15,10 +15,12 @@ import type {
   ExamListItem,
   LeaderRow,
   LoginResult,
+  PermInfo,
   ProblemDetail,
   ProblemListResult,
   ProgressRow,
   RankItem,
+  RoleInfo,
   Submission,
   SubmissionListResult,
 } from '@/types'
@@ -85,7 +87,7 @@ export const authApi = {
     post<LoginResult>('/auth/login', { username, password }),
   register: (username: string, password: string, nickname: string) =>
     post<LoginResult>('/auth/register', { username, password, nickname }),
-  me: () => get<{ id: number; username: string; nickname: string; role: string }>('/me'),
+  me: () => get<{ id: number; username: string; nickname: string; role: string; perms: string[] }>('/me'),
 }
 
 export const problemApi = {
@@ -166,6 +168,13 @@ export const adminApi = {
     get<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings'),
   updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string }) =>
     put<{ rate_limit_per_minute: number; home_notice: string }>('/admin/settings', patch),
+  // 角色管理（后端硬编码 root，不可下放）
+  listRoles: () => get<{ list: RoleInfo[]; catalog: PermInfo[] }>('/admin/roles'),
+  createRole: (id: string, name: string, permsList: string[]) =>
+    post<{ id: string }>('/admin/roles', { id, name, perms: permsList }),
+  updateRole: (id: string, body: { name?: string; perms?: string[] }) =>
+    patch<{ id: string }>(`/admin/roles/${id}`, body),
+  deleteRole: (id: string) => del<{ deleted: string }>(`/admin/roles/${id}`),
 }
 
 // ---------- 比赛（v0.4） ----------

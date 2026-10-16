@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/auth"
-	"soj/internal/config"
+	"soj/internal/repo"
 )
 
 // CORS 允许跨域（前后端分离本地开发时 vite 代理已同源，这里兜底）。
@@ -24,50 +24,90 @@ func CORS() gin.HandlerFunc {
 	}
 }
 
-// AuthRequired 校验 Bearer Token，通过后把用户信息放入 gin.Context。
-func AuthRequired(cfg *config.Config) gin.HandlerFunc {
+// AuthRequired 校验 Bearer Token，并从数据库加载权威身份（用户名/角色/生效权限位，
+// 带缓存）。角色不信任 token 内容，降权即时生效。
+func AuthRequired(h *Handlers) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-		uid, uname, role, err := auth.ParseToken(token, cfg.JWTSecret)
+		uid, _, err := auth.ParseToken(token, h.cfg.JWTSecret)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录或登录已过期"})
 			return
 		}
+		e, ok := h.loadIdent(c.Request.Context(), uid)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "账号状态异常，请重新登录"})
+			return
+		}
 		c.Set("uid", uid)
-		c.Set("uname", uname)
-		c.Set("role", role)
+		c.Set("uname", e.uname)
+		c.Set("role", e.role)
+		c.Set("perms", e.perms)
 		c.Next()
 	}
 }
 
 // AuthOptional 尝试解析登录态，无论成功与否都放行（用于可选登录的公开接口）。
-func AuthOptional(cfg *config.Config) gin.HandlerFunc {
+func AuthOptional(h *Handlers) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-		if uid, uname, role, err := auth.ParseToken(token, cfg.JWTSecret); err == nil {
-			c.Set("uid", uid)
-			c.Set("uname", uname)
-			c.Set("role", role)
+		if uid, _, err := auth.ParseToken(token, h.cfg.JWTSecret); err == nil {
+			if e, ok := h.loadIdent(c.Request.Context(), uid); ok {
+				c.Set("uid", uid)
+				c.Set("uname", e.uname)
+				c.Set("role", e.role)
+				c.Set("perms", e.perms)
+			}
 		}
 		c.Next()
 	}
 }
 
-// RequireRole 校验当前登录用户的全局角色（操作类权限查全局角色，见 DEVELOPMENT.md）。
-func RequireRole(roles ...string) gin.HandlerFunc {
+// RequirePerm 校验当前用户持有某权限位（root 恒通过）。挂在 AuthRequired/AuthOptional 之后。
+func RequirePerm(perm string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_, _, role, ok := currentUser(c)
-		if !ok {
+		_, _, _, logged := currentUser(c)
+		if !logged {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录"})
 			return
 		}
-		for _, r := range roles {
-			if role == r {
-				c.Next()
-				return
-			}
+		if !hasPerm(c, perm) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 1, "message": "权限不足"})
+			return
 		}
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 1, "message": "权限不足"})
+		c.Next()
+	}
+}
+
+// RequirePermAny 任一权限位命中即可（属主级校验由 handler 补充）。
+func RequirePermAny(perms ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		_, _, _, logged := currentUser(c)
+		if !logged {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录"})
+			return
+		}
+		if !hasPermAny(c, perms...) {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 1, "message": "权限不足"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireRoot 硬编码 root：用于角色管理等不可下放的操作。
+func RequireRoot() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		_, _, role, logged := currentUser(c)
+		if !logged {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录"})
+			return
+		}
+		if role != repo.RoleRoot {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 1, "message": "仅 root 可执行该操作"})
+			return
+		}
+		c.Next()
 	}
 }
 

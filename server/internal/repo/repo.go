@@ -19,6 +19,7 @@ type Repo struct {
 	cli         *mongo.Client
 	db          *mongo.Database
 	Users       *mongo.Collection
+	Roles       *mongo.Collection
 	Problems    *mongo.Collection
 	Submissions *mongo.Collection
 	Counters    *mongo.Collection
@@ -53,6 +54,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		cli:         cli,
 		db:          db,
 		Users:       db.Collection("users"),
+		Roles:       db.Collection("roles"),
 		Problems:    db.Collection("problems"),
 		Submissions: db.Collection("submissions"),
 		Counters:    db.Collection("counters"),
@@ -94,6 +96,11 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		}
 		_ = uid
 		log.Printf("[boot] 已创建初始管理员: admin / admin123（请尽快修改密码）")
+	}
+
+	// 角色种子：内置 default/admin/root（不存在才建，不覆盖 root 的调整）
+	if err := r.EnsureBuiltinRoles(ctx); err != nil {
+		return err
 	}
 
 	// 一次性数据迁移（角色体系、班级引用结构等），meta.migrations 记录完成标记

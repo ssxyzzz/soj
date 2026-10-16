@@ -29,8 +29,17 @@ function onCommand(command: string) {
           <el-menu-item index="/contests">比赛</el-menu-item>
           <el-menu-item index="/classes">班级</el-menu-item>
           <el-menu-item index="/rank">排名</el-menu-item>
-          <el-menu-item v-if="userStore.role === 'admin' || userStore.role === 'root'" index="/submissions">提交记录</el-menu-item>
-          <el-menu-item v-if="userStore.role === 'root'" index="/admin">管理后台</el-menu-item>
+          <el-menu-item v-if="userStore.can('submission.view.all')" index="/submissions">提交记录</el-menu-item>
+        </el-menu>
+        <el-menu
+          v-if="userStore.canAdmin"
+          mode="horizontal"
+          router
+          :default-active="active"
+          class="menu menu-admin"
+          :ellipsis="false"
+        >
+          <el-menu-item index="/admin">管理后台</el-menu-item>
         </el-menu>
         <template v-if="userStore.token">
           <el-dropdown @command="onCommand">
@@ -64,13 +73,18 @@ function onCommand(command: string) {
   height: 60px;
 }
 
+/* 1320px = 1280px 内容列 + 左右各 20px 内边距；再各收 4px（padding 24）做视觉内收——
+   卡片边框浅、有圆角阴影会视觉后退，而 SOJ 加粗蓝字和 CJK 用户名边缘更实，
+   与内容列严格齐平时顶栏文字观感上会往外凸，故文字比内容列略靠内 4px。
+   必须显式 border-box（默认 content-box 会让 max-width 与 padding 相加，左右各多出 20px） */
 .header-inner {
-  max-width: 1080px;
+  box-sizing: border-box;
+  max-width: 1320px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 16px;
+  padding: 0 24px;
   gap: 8px;
 }
 
@@ -86,6 +100,11 @@ function onCommand(command: string) {
 .menu {
   flex: 1;
   border-bottom: none;
+}
+
+/* 右侧「管理后台」独立菜单：不参与主菜单的 flex:1 拉伸，紧贴用户名左侧 */
+.menu-admin {
+  flex: 0 0 auto;
 }
 
 .username {

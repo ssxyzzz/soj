@@ -20,8 +20,7 @@ const createForm = reactive({ name: '', intro: '', private: false })
 const joinCode = ref('')
 const joining = ref(false)
 
-const canCreate = () =>
-  userStore.token && (userStore.role === 'admin' || userStore.role === 'root')
+const canCreate = () => userStore.token && userStore.can('class.create')
 
 async function load() {
   loading.value = true

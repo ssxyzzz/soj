@@ -25,7 +25,7 @@ async function submit() {
       mode.value === 'login'
         ? await authApi.login(form.username, form.password)
         : await authApi.register(form.username, form.password, form.nickname)
-    userStore.setLogin(r.token, r.user.nickname || r.user.username, r.user.role)
+    userStore.setLogin(r.token, r.user.nickname || r.user.username, r.user.role, r.user.perms ?? [])
     ElMessage.success(mode.value === 'login' ? '登录成功' : '注册成功')
     router.push((route.query.redirect as string) || '/')
   } catch {
