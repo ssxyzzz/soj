@@ -11,8 +11,19 @@ const props = withDefaults(
     height?: string // 如 '420px'；'100%' 时父容器需有确定高度
     autocomplete?: boolean
     placeholder?: string
+    fontSize?: number // px（12-28）
+    fontFamily?: string // Consolas / Menlo / Monaco
+    tabIndent?: boolean // Tab 键插入缩进（在线编程开启；关闭时 Tab 移出焦点便于表单导航）
   }>(),
-  { language: 'cpp', height: '420px', autocomplete: true, placeholder: '' },
+  {
+    language: 'cpp',
+    height: '420px',
+    autocomplete: true,
+    placeholder: '',
+    fontSize: 14,
+    fontFamily: 'Consolas',
+    tabIndent: false,
+  },
 )
 
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
@@ -22,7 +33,9 @@ let view: any = null // EditorView（CM6 经动态 import，类型取不到静�
 let inner = props.modelValue // 防止 setValue 触发的回显循环
 let langComp: any = null
 let acComp: any = null
+let themeComp: any = null
 let acFactory: (() => any) | null = null
+let viewMod: any = null
 
 // 语言包懒加载（C 与 C++ 共用 C++ 高亮；Java/Go 届时加包）
 async function langExt(language: string) {
@@ -87,12 +100,24 @@ const COMPLETIONS: Record<string, { label: string; type: string; detail: string;
   ],
 }
 
+// 编辑器主题：字号与字体家族（跟随用户偏好热切换；平台缺字体时浏览器回退 monospace）
+function buildTheme(vm: any, fontFamily: string, fontSize: number) {
+  return vm.EditorView.theme({
+    '&': { height: '100%', fontSize: fontSize + 'px' },
+    '.cm-content': { fontFamily: `"${fontFamily}", Menlo, Monaco, monospace` },
+    '.cm-gutters': { fontFamily: `"${fontFamily}", monospace` },
+    '.cm-line': { lineHeight: '1.6' },
+  })
+}
+
 onMounted(async () => {
-  const [cm, state, viewMod, autocompleteMod, lang] = await Promise.all([
+  const [cm, state, vm, autocompleteMod, languageMod, commandsMod, lang] = await Promise.all([
     import('codemirror'),
     import('@codemirror/state'),
     import('@codemirror/view'),
     import('@codemirror/autocomplete'),
+    import('@codemirror/language'),
+    import('@codemirror/commands'),
     langExt(props.language),
   ])
   // 常用清单补全源：仅在词首触发（Ctrl+Space 可显式唤起）
@@ -104,12 +129,42 @@ onMounted(async () => {
   }
   langComp = new state.Compartment()
   acComp = new state.Compartment()
+  themeComp = new state.Compartment()
+  viewMod = vm
   acFactory = () => autocompleteMod.autocompletion({ override: [listSource] })
-  const exts: any[] = [cm.basicSetup, langComp.of(lang)]
+  const exts: any[] = [
+    cm.basicSetup,
+    langComp.of(lang),
+    themeComp.of(buildTheme(vm, props.fontFamily, props.fontSize)),
+    languageMod.indentUnit.of('    '), // 缩进单位统一 4 空格（自动缩进与 Tab 插入共用）
+  ]
+  if (props.tabIndent) exts.push(vm.keymap.of([commandsMod.indentWithTab]))
   if (props.autocomplete) exts.push(acComp.of(acFactory()))
-  if (props.placeholder) exts.push(viewMod.placeholder(props.placeholder))
+  if (props.placeholder) exts.push(vm.placeholder(props.placeholder))
+  // 控制流语句（for/if/while 等）以 ) 结尾时，换行新行与该行对齐而非 +1 缩进——
+  // 适配大括号独立成行的写法：for (...)\n{\n    ...\n}（函数调用的多行参数不受影响，仍 +1）
+  if (props.language !== 'python3') {
+    exts.push(
+      languageMod.indentService.of((context: any, pos: number) => {
+        const line = context.lineAt(pos)
+        const t = line.text.trimEnd()
+        // ① 控制流行悬空：新行与 for/if/while 对齐（大括号独立成行的写法）
+        if (/(^|\s)(for|if|else if|while|switch)\s*\(.*\)\s*$/.test(t)) {
+          return (t.match(/^\s*/)?.[0] ?? '').length
+        }
+        // ② 上一行以 { 结尾：新行进入块内，+1 缩进单位（4 空格）
+        if (pos > 0) {
+          const prev = context.lineAt(pos - 1)
+          if (/\{\s*$/.test(prev.text.trimEnd())) {
+            return (prev.text.match(/^\s*/)?.[0] ?? '').length + 4
+          }
+        }
+        return null
+      }),
+    )
+  }
   exts.push(
-    viewMod.EditorView.updateListener.of((u: any) => {
+    vm.EditorView.updateListener.of((u: any) => {
       if (u.docChanged) {
         inner = u.state.doc.toString()
         emit('update:modelValue', inner)
@@ -145,6 +200,10 @@ watch(
   },
 )
 
+watch([() => props.fontFamily, () => props.fontSize], ([fontFamily, fontSize]) => {
+  if (view && viewMod) themeComp?.reconfigure(buildTheme(viewMod, fontFamily, fontSize))
+})
+
 onUnmounted(() => view?.destroy())
 </script>
 
@@ -163,12 +222,21 @@ onUnmounted(() => view?.destroy())
   overflow: hidden;
 }
 
+/* 高度链：包装层(高度 prop) → 挂载层(100%) → .cm-editor(100%,主题) → .cm-scroller(滚动) */
+.code-editor > div {
+  height: 100%;
+}
+
 .code-editor :deep(.cm-editor) {
   height: 100%;
 }
 
 .code-editor :deep(.cm-editor.cm-focused) {
   outline: none;
+}
+
+.code-editor :deep(.cm-scroller) {
+  overflow: auto;
 }
 
 .code-editor :deep(.cm-gutters) {

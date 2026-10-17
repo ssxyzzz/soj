@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import MdView from '@/components/MdView.vue'
+import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
 
@@ -29,6 +30,25 @@ const leftPct = ref(50)
 const divider = ref<HTMLElement>()
 const userStore = useUserStore()
 const acOn = computed(() => autocompleteOn())
+const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
+const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
+
+// 字体/字号即改即存（prefs 为整体覆盖语义，需携带全量字段；本机与后续会话同字体同字号）
+async function saveEditorPrefs(patch: Record<string, unknown>) {
+  try {
+    const prefs = {
+      defaultLang: userStore.prefs.defaultLang ?? '',
+      mdEditMode: userStore.prefs.mdEditMode ?? '',
+      codeTemplates: userStore.prefs.codeTemplates ?? {},
+      autocomplete: userStore.prefs.autocomplete ?? true,
+      ...patch,
+    }
+    const p = await authApi.updateProfile({ prefs })
+    userStore.setPrefs(p.prefs ?? {})
+  } catch {
+    // 错误提示已由 axios 拦截器统一弹出
+  }
+}
 
 watch(() => props.modelValue, (open) => {
   if (open) code.value = code.value || templateFor(lang.value)
@@ -90,9 +110,29 @@ onBeforeUnmount(() => {
       <header class="wb-header">
         <span class="wb-title">{{ title }}</span>
         <div class="wb-actions">
-          <el-select :model-value="lang" size="default" style="width: 140px" @change="changeLang">
+          <el-select :model-value="lang" style="width: 140px" @change="changeLang">
             <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
           </el-select>
+          <el-select
+            :model-value="codeFont"
+            style="width: 130px"
+            title="编辑器字体"
+            @change="(f: string) => saveEditorPrefs({ codeFont: f })"
+          >
+            <el-option value="Consolas" label="Consolas" />
+            <el-option value="Menlo" label="Menlo" />
+            <el-option value="Monaco" label="Monaco" />
+          </el-select>
+          <el-input-number
+            :model-value="codeFontSize"
+            :min="12"
+            :max="28"
+            :step="1"
+            controls-position="right"
+            style="width: 100px"
+            title="编辑器字号（12-28，可输入或 +/- 微调）"
+            @change="(n: number | undefined) => n && saveEditorPrefs({ codeFontSize: n })"
+          />
           <el-button type="primary" :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
           <el-button @click="emit('update:modelValue', false)">退出全屏（Esc）</el-button>
         </div>
@@ -109,6 +149,9 @@ onBeforeUnmount(() => {
             class="wb-editor"
             :language="lang"
             :autocomplete="acOn"
+            :font-size="codeFontSize"
+            :font-family="codeFont"
+            :tab-indent="true"
             height="100%"
             placeholder="在此编写或粘贴你的代码（系统不提供默认模板）"
           />

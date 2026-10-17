@@ -25,6 +25,8 @@ const lang = ref(defaultLang()) // 个人设置的默认语言优先
 const code = ref('')
 const userStore = useUserStore()
 const acOn = computed(() => autocompleteOn())
+const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
+const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
 
 watch(() => props.modelValue, (open) => {
   if (open) code.value = templateFor(lang.value)
@@ -64,6 +66,8 @@ function doSubmit() {
       v-model="code"
       :language="lang"
       :autocomplete="acOn"
+      :font-size="codeFontSize"
+      :font-family="codeFont"
       height="460px"
       placeholder="在此编写或粘贴你的代码（系统不提供默认模板）"
     />

@@ -83,6 +83,8 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 			CodeTemplates *map[string]string `json:"codeTemplates"`
 			MdEditMode    *string            `json:"mdEditMode"`
 			Autocomplete  *bool              `json:"autocomplete"`
+			CodeFont      *string            `json:"codeFont"`
+			CodeFontSize  *int               `json:"codeFontSize"`
 		} `json:"prefs"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -148,6 +150,24 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		}
 		if req.Prefs.Autocomplete != nil {
 			prefs.Autocomplete = req.Prefs.Autocomplete
+		}
+		if req.Prefs.CodeFont != nil {
+			f := strings.TrimSpace(*req.Prefs.CodeFont)
+			switch f {
+			case "", "Consolas", "Menlo", "Monaco":
+				prefs.CodeFont = f
+			default:
+				fail(c, http.StatusBadRequest, "字体仅支持 Consolas / Menlo / Monaco")
+				return
+			}
+		}
+		if req.Prefs.CodeFontSize != nil {
+			n := *req.Prefs.CodeFontSize
+			if n != 0 && (n < 12 || n > 28) {
+				fail(c, http.StatusBadRequest, "字号需在 12-28 之间")
+				return
+			}
+			prefs.CodeFontSize = n
 		}
 		set["prefs"] = &prefs
 	}
