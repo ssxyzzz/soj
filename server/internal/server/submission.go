@@ -273,6 +273,7 @@ func submissionJSON(s *repo.Submission, withCode bool) gin.H {
 	}
 	if withCode {
 		h["code"] = s.Code
+		h["detail"] = s.Detail // 测试点明细与代码同门槛（本人/总表/满分解锁）
 	}
 	return h
 }

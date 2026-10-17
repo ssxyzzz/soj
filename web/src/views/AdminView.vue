@@ -8,6 +8,7 @@ import { adminApi } from '@/api'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
+import { copyText } from '@/utils/clipboard'
 import { markdownBytes } from '@/utils/vditor'
 import { BACKUP_RUN_URL } from '@/types'
 import type { AdminUser, BackupStatus, PermGroupInfo, PermInfo, RoleInfo } from '@/types'
@@ -532,25 +533,6 @@ function downloadKey() {
 
 async function copyKey() {
   copyText(offlineKey.value)
-}
-
-// 剪贴板复制：优先 Clipboard API（localhost/HTTPS 可用），失败回退 execCommand 兼容 HTTP 部署
-function copyText(text: string) {
-  const done = () => ElMessage.success('已复制到剪贴板')
-  const fallback = () => {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
-    done()
-  }
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(done).catch(fallback)
-  } else {
-    fallback()
-  }
 }
 
 onMounted(async () => {

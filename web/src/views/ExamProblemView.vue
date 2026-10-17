@@ -8,7 +8,7 @@ import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
+import { fmtDate, fmtMem, statusDesc, statusStyle } from '@/utils/format'
 import type { ContestMySubmission, ExamDetail, ProblemDetail } from '@/types'
 
 const route = useRoute()
@@ -37,11 +37,13 @@ const statusText = computed(() => {
 })
 
 // 在线编程左栏题面：题面本身已含 Markdown 样例章节，直接渲染
-// 在线编程左栏题面：本场启用文件 IO 时追加文件 IO 说明段
+// 在线编程左栏题面：本场启用文件 IO 时追加文件 IO 提示
 const workbenchStatement = computed(() => {
   const base = problem.value?.description ?? ''
-  if (exam.value?.file_io && problem.value?.file_io_desc) {
-    return `${base}\n\n## 文件 IO\n\n${problem.value.file_io_desc}\n`
+  if (exam.value?.file_io) {
+    const inName = problem.value?.file_io_input || 'problem.in'
+    const outName = problem.value?.file_io_output || 'problem.out'
+    return `${base}\n\n> ⚠️ 本题请以文件 IO 方式提交，输入输出文件名是 ${inName} / ${outName}\n`
   }
   return base
 })
@@ -160,10 +162,15 @@ onUnmounted(() => {
           <el-tag v-if="exam.file_io" size="small" type="danger">本场为文件 IO 模式</el-tag>
         </div>
         <MdView :content="problem.description" />
-        <el-card v-if="exam.file_io && problem.file_io_desc" shadow="never" class="fileio-card">
-          <template #header><span>📎 文件 IO 说明（本场启用文件 IO）</span></template>
-          <MdView :content="problem.file_io_desc" />
-        </el-card>
+        <el-alert
+          v-if="exam.file_io"
+          type="warning"
+          :closable="false"
+          class="fileio-card"
+          show-icon
+          title="本题请以文件 IO 方式提交"
+          :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}（C/C++ 用 freopen 重定向，Python 用 sys.stdin / open 读写）`"
+        />
       </el-card>
 
       <template #aside>
@@ -172,7 +179,7 @@ onUnmounted(() => {
             <el-button type="primary" style="width: 100%" :disabled="!running" @click="showSubmit = true">
               提交
             </el-button>
-            <el-button plain style="width: 100%" :disabled="!running" @click="showWorkbench = true">
+            <el-button type="success" plain style="width: 100%" :disabled="!running" @click="showWorkbench = true">
               在线编程
             </el-button>
             <div v-if="!running" class="dim center">考试未在进行中</div>
@@ -187,7 +194,16 @@ onUnmounted(() => {
             <div class="sub-line">
               <span class="dim">#{{ s.id }}</span>
               <template v-if="revealed && s.status">
-                <el-tag size="small" :type="statusStyle(s.status).type">{{ statusStyle(s.status).label }}</el-tag>
+                <el-tooltip v-if="statusDesc(s.status)" placement="top" effect="light">
+                  <template #content>
+                    <div class="status-tip">
+                      <div>{{ statusDesc(s.status)!.meaning }}</div>
+                      <div v-if="statusDesc(s.status)!.cause">常见原因：{{ statusDesc(s.status)!.cause }}</div>
+                    </div>
+                  </template>
+                  <el-tag size="small" :type="statusStyle(s.status).type" class="status-tag">{{ statusStyle(s.status).label }}</el-tag>
+                </el-tooltip>
+                <el-tag v-else size="small" :type="statusStyle(s.status).type">{{ statusStyle(s.status).label }}</el-tag>
                 <span v-if="s.score != null">{{ s.score }} 分</span>
                 <span v-if="s.time_ms != null" class="dim">{{ s.time_ms }} ms</span>
               </template>

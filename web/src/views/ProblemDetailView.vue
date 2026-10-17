@@ -10,9 +10,10 @@ import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
 import { useUserStore } from '@/stores/user'
-import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
+import { fmtDate, fmtMem, statusDesc, statusStyle } from '@/utils/format'
 import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
 import { languageOptions } from '@/utils/code'
 import type { ProblemDetail, SolutionItem, Submission } from '@/types'
@@ -44,6 +45,13 @@ const othersTotal = ref(0)
 const othersSort = ref<'time' | 'mem'>('time')
 const othersLang = ref('')
 const showOthers = ref(false)
+const showOthersDetail = ref(false)
+const othersDetail = ref<Submission | null>(null)
+
+function openOthersDetail(s: Submission) {
+  othersDetail.value = s
+  showOthersDetail.value = true
+}
 
 // 题解（v0.5b-1）：满分 ∨ 老师群体可见可写；置顶/删他人需 solution.manage
 const solutions = ref<SolutionItem[]>([])
@@ -149,10 +157,12 @@ const metaForm = reactive({
   memory_limit_mb: 256,
   compare: 'exact',
   float_tolerance: 0.0001,
-  file_io_input: '',
-  file_io_output: '',
-  file_io_desc: '',
+  file_io_name: '',
 })
+
+// 文件 IO 基础名派生的实际文件名（弹窗内提示展示用）
+const fileIOIn = computed(() => problem.value?.file_io_input || 'problem.in')
+const fileIOOut = computed(() => problem.value?.file_io_output || 'problem.out')
 
 function openEdit() {
   const p = problem.value!
@@ -161,9 +171,7 @@ function openEdit() {
   metaForm.time_limit_ms = p.time_limit_ms
   metaForm.memory_limit_mb = Math.max(16, Math.round(p.memory_limit_kb / 1024))
   metaForm.compare = (p as ProblemDetail & { compare?: string }).compare === 'tolerant' ? 'tolerant' : 'exact'
-  metaForm.file_io_input = p.file_io_input ?? ''
-  metaForm.file_io_output = p.file_io_output ?? ''
-  metaForm.file_io_desc = p.file_io_desc ?? ''
+  metaForm.file_io_name = (p.file_io_input || 'problem.in').replace(/\.in$/, '')
   checkerFile.value = null
   showEdit.value = true
 }
@@ -191,9 +199,7 @@ async function saveEdit() {
       time_limit_ms: metaForm.time_limit_ms,
       memory_limit_kb: metaForm.memory_limit_mb * 1024,
       compare: metaForm.compare,
-      file_io_input: metaForm.file_io_input.trim(),
-      file_io_output: metaForm.file_io_output.trim(),
-      file_io_desc: metaForm.file_io_desc,
+      file_io_name: metaForm.file_io_name.trim(),
       ...(metaForm.compare === 'tolerant' ? { float_tolerance: metaForm.float_tolerance } : {}),
     })
     ElMessage.success('题目已保存')
@@ -395,10 +401,6 @@ onUnmounted(stopPolling)
           <div class="title-row">
             <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
             <el-tag v-if="problem.hidden" size="small" type="danger">主题库隐藏</el-tag>
-          </div>
-          <div class="info-row">
-            <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
-            <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
             <el-button
               v-if="canSetHidden"
               size="small"
@@ -406,8 +408,12 @@ onUnmounted(stopPolling)
               class="hidden-btn"
               @click="toggleHidden"
             >
-              {{ problem.hidden ? '对学生隐藏中 · 点击恢复' : '对学生隐藏' }}
+              隐藏
             </el-button>
+          </div>
+          <div class="info-row">
+            <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
+            <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
           </div>
           <MdView :content="problem.description" />
         </el-card>
@@ -423,10 +429,10 @@ onUnmounted(stopPolling)
             <el-button type="primary" style="width: 100%" :disabled="submitDisabled" @click="openSubmitEntry">
               提交
             </el-button>
-            <el-button plain style="width: 100%" :disabled="submitDisabled" @click="openWorkbenchEntry">
+            <el-button type="success" plain style="width: 100%" :disabled="submitDisabled" @click="openWorkbenchEntry">
               在线编程
             </el-button>
-            <el-button plain style="width: 100%" @click="openSolutions">题解</el-button>
+            <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
             <el-button v-if="userStore.token" plain style="width: 100%" @click="openMine">我的提交</el-button>
             <el-button plain style="width: 100%" @click="openOthers">他人代码</el-button>
             <div v-if="submitDisabledReason" class="dim center">{{ submitDisabledReason }}</div>
@@ -502,7 +508,16 @@ onUnmounted(stopPolling)
         <el-table :data="mySubs" highlight-current-row @row-click="openMineDetail">
           <el-table-column label="状态" width="170">
             <template #default="{ row }">
-              <el-tag size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+              <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
+                <template #content>
+                  <div class="status-tip">
+                    <div>{{ statusDesc(row.status)!.meaning }}</div>
+                    <div v-if="statusDesc(row.status)!.cause">常见原因：{{ statusDesc(row.status)!.cause }}</div>
+                  </div>
+                </template>
+                <el-tag size="small" :type="statusStyle(row.status).type" class="status-tag">{{ statusStyle(row.status).label }}</el-tag>
+              </el-tooltip>
+              <el-tag v-else size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="score" label="得分" width="80" />
@@ -533,7 +548,16 @@ onUnmounted(stopPolling)
         <el-button class="mb8" @click="mineView = 'list'">← 返回列表</el-button>
         <el-descriptions :column="3" border class="detail-desc">
           <el-descriptions-item label="状态">
-            <el-tag size="small" :type="statusStyle(mineDetail.status).type">{{ statusStyle(mineDetail.status).label }}</el-tag>
+            <el-tooltip v-if="statusDesc(mineDetail.status)" placement="top" effect="light">
+              <template #content>
+                <div class="status-tip">
+                  <div>{{ statusDesc(mineDetail.status)!.meaning }}</div>
+                  <div v-if="statusDesc(mineDetail.status)!.cause">常见原因：{{ statusDesc(mineDetail.status)!.cause }}</div>
+                </div>
+              </template>
+              <el-tag size="small" :type="statusStyle(mineDetail.status).type" class="status-tag">{{ statusStyle(mineDetail.status).label }}</el-tag>
+            </el-tooltip>
+            <el-tag v-else size="small" :type="statusStyle(mineDetail.status).type">{{ statusStyle(mineDetail.status).label }}</el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="得分">{{ mineDetail.score }}</el-descriptions-item>
           <el-descriptions-item label="语言">{{ mineDetail.language }}</el-descriptions-item>
@@ -567,7 +591,7 @@ onUnmounted(stopPolling)
       </template>
     </el-dialog>
 
-    <!-- 他人代码弹窗：耗时升序为默认（并列按内存），最多显示 10 条，可切排序与语言 -->
+    <!-- 他人代码弹窗：耗时升序为默认（并列按内存），最多显示 10 条，可切排序与语言；点行查看代码 -->
     <el-dialog v-model="showOthers" title="他人代码" width="1020" top="4vh">
       <div class="dlg-toolbar">
         <el-radio-group v-model="othersSort" @change="loadOthers">
@@ -585,7 +609,27 @@ onUnmounted(stopPolling)
         </el-select>
         <span class="dim">共 {{ othersTotal }} 份，显示前 {{ PAGE_SIZE }} 份</span>
       </div>
-      <el-table :data="others" border>
+      <el-table
+        :data="others"
+        size="small"
+        border
+        style="cursor: pointer"
+        @row-click="(row: Submission) => openOthersDetail(row as Submission)"
+      >
+        <el-table-column label="状态" width="170">
+          <template #default="{ row }">
+            <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
+              <template #content>
+                <div class="status-tip">
+                  <div>{{ statusDesc(row.status)!.meaning }}</div>
+                  <div v-if="statusDesc(row.status)!.cause">常见原因：{{ statusDesc(row.status)!.cause }}</div>
+                </div>
+              </template>
+              <el-tag size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+            </el-tooltip>
+            <el-tag v-else size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="username" label="提交者" min-width="110" />
         <el-table-column prop="language" label="语言" width="100" />
         <el-table-column label="耗时" width="100">
@@ -601,6 +645,14 @@ onUnmounted(stopPolling)
       </el-table>
       <el-empty v-if="!others.length" description="还没有人提交过" :image-size="48" />
     </el-dialog>
+
+    <!-- 他人提交详情（点状态/行查看代码与测试点明细） -->
+    <SubmissionDetailDialog
+      v-model="showOthersDetail"
+      :submission="othersDetail"
+      :title="othersDetail ? `他人代码 · ${othersDetail.username} · ${othersDetail.problem_title || problem.title}` : ''"
+    />
+
 
     <el-dialog v-model="showEdit" title="编辑题目（题面 / 信息）" width="1020" top="4vh">
       <el-form label-position="top">
@@ -618,28 +670,24 @@ onUnmounted(stopPolling)
         <el-form-item>
           <div class="fileio-edit">
             <span class="fileio-edit-label">
-              文件 IO（文件名对与说明）
+              文件 IO 文件名
               <el-tooltip
                 placement="top"
-                content="仅比赛/考试「本场启用文件 IO」时生效；题库/练习/作业恒为标准输入输出。名字留空默认 problem.in / problem.out；说明启用时会展示给学生"
+                content="仅比赛/考试「本场启用文件 IO」时生效；题库/练习/作业恒为标准输入输出。留空默认 problem：输入文件 problem.in、输出文件 problem.out"
               >
                 <el-icon class="dim"><QuestionFilled /></el-icon>
               </el-tooltip>
             </span>
-            <div class="edit-limits">
-              <el-input
-                v-model="metaForm.file_io_input"
-                placeholder="输入文件名，默认 problem.in"
-                style="width: 240px"
-              />
-              <el-input
-                v-model="metaForm.file_io_output"
-                placeholder="输出文件名，默认 problem.out"
-                style="width: 240px"
-              />
+            <el-input
+              v-model="metaForm.file_io_name"
+              placeholder="problem"
+              style="width: 280px"
+              maxlength="64"
+            />
+            <div class="dim" style="margin-top: 6px">
+              启用文件 IO 的比赛/考试中，输入文件为 <b>{{ fileIOIn }}</b>、输出文件为 <b>{{ fileIOOut }}</b
+              >，学生端会看到对应的提交提示
             </div>
-            <div class="fileio-desc-label dim">文件 IO 说明（Markdown，启用场景展示给学生）</div>
-            <MdEditor v-model="metaForm.file_io_desc" height="200px" />
           </div>
         </el-form-item>
         <el-form-item label="题面" required>
@@ -960,15 +1008,26 @@ onUnmounted(stopPolling)
   margin-bottom: 8px;
 }
 
-.fileio-desc-label {
-  margin-bottom: 6px;
-}
-
 .compare-label {
   cursor: help;
   color: #606266;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+.status-tag {
+  cursor: help;
+}
+
+.status-tip {
+  line-height: 1.6;
+  max-width: 260px;
+  white-space: normal;
+}
+
+.status-tip div + div {
+  margin-top: 4px;
+  color: #909399;
 }
 </style>

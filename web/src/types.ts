@@ -60,7 +60,6 @@ export interface ProblemDetail {
   can_view_solutions?: boolean
   file_io_input?: string
   file_io_output?: string
-  file_io_desc?: string
   locked?: boolean
   lock_kind?: 'contest' | 'exam'
   contest_id?: number
@@ -209,6 +208,8 @@ export interface UserPrefs {
   codeTemplates?: Record<string, string>
   mdEditMode?: '' | 'wysiwyg' | 'ir' | 'sv'
   autocomplete?: boolean // 代码自动补全（默认开箱开启；后续按用户等级门槛放开）
+  codeFont?: string // 编辑器字体：Consolas / Menlo / Monaco（默认 Consolas）
+  codeFontSize?: number // 编辑器字号 px（12-28，默认 14）
 }
 
 // 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）

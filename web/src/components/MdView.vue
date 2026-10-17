@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import DOMPurify from 'dompurify'
 import { loadVditor, MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
+import { copyText } from '@/utils/clipboard'
 
 // 查看端与编辑端共用 Vditor 引擎渲染，保证「格式统一不乱」。
 // 内容虽由老师/root 维护，仍按「账号可能被盗」设防：
@@ -34,6 +35,32 @@ async function render() {
     ADD_TAGS: ['semantics', 'annotation'],
     ADD_ATTR: ['target'],
   })
+  mountCopyButtons()
+}
+
+// 代码块复制按钮（v0.5d）：vditor 自带的图标过于隐蔽且无反馈，
+// 替换为统一样式的「复制」按钮——取 code 内容复制，成功后按钮内联提示「已复制」。
+function mountCopyButtons() {
+  if (!el.value) return
+  el.value.querySelectorAll('.vditor-copy').forEach((n) => n.remove()) // 移除 vditor 自带弱化图标
+  el.value.querySelectorAll('pre').forEach((pre) => {
+    if (pre.querySelector('.md-copy-btn')) return // 防重复挂载
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'md-copy-btn'
+    btn.textContent = '复制'
+    btn.addEventListener('click', () => {
+      const code = pre.querySelector('code') ?? pre
+      copyText(code.textContent ?? '')
+      btn.textContent = '已复制'
+      btn.classList.add('copied')
+      window.setTimeout(() => {
+        btn.textContent = '复制'
+        btn.classList.remove('copied')
+      }, 2500)
+    })
+    pre.appendChild(btn)
+  })
 }
 
 onMounted(render)
@@ -47,5 +74,37 @@ watch(() => props.content, render)
 <style scoped>
 .md-view :deep(.vditor-reset) {
   padding: 0;
+}
+
+.md-view :deep(pre) {
+  position: relative; /* 复制按钮的定位基准 */
+}
+
+.md-view :deep(.md-copy-btn) {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  border: 1px solid var(--el-color-primary-light-7);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.md-view :deep(.md-copy-btn:hover) {
+  color: #fff;
+  background: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+
+.md-view :deep(.md-copy-btn.copied) {
+  color: var(--el-color-success);
+  background: var(--el-color-success-light-9);
+  border-color: var(--el-color-success-light-7);
 }
 </style>
