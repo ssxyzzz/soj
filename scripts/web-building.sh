@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 编译前端并部署（本机 Node + Go 工具链，npm 走 npmmirror）。
+# 编译前端并部署（本机 Node + Go 工具链，缺失时自动装到 ~/.local/opt，npm 走 npmmirror）。
 # 常规路径 = 宿主机全量构建（前端产物嵌入二进制）+ docker cp 热替换，秒级发版；
 # 镜像重建仅在容器不在运行时兜底（平时镜像内版本会落后，用 make image 对齐）。
 # 产物:
@@ -61,13 +61,9 @@ trap on_fail ERR
 
 banner "SOJ 前端编译开始（web-building，本机工具链）"
 
-# 本机工具链：优先用户目录安装，其次系统 PATH（前端要 Node，嵌入二进制要 Go）
-[ -x "$HOME/.local/opt/go/bin/go" ] && export PATH="$HOME/.local/opt/go/bin:$PATH"
-[ -d "$HOME/.local/opt/node-v22.21.1-linux-x64" ] && export PATH="$HOME/.local/opt/node-v22.21.1-linux-x64/bin:$PATH"
-if ! command -v npm >/dev/null 2>&1 || ! command -v go >/dev/null 2>&1; then
-  err "找不到 npm 或 go。安装方法见 plan.md 部署运维章节（用户目录免 sudo 安装）"
-  exit 1
-fi
+# 本机工具链：缺 Go/Node 自动装到 ~/.local/opt（见 scripts/toolchain.sh）
+source "$ROOT/scripts/toolchain.sh"
+ensure_toolchain
 
 web_build() {
   cd "$ROOT/web"

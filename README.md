@@ -34,7 +34,7 @@
 ## 快速启动
 
 ```bash
-make up   # 自动先编译前端（需要本机 Node/Go 工具链），再起 3 容器
+make up   # 自动先编译前端（缺 Node/Go 会自动装到 ~/.local/opt 免 sudo），再起 3 容器
 ```
 
 打开 **http://localhost**（主机侧只暴露 80 端口，容器内仍是 8080），默认管理员 `admin / admin123`（root）。
@@ -63,7 +63,7 @@ cd server && go run ./cmd/soj --judge-only  # 或：纯判题进程
 
 ## 编译与发版（本机 Node/Go 工具链）
 
-脚本用本机工具链编译（Go 与 Node 装在用户目录 `~/.local/opt/` 免 sudo，安装方法见 notes.md 第 6 章；模块代理 goproxy.cn / npmmirror 已内置），每步实时显示「计时 + 最新日志」，全量日志落 /tmp（失败自动展示末 20 行）：
+脚本用本机工具链编译（缺 Go/Node 时自动安装到用户目录 `~/.local/opt/` 免 sudo，见 `scripts/toolchain.sh`；模块代理 goproxy.cn / npmmirror 已内置），每步实时显示「计时 + 最新日志」，全量日志落 /tmp（失败自动展示末 20 行）：
 
 ```bash
 ./scripts/web-building.sh      # 前端全量构建 → 嵌入二进制 → docker cp 热替换重启（秒级发版）

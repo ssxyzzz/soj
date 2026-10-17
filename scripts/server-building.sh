@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 编译后端（本机 Go 工具链，模块代理 goproxy.cn）。
+# 编译后端（本机 Go 工具链，缺失时自动装到 ~/.local/opt，模块代理 goproxy.cn）。
 # 产物: server/bin/soj —— 静态单文件二进制，前端页面已嵌入。
 # 注意: 需要先执行 ./scripts/web-building.sh（前端构建产物会被嵌入）。
 set -euo pipefail
@@ -56,8 +56,9 @@ trap on_fail ERR
 
 banner "SOJ 后端编译开始（server-building，本机工具链）"
 
-# 本机工具链：优先用户目录安装，其次系统 PATH
-[ -x "$HOME/.local/opt/go/bin/go" ] && export PATH="$HOME/.local/opt/go/bin:$PATH"
+# 本机工具链：缺 Go 自动装到 ~/.local/opt（见 scripts/toolchain.sh）
+source "$ROOT/scripts/toolchain.sh"
+ensure_go
 
 go_build() {
   cd "$ROOT/server"
