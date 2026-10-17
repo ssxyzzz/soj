@@ -22,9 +22,8 @@ backup: ## 备份 MongoDB 与测试数据到 ./backups/
 image: ## 重建 soj 镜像并重启容器（让镜像内版本追上热替换版本，平时不必跑）
 	docker compose up -d --build soj
 
-bin: ## 编译前后端并产出 server/bin/soj（等价于 web-building + server-building）
+bin: ## 全量编译发版（web-building 已含 go build 与热替换全流程，等价于旧 bin 但不重复部署）
 	./scripts/web-building.sh
-	./scripts/server-building.sh
 
 web-building: ## 只编译前端（产物 web/dist + 同步 embed 目录）
 	./scripts/web-building.sh

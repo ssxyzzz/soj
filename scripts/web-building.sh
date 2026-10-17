@@ -71,7 +71,18 @@ fi
 
 web_build() {
   cd "$ROOT/web"
-  npm install --no-audit --no-fund
+  # 依赖未变化时跳过 npm install：package.json + package-lock.json 的联合哈希
+  # 存在 node_modules/.soj-dep-hash 标记文件里，一致则视为依赖树未动（install 成功后才写标记，
+  # 半途失败下次仍会重装）
+  local sig
+  sig="$(sha256sum package.json package-lock.json 2>/dev/null | sha256sum | cut -c1-64)"
+  if [ -d node_modules ] && [ -f node_modules/.soj-dep-hash ] \
+      && [ "$(cat node_modules/.soj-dep-hash)" = "$sig" ]; then
+    echo "依赖未变化（lock 哈希一致），跳过 npm install"
+  else
+    npm install --no-audit --no-fund
+    printf '%s' "$sig" > node_modules/.soj-dep-hash
+  fi
   npm run build
 }
 sync_embed() {
