@@ -157,24 +157,17 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 			}
 		}
 	}
-	// 文件 IO 文件名对与说明（v0.5b-3）：zip 内 config.yaml 已声明的以 config 为准；
-	// 名字缺省 problem.in / problem.out（FileIONames 兜底），说明为 Markdown
-	if pr.FileIOInput == "" {
-		if v := formValue(form, "file_io_input"); v != "" {
-			set["fileIoInput"] = v
+	// 文件 IO 基础文件名（v0.5b-3，单字段）：填 problem 即 problem.in / problem.out；
+	// zip 内 config.yaml 已声明 file_io_input/file_io_output 的以 config 为准
+	if pr.FileIOInput == "" && pr.FileIOOutput == "" {
+		if name := strings.TrimSpace(formValue(form, "file_io_name")); name != "" {
+			if strings.ContainsAny(name, "/\\ \t.") || len(name) > 64 {
+				fail(c, http.StatusBadRequest, "文件名仅支持字母/数字/下划线/连字符（不含扩展名）")
+				return
+			}
+			set["fileIoInput"] = name + ".in"
+			set["fileIoOutput"] = name + ".out"
 		}
-	}
-	if pr.FileIOOutput == "" {
-		if v := formValue(form, "file_io_output"); v != "" {
-			set["fileIoOutput"] = v
-		}
-	}
-	if v := formValue(form, "file_io_desc"); v != "" {
-		if len(v) > 256<<10 {
-			fail(c, http.StatusBadRequest, "文件 IO 说明过长（上限 256KB）")
-			return
-		}
-		set["fileIoDesc"] = v
 	}
 	if len(set) > 0 {
 		if err := h.repo.UpdateProblemMeta(c.Request.Context(), pr.ID, set); err != nil {
@@ -297,9 +290,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		MemoryLimitKB  *int     `json:"memory_limit_kb"`
 		Compare        *string  `json:"compare"`
 		FloatTolerance *float64 `json:"float_tolerance"`
-		FileIOInput    *string  `json:"file_io_input"`
-		FileIOOutput   *string  `json:"file_io_output"`
-		FileIODesc     *string  `json:"file_io_desc"`
+		FileIOName     *string  `json:"file_io_name"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -342,33 +333,21 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		}
 		set["floatTolerance"] = *req.FloatTolerance
 	}
-	// 文件 IO 文件名对与说明（v0.5b-3）：名字允许清空（回退默认 problem.in/problem.out），
-	// 非法文件名字符（路径分隔/空白）拒绝；说明为 Markdown，仅启用场景渲染
-	validIOName := func(s string) bool {
-		return !strings.ContainsAny(s, "/\\ \t") && len(s) <= 64
-	}
-	if req.FileIOInput != nil {
-		t := strings.TrimSpace(*req.FileIOInput)
-		if t != "" && !validIOName(t) {
-			fail(c, http.StatusBadRequest, "输入文件名不可含路径分隔符或空白")
-			return
+	// 文件 IO 基础文件名（v0.5b-3，单字段）：填 problem 即 problem.in / problem.out；
+	// 允许清空（回退默认 problem），非法文件名字符（路径分隔/空白/点开头的扩展名混淆）拒绝
+	if req.FileIOName != nil {
+		t := strings.TrimSpace(*req.FileIOName)
+		if t != "" {
+			if strings.ContainsAny(t, "/\\ \t.") || len(t) > 64 {
+				fail(c, http.StatusBadRequest, "文件名仅支持字母/数字/下划线/连字符（不含扩展名）")
+				return
+			}
+			set["fileIoInput"] = t + ".in"
+			set["fileIoOutput"] = t + ".out"
+		} else {
+			set["fileIoInput"] = ""
+			set["fileIoOutput"] = ""
 		}
-		set["fileIoInput"] = t
-	}
-	if req.FileIOOutput != nil {
-		t := strings.TrimSpace(*req.FileIOOutput)
-		if t != "" && !validIOName(t) {
-			fail(c, http.StatusBadRequest, "输出文件名不可含路径分隔符或空白")
-			return
-		}
-		set["fileIoOutput"] = t
-	}
-	if req.FileIODesc != nil {
-		if len(*req.FileIODesc) > 256<<10 {
-			fail(c, http.StatusBadRequest, "文件 IO 说明过长（上限 256KB）")
-			return
-		}
-		set["fileIoDesc"] = *req.FileIODesc
 	}
 	if len(set) == 0 {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")

@@ -62,7 +62,6 @@ type Problem struct {
 	FileIO         bool       `bson:"fileIo,omitempty"`        // 文件 IO 模式（v0.5b-3 生效）
 	FileIOInput    string     `bson:"fileIoInput,omitempty"`
 	FileIOOutput   string     `bson:"fileIoOutput,omitempty"`
-	FileIODesc     string     `bson:"fileIoDesc,omitempty"` // 文件 IO 说明（Markdown，启用场景追加渲染）
 	CreatedAt      time.Time  `bson:"createdAt"`
 	UpdatedAt      time.Time  `bson:"updatedAt"`
 }
