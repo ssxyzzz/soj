@@ -135,6 +135,9 @@ export const problemApi = {
     patch<{ pinned: boolean }>(`/problems/${id}/solutions/${sid}/pinned`, { pinned }),
   setHidden: (id: number, hidden: boolean) =>
     patch<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
+  // 整包替换测试数据（编辑题目）：旧测试点全部删除，按新 zip 重建
+  replaceTestdata: (id: number, form: FormData) =>
+    client.post(`/problems/${id}/testdata`, form, { timeout: 0 }).then((r) => r.data.data),
   submissions: (id: number, page: number, pageSize: number, sort?: string, lang?: string) =>
     get<SubmissionListResult>(`/problems/${id}/submissions`, {
       page,

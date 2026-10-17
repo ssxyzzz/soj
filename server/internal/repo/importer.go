@@ -276,6 +276,241 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 
 func sha256Hex(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
 
+// ReplaceCases 整包替换既有题目的测试数据（编辑题目复用建题界面，v0.5b-4）：
+// dir 为新数据包解压目录（cases/<N>/in|ans 结构），旧测试点文件全部删除；
+// 标题/时限/内存/隐藏态等元数据保持不变，新包 config.yaml 可覆盖
+// 样例/子任务/文件 IO/校验器（与建题的「config 优先」语义一致）；
+// 题面正文保留，样例章节按新数据重建（「## 样例」剥离后重追加）。
+func (im *Importer) ReplaceCases(ctx context.Context, pid int64, dir string) (*Problem, error) {
+	p, err := im.Repo.GetProblem(ctx, pid)
+	if err != nil {
+		return nil, fmt.Errorf("读取原题目: %w", err)
+	}
+	if err := normalizeFlatCases(dir); err != nil {
+		return nil, err
+	}
+	cfg, err := parseProblemConfig(dir)
+	if err != nil {
+		return nil, fmt.Errorf("解析 config.yaml: %w", err)
+	}
+
+	casesDir := filepath.Join(dir, "cases")
+	caseEntries, err := os.ReadDir(casesDir)
+	if err != nil {
+		return nil, fmt.Errorf("读取 cases 目录: %w", err)
+	}
+	indexes := make([]int, 0, len(caseEntries))
+	for _, e := range caseEntries {
+		if !e.IsDir() {
+			continue
+		}
+		if n, err := strconv.Atoi(e.Name()); err == nil {
+			indexes = append(indexes, n)
+		}
+	}
+	sort.Ints(indexes)
+	if len(indexes) == 0 {
+		return nil, fmt.Errorf("cases 目录下没有测试点")
+	}
+
+	store := testdata.NewLocalFS(im.DataDir)
+
+	// 样例标记：config 声明 > 沿用原样例标记 > 首个测试点
+	sampleSet := map[int]bool{}
+	if cfg != nil && cfg.Samples != nil {
+		for _, i := range *cfg.Samples {
+			sampleSet[i] = true
+		}
+	} else {
+		for _, c := range p.Cases {
+			if c.Sample {
+				sampleSet[c.Index] = true
+			}
+		}
+	}
+
+	// 子任务：config 声明（校验存在性与分值合计）> 沿用原子任务（引用的测试点必须仍存在）
+	var subtasks []Subtask
+	validateSubtasks := func(ysts []yamlSubtask) ([]Subtask, error) {
+		exists := map[int]bool{}
+		for _, i := range indexes {
+			exists[i] = true
+		}
+		sum := 0
+		out := make([]Subtask, 0, len(ysts))
+		for _, st := range ysts {
+			if len(st.Cases) == 0 {
+				return nil, fmt.Errorf("子任务不能为空")
+			}
+			for _, ci := range st.Cases {
+				if !exists[ci] {
+					return nil, fmt.Errorf("子任务引用了不存在的测试点 %d", ci)
+				}
+			}
+			if st.Score <= 0 {
+				return nil, fmt.Errorf("子任务分值必须为正数")
+			}
+			sum += st.Score
+			out = append(out, Subtask{Cases: st.Cases, Score: st.Score})
+		}
+		if sum != 100 {
+			return nil, fmt.Errorf("子任务分值之和必须为 100，当前为 %d", sum)
+		}
+		return out, nil
+	}
+	switch {
+	case cfg != nil && cfg.Subtasks != nil:
+		if subtasks, err = validateSubtasks(*cfg.Subtasks); err != nil {
+			return nil, err
+		}
+	case len(p.Subtasks) > 0:
+		exists := map[int]bool{}
+		for _, i := range indexes {
+			exists[i] = true
+		}
+		for _, st := range p.Subtasks {
+			for _, ci := range st.Cases {
+				if !exists[ci] {
+					return nil, fmt.Errorf("新数据缺少原子任务引用的测试点 %d（原题目配置了子任务计分，请在 zip 内 config.yaml 声明 subtasks）", ci)
+				}
+			}
+		}
+		subtasks = p.Subtasks
+	}
+
+	// 写入新测试点并重建元数据
+	cases := make([]CaseMeta, 0, len(indexes))
+	contents := make(map[int]SampleIO, len(indexes))
+	for _, i := range indexes {
+		inData, err := os.ReadFile(filepath.Join(casesDir, strconv.Itoa(i), "in"))
+		if err != nil {
+			return nil, fmt.Errorf("读取测试点 %d 输入: %w", i, err)
+		}
+		ansData, err := os.ReadFile(filepath.Join(casesDir, strconv.Itoa(i), "ans"))
+		if err != nil {
+			return nil, fmt.Errorf("读取测试点 %d 答案: %w", i, err)
+		}
+		contents[i] = SampleIO{Input: string(inData), Output: string(ansData)}
+		inName, ansName := fmt.Sprintf("cases/%d/in", i), fmt.Sprintf("cases/%d/ans", i)
+		if err := store.WriteFile(pid, inName, inData); err != nil {
+			return nil, err
+		}
+		if err := store.WriteFile(pid, ansName, ansData); err != nil {
+			return nil, err
+		}
+		cases = append(cases, CaseMeta{
+			Index:   i,
+			Sample:  sampleSet[i],
+			InName:  inName,
+			AnsName: ansName,
+			InSize:  int64(len(inData)),
+			AnsSize: int64(len(ansData)),
+			InSHA:   sha256Hex(inData),
+			AnsSHA:  sha256Hex(ansData),
+		})
+	}
+	hasSample := false
+	for i := range cases {
+		if cases[i].Sample {
+			hasSample = true
+			break
+		}
+	}
+	if !hasSample {
+		cases[0].Sample = true
+	}
+
+	// 旧测试点清理：新包未覆盖到的编号，文件与目录一并删除（纯替换语义）
+	newNames := map[string]bool{}
+	newIdx := map[int]bool{}
+	for _, c := range cases {
+		newNames[c.InName], newNames[c.AnsName] = true, true
+		newIdx[c.Index] = true
+	}
+	for _, c := range p.Cases {
+		for _, name := range []string{c.InName, c.AnsName} {
+			if !newNames[name] {
+				_ = store.Delete(pid, name)
+			}
+		}
+		if !newIdx[c.Index] {
+			_ = store.RemoveDir(pid, fmt.Sprintf("cases/%d", c.Index))
+		}
+	}
+
+	// 题面：正文保留，样例章节按新数据重建
+	samples := make([]SampleIO, 0, 4)
+	for _, tc := range cases {
+		if tc.Sample {
+			samples = append(samples, contents[tc.Index])
+		}
+	}
+	p.Statement = AppendSamplesMd(StripSamplesMd(p.Statement), samples)
+	if err := store.WriteFile(pid, "statement.md", []byte(p.Statement)); err != nil {
+		return nil, err
+	}
+
+	// 校验器：新包 config.yaml 声明才替换，否则沿用（旧文件名不同则删除旧文件）
+	if cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
+		src, err := os.ReadFile(filepath.Join(dir, *cfg.Checker))
+		if err != nil {
+			return nil, fmt.Errorf("读取校验器文件: %w", err)
+		}
+		if err := store.WriteFile(pid, *cfg.Checker, src); err != nil {
+			return nil, err
+		}
+		if p.CheckerFile != "" && p.CheckerFile != *cfg.Checker {
+			_ = store.Delete(pid, p.CheckerFile)
+		}
+		p.CheckerFile, p.CheckerSHA = *cfg.Checker, sha256Hex(src)
+	}
+
+	// 文件 IO：新包 config.yaml 声明才覆盖
+	if cfg != nil {
+		if cfg.FileIO != nil {
+			p.FileIO = *cfg.FileIO
+		}
+		if cfg.FileIOInput != nil {
+			p.FileIOInput = *cfg.FileIOInput
+		}
+		if cfg.FileIOOutput != nil {
+			p.FileIOOutput = *cfg.FileIOOutput
+		}
+	}
+
+	// problem.yaml 归档重建（数据卷保持自包含，反映替换后的数据形态）
+	meta := problemYAML{
+		Title:         p.Title,
+		TimeLimitMS:   p.TimeLimitMS,
+		MemoryLimitKB: p.MemoryLimitKB,
+		Visibility:    p.Visibility,
+		Hidden:        p.Hidden,
+		Tags:          p.Tags,
+		Compare:       p.Compare,
+	}
+	for _, c := range cases {
+		if c.Sample {
+			meta.Samples = append(meta.Samples, c.Index)
+		}
+	}
+	for _, st := range subtasks {
+		meta.Subtasks = append(meta.Subtasks, yamlSubtask{Cases: st.Cases, Score: st.Score})
+	}
+	if yb, err := yaml.Marshal(&meta); err == nil {
+		_ = store.WriteFile(pid, "problem.yaml", yb)
+	}
+	if cfg != nil && len(cfg.raw) > 0 {
+		_ = store.WriteFile(pid, "config.yaml", cfg.raw)
+	}
+
+	p.Cases = cases
+	p.Subtasks = subtasks
+	if err := im.Repo.UpsertProblem(ctx, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
 // pickNonEmpty 返回第一个非空值（全空返回空串）。
 func pickNonEmpty(vals ...string) string {
 	for _, v := range vals {

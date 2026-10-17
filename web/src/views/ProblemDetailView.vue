@@ -1,20 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadUserFile } from 'element-plus'
-import { QuestionFilled } from '@element-plus/icons-vue'
 
 import { problemApi, submissionApi } from '@/api'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import ProblemForm from '@/components/ProblemForm.vue'
+import type { ProblemFormPayload } from '@/components/ProblemForm.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
 import { useUserStore } from '@/stores/user'
 import { fmtDate, fmtMem, statusDesc, statusStyle } from '@/utils/format'
-import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
 import { languageOptions } from '@/utils/code'
 import type { ProblemDetail, SolutionItem, Submission } from '@/types'
 
@@ -147,61 +147,68 @@ async function togglePin(s: SolutionItem) {
   await loadSolutions()
 }
 
-// 编辑题目（题面 + 信息合并弹窗；内存以 MB 编辑、KB 存储）
+// 编辑题目（v0.5b-4 复用建题界面）：表单在 ProblemForm 共享组件，本页只保留提交流程；
+// zip 可选——留空仅更新题面/信息，选择新 zip 则整包替换测试数据（旧测试点不保留）。
 const showEdit = ref(false)
 const savingEdit = ref(false)
-const editStatement = ref('')
-const metaForm = reactive({
-  title: '',
-  time_limit_ms: 1000,
-  memory_limit_mb: 256,
-  compare: 'exact',
-  float_tolerance: 0.0001,
-  file_io_name: '',
-})
-
-// 文件 IO 基础名派生的实际文件名（弹窗内提示展示用）
-const fileIOIn = computed(() => problem.value?.file_io_input || 'problem.in')
-const fileIOOut = computed(() => problem.value?.file_io_output || 'problem.out')
+const editFormRef = ref<InstanceType<typeof ProblemForm>>()
+const editInitial = ref<Partial<Omit<ProblemFormPayload, 'zip' | 'checker'>>>({})
+const fileIOHint = computed(() => ({
+  input: problem.value?.file_io_input || 'problem.in',
+  output: problem.value?.file_io_output || 'problem.out',
+}))
 
 function openEdit() {
   const p = problem.value!
-  editStatement.value = p.description ?? ''
-  metaForm.title = p.title
-  metaForm.time_limit_ms = p.time_limit_ms
-  metaForm.memory_limit_mb = Math.max(16, Math.round(p.memory_limit_kb / 1024))
-  metaForm.compare = (p as ProblemDetail & { compare?: string }).compare === 'tolerant' ? 'tolerant' : 'exact'
-  metaForm.file_io_name = (p.file_io_input || 'problem.in').replace(/\.in$/, '')
+  editInitial.value = {
+    title: p.title,
+    time_limit_ms: p.time_limit_ms,
+    memory_limit_mb: Math.max(16, Math.round(p.memory_limit_kb / 1024)),
+    compare: p.compare === 'tolerant' ? 'tolerant' : 'exact',
+    float_tolerance: p.float_tolerance ?? 0.0001,
+    statement: p.description ?? '',
+    file_io_name: (p.file_io_input || 'problem.in').replace(/\.in$/, ''),
+  }
   checkerFile.value = null
+  showCheckerUpload.value = false
   showEdit.value = true
 }
 
-async function saveEdit() {
+async function onSaveEditClick() {
+  const p = editFormRef.value?.payload()
+  if (!p || !problem.value) return
+  if (p.zip) {
+    const confirmed = await ElMessageBox.confirm(
+      '将以新 zip 整包替换测试数据：旧测试点全部删除，样例章节按新数据重建。确认替换？',
+      '替换测试数据',
+      { type: 'warning', confirmButtonText: '替换', cancelButtonText: '取消' },
+    )
+      .then(() => true)
+      .catch(() => false)
+    if (!confirmed) return
+  }
+  await saveEdit(p)
+}
+
+async function saveEdit(p: ProblemFormPayload) {
   if (!problem.value) return
-  if (!metaForm.title.trim()) {
-    ElMessage.warning('标题不能为空')
-    return
-  }
-  if (!editStatement.value.trim()) {
-    ElMessage.warning('题面不能为空')
-    return
-  }
-  if (markdownBytes(editStatement.value) > MAX_MARKDOWN_BYTES) {
-    ElMessage.error('题面过长（上限 256KB）')
-    return
-  }
   savingEdit.value = true
   try {
-    await problemApi.setStatement(problem.value.id, editStatement.value)
-    problem.value.description = editStatement.value
+    await problemApi.setStatement(problem.value.id, p.statement)
+    problem.value.description = p.statement
     await problemApi.updateMeta(problem.value.id, {
-      title: metaForm.title.trim(),
-      time_limit_ms: metaForm.time_limit_ms,
-      memory_limit_kb: metaForm.memory_limit_mb * 1024,
-      compare: metaForm.compare,
-      file_io_name: metaForm.file_io_name.trim(),
-      ...(metaForm.compare === 'tolerant' ? { float_tolerance: metaForm.float_tolerance } : {}),
+      title: p.title,
+      time_limit_ms: p.time_limit_ms,
+      memory_limit_kb: p.memory_limit_mb * 1024,
+      compare: p.compare,
+      file_io_name: p.file_io_name,
+      ...(p.compare === 'tolerant' ? { float_tolerance: p.float_tolerance } : {}),
     })
+    if (p.zip) {
+      const fd = new FormData()
+      fd.append('zip', p.zip)
+      await problemApi.replaceTestdata(problem.value.id, fd)
+    }
     ElMessage.success('题目已保存')
     showEdit.value = false
     await load()
@@ -212,8 +219,10 @@ async function saveEdit() {
 
 // 自定义校验器（v0.5b-2）：上传 .cpp 源文件，判题时懒编译；移除恢复按比对模式判定。
 // 管理界面并入「编辑题目」弹窗，上传/移除为即时操作（不随弹窗「保存」提交）。
+// 未启用时上传区默认收起（保留「配置校验器」入口），已启用或点开后显示。
 const checkerFile = ref<File | null>(null)
 const savingChecker = ref(false)
+const showCheckerUpload = ref(false)
 
 function onCheckerChange(file: UploadUserFile) {
   checkerFile.value = (file.raw as File) ?? null
@@ -654,99 +663,60 @@ onUnmounted(stopPolling)
     />
 
 
-    <el-dialog v-model="showEdit" title="编辑题目（题面 / 信息）" width="1020" top="4vh">
+    <el-dialog v-model="showEdit" title="编辑题目（题面 / 信息 / 测试数据）" width="1020" top="4vh">
+      <ProblemForm
+        v-if="showEdit"
+        ref="editFormRef"
+        mode="edit"
+        :saving="savingEdit"
+        :initial="editInitial"
+        :file-i-o-hint="fileIOHint"
+      />
       <el-form label-position="top">
-        <el-form-item label="标题" required>
-          <el-input v-model="metaForm.title" maxlength="64" show-word-limit />
-        </el-form-item>
-        <el-form-item label="时限 / 内存">
-          <div class="edit-limits">
-            <el-input-number v-model="metaForm.time_limit_ms" :min="100" :max="600000" :step="100" />
-            <span class="dim">ms</span>
-            <el-input-number v-model="metaForm.memory_limit_mb" :min="16" :max="1024" :step="16" />
-            <span class="dim">MB</span>
-          </div>
-        </el-form-item>
-        <el-form-item>
-          <div class="fileio-edit">
-            <span class="fileio-edit-label">
-              文件 IO 文件名
-              <el-tooltip
-                placement="top"
-                content="仅比赛/考试「本场启用文件 IO」时生效；题库/练习/作业恒为标准输入输出。留空默认 problem：输入文件 problem.in、输出文件 problem.out"
-              >
-                <el-icon class="dim"><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </span>
-            <el-input
-              v-model="metaForm.file_io_name"
-              placeholder="problem"
-              style="width: 280px"
-              maxlength="64"
-            />
-            <div class="dim" style="margin-top: 6px">
-              启用文件 IO 的比赛/考试中，输入文件为 <b>{{ fileIOIn }}</b>、输出文件为 <b>{{ fileIOOut }}</b
-              >，学生端会看到对应的提交提示
-            </div>
-          </div>
-        </el-form-item>
-        <el-form-item label="题面" required>
-          <MdEditor v-model="editStatement" height="480px" />
-        </el-form-item>
-        <el-form-item>
-          <el-tooltip
-            placement="top"
-            content="全文比对：输出与答案精确一致（忽略行尾空白与文末换行）；宽容比对：按空白分词比较，数字可带精度容差（适合答案不唯一的构造/计算题）"
-          >
-            <span class="compare-label">
-              比对模式
-              <el-icon><QuestionFilled /></el-icon>
-            </span>
-          </el-tooltip>
-          <div>
-            <el-radio-group v-model="metaForm.compare">
-              <el-radio-button value="exact">全文比对</el-radio-button>
-              <el-radio-button value="tolerant">宽容比对</el-radio-button>
-            </el-radio-group>
-          </div>
-        </el-form-item>
-        <el-form-item v-if="metaForm.compare === 'tolerant'" label="浮点容差">
-          <el-input-number v-model="metaForm.float_tolerance" :min="0.000001" :max="1" :step="0.0001" :precision="6" />
-          <span class="dim ml8">数字按此精度判定等价</span>
-        </el-form-item>
         <el-form-item>
           <div class="checker-block">
             <div class="checker-status">
               自定义校验器
               <el-tag v-if="problem.has_checker" size="small" type="success">已启用 · 判题由校验器决定（比对模式不生效）</el-tag>
               <el-tag v-else size="small" type="info">未启用 · 按比对模式判定</el-tag>
-            </div>
-            <el-upload
-              drag
-              accept=".cpp"
-              :limit="1"
-              :auto-upload="false"
-              :on-change="onCheckerChange"
-              :on-remove="() => (checkerFile = null)"
-              class="checker-upload"
-            >
-              <div class="checker-hint">
-                <p>{{ problem.has_checker ? '已有校验器，拖入新文件可替换' : '拖入 C++ 校验器源文件或点击选择（.cpp，≤256KB）' }}</p>
-                <p class="dim">调用约定：checker 输入 期望 考生输出，退出码 0 = 通过</p>
-              </div>
-            </el-upload>
-            <div class="checker-actions">
-              <el-button v-if="problem.has_checker" type="danger" plain @click="removeChecker">移除校验器</el-button>
-              <el-button type="primary" :loading="savingChecker" :disabled="!checkerFile" @click="saveChecker">
-                上传并启用
+              <el-button
+                v-if="!problem.has_checker && !showCheckerUpload"
+                size="small"
+                text
+                type="primary"
+                @click="showCheckerUpload = true"
+              >
+                配置校验器
               </el-button>
             </div>
+            <template v-if="problem.has_checker || showCheckerUpload">
+              <el-upload
+                drag
+                accept=".cpp"
+                :limit="1"
+                :auto-upload="false"
+                :on-change="onCheckerChange"
+                :on-remove="() => (checkerFile = null)"
+                class="checker-upload"
+              >
+                <div class="checker-hint">
+                  <p>{{ problem.has_checker ? '已有校验器，拖入新文件可替换' : '拖入 C++ 校验器源文件或点击选择（.cpp，≤256KB）' }}</p>
+                  <p class="dim">调用约定：checker 输入 期望 考生输出，退出码 0 = 通过</p>
+                </div>
+              </el-upload>
+              <div class="checker-actions">
+                <el-button v-if="problem.has_checker" type="danger" plain @click="removeChecker">移除校验器</el-button>
+                <el-button type="primary" :loading="savingChecker" :disabled="!checkerFile" @click="saveChecker">
+                  上传并启用
+                </el-button>
+              </div>
+            </template>
           </div>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEdit = false">取消</el-button>
-        <el-button type="primary" :loading="savingEdit" @click="saveEdit">保存</el-button>
+        <el-button type="primary" :loading="savingEdit" @click="onSaveEditClick">保存</el-button>
       </template>
     </el-dialog>
 
@@ -979,41 +949,6 @@ onUnmounted(stopPolling)
 
 .mt8 {
   margin-top: 8px;
-}
-
-.ml8 {
-  margin-left: 8px;
-}
-
-.edit-limits {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.fileio-edit {
-  width: 100%;
-}
-
-.fileio-edit-label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 600;
-  color: #606266;
-  margin-bottom: 8px;
-}
-
-.fileio-edit .edit-limits {
-  margin-bottom: 8px;
-}
-
-.compare-label {
-  cursor: help;
-  color: #606266;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .status-tag {

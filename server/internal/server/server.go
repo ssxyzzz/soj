@@ -87,6 +87,7 @@ func Run(ctx context.Context, deps *Deps) {
 			// 网页建题（v0.5b-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
 			authed.POST("/problems", RequirePerm(repo.PermProblemCreate), h.CreateProblem)
 			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
+			authed.POST("/problems/:id/testdata", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ReplaceProblemTestdata)
 			authed.POST("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateChecker)
 			authed.DELETE("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveChecker)
 

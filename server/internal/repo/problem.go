@@ -109,6 +109,36 @@ func AppendSamplesMd(statement string, samples []SampleIO) string {
 	return b.String()
 }
 
+// StripSamplesMd 剥离题面中的「## 样例」章节（从标题行到下一个二级标题或文末），
+// 返回不含样例章节的正文。替换测试数据后样例需按新数据重建：先剥离再重新追加。
+func StripSamplesMd(statement string) string {
+	lines := strings.Split(statement, "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, samplesMdHeading) {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return statement
+	}
+	end := len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "## ") {
+			end = i
+			break
+		}
+	}
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(strings.Join(lines[:start], "\n"), "\n\t "))
+	if end < len(lines) {
+		b.WriteString("\n\n")
+		b.WriteString(strings.Join(lines[end:], "\n"))
+	}
+	return b.String()
+}
+
 // migrateSamplesMd 样例并入题面（2026-10-16）：存量题目的样例此前由前端单独渲染，
 // 现把样例内容以 Markdown 追加进题面正文，样例随「编辑题面」一并维护。
 // 逐题幂等：题面已含「## 样例」的跳过。

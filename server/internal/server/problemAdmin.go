@@ -265,6 +265,75 @@ func (h *Handlers) RemoveChecker(c *gin.Context) {
 	ok(c, gin.H{"removed": true})
 }
 
+// ReplaceProblemTestdata 整包替换题目测试数据（编辑题目 v0.5b-4）：
+// 旧测试点文件全部删除，按新 zip 重建 cases；元数据与题面正文保留，
+// 样例章节按新数据重建；新包 config.yaml 可覆盖样例/子任务/文件 IO/校验器。
+func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	p, err := h.repo.GetProblem(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
+		return
+	}
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxCreateRequest)
+	form, err := c.MultipartForm()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "请求体过大或格式错误（测试数据上限 64MB）")
+		return
+	}
+	zips := form.File["zip"]
+	if len(zips) != 1 {
+		fail(c, http.StatusBadRequest, "请上传一个测试数据 zip（含 cases/<N>/in|ans 结构）")
+		return
+	}
+
+	tmpZip, err := os.CreateTemp("", "soj-replace-*.zip")
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器临时文件创建失败")
+		return
+	}
+	defer os.Remove(tmpZip.Name())
+	zf, err := zips[0].Open()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "读取上传文件失败")
+		return
+	}
+	if _, err = io.Copy(tmpZip, zf); err != nil {
+		tmpZip.Close()
+		fail(c, http.StatusBadRequest, "读取上传文件失败")
+		return
+	}
+	tmpZip.Close()
+
+	tmpDir, err := os.MkdirTemp("", "soj-replace-")
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+	if err = safeExtractZip(tmpZip.Name(), tmpDir); err != nil {
+		fail(c, http.StatusBadRequest, "测试数据包不合法："+err.Error())
+		return
+	}
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir}).ReplaceCases(c.Request.Context(), id, tmpDir)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "替换失败："+err.Error())
+		return
+	}
+	ok(c, gin.H{"cases": len(pr.Cases)})
+}
+
 // UpdateProblemMeta 编辑题目元数据（标题/时限/内存/比对模式；题面走既有 statement 接口）。
 func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 	id, okID := parseID(c, "id")
