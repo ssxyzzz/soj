@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus'
 import PageShell from '@/components/PageShell.vue'
 import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
-import { autocompleteAvailable, languageOptions } from '@/utils/code'
+import { autocompleteAvailable, languageOptions, mergedPrefs } from '@/utils/code'
 
 // 个人设置（v0.4.8）：本人自助字段（性别/学校/年级/QQ）+ 偏好（默认语言/代码模板/MD 编辑模式）。
 // 真实姓名只读展示——仅管理员后台可改（班级名单对号用）。
@@ -65,16 +65,17 @@ async function saveProfile() {
 async function savePrefs() {
   savingPrefs.value = true
   try {
-    const p = await authApi.updateProfile({
-      prefs: {
-        defaultLang: prefsForm.defaultLang,
-        mdEditMode: prefsForm.mdEditMode,
-        codeTemplates: prefsForm.codeTemplates,
-        autocomplete: prefsForm.autocomplete,
-      },
+    // 全量合成后整体覆盖（避免清掉在线编程保存的字体/字号），先乐观更新本地再落库
+    const merged = mergedPrefs({
+      defaultLang: prefsForm.defaultLang,
+      mdEditMode: prefsForm.mdEditMode,
+      codeTemplates: prefsForm.codeTemplates,
+      autocomplete: prefsForm.autocomplete,
     })
+    userStore.setPrefs(merged)
+    const p = await authApi.updateProfile({ prefs: merged })
     ElMessage.success('偏好已保存，提交弹窗 / 在线编程 / 编辑器即刻生效')
-    userStore.setPrefs(p.prefs ?? {}) // 本次会话立即生效（布局层只在挂载时拉取）
+    userStore.setPrefs(p.prefs ?? merged) // 本次会话立即生效（布局层只在挂载时拉取）
   } finally {
     savingPrefs.value = false
   }

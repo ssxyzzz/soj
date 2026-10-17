@@ -188,20 +188,24 @@ watch(
 watch(
   () => props.language,
   async (lang) => {
-    if (!view) return
-    langComp?.reconfigure(await langExt(lang))
+    // Compartment.reconfigure 只产出 effect，必须 dispatch 才会生效
+    if (!view || !langComp) return
+    view.dispatch({ effects: langComp.reconfigure(await langExt(lang)) })
   },
 )
 
 watch(
   () => props.autocomplete,
   (v) => {
-    acComp?.reconfigure(v && acFactory ? acFactory() : [])
+    if (!view || !acComp) return
+    view.dispatch({ effects: acComp.reconfigure(v && acFactory ? acFactory() : []) })
   },
 )
 
 watch([() => props.fontFamily, () => props.fontSize], ([fontFamily, fontSize]) => {
-  if (view && viewMod) themeComp?.reconfigure(buildTheme(viewMod, fontFamily, fontSize))
+  // 同上：reconfigure 的 effect 经 view.dispatch 应用，字号/字体才能实时重绘
+  if (!view || !themeComp || !viewMod) return
+  view.dispatch({ effects: themeComp.reconfigure(buildTheme(viewMod, fontFamily, fontSize)) })
 })
 
 onUnmounted(() => view?.destroy())

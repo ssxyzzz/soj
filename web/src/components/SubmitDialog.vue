@@ -69,7 +69,7 @@ function doSubmit() {
       :font-size="codeFontSize"
       :font-family="codeFont"
       height="460px"
-      placeholder="在此编写或粘贴你的代码（系统不提供默认模板）"
+      placeholder="在此编写或粘贴你的代码"
     />
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>

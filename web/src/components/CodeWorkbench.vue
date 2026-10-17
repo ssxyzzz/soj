@@ -6,7 +6,8 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import MdView from '@/components/MdView.vue'
 import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
-import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
+import { autocompleteOn, defaultLang, languageOptions, mergedPrefs, templateFor } from '@/utils/code'
+import type { UserPrefs } from '@/types'
 
 // 在线编程（v0.4.6 右列入口）：全屏覆盖层，左侧题面（MdView 同引擎渲染）、
 // 右侧代码，中间分隔条可拖动调整两栏宽度；提交动作由父组件接手。
@@ -33,20 +34,19 @@ const acOn = computed(() => autocompleteOn())
 const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
 const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
 
-// 字体/字号即改即存（prefs 为整体覆盖语义，需携带全量字段；本机与后续会话同字体同字号）
-async function saveEditorPrefs(patch: Record<string, unknown>) {
+// 字体/字号即改即存：先乐观更新本地 store（编辑器点击瞬间重绘，不等网络往返），
+// 再全量字段落库（整体覆盖语义，见 utils/code.ts mergedPrefs）。
+// 竞态守卫：快速连点时多个请求乱序返回，仅最后一次请求的响应允许回写 store。
+let prefsSeq = 0
+async function saveEditorPrefs(patch: Partial<UserPrefs>) {
+  const merged = mergedPrefs(patch)
+  userStore.setPrefs(merged)
+  const seq = ++prefsSeq
   try {
-    const prefs = {
-      defaultLang: userStore.prefs.defaultLang ?? '',
-      mdEditMode: userStore.prefs.mdEditMode ?? '',
-      codeTemplates: userStore.prefs.codeTemplates ?? {},
-      autocomplete: userStore.prefs.autocomplete ?? true,
-      ...patch,
-    }
-    const p = await authApi.updateProfile({ prefs })
-    userStore.setPrefs(p.prefs ?? {})
+    const p = await authApi.updateProfile({ prefs: merged })
+    if (seq === prefsSeq) userStore.setPrefs(p.prefs ?? merged)
   } catch {
-    // 错误提示已由 axios 拦截器统一弹出
+    // 错误提示已由 axios 拦截器统一弹出；本地保持本次会话生效，下次进入以后端为准
   }
 }
 
@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
             :font-family="codeFont"
             :tab-indent="true"
             height="100%"
-            placeholder="在此编写或粘贴你的代码（系统不提供默认模板）"
+            placeholder="在此编写或粘贴你的代码"
           />
         </section>
       </div>
