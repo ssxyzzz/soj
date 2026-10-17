@@ -26,7 +26,7 @@ const code = ref('')
 const userStore = useUserStore()
 const acOn = computed(() => autocompleteOn())
 const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
-const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
+const codeFontSize = computed(() => userStore.prefs.codeFontSize || 15)
 
 watch(() => props.modelValue, (open) => {
   if (open) code.value = templateFor(lang.value)

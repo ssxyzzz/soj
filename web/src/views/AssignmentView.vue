@@ -380,23 +380,7 @@ onMounted(() => {
   vertical-align: baseline;
 }
 
-.sub-code {
-  margin: 0;
-  padding: 8px 10px;
-  background: #f8f8f8;
-  border-radius: 4px;
-  max-height: 280px;
-  overflow: auto;
-}
-
-.user-subs-detail {
-  padding: 8px 20px 16px;
-}
-
-.user-subs-detail .sub-code {
-  margin-bottom: 12px;
-}
-
+/* 本视图 mb8=16px（编辑器上方间距），显式覆盖全局 8px 款 */
 .mb8 {
   margin-bottom: 16px;
 }
@@ -419,11 +403,11 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   margin-bottom: 8px;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .intro {
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 1.7;
 }
 
@@ -445,7 +429,7 @@ onMounted(() => {
 }
 
 .adjust-list {
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--el-border-color-lighter);
   border-radius: 4px;
   max-height: 320px;
   overflow: auto;
@@ -457,24 +441,24 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--el-fill-color);
   cursor: grab;
   background: #fff;
 }
 
 .adjust-row:hover {
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 
 .drag-handle {
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
   cursor: grab;
 }
 
 .adjust-order {
   width: 24px;
   text-align: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 15px;
 }
 

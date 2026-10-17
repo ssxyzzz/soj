@@ -191,7 +191,7 @@ onMounted(async () => {
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="showCreateRole" title="新建自定义角色" width="740">
+    <el-dialog v-model="showCreateRole" title="新建自定义角色" width="560">
       <el-form label-position="top">
         <el-form-item label="角色 ID（创建后不可改）" required>
           <el-input v-model="createRoleForm.id" placeholder="如 backup_op / author（2-32 位小写字母/数字/下划线）" />
@@ -228,7 +228,7 @@ onMounted(async () => {
 }
 
 .muted {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-weight: 400;
   font-size: 15px;
 }
@@ -248,8 +248,8 @@ onMounted(async () => {
 /* 权限分类分组行 */
 .perm-group-row {
   font-weight: 600;
-  color: #303133;
-  background: #fafcff;
+  color: var(--el-text-color-primary);
+  background: var(--el-color-primary-light-9);
   margin: -8px -16px;
   padding: 8px 16px;
 }
@@ -275,25 +275,25 @@ onMounted(async () => {
 
 .col-act {
   cursor: pointer;
-  color: #909399;
-  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  font-size: 15px;
 }
 
 .col-act:hover {
-  color: #409eff;
+  color: var(--el-color-primary);
 }
 
 .col-act-disabled {
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
   cursor: not-allowed;
 }
 
 .col-act-disabled:hover {
-  color: #c0c4cc;
+  color: var(--el-text-color-placeholder);
 }
 
 .root-check {
-  color: #67c23a;
+  color: var(--el-color-success);
   font-size: 16px;
   font-weight: 700;
 }
@@ -308,7 +308,7 @@ onMounted(async () => {
 .perm-block-title {
   font-weight: 600;
   font-size: 15px;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 4px;
 }
 

@@ -118,7 +118,7 @@ onMounted(async () => {
 }
 
 .subtitle {
-  color: #606266;
+  color: var(--el-text-color-regular);
   margin: 0 0 16px;
 }
 
@@ -154,8 +154,8 @@ onMounted(async () => {
 }
 
 .feature p {
-  color: #606266;
-  font-size: 14px;
+  color: var(--el-text-color-regular);
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -180,7 +180,7 @@ onMounted(async () => {
 }
 
 .class-intro {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 15px;
   height: 36px;
   overflow: hidden;

@@ -155,23 +155,8 @@ onUnmounted(() => {
   margin-top: 16px;
 }
 
-/* 状态标签可悬停查看说明、点击查看代码与测试点明细 */
-.status-tag {
-  cursor: help;
-}
-
+/* 状态标签可点击查看代码与测试点明细（悬停说明样式走全局 .status-tag/.status-tip） */
 .status-tag.clickable {
   cursor: pointer;
-}
-
-.status-tip {
-  line-height: 1.6;
-  max-width: 260px;
-  white-space: normal;
-}
-
-.status-tip div + div {
-  margin-top: 4px;
-  color: #909399;
 }
 </style>

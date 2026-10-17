@@ -2,7 +2,8 @@ package server
 
 // 网页建题与元数据编辑（v0.5b-1）：
 //   - POST /api/problems：multipart 建题（元数据字段 + 题面 + 测试数据 zip），
-//     zip 只需 cases/<N>/in|ans 结构，problem.yaml / statement.md 由表单生成；
+//     zip 只需 cases/<N>/in|ans 结构（根下平铺 N.in/N.ans 或顶层单目录包裹亦可，
+//     解压后归一/下钻），problem.yaml / statement.md 由表单生成；
 //   - PATCH /api/problems/:id/meta：编辑标题/时限/内存/比对模式（problemEditable 校验）。
 // zip 安全面三道闸：请求体上限、条目数与解压总量上限、条目名穿越成分拒绝。
 
@@ -111,6 +112,10 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	defer os.RemoveAll(tmpDir)
 	if err = safeExtractZip(tmpZip.Name(), tmpDir); err != nil {
 		fail(c, http.StatusBadRequest, "测试数据包不合法："+err.Error())
+		return
+	}
+	if err = unwrapSingleRootDir(tmpDir); err != nil {
+		fail(c, http.StatusInternalServerError, "整理测试数据目录失败")
 		return
 	}
 
@@ -326,6 +331,10 @@ func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "测试数据包不合法："+err.Error())
 		return
 	}
+	if err = unwrapSingleRootDir(tmpDir); err != nil {
+		fail(c, http.StatusInternalServerError, "整理测试数据目录失败")
+		return
+	}
 	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir}).ReplaceCases(c.Request.Context(), id, tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "替换失败："+err.Error())
@@ -508,4 +517,44 @@ func safeExtractZip(zipPath, dst string) error {
 		rc.Close()
 	}
 	return nil
+}
+
+// unwrapSingleRootDir 摊平「整个包套在顶层目录里」的解压结果（下载的数据包再压缩常见）：
+// 根下剔除打包杂物后只剩一个子目录、且该子目录不叫 cases 时，把其内容整体上移一层，
+// 反复进行直到根下不再满足该形态。cases 是根布局保留名（cases/<N>/in|ans），
+// 根下仅有 cases 时说明已是标准结构，下钻反而会拆散它。
+func unwrapSingleRootDir(dir string) error {
+	for {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		live := make([]os.DirEntry, 0, len(entries))
+		for _, e := range entries {
+			if !isPackagingJunk(e.Name()) {
+				live = append(live, e)
+			}
+		}
+		if len(live) != 1 || !live[0].IsDir() || live[0].Name() == "cases" {
+			return nil
+		}
+		inner := filepath.Join(dir, live[0].Name())
+		sub, err := os.ReadDir(inner)
+		if err != nil {
+			return err
+		}
+		for _, e := range sub {
+			if err := os.Rename(filepath.Join(inner, e.Name()), filepath.Join(dir, e.Name())); err != nil {
+				return err
+			}
+		}
+		if err := os.Remove(inner); err != nil {
+			return err
+		}
+	}
+}
+
+// isPackagingJunk 压缩工具附带的系统杂物：macOS 的 __MACOSX/、.DS_Store 与 ._ 资源分叉文件。
+func isPackagingJunk(name string) bool {
+	return name == "__MACOSX" || name == ".DS_Store" || strings.HasPrefix(name, "._")
 }

@@ -172,7 +172,7 @@ defineExpose({ payload })
       >
         <div class="zip-hint">
           <p>{{ mode === 'create' ? '拖入 zip 或点击选择' : '拖入新 zip 整包替换，留空则不修改' }}</p>
-          <p class="dim">结构：test1.in、test1.ans/out、test2.in、test2.ans/out……每个测试点一对输入/输出</p>
+          <p class="dim">结构：test1.in、test1.ans/out……每个测试点一对输入/输出；cases/1/in|ans 目录结构亦可，外层多套一层文件夹没问题</p>
         </div>
       </el-upload>
     </el-form-item>
@@ -229,7 +229,7 @@ defineExpose({ payload })
 :deep(.el-form-item__label) {
   font-size: 15px;
   font-weight: 400;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 /* 时限/内存 与 文件 IO 同行排布（各带自绘标签，样式对齐 el-form-item__label） */
@@ -248,7 +248,7 @@ defineExpose({ payload })
 .field-label {
   font-size: 15px;
   font-weight: 400;
-  color: #303133;
+  color: var(--el-text-color-primary);
   margin-bottom: 8px;
   display: inline-flex;
   align-items: center;
@@ -302,7 +302,7 @@ defineExpose({ payload })
 .plain-label :deep(.el-form-item__label) {
   font-size: 15px;
   font-weight: 400;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .zip-hint {

@@ -147,46 +147,5 @@ defineExpose({ refresh: loadMine })
   </el-dialog>
 </template>
 
-<style scoped>
-.side-pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
+<!-- 状态提示/明细/代码块样式走全局（styles/main.css 评测查看通用段） -->
 
-.mb8 {
-  margin-bottom: 8px;
-}
-
-.detail-desc {
-  margin-bottom: 4px;
-}
-
-.detail-sub {
-  font-weight: 600;
-  margin: 14px 0 8px;
-}
-
-.sub-code {
-  margin: 0;
-  padding: 10px 14px;
-  background: #f8f8f8;
-  border-radius: 4px;
-  max-height: 320px;
-  overflow: auto;
-}
-
-.status-tag {
-  cursor: help;
-}
-
-.status-tip {
-  line-height: 1.6;
-  max-width: 260px;
-  white-space: normal;
-}
-
-.mono {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
-}
-</style>

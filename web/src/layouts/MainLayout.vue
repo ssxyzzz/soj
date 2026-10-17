@@ -86,7 +86,7 @@ function onCommand(command: string) {
 
 .header {
   background: #fff;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--el-border-color-light);
   padding: 0;
   height: 60px;
 }
@@ -109,7 +109,7 @@ function onCommand(command: string) {
 .brand {
   font-size: 22px;
   font-weight: 700;
-  color: #409eff;
+  color: var(--el-color-primary);
   cursor: pointer;
   margin-right: 16px;
   letter-spacing: 2px;
@@ -140,7 +140,7 @@ function onCommand(command: string) {
   align-items: center;
   padding: 0 var(--el-menu-base-level-padding, 20px);
   font-size: var(--el-menu-item-font-size, 14px);
-  color: var(--el-menu-text-color, #303133);
+  color: var(--el-menu-text-color, var(--el-text-color-primary));
   border-bottom: 2px solid transparent;
   white-space: nowrap;
   transition:
@@ -177,15 +177,15 @@ function onCommand(command: string) {
 }
 
 .main {
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 
 .footer {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 15px;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 </style>

@@ -91,7 +91,7 @@ my-problem/
 
 - 目录名前缀数字作为题目 ID（如 `7_我的题目` → pid 7），省略则自动分配；
 - `hidden: true` 设为主题库隐藏（普通用户不可见，适合做考试题）；
-- 可选 `config.yaml`（与 zip 建题共用解析，白名单制、未知字段忽略，config 优先于 problem.yaml）：`time`（秒）/`memory`（MB）/`compare`（exact/tolerant）/`float_tolerance`/`subtasks`/`samples`/`checker`/`file_io*`；测试点支持平铺布局（根目录 `1.in 1.ans`），自动归一为 `cases/1/` 结构；
+- 可选 `config.yaml`（与 zip 建题共用解析，白名单制、未知字段忽略，config 优先于 problem.yaml）：`time`（秒）/`memory`（MB）/`compare`（exact/tolerant）/`float_tolerance`/`subtasks`/`samples`/`checker`/`file_io*`；测试点支持平铺布局（根目录 `1.in 1.ans`），自动归一为 `cases/1/` 结构；zip 建题/整包替换还容忍顶层单目录包裹（整个包多套一层文件夹，如下载的数据包直接上传）与 macOS 打包杂物（`__MACOSX/`、`.DS_Store`），解压后自动下钻/忽略；
 - `subtasks` 可选子任务分组给分（组内测试点全过才得分，分值之和须为 100）：
 
 ```yaml

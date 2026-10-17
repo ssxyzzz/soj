@@ -21,8 +21,8 @@ body {
     'Hiragino Sans GB',
     'Microsoft YaHei',
     sans-serif;
-  background-color: #f5f7fa;
-  color: #303133;
+  background-color: var(--el-fill-color-light);
+  color: var(--el-text-color-primary);
 }
 
 .page {
@@ -44,7 +44,7 @@ pre {
 
 /* 全局小提示（各视图本地 .dim 定义已移除，统一走这里；字号继承 body 15px） */
 .dim {
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 /* 徽章类 el-tag 与小号按钮：字号对齐全站 15px（EP 默认 12px 偏小），高度随内容自适应 */
@@ -86,6 +86,57 @@ code,
 kbd,
 samp {
   font-size: 15px;
+}
+
+/* ---- 评测/提交查看通用样式（v0.5e ② 自各弹窗/视图收敛；类名足够特化，全局共享） ----
+   使用方：SubmissionDetailDialog / SubmissionListView / MySubmissionsDialog /
+   OthersCodeDialog / RoundDetailView / RoundProblemView / AssignmentView */
+.status-tag {
+  cursor: help;
+}
+
+/* 状态标签悬浮说明（含义 + 常见原因） */
+.status-tip {
+  line-height: 1.6;
+  max-width: 260px;
+  white-space: normal;
+}
+
+.status-tip div + div {
+  margin-top: 4px;
+  color: var(--el-text-color-secondary);
+}
+
+.side-pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.mb8 {
+  margin-bottom: 8px;
+}
+
+.detail-desc {
+  margin-bottom: 4px;
+}
+
+.detail-sub {
+  font-weight: 600;
+  margin: 14px 0 8px;
+}
+
+.sub-code {
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--el-fill-color-lighter);
+  border-radius: 4px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
 }
 
 /* 小号下拉选择器（管理后台角色选择等）：字号对齐全站 15px（EP small 为 12px） */

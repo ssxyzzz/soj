@@ -36,7 +36,7 @@ type UserPrefs struct {
 	MdEditMode    string            `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"` // wysiwyg / ir / sv，空为默认所见即所得
 	Autocomplete  *bool             `bson:"autocomplete,omitempty" json:"autocomplete,omitempty"` // 代码自动补全（v0.5d，默认开箱开启；后续按用户等级门槛放开——预留接口）
 	CodeFont      string            `bson:"codeFont,omitempty" json:"codeFont,omitempty"`         // 代码编辑器字体：Consolas / Menlo / Monaco，空为 Consolas
-	CodeFontSize  int               `bson:"codeFontSize,omitempty" json:"codeFontSize,omitempty"` // 编辑器字号 px（12-28），0 为默认 14
+	CodeFontSize  int               `bson:"codeFontSize,omitempty" json:"codeFontSize,omitempty"` // 编辑器字号 px（12-28），0 为默认 15
 }
 
 type User struct {

@@ -387,7 +387,7 @@ onMounted(() => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showExam" title="发起班级考试" width="660">
+    <el-dialog v-model="showExam" title="发起班级考试" width="560">
       <el-form label-position="top">
         <el-form-item label="考试名称" required>
           <el-input v-model="examForm.title" maxlength="64" />
@@ -450,7 +450,7 @@ onMounted(() => {
 
 .intro {
   margin: 10px 0 4px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .meta {
@@ -477,8 +477,8 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   padding: 4px 0;
-  font-size: 14px;
-  color: #606266;
+  font-size: 15px;
+  color: var(--el-text-color-regular);
 }
 
 .info-line b.small {

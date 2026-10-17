@@ -20,7 +20,7 @@ const props = withDefaults(
     height: '420px',
     autocomplete: true,
     placeholder: '',
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: 'Consolas',
     tabIndent: false,
   },
@@ -221,7 +221,7 @@ onUnmounted(() => view?.destroy())
 <style scoped>
 .code-editor {
   width: 100%;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--el-border-color);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -244,7 +244,7 @@ onUnmounted(() => view?.destroy())
 }
 
 .code-editor :deep(.cm-gutters) {
-  border-right: 1px solid #dcdfe6;
-  background: #fafafa;
+  border-right: 1px solid var(--el-border-color);
+  background: var(--el-fill-color-lighter);
 }
 </style>

@@ -61,7 +61,7 @@ async function onSubmit(p: ProblemFormPayload) {
 <style scoped>
 .tips {
   font-size: 15px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 1.8;
 }
 

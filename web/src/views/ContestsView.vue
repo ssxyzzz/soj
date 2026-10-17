@@ -145,7 +145,7 @@ onMounted(load)
     </template>
   </PageShell>
 
-  <el-dialog v-model="showCreate" title="创建主题库比赛" width="660">
+  <el-dialog v-model="showCreate" title="创建主题库比赛" width="560">
     <el-form label-position="top">
       <el-form-item label="比赛名称" required>
         <el-input v-model="form.title" maxlength="64" />
@@ -205,23 +205,23 @@ onMounted(load)
 }
 
 .running-dot {
-  background: #67c23a;
+  background: var(--el-color-success);
 }
 
 .scheduled-dot {
-  background: #e6a23c;
+  background: var(--el-color-warning);
 }
 
 .ended-dot {
-  background: #c0c4cc;
+  background: var(--el-text-color-placeholder);
 }
 
 .running-head {
-  color: #529b2e;
+  color: var(--el-color-success-dark-2);
 }
 
 .scheduled-head {
-  color: #b88230;
+  color: var(--el-color-warning-dark-2);
 }
 
 .aside-card + .aside-card {

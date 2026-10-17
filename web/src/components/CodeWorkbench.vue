@@ -32,7 +32,7 @@ const divider = ref<HTMLElement>()
 const userStore = useUserStore()
 const acOn = computed(() => autocompleteOn())
 const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
-const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
+const codeFontSize = computed(() => userStore.prefs.codeFontSize || 15)
 
 // 字体/字号即改即存：先乐观更新本地 store（编辑器点击瞬间重绘，不等网络往返），
 // 再全量字段落库（整体覆盖语义，见 utils/code.ts mergedPrefs）。
@@ -177,7 +177,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   padding: 10px 20px;
-  border-bottom: 1px solid #e4e7ed;
+  border-bottom: 1px solid var(--el-border-color-light);
   flex: none;
 }
 
@@ -197,8 +197,8 @@ onBeforeUnmount(() => {
 
 .wb-disabled {
   padding: 8px 20px;
-  background: #fdf6ec;
-  color: #e6a23c;
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
   font-size: 15px;
   flex: none;
 }
@@ -219,12 +219,12 @@ onBeforeUnmount(() => {
   flex: none;
   width: 6px;
   cursor: col-resize;
-  background: #f0f2f5;
+  background: var(--el-fill-color);
   transition: background 0.2s;
 }
 
 .wb-divider:hover {
-  background: #c6e2ff;
+  background: var(--el-color-primary-light-5);
 }
 
 .wb-right {

@@ -331,7 +331,7 @@ defineExpose({ refresh: loadDefaultView })
       :image-size="60"
     />
 
-    <el-dialog v-model="showCreate" title="新建用户" width="500">
+    <el-dialog v-model="showCreate" title="新建用户" width="560">
       <el-form label-position="top">
         <el-form-item label="用户名" required>
           <el-input v-model="createForm.username" placeholder="3-32 位字母/数字/下划线" />
@@ -391,7 +391,7 @@ defineExpose({ refresh: loadDefaultView })
 }
 
 .sug-nickname {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 15px;
   flex: 1 1 auto;
 }
@@ -401,11 +401,11 @@ defineExpose({ refresh: loadDefaultView })
   display: flex;
   align-items: center;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
 }
 
 .row-hint {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 15px;
 }
 

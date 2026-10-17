@@ -258,7 +258,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .sa-switch {
@@ -316,12 +316,12 @@ onUnmounted(() => {
 
 .sub-row {
   padding: 6px 4px;
-  border-bottom: 1px dashed #ebeef5;
+  border-bottom: 1px dashed var(--el-border-color-lighter);
   cursor: pointer;
 }
 
 .sub-row:hover {
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
 }
 
 .sub-line {
@@ -337,18 +337,9 @@ onUnmounted(() => {
   font-size: 15px;
 }
 
-.sub-code {
+/* 列表行内的代码块：与上一行留间距、不继承行的手型光标（其余走全局 .sub-code/.mono） */
+.sub-row .sub-code {
   margin-top: 6px;
-  padding: 8px 10px;
-  background: #f8f8f8;
-  border-radius: 4px;
-  max-height: 280px;
-  overflow: auto;
-  font-size: 15px;
   cursor: auto;
-}
-
-.mono {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
 }
 </style>

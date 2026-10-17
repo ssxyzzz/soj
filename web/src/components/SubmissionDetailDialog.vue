@@ -102,37 +102,3 @@ watch(
   </el-dialog>
 </template>
 
-<style scoped>
-.detail-desc {
-  margin-bottom: 4px;
-}
-
-.detail-sub {
-  font-weight: 600;
-  margin: 14px 0 8px;
-}
-
-.sub-code {
-  margin: 0;
-  padding: 10px 14px;
-  background: #f8f8f8;
-  border-radius: 4px;
-  max-height: 320px;
-  overflow: auto;
-}
-
-.status-tag {
-  cursor: help;
-}
-
-.status-tip {
-  line-height: 1.6;
-  max-width: 260px;
-  white-space: normal;
-}
-
-.status-tip div + div {
-  margin-top: 4px;
-  color: #909399;
-}
-</style>

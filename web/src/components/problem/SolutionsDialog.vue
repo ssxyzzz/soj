@@ -166,7 +166,7 @@ async function togglePin(s: SolutionItem) {
 .solution-item + .solution-item {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .solution-meta {

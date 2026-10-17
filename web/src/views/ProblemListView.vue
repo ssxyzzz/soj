@@ -189,7 +189,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   padding: 8px 12px;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
   border-radius: 4px;
   margin-bottom: 12px;
   font-size: 15px;
@@ -219,7 +219,7 @@ onMounted(() => {
 .stat-big {
   font-size: 32px;
   font-weight: 700;
-  color: #409eff;
+  color: var(--el-color-primary);
   line-height: 1.2;
 }
 </style>

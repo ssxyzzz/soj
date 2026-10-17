@@ -423,7 +423,7 @@ onUnmounted(() => {
 
 .intro {
   margin: 12px 0 4px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .meta {
@@ -448,7 +448,7 @@ onUnmounted(() => {
 .countdown {
   font-size: 22px;
   font-weight: 700;
-  color: #409eff;
+  color: var(--el-color-primary);
   margin-bottom: 10px;
   text-align: center;
 }
@@ -462,7 +462,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   padding: 4px 0;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .entry-actions {
@@ -474,15 +474,6 @@ onUnmounted(() => {
 
 .cell-tries {
   vertical-align: baseline;
-}
-
-.sub-code {
-  margin: 0;
-  padding: 8px 10px;
-  background: #f8f8f8;
-  border-radius: 4px;
-  max-height: 280px;
-  overflow: auto;
 }
 
 .user-subs-detail {

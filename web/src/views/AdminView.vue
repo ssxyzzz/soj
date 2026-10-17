@@ -94,8 +94,8 @@ const section = ref<'users' | 'roles' | 'notice' | 'settings' | 'backup'>('users
 }
 
 .nav-item {
-  background: #f0f7ff;
-  border: 1px solid #d9ecff;
+  background: var(--el-color-primary-light-9);
+  border: 1px solid var(--el-color-primary-light-7);
   border-radius: 8px;
   padding: 14px 16px;
   cursor: pointer;
@@ -106,12 +106,12 @@ const section = ref<'users' | 'roles' | 'notice' | 'settings' | 'backup'>('users
 }
 
 .nav-item:hover {
-  border-color: #409eff;
+  border-color: var(--el-color-primary);
 }
 
 .nav-item.active {
-  background: #409eff;
-  border-color: #409eff;
+  background: var(--el-color-primary);
+  border-color: var(--el-color-primary);
 }
 
 .nav-item.active .nav-title,
@@ -121,13 +121,13 @@ const section = ref<'users' | 'roles' | 'notice' | 'settings' | 'backup'>('users
 
 .nav-title {
   font-weight: 600;
-  font-size: 14px;
-  color: #303133;
+  font-size: 15px;
+  color: var(--el-text-color-primary);
 }
 
 .nav-sub {
   font-size: 15px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .admin-main {

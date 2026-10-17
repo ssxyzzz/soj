@@ -292,7 +292,7 @@ onMounted(loadBackup)
 }
 
 .muted {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-weight: 400;
   font-size: 15px;
 }
@@ -306,7 +306,7 @@ onMounted(loadBackup)
 .backup-desc {
   margin: 12px 0;
   font-size: 15px;
-  color: #606266;
+  color: var(--el-text-color-regular);
 }
 
 .backup-actions {
@@ -316,7 +316,7 @@ onMounted(loadBackup)
 
 .tips {
   font-size: 15px;
-  color: #606266;
+  color: var(--el-text-color-regular);
   line-height: 1.8;
 }
 
@@ -329,7 +329,7 @@ onMounted(loadBackup)
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
   border-radius: 6px;
   margin-bottom: 6px;
 }
@@ -342,7 +342,7 @@ onMounted(loadBackup)
 
 .cmd-note {
   font-size: 15px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 
 .key-actions {
@@ -354,7 +354,7 @@ onMounted(loadBackup)
 
 .key-warning {
   font-size: 15px;
-  color: #f56c6c;
+  color: var(--el-color-danger);
   font-weight: 600;
 }
 

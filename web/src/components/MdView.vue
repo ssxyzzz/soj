@@ -14,11 +14,11 @@ const el = ref<HTMLDivElement>()
 async function render() {
   if (!el.value) return
   if (!props.content) {
-    el.value.innerHTML = '<span style="color:#909399">暂无内容</span>'
+    el.value.innerHTML = '<span style="color:var(--el-text-color-secondary)">暂无内容</span>'
     return
   }
   if (markdownBytes(props.content) > MAX_MARKDOWN_BYTES) {
-    el.value.innerHTML = '<span style="color:#f56c6c">内容超过 256KB 上限，为避免页面卡顿已停止渲染</span>'
+    el.value.innerHTML = '<span style="color:var(--el-color-danger)">内容超过 256KB 上限，为避免页面卡顿已停止渲染</span>'
     return
   }
   const Vditor = await loadVditor()

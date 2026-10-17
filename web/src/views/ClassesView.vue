@@ -168,7 +168,7 @@ onMounted(load)
     </el-dialog>
   </PageShell>
 
-  <el-dialog v-model="showCreate" title="创建班级" width="500">
+  <el-dialog v-model="showCreate" title="创建班级" width="560">
     <el-form label-position="top">
       <el-form-item label="班级名称" required>
         <el-input v-model="createForm.name" maxlength="64" placeholder="如：初二 3 班信息组" />
@@ -206,12 +206,12 @@ onMounted(load)
   margin: 0;
   font-size: 16px;
   cursor: pointer;
-  color: #409eff;
+  color: var(--el-color-primary);
   font-weight: 600;
 }
 
 .intro {
-  color: #909399;
+  color: var(--el-text-color-secondary);
   font-size: 15px;
   min-height: 36px;
   margin: 6px 0 8px;
