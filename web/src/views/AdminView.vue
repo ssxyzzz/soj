@@ -9,12 +9,13 @@ import BackupPanel from '@/components/admin/BackupPanel.vue'
 import NoticePanel from '@/components/admin/NoticePanel.vue'
 import RolesPanel from '@/components/admin/RolesPanel.vue'
 import SettingsPanel from '@/components/admin/SettingsPanel.vue'
+import TagsPanel from '@/components/admin/TagsPanel.vue'
 import UsersPanel from '@/components/admin/UsersPanel.vue'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 
-const section = ref<'users' | 'roles' | 'notice' | 'settings' | 'backup'>('users')
+const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup'>('users')
 </script>
 
 <template>
@@ -36,6 +37,15 @@ const section = ref<'users' | 'roles' | 'notice' | 'settings' | 'backup'>('users
       >
         <span class="nav-title">角色管理</span>
         <span class="nav-sub">权限位 / 自定义角色</span>
+      </div>
+      <div
+        v-if="userStore.role === 'root'"
+        class="nav-item"
+        :class="{ active: section === 'tags' }"
+        @click="section = 'tags'"
+      >
+        <span class="nav-title">标签树</span>
+        <span class="nav-sub">多级标签 / 大纲编辑</span>
       </div>
       <div
         class="nav-item"
@@ -67,6 +77,7 @@ const section = ref<'users' | 'roles' | 'notice' | 'settings' | 'backup'>('users
     <main class="admin-main">
       <UsersPanel v-if="section === 'users'" />
       <RolesPanel v-else-if="section === 'roles'" />
+      <TagsPanel v-else-if="section === 'tags'" />
       <NoticePanel v-else-if="section === 'notice'" />
       <SettingsPanel v-else-if="section === 'settings'" />
       <BackupPanel v-else-if="section === 'backup'" />

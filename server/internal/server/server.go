@@ -58,6 +58,8 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)
 		api.GET("/problems/:id/submissions", AuthRequired(h), h.ListProblemSubmissions)
 		api.GET("/problems/:id/my-submissions", AuthRequired(h), h.MyProblemSubmissions)
+		// 标签树（v0.5f）：公开读（题库筛选/详情卡/建题表单共用），写走 /admin/tagtree
+		api.GET("/tags/tree", AuthOptional(h), h.GetTagTree)
 
 		api.POST("/submissions", AuthRequired(h), h.CreateSubmission)
 		// 提交记录总表需「查看全部提交」权限位（学生查自己的历史走题目页「我的提交」）
@@ -165,6 +167,9 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.GET("/backup", RequirePerm(repo.PermBackupRun), h.BackupStatus)
 				adminG.POST("/backup/run", RequirePerm(repo.PermBackupRun), h.BackupRun)
 				adminG.POST("/backup/offline-key", RequirePerm(repo.PermBackupKeys), h.BackupOfflineKey)
+
+				// 标签树（v0.5f）：仅 root 可改（硬编码不下放，同角色管理先例）
+				adminG.PUT("/tagtree", RequireRoot(), h.AdminReplaceTagTree)
 			}
 		}
 	}

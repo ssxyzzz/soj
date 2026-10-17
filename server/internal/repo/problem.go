@@ -49,9 +49,9 @@ type Problem struct {
 	TimeLimitMS    int        `bson:"timeLimitMs"`
 	MemoryLimitKB  int        `bson:"memoryLimitKb"`
 	Visibility     string     `bson:"visibility"`
-	Hidden         bool       `bson:"hidden"`    // 主题库隐藏：default/guest 永不可见不可交
-	CreatedBy      int64      `bson:"createdBy"` // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
-	Tags           []string   `bson:"tags"`
+	Hidden         bool       `bson:"hidden"`             // 主题库隐藏：default/guest 永不可见不可交
+	CreatedBy      int64      `bson:"createdBy"`          // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
+	Tags           []int64    `bson:"tags"`               // 标签树节点 ID（v0.5f），名字与层级由 tags 集合的树实时解析
 	Subtasks       []Subtask  `bson:"subtasks,omitempty"` // nil = 单点等分
 	Cases          []CaseMeta `bson:"cases"`
 	Compare        string     `bson:"compare,omitempty"`        // 比对模式，空 = exact

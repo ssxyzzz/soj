@@ -27,7 +27,7 @@
 - **比赛**：主题库比赛面向全体登录用户；与考试共用锁题规则。
 - **排名**：解题数排行（比赛提交在隐藏期结束后才计入，防赛中推测成绩）。
 - **权限**：15 个权限位 + 可配置角色——内置 default（学生）/ admin / root，root 可建自定义角色（如备份员、出题老师）；root 为代码级超角色；导航、路由与接口全按权限位判权，降权即时生效；班级内部两级（班级管理员/成员）独立不动。
-- **网页建题**：持有「新建题目」权限位者在网页直接建题——题面富文本（粘贴即传图）、时限/内存、测试数据 zip 上传（支持 config.yaml）、比对模式；**编辑题目复用同一表单**，测试数据支持整包替换（旧测试点全删重建，样例章节自动重生成）；**代码编辑器**：提交弹窗与在线编程均为 CodeMirror 6（语法高亮/行号/自动缩进/括号匹配，内置 C++/Python 常用函数补全表，字体字号可调即改即存）；题解区满分开放（多作者，记录作者与时间，支持置顶）。
+- **网页建题**：持有「新建题目」权限位者在网页直接建题——题面富文本（粘贴即传图）、时限/内存、测试数据 zip 上传（支持 config.yaml）、比对模式、标签（级联多选，从 root 维护的标签树选择）；**编辑题目复用同一表单**，测试数据支持整包替换（旧测试点全删重建，样例章节自动重生成）；**标签树**：root 在后台以大纲式缩进文本维护多级标签（改名/删除涉及被引用标签时拦截并列出引用题目），题库页按标签多选筛选（并集精确匹配，悬停预览下级、点击选中）+ 列表标签列，题目详情右列「题目信息」卡展示提交/通过/通过率与标签（比赛/考试做题页不显示）；**代码编辑器**：提交弹窗与在线编程均为 CodeMirror 6（语法高亮/行号/自动缩进/括号匹配，内置 C++/Python 常用函数补全表，字体字号可调即改即存）；题解区满分开放（多作者，记录作者与时间，支持置顶）。
 - **个人设置**：真实姓名（仅管理员后台维护，班级名单对号）+ 性别/学校/年级/QQ（仅自己可见）+ 偏好（默认判题语言、按语言的代码模板、Markdown 编辑器初始模式、代码编辑器字体/字号/自动补全开关），提交弹窗/在线编程/编辑器自动预填。
 - **防刷**：提交限速 1 分钟 3 次（持「提交不限速」权限位者豁免，上限 root 后台可调）。
 - **性能与安全**：响应 gzip 压缩；带哈希的静态资源一年期 immutable 缓存、其余每次回源校验；Vditor 懒加载分包不拖累首屏；题面/说明 256KB 上限（服务端拦截 + 查看端拒渲染）+ 渲染后 DOMPurify 消毒。
@@ -82,7 +82,7 @@ make image                     # 重建 soj 镜像并重启容器（让镜像内
 
 ```
 my-problem/
-├── problem.yaml      # title / timeLimitMs / memoryLimitKb / samples / hidden / subtasks
+├── problem.yaml      # title / timeLimitMs / memoryLimitKb / samples / hidden / subtasks / tags
 ├── statement.md      # 题面
 └── cases/
     ├── 1/in  1/ans   # 每个测试点一对输入/答案
@@ -91,6 +91,7 @@ my-problem/
 
 - 目录名前缀数字作为题目 ID（如 `7_我的题目` → pid 7），省略则自动分配；
 - `hidden: true` 设为主题库隐藏（普通用户不可见，适合做考试题）；
+- `tags: [动态规划, 树形 DP]` 按名字匹配标签树节点挂载（同名取首个，树里没有的名字忽略不报错）；标签树由 root 在后台维护，网页建题/编辑则为级联多选直选节点；
 - 可选 `config.yaml`（与 zip 建题共用解析，白名单制、未知字段忽略，config 优先于 problem.yaml）：`time`（秒）/`memory`（MB）/`compare`（exact/tolerant）/`float_tolerance`/`subtasks`/`samples`/`checker`/`file_io*`；测试点支持平铺布局（根目录 `1.in 1.ans`），自动归一为 `cases/1/` 结构；zip 建题/整包替换还容忍顶层单目录包裹（整个包多套一层文件夹，如下载的数据包直接上传）与 macOS 打包杂物（`__MACOSX/`、`.DS_Store`），解压后自动下钻/忽略；
 - `subtasks` 可选子任务分组给分（组内测试点全过才得分，分值之和须为 100）：
 
@@ -128,12 +129,13 @@ subtasks:
 | GET | /health | 健康检查（db / sandbox） | 公开 |
 | POST | /auth/register · /auth/login | 注册 / 登录（JWT 仅含 uid/uname） | 公开 |
 | GET | /me · /me/classes · /me/profile | 当前用户（含权限位）/ 我的班级 / 个人信息与偏好（真实姓名只读，性别/学校/年级/QQ/偏好本人可改） | 登录 |
-| GET | /problems · /problems/:id | 题库列表 / 详情（按视角过滤隐藏与赛事锁题） | 公开 |
+| GET | /problems · /problems/:id | 题库列表 / 详情（按视角过滤隐藏与赛事锁题；列表支持 `q` 关键字与 `tags=1,5,9` 标签筛选——多选并集精确匹配，列表/详情带 tags 与提交/通过统计） | 公开 |
+| GET | /tags/tree | 标签树整棵（题目信息卡/筛选/表单共用） | 公开 |
 | GET | /problems/:id/submissions | 他人代码（该题满分解锁） | 登录 |
 | GET | /problems/:id/my-submissions | 我在该题的提交 | 登录 |
 | PATCH | /problems/:id/hidden · /problems/:id/statement | 设置隐藏 / 编辑题面 | problem.edit.all，或 problem.edit.own 限自己导入的题 |
 | POST | /problems | 网页建题（problem.yaml + 题面 + 测试数据 zip，支持 config.yaml） | problem.create |
-| PATCH | /problems/:id/meta | 编辑题目信息（标题/时限/内存/比对模式/文件 IO 名） | problem.edit.all，或 problem.edit.own 限自己的题 |
+| PATCH | /problems/:id/meta | 编辑题目信息（标题/时限/内存/比对模式/文件 IO 名/标签） | problem.edit.all，或 problem.edit.own 限自己的题 |
 | POST | /problems/:id/testdata | 测试数据整包替换（旧测试点全删重建，zip 内 config.yaml 生效） | 同上 |
 | POST/DELETE | /problems/:id/checker | 挂载 / 移除自定义校验器（C++，判题懒编译） | 同上 |
 | GET/POST/PATCH/DELETE | /problems/:id/solutions[/:sid]（/pinned） | 题解列表（分页置顶优先）/ 发表 / 编辑删除自己的 / 置顶管理；可见门槛 = 该题满分 | 满分用户读写自己；置顶/删他人需 solution.manage |
@@ -167,6 +169,7 @@ subtasks:
 | GET/PUT | /admin/settings | 系统设置（限速 / 公告） | admin.settings |
 | GET | /admin/roles | 角色清单 + 权限位目录 | admin.user.manage |
 | POST/PATCH/DELETE | /admin/roles[/:id] | 角色增删改（不可下放） | root |
+| PUT | /admin/tagtree | 标签树整树覆盖保存（按名对齐身份；删除被引用标签返回 400 + 引用题目明细） | root |
 | GET | /admin/backup | 备份状态（模式 / 上次备份时间） | backup.run |
 | POST | /admin/backup/run · /admin/backup/offline-key | 一键备份（密文归档流下载 + 服务器留存）/ 升级 Tier 1 离线私钥（响应一次性，no-store） | backup.run / backup.keys |
 
@@ -199,7 +202,7 @@ subtasks:
 
 ## 路线图
 
-v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → v0.4.8 个人设置（资料 + 偏好联动）✅ → v0.4.9 备份加密与备份面板（Tier 0/1 + age 密文归档）✅ → v0.4.10 管理后台改版（角色矩阵/用户单表搜索）✅ → v0.5a 题面图片上传 ✅ → v0.5b 网页建题/比对扩展（宽容比对 + checker + config.yaml）/多作者题解/文件 IO 场景开关，三步全 ✅ → v0.5d 代码编辑器升级（CodeMirror 6 + 补全 + 字体字号）✅；下一批 v0.5c 老师教学闭环（成绩导出/题目统计/已通过列）；题包导入导出、标签等暂缓。
+v0.4.1 作业与管理入口 ✅ → v0.4.2 班级考试 ✅ → v0.4.3 代码可见性 ✅ → v0.4.4 富文本 Vditor ✅ → v0.4.5 上云前性能与安全（gzip/缓存/分包 + 长度上限/渲染消毒 + 编译部署改造）✅ → v0.4.6 全站两列布局改造（PageShell/提交弹窗/在线编程/班级公开私密）✅ → v0.4.7 权限位与可配置角色（单域 RBAC + JWT 降权即时生效）✅ → v0.4.8 个人设置（资料 + 偏好联动）✅ → v0.4.9 备份加密与备份面板（Tier 0/1 + age 密文归档）✅ → v0.4.10 管理后台改版（角色矩阵/用户单表搜索）✅ → v0.5a 题面图片上传 ✅ → v0.5b 网页建题/比对扩展（宽容比对 + checker + config.yaml）/多作者题解/文件 IO 场景开关，三步全 ✅ → v0.5d 代码编辑器升级（CodeMirror 6 + 补全 + 字体字号）✅；下一批 **v0.5f 标签树**（root 大纲式标签树管理 / 题库标签多选筛选与标签列 / 建题级联打标 / 详情「题目信息」卡）✅ → v0.5c 老师教学闭环（成绩导出/题目统计/已通过列）；题包导入导出等暂缓。
 实现记录见 [notes.md](notes.md)，排期与待对齐事项见 [plan.md](plan.md)（均为本地文档，不入库）。
 
 ## 许可证

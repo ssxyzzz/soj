@@ -5,11 +5,14 @@ import { ElMessage } from 'element-plus'
 
 import { authApi, problemApi, rankApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
+import TagFilter from '@/components/problem/TagFilter.vue'
+import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
 import type { ProblemListItem } from '@/types'
 
 const router = useRouter()
 const userStore = useUserStore()
+const tagStore = useTagTreeStore()
 
 const list = ref<ProblemListItem[]>([])
 const total = ref(0)
@@ -17,6 +20,7 @@ const page = ref(1)
 const pageSize = 20
 const loading = ref(false)
 const keyword = ref('')
+const tagSel = ref<number[]>([])
 
 const solvedCount = ref<number | null>(null)
 const solvedRank = ref<number | null>(null)
@@ -24,7 +28,7 @@ const solvedRank = ref<number | null>(null)
 async function load() {
   loading.value = true
   try {
-    const r = await problemApi.list(page.value, pageSize, keyword.value.trim() || undefined)
+    const r = await problemApi.list(page.value, pageSize, keyword.value.trim() || undefined, tagSel.value)
     list.value = r.list
     total.value = r.total
   } finally {
@@ -39,8 +43,27 @@ function search() {
 
 function resetSearch() {
   keyword.value = ''
+  tagSel.value = []
   page.value = 1
   load()
+}
+
+function onTagChange(ids: number[]) {
+  tagSel.value = ids
+  page.value = 1
+  load()
+}
+
+// 表格标签列：前 3 个直接显示，其余收进 +N 悬浮
+function shownTags(row: ProblemListItem): number[] {
+  return (row.tags ?? []).slice(0, 3)
+}
+
+function restTagNames(row: ProblemListItem): string {
+  return (row.tags ?? [])
+    .slice(3)
+    .map((id) => tagStore.nameOf(id))
+    .join('、')
 }
 
 async function loadOverview() {
@@ -82,6 +105,7 @@ function comingSoon() {
 onMounted(() => {
   load()
   loadOverview()
+  tagStore.ensure() // 标签树异步就绪后筛选区自动出现（v-if 响应 store）
 })
 </script>
 
@@ -109,9 +133,9 @@ onMounted(() => {
             @current-change="onPageChange"
           />
         </div>
-        <div class="tag-row">
-          <span class="dim">标签筛选</span>
-          <el-tag size="small" type="info" class="ml8">即将上线</el-tag>
+        <div v-if="tagStore.nodes.length || tagSel.length" class="tag-row">
+          <span class="dim tag-row-label">标签筛选</span>
+          <TagFilter :selected="tagSel" @change="onTagChange" />
         </div>
         <el-table
           v-loading="loading"
@@ -127,6 +151,22 @@ onMounted(() => {
               <el-tag v-if="row.locked" size="small" type="warning" class="ml8">
                 {{ row.lock_kind === 'exam' ? '考试中' : '比赛中' }}
               </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="标签" min-width="170">
+            <template #default="{ row }">
+              <template v-if="row.tags?.length">
+                <el-tag v-for="id in shownTags(row)" :key="id" size="small" type="info" class="cell-tag">
+                  {{ tagStore.nameOf(id) }}
+                </el-tag>
+                <el-tooltip v-if="(row.tags?.length ?? 0) > 3" placement="top" effect="light">
+                  <template #content>
+                    <div style="max-width: 320px">{{ restTagNames(row) }}</div>
+                  </template>
+                  <el-tag size="small" type="info">+{{ (row.tags?.length ?? 0) - 3 }}</el-tag>
+                </el-tooltip>
+              </template>
+              <span v-else class="dim">—</span>
             </template>
           </el-table-column>
           <el-table-column label="通过率" width="110">
@@ -159,7 +199,6 @@ onMounted(() => {
         <template v-if="userStore.token">
           <div class="stat-big">{{ solvedCount ?? '—' }}</div>
           <div class="dim">已解决题数{{ solvedRank ? ` · 当前排名第 ${solvedRank}` : '' }}</div>
-          <div class="dim tip">按标签 / 难度分组统计将随标签功能上线</div>
         </template>
         <template v-else>
           <div class="dim">登录后查看你的做题概览</div>
@@ -187,12 +226,22 @@ onMounted(() => {
 
 .tag-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   padding: 8px 12px;
   background: var(--el-fill-color-light);
   border-radius: 4px;
   margin-bottom: 12px;
   font-size: 15px;
+}
+
+.tag-row-label {
+  flex-shrink: 0;
+  line-height: 28px;
+  margin-right: 12px;
+}
+
+.cell-tag {
+  margin: 0 6px 4px 0;
 }
 
 .pager {

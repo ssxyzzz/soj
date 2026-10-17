@@ -44,6 +44,7 @@ watch(
         float_tolerance: p.float_tolerance ?? 0.0001,
         statement: p.description ?? '',
         file_io_name: (p.file_io_input || 'problem.in').replace(/\.in$/, ''),
+        tag_ids: p.tags ? [...p.tags] : [],
       }
       checkerFile.value = null
       showCheckerUpload.value = false
@@ -103,6 +104,7 @@ async function onSaveEditClick() {
       memory_limit_kb: p.memory_limit_mb * 1024,
       compare: p.compare,
       file_io_name: p.file_io_name,
+      tag_ids: p.tag_ids,
       ...(p.compare === 'tolerant' ? { float_tolerance: p.float_tolerance } : {}),
     })
     if (p.zip) {

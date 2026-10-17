@@ -31,10 +31,29 @@ func atoiDefault(s string, def int) int {
 	return def
 }
 
+// hasAnyTag 题目标签是否命中任一选中 ID（并集、精确匹配）。
+func hasAnyTag(tags []int64, sel map[int64]bool) bool {
+	for _, id := range tags {
+		if sel[id] {
+			return true
+		}
+	}
+	return false
+}
+
+// orEmptyInt64 nil 切片转空切片，JSON 输出 [] 而非 null。
+func orEmptyInt64(s []int64) []int64 {
+	if s == nil {
+		return []int64{}
+	}
+	return s
+}
+
 // ListProblems 题库列表（按视角过滤）：
 //   - 主题库隐藏题对 guest/default 不可见（被主题库比赛赛中解锁时除外）；
 //   - 被比赛锁定（赛前/隐藏期）的题对受影响视角不可见，赛中带锁标记与指引；
-//   - admin/root 可见全部并带标记。
+//   - admin/root 可见全部并带标记；
+//   - tags=1,5,9 标签筛选：并集、精确匹配节点 ID（v0.5f）。
 func (h *Handlers) ListProblems(c *gin.Context) {
 	uid, _, role, _ := currentUser(c)
 	page, pageSize := queryPage(c)
@@ -42,6 +61,15 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 	// 题库搜索：标题包含（忽略大小写）或 ID 精确匹配
 	q := strings.TrimSpace(c.Query("q"))
 	ql := strings.ToLower(q)
+	tagSel, err := parseTagFilter(c.Query("tags"))
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	selSet := map[int64]bool{}
+	for _, id := range tagSel {
+		selSet[id] = true
+	}
 
 	ctx := c.Request.Context()
 	lockMap, err := h.loadLockMap(ctx, uid, role)
@@ -60,6 +88,9 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		if q != "" && strconv.FormatInt(p.ID, 10) != q && !strings.Contains(strings.ToLower(p.Title), ql) {
 			continue
 		}
+		if len(selSet) > 0 && !hasAnyTag(p.Tags, selSet) {
+			continue
+		}
 		lk := lockMap[p.ID]
 		if !privileged {
 			hiddenBlocked := p.Hidden && !(lk != nil && lk.Phase == "running" && lk.Bank)
@@ -67,7 +98,7 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 				continue
 			}
 		}
-		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden}
+		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags)}
 		if lk != nil {
 			item["locked"] = true
 			item["lock_kind"] = lk.Kind
@@ -193,6 +224,15 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"can_view_solutions": canViewSolutions, // 满分 ∨ 老师群体：题解弹窗入口提示用
 		"file_io_input":      p.FileIOInput,    // 文件名对：编辑配置用；场景 warning 展示实际文件名
 		"file_io_output":     p.FileIOOutput,
+		"tags":               orEmptyInt64(p.Tags), // 节点 ID，名字由前端标签树映射
+	}
+	// 统计（题目信息卡）：公开态提交聚合；失败降级 0，不阻塞详情
+	if stats, err := h.repo.ListProblemStats(ctx, []int64{id}); err == nil {
+		resp["submit_count"] = stats[id].Total
+		resp["accepted_count"] = stats[id].Accepted
+	} else {
+		resp["submit_count"] = int64(0)
+		resp["accepted_count"] = int64(0)
 	}
 	if lk != nil {
 		resp["locked"] = true

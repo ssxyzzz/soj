@@ -3,12 +3,13 @@
 // 提交动作 emit 给调用方——新增 = POST /problems 一次交齐；
 // 编辑 = statement / meta / testdata 分步（编辑模式的 zip 为可选的整包替换）。
 // 编辑弹窗不渲染内置提交按钮（走弹窗 footer），经 expose 的 payload() 取值。
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
 import MdEditor from '@/components/MdEditor.vue'
+import { useTagTreeStore } from '@/stores/tagtree'
 import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
 
 export interface ProblemFormPayload {
@@ -19,6 +20,7 @@ export interface ProblemFormPayload {
   float_tolerance: number
   statement: string
   file_io_name: string
+  tag_ids: number[]
   zip: File | null
   checker: File | null
 }
@@ -48,7 +50,13 @@ const form = reactive({
   float_tolerance: props.initial.float_tolerance ?? 0.0001,
   statement: props.initial.statement ?? '',
   file_io_name: props.initial.file_io_name ?? '',
+  tag_ids: props.initial.tag_ids ?? [],
 })
+
+const tagStore = useTagTreeStore()
+tagStore.ensure()
+// 级联面板数据：空树时展示「管理员尚未配置标签树」占位
+const tagTreeEmpty = computed(() => !tagStore.nodes.length)
 
 const fileList = ref<UploadUserFile[]>([])
 const checkerList = ref<UploadUserFile[]>([])
@@ -104,6 +112,7 @@ function payload(): ProblemFormPayload | null {
     title: form.title.trim(),
     statement: form.statement,
     file_io_name: form.file_io_name.trim(),
+    tag_ids: [...form.tag_ids],
     zip,
     checker: checkerFile(),
   }
@@ -200,6 +209,30 @@ defineExpose({ payload })
     </el-form-item>
     <el-form-item v-if="form.compare === 'tolerant'" label="浮点容差" class="plain-label">
       <el-input-number v-model="form.float_tolerance" :min="0.000001" :max="1" :step="0.0001" :precision="6" />
+    </el-form-item>
+    <el-form-item class="plain-label">
+      <template #label>
+        <span class="label-with-tip">
+          标签
+          <el-tooltip
+            placement="top"
+            content="从标签树选择，可多选、可选任意层级；树的层级由 root 在后台「标签树」维护，改名后全站展示自动跟随"
+          >
+            <el-icon class="dim"><QuestionFilled /></el-icon>
+          </el-tooltip>
+        </span>
+      </template>
+      <el-cascader
+        v-if="!tagTreeEmpty"
+        v-model="form.tag_ids"
+        :options="tagStore.nodes"
+        :props="{ multiple: true, checkStrictly: true, emitPath: false, value: 'id', label: 'name', children: 'children' }"
+        clearable
+        filterable
+        placeholder="从标签树选择（可输入关键字过滤）"
+        style="width: 100%"
+      />
+      <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
     </el-form-item>
     <el-form-item v-if="mode === 'create'" label="自定义校验器（可选）">
       <div>

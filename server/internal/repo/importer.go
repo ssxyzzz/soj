@@ -24,8 +24,9 @@ import (
 //	  cases/1/in 1/ans ...   # 每个测试点一对文件
 type Importer struct {
 	Repo       *Repo
-	DataDir    string // testdata 存储根目录
-	CreatorUID int64  // 导入者 uid（0 = 系统/命令行导入，其题目隐藏态仅 root 可改）
+	DataDir    string  // testdata 存储根目录
+	CreatorUID int64   // 导入者 uid（0 = 系统/命令行导入，其题目隐藏态仅 root 可改）
+	TagIDs     []int64 // 网页建题直传的标签节点 ID（非空时优先于 yaml tags 按名匹配）
 }
 
 type problemYAML struct {
@@ -101,6 +102,13 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		return nil, fmt.Errorf("解析 config.yaml: %w", err)
 	}
 	cfg.applyTo(&meta)
+
+	// 标签挂载（v0.5f）：网页建题直传节点 ID（校验存在性），否则 yaml tags 按名匹配
+	//（同名取首个，未命中忽略——树里没有的名字不阻塞导入）
+	tagIDs, err := im.resolveTags(ctx, meta.Tags)
+	if err != nil {
+		return nil, fmt.Errorf("挂载标签: %w", err)
+	}
 
 	// 平铺测试点布局归一：根目录 N.in/N.ans 自动整理为 cases/<序号>/ 结构
 	if err := normalizeFlatCases(dir); err != nil {
@@ -252,7 +260,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		Visibility:     meta.Visibility,
 		Hidden:         meta.Hidden,
 		CreatedBy:      im.CreatorUID,
-		Tags:           meta.Tags,
+		Tags:           tagIDs,
 		Subtasks:       subtasks,
 		Cases:          cases,
 		Compare:        pickNonEmpty(cfg.resolvedCompare(checkerRel), meta.Compare),
@@ -270,6 +278,54 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 }
 
 func sha256Hex(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
+
+// tagNamesOf 节点 ID → 名字（problem.yaml 归档用；树中已不存在的 ID 忽略，
+// 读取树失败时返回 nil——归档是尽力而为，不阻塞替换主流程）。
+func (im *Importer) tagNamesOf(ctx context.Context, ids []int64) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	tree, err := im.Repo.GetTagTree(ctx)
+	if err != nil {
+		return nil
+	}
+	names := TagIDNames(tree)
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if n, ok := names[id]; ok {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// resolveTags 把标签来源归一为树节点 ID：TagIDs 非空（网页建题）时校验每个 ID
+// 在树中存在；否则按名字匹配（同名取首个，未命中的名字忽略不报错）。
+func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, error) {
+	if len(im.TagIDs) > 0 {
+		if err := im.Repo.ValidateTagRefs(ctx, im.TagIDs); err != nil {
+			return nil, err
+		}
+		return im.TagIDs, nil
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+	tree, err := im.Repo.GetTagTree(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lookup := TagNameLookup(tree)
+	out := make([]int64, 0, len(names))
+	seen := map[int64]bool{}
+	for _, name := range names {
+		if id, ok := lookup[name]; ok && !seen[id] {
+			out = append(out, id)
+			seen[id] = true
+		}
+	}
+	return out, nil
+}
 
 // ReplaceCases 整包替换既有题目的测试数据（编辑题目复用建题界面，v0.5b-4）：
 // dir 为新数据包解压目录（cases/<N>/in|ans 结构），旧测试点文件全部删除；
@@ -473,14 +529,15 @@ func (im *Importer) ReplaceCases(ctx context.Context, pid int64, dir string) (*P
 		}
 	}
 
-	// problem.yaml 归档重建（数据卷保持自包含，反映替换后的数据形态）
+	// problem.yaml 归档重建（数据卷保持自包含，反映替换后的数据形态）；
+	// 标签写名字而非节点 ID——yaml 保持可读，重导入按名回匹配同一节点
 	meta := problemYAML{
 		Title:         p.Title,
 		TimeLimitMS:   p.TimeLimitMS,
 		MemoryLimitKB: p.MemoryLimitKB,
 		Visibility:    p.Visibility,
 		Hidden:        p.Hidden,
-		Tags:          p.Tags,
+		Tags:          im.tagNamesOf(ctx, p.Tags),
 		Compare:       p.Compare,
 	}
 	for _, c := range cases {

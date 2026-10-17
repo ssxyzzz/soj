@@ -29,6 +29,25 @@ export interface ProblemListItem {
   lock_phase?: string
   submit_count?: number // 公开态提交数（通过率展示用）
   accepted_count?: number // 其中 AC 的提交数
+  tags?: number[] // 标签树节点 ID，名字由前端标签树映射
+}
+
+// 标签树（v0.5f）：嵌套 children 表达层级，数组顺序即展示顺序
+export interface TagNode {
+  id: number
+  name: string
+  children?: TagNode[]
+}
+
+export interface TagTreeResult {
+  nodes: TagNode[]
+}
+
+// 标签树保存被拒（删除被引用标签）时 failData 附带的引用题目明细
+export interface TagRefProblem {
+  id: number
+  title: string
+  tags: string[]
 }
 
 export interface ProblemListResult {
@@ -67,6 +86,9 @@ export interface ProblemDetail {
   exam_id?: number
   exam_title?: string
   masked?: boolean
+  tags?: number[] // 标签树节点 ID（题目信息卡展示，名字由前端标签树映射）
+  submit_count?: number // 公开态提交数（题目信息卡）
+  accepted_count?: number // 其中 AC 的提交数
 }
 
 export interface Submission {
@@ -202,7 +224,7 @@ export interface UserPrefs {
   mdEditMode?: '' | 'wysiwyg' | 'ir' | 'sv'
   autocomplete?: boolean // 代码自动补全（默认开箱开启；后续按用户等级门槛放开）
   codeFont?: string // 编辑器字体：Consolas / Menlo / Monaco（默认 Consolas）
-  codeFontSize?: number // 编辑器字号 px（12-28，默认 14）
+  codeFontSize?: number // 编辑器字号 px（12-48，默认 14）
 }
 
 // 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）

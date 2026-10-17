@@ -25,6 +25,7 @@ type Repo struct {
 	Counters    *mongo.Collection
 	Uploads     *mongo.Collection
 	Solutions   *mongo.Collection
+	Tags        *mongo.Collection
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -62,6 +63,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		Counters:    db.Collection("counters"),
 		Uploads:     db.Collection("uploads"),
 		Solutions:   db.Collection("solutions"),
+		Tags:        db.Collection("tags"),
 	}, nil
 }
 

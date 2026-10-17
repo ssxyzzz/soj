@@ -7,20 +7,23 @@ import { ElMessage } from 'element-plus'
 
 import { problemApi, submissionApi } from '@/api'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
-import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
 import EditProblemDialog from '@/components/problem/EditProblemDialog.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import OthersCodeDialog from '@/components/problem/OthersCodeDialog.vue'
+import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
+import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
-import { fmtMem, statusStyle } from '@/utils/format'
+import { statusStyle } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const tagStore = useTagTreeStore()
+tagStore.ensure() // 标签名映射异步就绪，信息卡响应式跟随
 
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
@@ -52,8 +55,16 @@ const submitDisabledReason = computed(() => {
   return ''
 })
 
-// 在线编程左栏题面：题面本身已含 Markdown 样例章节，直接渲染
-const workbenchStatement = computed(() => problem.value?.description ?? '')
+// 题目信息卡（v0.5f）：统计 + 标签；比赛/考试做题页（RoundProblemView）为独立视图，天然无此卡
+const tagNames = computed(() => (problem.value?.tags ?? []).map((id) => tagStore.nameOf(id)))
+const shownTagNames = computed(() => tagNames.value.slice(0, 6))
+const restTagNames = computed(() => tagNames.value.slice(6).join('、'))
+const acceptRate = computed(() => {
+  const p = problem.value
+  if (!p?.submit_count) return '—'
+  const pct = ((p.accepted_count ?? 0) / p.submit_count) * 100
+  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
+})
 
 async function load() {
   loading.value = true
@@ -177,9 +188,8 @@ onUnmounted(stopPolling)
           </template>
         </el-alert>
 
-        <el-card>
-          <div class="title-row">
-            <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
+        <ProblemStatement :problem="problem">
+          <template #extra>
             <el-tag v-if="problem.hidden" type="danger">主题库隐藏</el-tag>
             <el-button
               v-if="canSetHidden"
@@ -190,15 +200,29 @@ onUnmounted(stopPolling)
             >
               隐藏
             </el-button>
-          </div>
-          <div class="info-row">
-            <el-tag type="success">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
-            <el-tag type="success">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
-          </div>
-          <MdView :content="problem.description" />
-        </el-card>
+          </template>
+        </ProblemStatement>
 
         <template #aside>
+        <el-card class="aside-card">
+          <template #header><span>题目信息</span></template>
+          <div class="info-stats">
+            <span>提交 <b>{{ problem.submit_count ?? 0 }}</b></span>
+            <span>通过 <b>{{ problem.accepted_count ?? 0 }}</b></span>
+            <span>通过率 <b>{{ acceptRate }}</b></span>
+          </div>
+          <div v-if="tagNames.length" class="info-tags">
+            <el-tag v-for="name in shownTagNames" :key="name" size="small" type="info">{{ name }}</el-tag>
+            <el-tooltip v-if="restTagNames" placement="top" effect="light">
+              <template #content>
+                <div style="max-width: 320px">{{ restTagNames }}</div>
+              </template>
+              <el-tag size="small" type="info">+{{ tagNames.length - 6 }}</el-tag>
+            </el-tooltip>
+          </div>
+          <div v-else class="dim">暂无标签</div>
+        </el-card>
+
         <el-card v-if="problem.can_edit_statement" class="aside-card">
           <template #header><span>管理</span></template>
           <el-button type="primary" style="width: 100%" @click="showEdit = true">编辑题目</el-button>
@@ -231,7 +255,7 @@ onUnmounted(stopPolling)
     <CodeWorkbench
       v-model="showWorkbench"
       :title="`#${problem.id} ${problem.title}`"
-      :statement="workbenchStatement"
+      :problem="problem"
       :submitting="submitting"
       @submit="handleSubmit"
     />
@@ -248,30 +272,28 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
+.info-stats {
+  display: flex;
+  gap: 14px;
+  font-size: 15px;
+}
+
+.info-stats b {
+  font-weight: 600;
+}
+
+.info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
 .lock-bar {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-}
-
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.big-title {
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.info-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 10px 0 14px;
 }
 
 .aside-card + .aside-card {

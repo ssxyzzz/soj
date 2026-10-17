@@ -10,6 +10,7 @@ package server
 import (
 	"archive/zip"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -79,6 +80,14 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "题面过长（上限 256KB）")
 		return
 	}
+	// 标签（v0.5f）：级联选择直传节点 ID（JSON 数组字符串），存在性由 importer 校验
+	var tagIDs []int64
+	if raw := formValue(form, "tag_ids"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &tagIDs); err != nil || len(tagIDs) > 50 {
+			fail(c, http.StatusBadRequest, "tag_ids 参数错误")
+			return
+		}
+	}
 	zips := form.File["zip"]
 	if len(zips) != 1 {
 		fail(c, http.StatusBadRequest, "请上传一个测试数据 zip（含 cases/<N>/in|ans 结构）")
@@ -135,7 +144,7 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		}
 	}
 
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return
@@ -369,6 +378,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		Compare        *string  `json:"compare"`
 		FloatTolerance *float64 `json:"float_tolerance"`
 		FileIOName     *string  `json:"file_io_name"`
+		TagIDs         *[]int64 `json:"tag_ids"` // 指针语义：缺省不动，空数组清空（v0.5f）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -426,6 +436,18 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			set["fileIoInput"] = ""
 			set["fileIoOutput"] = ""
 		}
+	}
+	// 标签（v0.5f）：节点 ID 数组，全部存在于树中才接受
+	if req.TagIDs != nil {
+		if err := h.repo.ValidateTagRefs(c.Request.Context(), *req.TagIDs); err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		ids := *req.TagIDs
+		if ids == nil {
+			ids = []int64{}
+		}
+		set["tags"] = ids
 	}
 	if len(set) == 0 {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")

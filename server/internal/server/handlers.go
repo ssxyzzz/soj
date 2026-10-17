@@ -43,6 +43,13 @@ func fail(c *gin.Context, status int, message string) {
 	c.JSON(status, gin.H{"code": 1, "message": message})
 }
 
+// failData 失败响应附加结构化数据（{"code":1,"message":"...","data":...}），
+// 供前端在 toast 之外展示明细——首个使用方是标签树保存被拒时的引用题目清单；
+// api 拦截器会把 data 挂到 rejected Error 上（error.data）。
+func failData(c *gin.Context, status int, message string, data any) {
+	c.JSON(status, gin.H{"code": 1, "message": message, "data": data})
+}
+
 // Health 返回数据库与沙箱的连通状态。
 func (h *Handlers) Health(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)

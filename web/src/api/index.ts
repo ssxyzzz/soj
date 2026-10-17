@@ -28,6 +28,8 @@ import type {
   RoleInfo,
   Submission,
   SubmissionListResult,
+  TagNode,
+  TagTreeResult,
 } from '@/types'
 
 const client = axios.create({ baseURL: '/api', timeout: 20000 })
@@ -47,7 +49,10 @@ client.interceptors.response.use(
     if (body && typeof body.code === 'number' && body.code !== 0) {
       const message = body.message || '请求失败'
       ElMessage.error(message)
-      return Promise.reject(new Error(message))
+      // 附加后端 failData 携带的明细（如标签树保存被拒时的引用题目清单）
+      const err = new Error(message) as Error & { data?: unknown }
+      err.data = body.data
+      return Promise.reject(err)
     }
     return resp
   },
@@ -107,8 +112,13 @@ export const authApi = {
 }
 
 export const problemApi = {
-  list: (page: number, pageSize: number, q?: string) =>
-    get<ProblemListResult>('/problems', { page, page_size: pageSize, ...(q ? { q } : {}) }),
+  list: (page: number, pageSize: number, q?: string, tags?: number[]) =>
+    get<ProblemListResult>('/problems', {
+      page,
+      page_size: pageSize,
+      ...(q ? { q } : {}),
+      ...(tags && tags.length ? { tags: tags.join(',') } : {}),
+    }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   create: (form: FormData) =>
     client
@@ -150,6 +160,12 @@ export const problemApi = {
     get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
   setStatement: (id: number, statement: string) =>
     patch<{ id: number }>(`/problems/${id}/statement`, { statement }),
+}
+
+// 标签树（v0.5f）：读公开（题库/详情/表单共用），写仅 root（后端 RequireRoot）
+export const tagApi = {
+  tree: () => get<TagTreeResult>('/tags/tree'),
+  save: (nodes: TagNode[]) => put<{ count: number }>('/admin/tagtree', { nodes }),
 }
 
 export const submissionApi = {

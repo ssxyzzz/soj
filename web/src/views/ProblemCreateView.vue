@@ -26,6 +26,7 @@ async function onSubmit(p: ProblemFormPayload) {
     }
     fd.append('statement', p.statement)
     if (p.file_io_name) fd.append('file_io_name', p.file_io_name)
+    fd.append('tag_ids', JSON.stringify(p.tag_ids))
     fd.append('zip', p.zip!)
     if (p.checker) fd.append('checker', p.checker)
     const r = await problemApi.create(fd)
