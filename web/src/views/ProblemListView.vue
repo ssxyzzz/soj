@@ -76,7 +76,7 @@ function onPageChange(p: number) {
 }
 
 function comingSoon() {
-  ElMessage.info('题包导入将在 v0.5b-2 提供，当前请使用命令行导入')
+  ElMessage.info('批量题包导入尚未上线；单题可直接点「新增题目」上传 zip，批量仍用命令行导入')
 }
 
 onMounted(() => {
