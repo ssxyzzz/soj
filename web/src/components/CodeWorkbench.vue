@@ -133,7 +133,7 @@ onBeforeUnmount(() => {
             title="编辑器字号（12-28，可输入或 +/- 微调）"
             @change="(n: number | undefined) => n && saveEditorPrefs({ codeFontSize: n })"
           />
-          <el-button type="primary" :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
+          <el-button type="primary" plain :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
           <el-button @click="emit('update:modelValue', false)">退出全屏（Esc）</el-button>
         </div>
       </header>

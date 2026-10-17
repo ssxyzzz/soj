@@ -12,7 +12,6 @@ import type {
   ContestDetail,
   ContestListItem,
   ContestMySubmission,
-  ExamDetail,
   ExamListItem,
   LeaderRow,
   LoginResult,
@@ -168,7 +167,6 @@ export const rankApi = {
 export const classApi = {
   list: () => get<ClassCard[]>('/classes'),
   detail: (id: number) => get<ClassDetail>(`/classes/${id}`),
-  mine: () => get<ClassCard[]>('/me/classes'),
   create: (name: string, intro: string, priv = false) =>
     post<{ id: number; name: string; invite_code: string }>('/classes', { name, intro, private: priv }),
   join: (id: number, code: string) => post<{ joined: boolean }>(`/classes/${id}/join`, { code }),
@@ -194,10 +192,6 @@ export const assignmentApi = {
   remove: (id: number) => del<{ deleted: number }>(`/assignments/${id}`),
   setProblems: (id: number, pids: number[]) =>
     put<{ count: number }>(`/assignments/${id}/problems`, { pids }),
-  addProblem: (id: number, problemId: number) =>
-    post<{ added: number }>(`/assignments/${id}/problems`, { problem_id: problemId }),
-  removeProblem: (id: number, pid: number) =>
-    del<{ removed: number }>(`/assignments/${id}/problems/${pid}`),
   progress: (id: number) => get<ProgressRow[]>(`/assignments/${id}/progress`),
 }
 
@@ -243,24 +237,44 @@ export interface CreateContestPayload {
   file_io?: boolean
 }
 
+// ---------- 比赛/考试（v0.5e ① 合并：10 对同构接口收敛为 roundApiOf(kind) 工厂） ----------
+
+export type RoundKind = 'contest' | 'exam'
+
+// roundApiOf 比赛/考试同构接口（路径 /contests|/exams，语义差异在后端 round.go）。
+const roundApiOf = (kind: RoundKind) => {
+  const base = `/${kind}s`
+  return {
+    detail: (id: number) => get<ContestDetail>(`${base}/${id}`),
+    setIntro: (id: number, intro: string) => patch<{ id: number }>(`${base}/${id}/intro`, { intro }),
+    remove: (id: number) => del<{ deleted: number }>(`${base}/${id}`),
+    submit: (roundId: number, pid: number, language: string, code: string) =>
+      post<{ id: number }>(`${base}/${roundId}/problems/${pid}/submissions`, { language, code }),
+    mySubmissions: (roundId: number) =>
+      get<{ revealed: boolean; list: ContestMySubmission[] }>(`${base}/${roundId}/submissions/mine`),
+    leaderboard: (roundId: number) => get<LeaderRow[]>(`${base}/${roundId}/leaderboard`),
+    setFileIO: (roundId: number, enabled: boolean) =>
+      patch<{ file_io: boolean }>(`${base}/${roundId}/file-io`, { enabled }),
+    userSubmissions: (roundId: number, pid: number, uid: number) =>
+      get<{ list: Submission[] }>(`${base}/${roundId}/problems/${pid}/submissions`, { uid }),
+  }
+}
+
 export const contestApi = {
   list: () => get<ContestListItem[]>('/contests'),
-  detail: (id: number) => get<ContestDetail>(`/contests/${id}`),
   create: (payload: CreateContestPayload) => post<{ id: number }>('/contests', payload),
-  setIntro: (id: number, intro: string) => patch<{ id: number }>(`/contests/${id}/intro`, { intro }),
-  remove: (id: number) => del<{ deleted: number }>(`/contests/${id}`),
-  submit: (contestId: number, pid: number, language: string, code: string) =>
-    post<{ id: number }>(`/contests/${contestId}/problems/${pid}/submissions`, { language, code }),
-  mySubmissions: (contestId: number) =>
-    get<{ revealed: boolean; list: ContestMySubmission[] }>(`/contests/${contestId}/submissions/mine`),
-  leaderboard: (contestId: number) => get<LeaderRow[]>(`/contests/${contestId}/leaderboard`),
-  setFileIO: (contestId: number, enabled: boolean) =>
-    patch<{ file_io: boolean }>(`/contests/${contestId}/file-io`, { enabled }),
-  userSubmissions: (contestId: number, pid: number, uid: number) =>
-    get<{ list: Submission[] }>(`/contests/${contestId}/problems/${pid}/submissions`, { uid }),
+  ...roundApiOf('contest'),
 }
 
 // ---------- 考试（班级级赛事，v0.4.2） ----------
+
+export const examApi = {
+  listByClass: (classId: number) =>
+    get<{ visible: boolean; list: ExamListItem[] }>(`/classes/${classId}/exams`),
+  create: (classId: number, payload: CreateExamPayload) =>
+    post<{ id: number }>(`/classes/${classId}/exams`, { ...payload, class_id: classId }),
+  ...roundApiOf('exam'),
+}
 
 export interface CreateExamPayload {
   title: string
@@ -270,26 +284,6 @@ export interface CreateExamPayload {
   hidden_days?: number
   problem_ids: number[]
   file_io?: boolean
-}
-
-export const examApi = {
-  listByClass: (classId: number) =>
-    get<{ visible: boolean; list: ExamListItem[] }>(`/classes/${classId}/exams`),
-  detail: (id: number) => get<ExamDetail>(`/exams/${id}`),
-  create: (classId: number, payload: CreateExamPayload) =>
-    post<{ id: number }>(`/classes/${classId}/exams`, { ...payload, class_id: classId }),
-  remove: (id: number) => del<{ deleted: number }>(`/exams/${id}`),
-  submit: (examId: number, pid: number, language: string, code: string) =>
-    post<{ id: number }>(`/exams/${examId}/problems/${pid}/submissions`, { language, code }),
-  mySubmissions: (examId: number) =>
-    get<{ revealed: boolean; list: ContestMySubmission[] }>(`/exams/${examId}/submissions/mine`),
-  leaderboard: (examId: number) => get<LeaderRow[]>(`/exams/${examId}/leaderboard`),
-  setFileIO: (examId: number, enabled: boolean) =>
-    patch<{ file_io: boolean }>(`/exams/${examId}/file-io`, { enabled }),
-  userSubmissions: (examId: number, pid: number, uid: number) =>
-    get<{ list: Submission[] }>(`/exams/${examId}/problems/${pid}/submissions`, { uid }),
-  setIntro: (examId: number, intro: string) =>
-    patch<{ id: number }>(`/exams/${examId}/intro`, { intro }),
 }
 
 // ---------- 首页公告 ----------

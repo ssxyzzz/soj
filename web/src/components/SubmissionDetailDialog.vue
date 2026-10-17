@@ -3,8 +3,6 @@
 // 数据来源二选一：submissionId（按需拉取 /submissions/:id，可见性由后端判定）或
 // submission（列表已带代码与明细时直接传入，避免多余请求）。
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-
 import { submissionApi } from '@/api'
 import { fmtDate, fmtMem, statusDesc, statusStyle } from '@/utils/format'
 import type { Submission } from '@/types'

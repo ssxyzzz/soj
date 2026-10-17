@@ -122,13 +122,6 @@ export interface ClassCard {
   joined: boolean
 }
 
-export interface ClassProblem {
-  id: number
-  title: string
-  hidden: boolean
-  contest_id?: number
-}
-
 // ---------- 作业（班级题目清单，即时出分） ----------
 
 export interface AssignmentListItem {
@@ -300,6 +293,7 @@ export interface ContestDetail {
   is_organizer: boolean
   deletable: boolean
   file_io?: boolean // 本场启用文件 IO（v0.5b-3）
+  class_id?: number // 考试归属班级（v0.5e 起两种详情同构返回）
   problems?: ContestProblem[]
 }
 
@@ -316,8 +310,6 @@ export interface ExamListItem {
   problem_count: number
   is_organizer: boolean
 }
-
-export type ExamDetail = ContestDetail & { class_id: number }
 
 export interface ContestMySubmission {
   id: number

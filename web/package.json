@@ -8,7 +8,8 @@
     "build": "vite build",
     "postinstall": "node -e \"require('fs').cpSync('node_modules/vditor/dist','public/vditor/dist',{recursive:true})\"",
     "typecheck": "vue-tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@codemirror/lang-cpp": "^6.0.3",
@@ -26,7 +27,12 @@
   "devDependencies": {
     "@types/node": "^22.10.1",
     "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/eslint-config-typescript": "^14.9.0",
+    "eslint": "^10.13.0",
+    "eslint-plugin-vue": "^10.11.1",
+    "globals": "^17.13.0",
     "typescript": "~5.6.3",
+    "typescript-eslint": "^8.71.2",
     "vite": "^5.4.11",
     "vue-tsc": "^2.1.10"
   }
