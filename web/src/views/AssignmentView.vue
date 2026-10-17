@@ -287,7 +287,7 @@ onMounted(() => {
           <template #header><span>管理</span></template>
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openAdjust">调整题目</el-button>
-            <el-button type="danger" plain style="width: 100%" @click="removeAssignment">删作业</el-button>
+            <el-button type="danger" style="width: 100%" @click="removeAssignment">删作业</el-button>
           </div>
         </el-card>
       </template>

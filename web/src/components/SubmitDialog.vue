@@ -73,7 +73,7 @@ function doSubmit() {
     />
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
+      <el-button type="primary" plain :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
     </template>
   </el-dialog>
 </template>
@@ -84,10 +84,5 @@ function doSubmit() {
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
-}
-
-.mono :deep(textarea) {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
-  line-height: 1.5;
 }
 </style>

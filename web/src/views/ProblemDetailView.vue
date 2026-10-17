@@ -63,8 +63,6 @@ const showSolutionEditor = ref(false)
 const solutionEditing = ref<SolutionItem | null>(null)
 const solutionDraft = ref('')
 
-const canEditMeta = computed(() => !!problem.value?.can_edit_statement)
-
 async function loadSolutions(p = 1) {
   const r = await problemApi.solutions(Number(route.params.id), p, PAGE_SIZE)
   solutions.value = r.list
@@ -401,7 +399,7 @@ onUnmounted(stopPolling)
           <template #default>
             <div class="lock-bar">
               <span>{{ lockWhat }}期间只能从{{ lockWhat }}页面提交（{{ problem.contest_title ?? problem.exam_title ?? '' }}）</span>
-              <el-button type="warning" size="small" @click="router.push(lockRoute)">前往{{ lockWhat }}</el-button>
+              <el-button type="warning" size="small" plain @click="router.push(lockRoute)">前往{{ lockWhat }}</el-button>
             </div>
           </template>
         </el-alert>
@@ -435,7 +433,7 @@ onUnmounted(stopPolling)
 
         <el-card class="aside-card">
           <div class="entry-actions">
-            <el-button type="primary" style="width: 100%" :disabled="submitDisabled" @click="openSubmitEntry">
+            <el-button type="primary" plain style="width: 100%" :disabled="submitDisabled" @click="openSubmitEntry">
               提交
             </el-button>
             <el-button type="success" plain style="width: 100%" :disabled="submitDisabled" @click="openWorkbenchEntry">
@@ -705,7 +703,7 @@ onUnmounted(stopPolling)
                 </div>
               </el-upload>
               <div class="checker-actions">
-                <el-button v-if="problem.has_checker" type="danger" plain @click="removeChecker">移除校验器</el-button>
+                <el-button v-if="problem.has_checker" type="danger" @click="removeChecker">移除校验器</el-button>
                 <el-button type="primary" :loading="savingChecker" :disabled="!checkerFile" @click="saveChecker">
                   上传并启用
                 </el-button>
@@ -724,7 +722,7 @@ onUnmounted(stopPolling)
       <MdEditor v-model="solutionDraft" height="420px" />
       <template #footer>
         <el-button @click="showSolutionEditor = false">取消</el-button>
-        <el-button type="primary" @click="saveSolution">发布</el-button>
+        <el-button type="primary" plain @click="saveSolution">发布</el-button>
       </template>
     </el-dialog>
     </template>

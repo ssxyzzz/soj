@@ -70,6 +70,24 @@ pre {
   font-size: 15px;
 }
 
+/* small 尺寸描述列表（评测详情等）：EP 带 --small 前缀的选择器多一个类，必须同规格覆盖 */
+.el-descriptions--small .el-descriptions__body .el-descriptions__table .el-descriptions__cell {
+  font-size: 15px;
+}
+
+/* 弹窗内容：EP 硬编码 --el-dialog-content-font-size:14px，对齐全站界面字号 15px */
+.el-dialog {
+  --el-dialog-content-font-size: 15px;
+}
+
+/* 代码显示面：等宽字体视觉偏小且各处曾靠继承拿字号，显式统一 15px（编辑器 CodeMirror 有自己的字号主题，不受影响） */
+pre,
+code,
+kbd,
+samp {
+  font-size: 15px;
+}
+
 /* 小号下拉选择器（管理后台角色选择等）：字号对齐全站 15px（EP small 为 12px） */
 .el-select--small .el-select__wrapper {
   font-size: 15px;

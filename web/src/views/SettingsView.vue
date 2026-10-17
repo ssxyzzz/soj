@@ -108,7 +108,7 @@ onMounted(load)
           <el-input v-model="profileForm.qq" maxlength="16" placeholder="选填，仅自己可见" />
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="savingProfile" @click="saveProfile">保存</el-button>
+          <el-button type="primary" plain :loading="savingProfile" @click="saveProfile">保存</el-button>
         </el-form-item>
       </el-form>
     </el-card>
@@ -156,7 +156,7 @@ onMounted(load)
           </div>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" :loading="savingPrefs" @click="savePrefs">保存</el-button>
+          <el-button type="primary" plain :loading="savingPrefs" @click="savePrefs">保存</el-button>
         </el-form-item>
       </el-form>
     </el-card>

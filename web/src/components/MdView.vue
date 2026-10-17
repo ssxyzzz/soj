@@ -72,18 +72,21 @@ watch(() => props.content, render)
 </template>
 
 <style scoped>
-.md-view :deep(.vditor-reset) {
+/* vditor 4.x 预览会把 vditor-reset 类加在挂载元素自身（本组件根 div）。
+   覆盖其样式必须以 .md-view.vditor-reset 开头，并用 :deep 穿透运行时生成的子元素——
+   普通后代/同类选择器会因类不在后代位置、或运行时子元素缺 data-v 而静默失效 */
+.md-view.vditor-reset {
   padding: 0;
+}
+
+/* 代码框（样例输入/输出等）与行内代码统一 15px（vditor 默认 85%≈13.6px，数字可读性差） */
+.md-view.vditor-reset :deep(pre > code),
+.md-view.vditor-reset :deep(:not(pre) > code) {
+  font-size: 15px;
 }
 
 .md-view :deep(pre) {
   position: relative; /* 复制按钮的定位基准 */
-}
-
-/* 代码框（样例输入/输出等）与行内代码统一 15px（vditor 默认 85%≈13.6px 偏小） */
-.md-view :deep(.vditor-reset pre),
-.md-view :deep(.vditor-reset :not(pre) > code) {
-  font-size: 15px;
 }
 
 .md-view :deep(.md-copy-btn) {

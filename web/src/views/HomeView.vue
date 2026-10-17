@@ -64,7 +64,7 @@ onMounted(async () => {
         <el-tag v-for="t in techs" :key="t" size="small" class="tag">{{ t }}</el-tag>
       </div>
       <div class="actions">
-        <el-button type="primary" size="large" @click="router.push('/problems')">开始刷题</el-button>
+        <el-button type="primary" size="large" plain @click="router.push('/problems')">开始刷题</el-button>
         <el-button size="large" @click="router.push('/classes')">查看班级</el-button>
       </div>
     </el-card>

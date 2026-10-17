@@ -148,8 +148,8 @@ onMounted(() => {
       <el-card v-if="userStore.can('problem.create')" class="aside-card">
         <template #header><span>题目管理</span></template>
         <div class="aside-actions">
-          <el-button type="primary" plain style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
-          <el-button plain style="width: 100%" @click="comingSoon">导入题目</el-button>
+          <el-button type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
+          <el-button style="width: 100%" @click="comingSoon">导入题目</el-button>
         </div>
         <div class="dim tip">网页出题（含测试数据 zip 上传）在 v0.5b 上线</div>
       </el-card>

@@ -57,7 +57,7 @@ async function submit() {
         <el-form-item label="密码">
           <el-input v-model="form.password" type="password" show-password placeholder="至少 6 位" />
         </el-form-item>
-        <el-button type="primary" class="submit" :loading="loading" @click="submit">
+        <el-button type="primary" plain class="submit" :loading="loading" @click="submit">
           {{ mode === 'login' ? '登录' : '注册' }}
         </el-button>
       </el-form>

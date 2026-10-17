@@ -150,7 +150,7 @@ onMounted(load)
             maxlength="8"
             @keyup.enter="joinByCode"
           />
-          <el-button type="primary" :loading="joining" style="width: 100%" @click="joinByCode">加入班级</el-button>
+          <el-button type="primary" plain :loading="joining" style="width: 100%" @click="joinByCode">加入班级</el-button>
         </div>
       </el-card>
     </template>
@@ -163,7 +163,7 @@ onMounted(load)
       <el-input v-model="joinTargetCode" placeholder="请向老师索取邀请码" maxlength="8" @keyup.enter="joinTargetSubmit" />
       <template #footer>
         <el-button @click="showJoin = false">取消</el-button>
-        <el-button type="primary" :loading="joiningTarget" @click="joinTargetSubmit">加入</el-button>
+        <el-button type="primary" plain :loading="joiningTarget" @click="joinTargetSubmit">加入</el-button>
       </template>
     </el-dialog>
   </PageShell>

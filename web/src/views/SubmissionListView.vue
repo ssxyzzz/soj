@@ -77,14 +77,18 @@ onUnmounted(() => {
                 :type="statusStyle(row.status).type"
                 class="status-tag clickable"
                 @click.stop="openDetail(row.id)"
-              >{{ statusStyle(row.status).label }}</el-tag>
+              >
+{{ statusStyle(row.status).label }}
+</el-tag>
             </el-tooltip>
             <el-tag
               v-else
               :type="statusStyle(row.status).type"
               class="status-tag clickable"
               @click.stop="openDetail(row.id)"
-            >{{ statusStyle(row.status).label }}</el-tag>
+            >
+{{ statusStyle(row.status).label }}
+</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="题目" min-width="200">

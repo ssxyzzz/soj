@@ -153,8 +153,8 @@ async function suggest(query: string, cb: (items: SuggestItem[]) => void) {
 }
 
 // el-autocomplete 的 select 回调参数是宽松的 Record 类型，这里收窄回 SuggestItem
-function onSelect(item: Record<string, any>) {
-  pinned.value = (item as SuggestItem).user
+function onSelect(item: Record<string, unknown>) {
+  pinned.value = (item as unknown as SuggestItem).user
 }
 
 // ---- 单表行模型：分组行 / 提示行 / 用户行，前端渲染分组 ----
@@ -748,7 +748,9 @@ onMounted(async () => {
                         :class="{ 'col-act-disabled': r.user_count > 0 }"
                         title="删除角色"
                         @click="r.user_count === 0 && removeRole(r)"
-                      ><Delete /></el-icon>
+                      >
+<Delete />
+</el-icon>
                     </el-tooltip>
                   </template>
                 </div>
