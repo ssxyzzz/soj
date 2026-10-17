@@ -199,7 +199,7 @@ onBeforeUnmount(() => {
   padding: 8px 20px;
   background: #fdf6ec;
   color: #e6a23c;
-  font-size: 13px;
+  font-size: 15px;
   flex: none;
 }
 

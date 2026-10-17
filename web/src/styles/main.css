@@ -6,7 +6,14 @@ body,
   min-height: 100vh;
 }
 
+/* 全站字阶（2026-10）：正文 16 / 界面与提示 15 / 代码 15。
+   --el-font-size-base 抬高 Element Plus 组件基础字号（按钮/输入框/表格等 14 → 15） */
+:root {
+  --el-font-size-base: 15px;
+}
+
 body {
+  font-size: 15px;
   font-family:
     'Helvetica Neue',
     Arial,
@@ -33,4 +40,37 @@ pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* 全局小提示（各视图本地 .dim 定义已移除，统一走这里；字号继承 body 15px） */
+.dim {
+  color: #909399;
+}
+
+/* 徽章类 el-tag 与小号按钮：字号对齐全站 15px（EP 默认 12px 偏小），高度随内容自适应 */
+.el-tag {
+  font-size: 15px;
+  height: auto;
+  padding: 3px 10px;
+  line-height: 1.4;
+}
+
+.el-button--small {
+  font-size: 15px;
+  height: auto;
+  padding: 5px 11px;
+}
+
+/* 表格与描述列表：字号对齐全站 15px（EP 对 small 尺寸/单元格硬编码 12-14px），保留紧凑内边距 */
+.el-table--small {
+  font-size: 15px;
+}
+
+.el-descriptions__body .el-descriptions__table .el-descriptions__cell {
+  font-size: 15px;
+}
+
+/* 小号下拉选择器（管理后台角色选择等）：字号对齐全站 15px（EP small 为 12px） */
+.el-select--small .el-select__wrapper {
+  font-size: 15px;
 }

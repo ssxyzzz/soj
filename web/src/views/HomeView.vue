@@ -181,7 +181,7 @@ onMounted(async () => {
 
 .class-intro {
   color: #909399;
-  font-size: 13px;
+  font-size: 15px;
   height: 36px;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -159,18 +159,18 @@ onUnmounted(() => {
         <div class="info-row">
           <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
           <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
-          <el-tag v-if="exam.file_io" size="small" type="danger">本场为文件 IO 模式</el-tag>
         </div>
-        <MdView :content="problem.description" />
         <el-alert
           v-if="exam.file_io"
-          type="warning"
+          type="error"
           :closable="false"
           class="fileio-card"
           show-icon
           title="本题请以文件 IO 方式提交"
-          :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}（C/C++ 用 freopen 重定向，Python 用 sys.stdin / open 读写）`"
+          :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
         />
+        <MdView :content="problem.description" />
+        
       </el-card>
 
       <template #aside>
@@ -312,13 +312,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 15px;
   flex-wrap: wrap;
 }
 
 .sub-time {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .sub-code {
@@ -328,16 +328,11 @@ onUnmounted(() => {
   border-radius: 4px;
   max-height: 280px;
   overflow: auto;
-  font-size: 12px;
+  font-size: 15px;
   cursor: auto;
 }
 
 .mono {
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
-}
-
-.dim {
-  color: #909399;
-  font-size: 13px;
 }
 </style>

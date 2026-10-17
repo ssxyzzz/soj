@@ -185,7 +185,7 @@ function onCommand(command: string) {
   align-items: center;
   justify-content: center;
   color: #909399;
-  font-size: 13px;
+  font-size: 15px;
   background: #f5f7fa;
 }
 </style>

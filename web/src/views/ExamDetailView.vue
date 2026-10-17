@@ -477,11 +477,6 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-.dim {
-  color: #909399;
-  font-size: 13px;
-}
-
 .scene-row {
   display: flex;
   align-items: center;

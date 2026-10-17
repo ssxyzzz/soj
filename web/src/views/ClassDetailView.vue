@@ -483,7 +483,7 @@ onMounted(() => {
 }
 
 .info-line b.small {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .entry-actions {
@@ -503,10 +503,5 @@ onMounted(() => {
   flex-direction: column;
   gap: 8px;
   align-items: flex-start;
-}
-
-.dim {
-  color: #909399;
-  font-size: 13px;
 }
 </style>

@@ -80,14 +80,20 @@ watch(() => props.content, render)
   position: relative; /* 复制按钮的定位基准 */
 }
 
+/* 代码框（样例输入/输出等）与行内代码统一 15px（vditor 默认 85%≈13.6px 偏小） */
+.md-view :deep(.vditor-reset pre),
+.md-view :deep(.vditor-reset :not(pre) > code) {
+  font-size: 15px;
+}
+
 .md-view :deep(.md-copy-btn) {
   position: absolute;
   top: 6px;
   right: 6px;
   z-index: 1;
-  padding: 2px 10px;
-  font-size: 12px;
-  line-height: 1.6;
+  padding: 1px 8px; /* 15px 字号下收紧行高与内边距，保持徽章紧凑 */
+  font-size: 15px;
+  line-height: 1.3;
   color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);
   border: 1px solid var(--el-color-primary-light-7);

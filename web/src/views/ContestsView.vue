@@ -232,9 +232,4 @@ onMounted(load)
   margin: 0 0 6px;
   line-height: 1.6;
 }
-
-.dim {
-  color: #909399;
-  font-size: 13px;
-}
 </style>

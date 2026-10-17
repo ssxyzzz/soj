@@ -86,11 +86,6 @@ function doSubmit() {
   margin-bottom: 12px;
 }
 
-.dim {
-  color: #909399;
-  font-size: 13px;
-}
-
 .mono :deep(textarea) {
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
   line-height: 1.5;

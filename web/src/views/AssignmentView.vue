@@ -475,7 +475,7 @@ onMounted(() => {
   width: 24px;
   text-align: center;
   color: #909399;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .adjust-title {
@@ -484,10 +484,5 @@ onMounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.dim {
-  color: #909399;
-  font-size: 13px;
 }
 </style>

@@ -122,12 +122,32 @@ defineExpose({ payload })
     <el-form-item label="标题" required>
       <el-input v-model="form.title" maxlength="64" show-word-limit placeholder="64 字符以内" />
     </el-form-item>
-    <el-form-item label="时限 / 内存">
-      <div class="limits">
-        <el-input-number v-model="form.time_limit_ms" :min="100" :max="600000" :step="100" />
-        <span class="dim">ms</span>
-        <el-input-number v-model="form.memory_limit_mb" :min="16" :max="1024" :step="16" />
-        <span class="dim">MB</span>
+    <el-form-item>
+      <div class="limits-row">
+        <div class="field-group">
+          <div class="field-label">时限 / 内存</div>
+          <div class="limits">
+            <el-input-number v-model="form.time_limit_ms" :min="100" :max="600000" :step="100" />
+            <span class="dim">ms</span>
+            <el-input-number v-model="form.memory_limit_mb" :min="16" :max="1024" :step="16" />
+            <span class="dim">MB</span>
+          </div>
+        </div>
+        <div class="field-group">
+          <div class="field-label">
+            文件 IO 文件名（可选）
+            <el-tooltip
+              placement="top"
+              content="仅比赛/考试「本场启用文件 IO」时生效，题库/练习/作业恒为标准输入输出；留空默认 problem.in / problem.out"
+            >
+              <el-icon class="dim"><QuestionFilled /></el-icon>
+            </el-tooltip>
+          </div>
+          <div class="fileio-row">
+            <el-input v-model="form.file_io_name" placeholder="problem" style="width: 180px" maxlength="32" />
+            <span v-if="fileIOHint" class="dim fileio-now">当前：{{ fileIOHint.input }} / {{ fileIOHint.output }}</span>
+          </div>
+        </div>
       </div>
     </el-form-item>
     <el-form-item label="题面" required>
@@ -135,9 +155,9 @@ defineExpose({ payload })
     </el-form-item>
     <el-form-item :required="mode === 'create'">
       <template #label>
-        测试数据 zip
-        <span v-if="mode === 'edit'" class="dim zip-replace-hint">
-          留空保留现有测试数据；选择新 zip 将<b>整包替换</b>（旧测试点全部删除，样例章节按新数据重建）
+        <span class="label-with-tip">
+          测试数据 zip
+          <span v-if="mode === 'edit'" class="dim zip-replace-hint">留空保留现有数据；选择新 zip 将整包替换（旧数据不保留）</span>
         </span>
       </template>
       <el-upload
@@ -151,32 +171,34 @@ defineExpose({ payload })
         :on-remove="onZipRemove"
       >
         <div class="zip-hint">
-          <p>{{ mode === 'create' ? '拖入 zip 或点击选择' : '拖入新 zip 可整包替换测试数据（旧数据不保留）' }}</p>
-          <p class="dim">结构：cases/1/in、cases/1/ans、cases/2/in……每个测试点一对输入/答案文件</p>
+          <p>{{ mode === 'create' ? '拖入 zip 或点击选择' : '拖入新 zip 整包替换，留空则不修改' }}</p>
+          <p class="dim">结构：test1.in、test1.ans/out、test2.in、test2.ans/out……每个测试点一对输入/输出</p>
         </div>
       </el-upload>
     </el-form-item>
     <el-form-item>
-      <el-tooltip
-        placement="top"
-        content="全文比对：输出与答案精确一致（忽略行尾空白与文末换行）；宽容比对：按空白分词比较，数字可带精度容差（适合答案不唯一的构造/计算题）"
-      >
-        <span class="compare-label">
+      <template #label>
+        <span class="label-with-tip">
           比对模式
-          <el-icon><QuestionFilled /></el-icon>
+          <el-tooltip
+            placement="top"
+            content="全文比对：输出与答案精确一致（忽略行尾空白与文末换行）；宽容比对：按空白分词比较，数字可带精度容差（适合答案不唯一的构造/计算题）"
+          >
+            <el-icon class="dim"><QuestionFilled /></el-icon>
+          </el-tooltip>
         </span>
-      </el-tooltip>
-      <div>
+      </template>
+      <div class="compare-row">
         <el-radio-group v-model="form.compare">
           <el-radio-button value="exact">全文比对</el-radio-button>
           <el-radio-button value="tolerant">宽容比对</el-radio-button>
         </el-radio-group>
-        <span class="dim ml8">
+        <span class="dim">
           {{ form.compare === 'tolerant' ? '按空白分词比较，数字可带精度容差（适合答案不唯一的构造/计算题）' : '输出与答案精确一致（忽略行尾空白与文末换行）' }}
         </span>
       </div>
     </el-form-item>
-    <el-form-item v-if="form.compare === 'tolerant'" label="浮点容差">
+    <el-form-item v-if="form.compare === 'tolerant'" label="浮点容差" class="plain-label">
       <el-input-number v-model="form.float_tolerance" :min="0.000001" :max="1" :step="0.0001" :precision="6" />
     </el-form-item>
     <el-form-item v-if="mode === 'create'" label="自定义校验器（可选）">
@@ -196,24 +218,6 @@ defineExpose({ payload })
         </div>
       </div>
     </el-form-item>
-    <el-form-item>
-      <div class="fileio-block">
-        <div class="fileio-title">
-          文件 IO 文件名（可选）
-          <span class="dim">仅比赛/考试「本场启用文件 IO」时生效；留空默认 problem，输入文件即 problem.in、输出即 problem.out</span>
-        </div>
-        <el-input
-          v-model="form.file_io_name"
-          placeholder="problem"
-          style="width: 280px"
-          maxlength="64"
-        />
-        <div v-if="fileIOHint" class="dim" style="margin-top: 6px">
-          启用文件 IO 的比赛/考试中，输入文件为 <b>{{ fileIOHint.input }}</b>、输出文件为
-          <b>{{ fileIOHint.output }}</b>，学生端会看到对应的提交提示
-        </div>
-      </div>
-    </el-form-item>
     <el-form-item v-if="mode === 'create'">
       <el-button type="primary" :loading="saving" @click="onSubmitClick">创建题目</el-button>
     </el-form-item>
@@ -221,27 +225,50 @@ defineExpose({ payload })
 </template>
 
 <style scoped>
+/* 表单标签统一 15px（不加粗） */
+:deep(.el-form-item__label) {
+  font-size: 15px;
+  font-weight: 400;
+  color: #303133;
+}
+
+/* 时限/内存 与 文件 IO 同行排布（各带自绘标签，样式对齐 el-form-item__label） */
+.limits-row {
+  display: flex;
+  gap: 40px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-label {
+  font-size: 15px;
+  font-weight: 400;
+  color: #303133;
+  margin-bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fileio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fileio-now {
+  white-space: nowrap; /* 防止提示文字换行 */
+}
+
 .limits {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.fileio-block {
-  width: 100%;
-}
-
-.fileio-title {
-  font-weight: 600;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.fileio-block :deep(.el-form-item__content) {
-  display: block;
 }
 
 .zip-upload {
@@ -253,16 +280,29 @@ defineExpose({ payload })
 }
 
 .zip-replace-hint {
-  margin-left: 8px;
   font-weight: 400;
 }
 
-.compare-label {
-  cursor: help;
-  color: #606266;
+/* label 插槽内的图标/提示与标签文字垂直居中（label 为块级布局，行内元素默认按基线对齐会偏高） */
+.label-with-tip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+/* 单选按钮组与说明文字垂直居中 */
+.compare-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* 浮点容差为次级条件字段：字号与全站统一 15px，字重颜色保持默认（不随表单主标签加粗） */
+.plain-label :deep(.el-form-item__label) {
+  font-size: 15px;
+  font-weight: 400;
+  color: #606266;
 }
 
 .zip-hint {
@@ -275,9 +315,5 @@ defineExpose({ payload })
 
 .checker-tip {
   margin-top: 6px;
-}
-
-.ml8 {
-  margin-left: 8px;
 }
 </style>

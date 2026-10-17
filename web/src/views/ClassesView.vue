@@ -212,7 +212,7 @@ onMounted(load)
 
 .intro {
   color: #909399;
-  font-size: 13px;
+  font-size: 15px;
   min-height: 36px;
   margin: 6px 0 8px;
 }
@@ -222,7 +222,7 @@ onMounted(load)
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .join-btn {
@@ -238,10 +238,5 @@ onMounted(load)
   flex-direction: column;
   gap: 8px;
   align-items: center;
-}
-
-.dim {
-  color: #909399;
-  font-size: 13px;
 }
 </style>

@@ -192,7 +192,7 @@ onMounted(() => {
   background: #f5f7fa;
   border-radius: 4px;
   margin-bottom: 12px;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .pager {
@@ -203,11 +203,6 @@ onMounted(() => {
 
 .ml8 {
   margin-left: 8px;
-}
-
-.dim {
-  color: #909399;
-  font-size: 13px;
 }
 
 .aside-actions {

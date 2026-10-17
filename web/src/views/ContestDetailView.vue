@@ -453,11 +453,6 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-.dim {
-  color: #909399;
-  font-size: 13px;
-}
-
 .cell-tries {
   vertical-align: baseline;
 }

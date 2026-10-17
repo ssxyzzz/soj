@@ -28,7 +28,7 @@ run_live() {
   pid=$!
   trap 'kill "$pid" 2>/dev/null || true' INT TERM
   while kill -0 "$pid" 2>/dev/null; do
-    e=$(( $(date +%s) - start ))
+    e=$(( $(date +%s) - start )); (( e > 0 )) || e=0  # WSL2 NTP 校时会整秒回拨，钳非负
     last="$(tail -n "$LIVE_LINES" "$log" 2>/dev/null | cut -c1-"${COLUMNS:-110}")"
     have=0; [ -n "$last" ] && have=$(printf '%s\n' "$last" | wc -l)
     if [ "$first" -eq 1 ]; then first=0; else printf '\033[%dA\033[J' "$((LIVE_LINES + 1))"; fi
@@ -39,7 +39,7 @@ run_live() {
   done
   wait "$pid" || rc=$?
   trap - INT TERM
-  e=$(( $(date +%s) - start ))
+  e=$(( $(date +%s) - start )); (( e > 0 )) || e=0
   printf '\033[%dA\033[J' "$((LIVE_LINES + 1))"
   if [ "$rc" -eq 0 ]; then
     printf "${C_OK}⏱ %s完成，用时 %02d:%02d${C_END}\n" "$label" $((e/60)) $((e%60))

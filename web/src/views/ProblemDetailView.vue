@@ -409,7 +409,7 @@ onUnmounted(stopPolling)
         <el-card>
           <div class="title-row">
             <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
-            <el-tag v-if="problem.hidden" size="small" type="danger">主题库隐藏</el-tag>
+            <el-tag v-if="problem.hidden" type="danger">主题库隐藏</el-tag>
             <el-button
               v-if="canSetHidden"
               size="small"
@@ -421,8 +421,8 @@ onUnmounted(stopPolling)
             </el-button>
           </div>
           <div class="info-row">
-            <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
-            <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
+            <el-tag type="success">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
+            <el-tag type="success">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
           </div>
           <MdView :content="problem.description" />
         </el-card>
@@ -430,7 +430,7 @@ onUnmounted(stopPolling)
         <template #aside>
         <el-card v-if="problem.can_edit_statement" class="aside-card">
           <template #header><span>管理</span></template>
-          <el-button type="primary" plain style="width: 100%" @click="openEdit">编辑题目</el-button>
+          <el-button type="primary" style="width: 100%" @click="openEdit">编辑题目</el-button>
         </el-card>
 
         <el-card class="aside-card">
@@ -663,7 +663,7 @@ onUnmounted(stopPolling)
     />
 
 
-    <el-dialog v-model="showEdit" title="编辑题目（题面 / 信息 / 测试数据）" width="1020" top="4vh">
+    <el-dialog v-model="showEdit" title="编辑题目" width="1020" top="4vh">
       <ProblemForm
         v-if="showEdit"
         ref="editFormRef"
@@ -680,13 +680,13 @@ onUnmounted(stopPolling)
               <el-tag v-if="problem.has_checker" size="small" type="success">已启用 · 判题由校验器决定（比对模式不生效）</el-tag>
               <el-tag v-else size="small" type="info">未启用 · 按比对模式判定</el-tag>
               <el-button
-                v-if="!problem.has_checker && !showCheckerUpload"
+                v-if="!problem.has_checker"
                 size="small"
                 text
                 type="primary"
-                @click="showCheckerUpload = true"
+                @click="showCheckerUpload = !showCheckerUpload"
               >
-                配置校验器
+                {{ showCheckerUpload ? '收起配置' : '配置校验器' }}
               </el-button>
             </div>
             <template v-if="problem.has_checker || showCheckerUpload">
@@ -761,6 +761,10 @@ onUnmounted(stopPolling)
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+  /* 标题文字与表单标签同字体（el-tag/el-button 有自身字体，不受影响） */
+  font-size: 15px;
+  font-weight: 400;
+  color: #303133;
 }
 
 .checker-upload {
@@ -867,18 +871,18 @@ onUnmounted(stopPolling)
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 15px;
   flex-wrap: wrap;
 }
 
 .sub-time {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .sub-user {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .sub-code {
@@ -888,7 +892,7 @@ onUnmounted(stopPolling)
   border-radius: 4px;
   max-height: 280px;
   overflow: auto;
-  font-size: 12px;
+  font-size: 15px;
   cursor: auto;
 }
 
@@ -898,11 +902,6 @@ onUnmounted(stopPolling)
 
 .mono {
   font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
-}
-
-.dim {
-  color: #909399;
-  font-size: 13px;
 }
 
 .side-pager {
@@ -931,7 +930,7 @@ onUnmounted(stopPolling)
 }
 
 .solution-item :deep(.vditor-reset) {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .solution-meta {

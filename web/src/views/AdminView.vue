@@ -1028,7 +1028,7 @@ onMounted(async () => {
 }
 
 .nav-sub {
-  font-size: 12px;
+  font-size: 15px;
   color: #909399;
 }
 
@@ -1074,7 +1074,7 @@ onMounted(async () => {
 
 .sug-nickname {
   color: #909399;
-  font-size: 12px;
+  font-size: 15px;
   flex: 1 1 auto;
 }
 
@@ -1088,7 +1088,7 @@ onMounted(async () => {
 
 .row-hint {
   color: #909399;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .user-table :deep(.el-table__row) .row-group,
@@ -1109,7 +1109,7 @@ onMounted(async () => {
 .muted {
   color: #909399;
   font-weight: 400;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .backup-status {
@@ -1120,7 +1120,7 @@ onMounted(async () => {
 
 .backup-desc {
   margin: 12px 0;
-  font-size: 13px;
+  font-size: 15px;
   color: #606266;
 }
 
@@ -1130,7 +1130,7 @@ onMounted(async () => {
 }
 
 .tips {
-  font-size: 13px;
+  font-size: 15px;
   color: #606266;
   line-height: 1.8;
 }
@@ -1151,12 +1151,12 @@ onMounted(async () => {
 
 .cmd-line code {
   flex: 1;
-  font-size: 12px;
+  font-size: 15px;
   word-break: break-all;
 }
 
 .cmd-note {
-  font-size: 12px;
+  font-size: 15px;
   color: #909399;
 }
 
@@ -1168,7 +1168,7 @@ onMounted(async () => {
 }
 
 .key-warning {
-  font-size: 12px;
+  font-size: 15px;
   color: #f56c6c;
   font-weight: 600;
 }
@@ -1180,7 +1180,7 @@ onMounted(async () => {
 }
 
 .guide-md {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .role-alert {
@@ -1220,7 +1220,7 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .col-act {
@@ -1257,7 +1257,7 @@ onMounted(async () => {
 
 .perm-block-title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 15px;
   color: #303133;
   margin-bottom: 4px;
 }
