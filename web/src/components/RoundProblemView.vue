@@ -8,10 +8,11 @@ import { ElMessage } from 'element-plus'
 
 import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
-import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import ProblemStatement from '@/components/problem/ProblemStatement.vue'
+import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import { fmtDate, fmtMem, statusDesc, statusStyle } from '@/utils/format'
+import { fmtDate, statusDesc, statusStyle } from '@/utils/format'
 import type { ContestDetail, ContestMySubmission, ProblemDetail } from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
@@ -43,18 +44,6 @@ const statusText = computed(() => {
     case 'scheduled': return '未开始'
     default: return '已结束'
   }
-})
-
-// 在线编程左栏题面：题面本身已含 Markdown 样例章节，直接渲染；
-// 本场启用文件 IO 时追加文件 IO 提示（学生写代码时需要随时对照文件名）
-const workbenchStatement = computed(() => {
-  const base = problem.value?.description ?? ''
-  if (round.value?.file_io) {
-    const inName = problem.value?.file_io_input || 'problem.in'
-    const outName = problem.value?.file_io_output || 'problem.out'
-    return `${base}\n\n> ⚠️ 本题请以文件 IO 方式提交，输入输出文件名是 ${inName} / ${outName}\n`
-  }
-  return base
 })
 
 // 加载失败回退：比赛回赛事页；考试回班级列表（考试路由不在主导航）
@@ -94,6 +83,18 @@ function toggleExpand(id: number) {
   const i = expandedMine.value.indexOf(id)
   if (i >= 0) expandedMine.value.splice(i, 1)
   else expandedMine.value.push(id)
+}
+
+// 题解弹窗（揭榜后显示入口）：未满分时后端会拒绝，弹窗内为空并提示——
+// 入口处直接用详情接口的 can_view_solutions 给出提示，不打无意义的请求
+const showSolutions = ref(false)
+
+function openSolutions() {
+  if (!problem.value?.can_view_solutions) {
+    ElMessage.warning('该题拿到满分后才能查看题解（老师群体不受限）')
+    return
+  }
+  showSolutions.value = true
 }
 
 async function handleSubmit(lang: string, code: string) {
@@ -166,25 +167,7 @@ onUnmounted(() => {
         </el-card>
       </template>
 
-      <el-card>
-        <div class="title-row">
-          <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
-        </div>
-        <div class="info-row">
-          <el-tag size="small" type="info">时间限制 {{ problem.time_limit_ms }} ms</el-tag>
-          <el-tag size="small" type="info">内存限制 {{ fmtMem(problem.memory_limit_kb) }}</el-tag>
-        </div>
-        <el-alert
-          v-if="round.file_io"
-          type="error"
-          :closable="false"
-          class="fileio-card"
-          show-icon
-          title="本题请以文件 IO 方式提交"
-          :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
-        />
-        <MdView :content="problem.description" />
-      </el-card>
+      <ProblemStatement :problem="problem" :file-io="round.file_io" />
       <template #aside>
         <el-card class="aside-card">
           <div class="entry-actions">
@@ -194,6 +177,13 @@ onUnmounted(() => {
             <el-button type="success" plain style="width: 100%" :disabled="!running" @click="showWorkbench = true">
               在线编程
             </el-button>
+            <el-tooltip
+              v-if="revealed"
+              placement="top"
+              :content="problem.can_view_solutions ? '查看本题题解' : '该题拿到满分后才能查看题解（老师群体不受限）'"
+            >
+              <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
+            </el-tooltip>
             <div v-if="!running" class="dim center">{{ name }}未在进行中</div>
           </div>
         </el-card>
@@ -240,10 +230,13 @@ onUnmounted(() => {
       <CodeWorkbench
         v-model="showWorkbench"
         :title="`#${problem.id} ${problem.title}`"
-        :statement="workbenchStatement"
+        :problem="problem"
+        :file-io="round.file_io"
         :submitting="submitting"
         @submit="handleSubmit"
       />
+
+      <SolutionsDialog v-model="showSolutions" :problem-id="pid" />
     </template>
   </div>
 </template>
@@ -274,29 +267,6 @@ onUnmounted(() => {
 
 .sa-back {
   margin-left: auto;
-}
-
-.fileio-card {
-  margin-top: 16px;
-}
-
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.big-title {
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.info-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 10px 0 14px;
 }
 
 .aside-card + .aside-card {

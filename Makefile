@@ -31,6 +31,11 @@ web-building: ## 只编译前端（产物 web/dist + 同步 embed 目录）
 server-building: ## 只编译后端（需先 web-building，产物 server/bin/soj）
 	./scripts/server-building.sh
 
+lint: ## 代码检查：web ESLint + go vet（+ staticcheck 如已安装）
+	cd web && npx eslint .
+	cd server && go vet ./...
+	@if command -v staticcheck >/dev/null 2>&1; then cd server && staticcheck ./...; else echo "（未安装 staticcheck，跳过：go install honnef.co/go/tools/cmd/staticcheck@latest）"; fi
+
 import: ## 导入题目目录: make import DIR=data/seed/1_A_Plus_B
 	cd server && go run ./cmd/soj -import $(DIR)
 

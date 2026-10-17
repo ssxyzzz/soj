@@ -3,18 +3,19 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import CodeEditor from '@/components/CodeEditor.vue'
-import MdView from '@/components/MdView.vue'
+import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions, mergedPrefs, templateFor } from '@/utils/code'
-import type { UserPrefs } from '@/types'
+import type { ProblemDetail, UserPrefs } from '@/types'
 
-// 在线编程（v0.4.6 右列入口）：全屏覆盖层，左侧题面（MdView 同引擎渲染）、
+// 在线编程（v0.4.6 右列入口）：全屏覆盖层，左侧题面（ProblemStatement 与详情页主列同卡复用）、
 // 右侧代码，中间分隔条可拖动调整两栏宽度；提交动作由父组件接手。
 const props = defineProps<{
   modelValue: boolean
   title: string
-  statement: string
+  problem: ProblemDetail // 左栏题面与详情页主列同卡渲染（含标题/限制/文件 IO 提示）
+  fileIo?: boolean // 本场启用文件 IO 时左栏与主列同款提示
   disabled?: boolean
   disabledReason?: string
   submitting?: boolean
@@ -126,11 +127,11 @@ onBeforeUnmount(() => {
           <el-input-number
             :model-value="codeFontSize"
             :min="12"
-            :max="28"
+            :max="48"
             :step="1"
             controls-position="right"
             style="width: 100px"
-            title="编辑器字号（12-28，可输入或 +/- 微调）"
+            title="编辑器字号（12-48，可输入或 +/- 微调）"
             @change="(n: number | undefined) => n && saveEditorPrefs({ codeFontSize: n })"
           />
           <el-button type="primary" plain :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
@@ -140,7 +141,7 @@ onBeforeUnmount(() => {
       <div v-if="disabled" class="wb-disabled">{{ disabledReason }}</div>
       <div class="wb-body">
         <section class="wb-left" :style="{ width: leftPct + '%' }">
-          <MdView :content="statement" />
+          <ProblemStatement :problem="problem" :file-io="fileIo" />
         </section>
         <div ref="divider" class="wb-divider" @mousedown="onDragStart" title="拖动调整分栏" />
         <section class="wb-right">

@@ -163,8 +163,8 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		}
 		if req.Prefs.CodeFontSize != nil {
 			n := *req.Prefs.CodeFontSize
-			if n != 0 && (n < 12 || n > 28) {
-				fail(c, http.StatusBadRequest, "字号需在 12-28 之间")
+			if n != 0 && (n < 12 || n > 48) {
+				fail(c, http.StatusBadRequest, "字号需在 12-48 之间")
 				return
 			}
 			prefs.CodeFontSize = n

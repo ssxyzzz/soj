@@ -75,7 +75,11 @@ export function statusStyle(status: string): StatusStyle {
 
 export function fmtMem(kb: number): string {
   if (!kb) return '-'
-  return kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb} KB`
+  const strip = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+  const mb = kb / 1024
+  if (mb < 1) return `${kb} KB`
+  const gb = mb / 1024
+  return gb >= 1 ? `${strip(gb)} GB` : `${strip(mb)} MB`
 }
 
 export function fmtDate(iso: string): string {

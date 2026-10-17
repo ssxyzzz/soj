@@ -2,7 +2,10 @@
 // 代码编辑器（v0.5d）：CodeMirror 6 共享组件，提交弹窗与在线编程复用。
 // CM6 全量走动态 import → 独立懒加载 chunk（不进主包、零 CDN）；
 // 语言与自动补全用 Compartment 热切换；自动补全开关走 utils/code.ts 的策略接口（预留等级门槛）。
+// 补全三层源：include 上下文 → 精选清单（utils/completions.ts）→ 文档内词（completeAnyWord）。
 import { onMounted, onUnmounted, ref, watch } from 'vue'
+
+import { CPP_COMPLETIONS, CPP_HEADERS, PY_COMPLETIONS } from '@/utils/completions'
 
 const props = withDefaults(
   defineProps<{
@@ -11,9 +14,9 @@ const props = withDefaults(
     height?: string // 如 '420px'；'100%' 时父容器需有确定高度
     autocomplete?: boolean
     placeholder?: string
-    fontSize?: number // px（12-28）
+    fontSize?: number // px（12-48）
     fontFamily?: string // Consolas / Menlo / Monaco
-    tabIndent?: boolean // Tab 键插入缩进（在线编程开启；关闭时 Tab 移出焦点便于表单导航）
+    tabIndent?: boolean // Tab 键插入缩进，补全弹层开着时优先接受补全（在线编程开启；关闭时 Tab 移出焦点便于表单导航）
   }>(),
   {
     language: 'cpp',
@@ -47,59 +50,6 @@ async function langExt(language: string) {
   return cpp()
 }
 
-// 常用函数 / 关键字精选清单（v0.5d 功能基线）：静态数据，取自题面语言即生效。
-// 语义级补全（clangd/LSP）在边界之外——这里只有词法 / 关键字 / 片段级。
-const COMPLETIONS: Record<string, { label: string; type: string; detail: string; apply: string }[]> = {
-  cpp: [
-    { label: 'sort', type: 'function', detail: '排序 [first, last)', apply: 'sort(begin, end)' },
-    { label: 'push_back', type: 'method', detail: 'vector 尾部插入', apply: 'push_back()' },
-    { label: 'pop_back', type: 'method', detail: 'vector 尾部弹出', apply: 'pop_back()' },
-    { label: 'size', type: 'method', detail: '容器大小', apply: 'size()' },
-    { label: 'begin', type: 'method', detail: '起始迭代器', apply: 'begin()' },
-    { label: 'end', type: 'method', detail: '末尾迭代器', apply: 'end()' },
-    { label: 'freopen', type: 'function', detail: '重定向输入输出（文件 IO）', apply: 'freopen("", "r", stdin)' },
-    { label: 'scanf', type: 'function', detail: '格式化读入', apply: 'scanf("", )' },
-    { label: 'printf', type: 'function', detail: '格式化输出', apply: 'printf("", )' },
-    { label: 'cin', type: 'keyword', detail: '标准输入流', apply: 'cin >> ' },
-    { label: 'cout', type: 'keyword', detail: '标准输出流', apply: 'cout << ' },
-    { label: 'endl', type: 'keyword', detail: '换行并刷新', apply: 'endl' },
-    { label: 'vector', type: 'class', detail: '动态数组', apply: 'vector<' },
-    { label: 'pair', type: 'class', detail: '键值对', apply: 'pair<' },
-    { label: 'string', type: 'class', detail: '字符串', apply: 'string' },
-    { label: 'queue', type: 'class', detail: '队列', apply: 'queue<' },
-    { label: 'stack', type: 'class', detail: '栈', apply: 'stack<' },
-    { label: 'unordered_map', type: 'class', detail: '哈希表', apply: 'unordered_map<' },
-    { label: 'min', type: 'function', detail: '最小值', apply: 'min(a, b)' },
-    { label: 'max', type: 'function', detail: '最大值', apply: 'max(a, b)' },
-    { label: 'abs', type: 'function', detail: '绝对值', apply: 'abs(x)' },
-    { label: 'memset', type: 'function', detail: '内存填充初始化', apply: 'memset(a, 0, sizeof(a))' },
-    { label: 'long long', type: 'keyword', detail: '64 位整型', apply: 'long long ' },
-    { label: '#include', type: 'keyword', detail: '头文件引入', apply: '#include <>' },
-    { label: 'int main', type: 'function', detail: '主函数骨架', apply: 'int main() {\n    \n    return 0;\n}' },
-  ],
-  python3: [
-    { label: 'print', type: 'function', detail: '输出', apply: 'print()' },
-    { label: 'input', type: 'function', detail: '读入一行', apply: 'input()' },
-    { label: 'int', type: 'function', detail: '转整型', apply: 'int()' },
-    { label: 'float', type: 'function', detail: '转浮点', apply: 'float()' },
-    { label: 'str', type: 'function', detail: '转字符串', apply: 'str()' },
-    { label: 'len', type: 'function', detail: '长度', apply: 'len()' },
-    { label: 'range', type: 'function', detail: '整数区间', apply: 'range()' },
-    { label: 'sort', type: 'method', detail: '列表原地排序', apply: 'sort()' },
-    { label: 'append', type: 'method', detail: '列表尾部插入', apply: 'append()' },
-    { label: 'split', type: 'method', detail: '按分隔符切分', apply: 'split()' },
-    { label: 'map', type: 'function', detail: '映射转换', apply: 'map()' },
-    { label: 'max', type: 'function', detail: '最大值', apply: 'max()' },
-    { label: 'min', type: 'function', detail: '最小值', apply: 'min()' },
-    { label: 'sum', type: 'function', detail: '求和', apply: 'sum()' },
-    { label: 'abs', type: 'function', detail: '绝对值', apply: 'abs()' },
-    { label: 'enumerate', type: 'function', detail: '带下标遍历', apply: 'enumerate()' },
-    { label: 'for', type: 'keyword', detail: '循环骨架', apply: 'for i in range(n):\n    ' },
-    { label: 'while', type: 'keyword', detail: '条件循环', apply: 'while :\n    ' },
-    { label: 'if __name__ == "__main__"', type: 'snippet', detail: '主入口骨架', apply: 'if __name__ == "__main__":\n    ' },
-  ],
-}
-
 // 编辑器主题：字号与字体家族（跟随用户偏好热切换；平台缺字体时浏览器回退 monospace）
 function buildTheme(vm: any, fontFamily: string, fontSize: number) {
   return vm.EditorView.theme({
@@ -120,25 +70,42 @@ onMounted(async () => {
     import('@codemirror/commands'),
     langExt(props.language),
   ])
-  // 常用清单补全源：仅在词首触发（Ctrl+Space 可显式唤起）
+  // 三层补全源（数据在 utils/completions.ts；Ctrl+Space 可显式唤起）：
+  // ① include 上下文（#include <…> 内只出标准头，路径字符放宽到 [\w./+]，否则 bits/stdc++.h 打一半即断）
+  // ② 精选清单（关键字/std/常用函数/片段，仅词首触发）
+  // ③ 文档内词（completeAnyWord：buffer 里出现过的标识符也能补）
+  const includeFrom = (ctx: any) => {
+    const line = ctx.state.doc.lineAt(ctx.pos)
+    const m = line.text.slice(0, ctx.pos - line.from).match(/#include\s*<([^<>]*)$/)
+    return m ? ctx.pos - m[1].length : -1
+  }
+  const includeSource = (ctx: any) => {
+    const from = includeFrom(ctx)
+    return from < 0 ? null : { from, options: CPP_HEADERS, validFor: /^[\w./+]*$/ }
+  }
   const listSource = (ctx: any) => {
+    if (includeFrom(ctx) >= 0) return null // include 上下文不混普通词
     const word = ctx.matchBefore(/\w*/)
     if (!word || (word.from === word.to && !ctx.explicit)) return null
-    const items = COMPLETIONS[props.language] ?? COMPLETIONS.cpp
+    const items = props.language === 'python3' ? PY_COMPLETIONS : CPP_COMPLETIONS
     return { from: word.from, options: items, validFor: /^\w*$/ }
   }
+  const wordSource = (ctx: any) => (includeFrom(ctx) >= 0 ? null : autocompleteMod.completeAnyWord(ctx))
   langComp = new state.Compartment()
   acComp = new state.Compartment()
   themeComp = new state.Compartment()
   viewMod = vm
-  acFactory = () => autocompleteMod.autocompletion({ override: [listSource] })
+  acFactory = () => autocompleteMod.autocompletion({ override: [includeSource, listSource, wordSource] })
   const exts: any[] = [
     cm.basicSetup,
     langComp.of(lang),
     themeComp.of(buildTheme(vm, props.fontFamily, props.fontSize)),
     languageMod.indentUnit.of('    '), // 缩进单位统一 4 空格（自动缩进与 Tab 插入共用）
   ]
-  if (props.tabIndent) exts.push(vm.keymap.of([commandsMod.indentWithTab]))
+  // Tab：补全弹层开着时优先接受补全（CM6 默认键位不含 Tab，此前 indentWithTab 独占导致弹层开着也缩进）；
+  // 无弹层时 acceptCompletion 返回 false 自然落回缩进（VS Code 同款）。补全关闭时无弹层，该绑定恒落空无害。
+  if (props.tabIndent)
+    exts.push(vm.keymap.of([{ key: 'Tab', run: autocompleteMod.acceptCompletion }, commandsMod.indentWithTab]))
   if (props.autocomplete) exts.push(acComp.of(acFactory()))
   if (props.placeholder) exts.push(vm.placeholder(props.placeholder))
   // 控制流语句（for/if/while 等）以 ) 结尾时，换行新行与该行对齐而非 +1 缩进——
