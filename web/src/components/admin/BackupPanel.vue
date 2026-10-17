@@ -89,10 +89,16 @@ function editGuide() {
 }
 
 async function saveGuide() {
-  await adminApi.updateSettings({ backup_guide: guideDraft.value })
-  backupGuide.value = guideDraft.value
-  showGuideEdit.value = false
-  ElMessage.success('使用说明已保存')
+  try {
+    await adminApi.updateSettings({ backup_guide: guideDraft.value })
+    // 以服务端持久化结果为准回读刷新（避免本地态与实际存储 diverge 时「看似已保存」）
+    await loadBackup()
+    showGuideEdit.value = false
+    ElMessage.success('使用说明已保存')
+  } catch {
+    // 拦截器已 toast 具体错误；这里保持弹窗打开，草稿不丢
+    ElMessage.error('保存失败，请重试')
+  }
 }
 
 async function runBackup() {
@@ -191,7 +197,9 @@ onMounted(loadBackup)
         </el-button>
       </div>
 
-      <el-divider content-position="left">如何恢复（网站出问题时，交给会命令行的人执行）</el-divider>
+      <el-divider content-position="center">
+        <span class="section-title">如何恢复（网站出问题时，交给会命令行的人执行）</span>
+      </el-divider>
       <div class="tips">
         <p>把下载的备份文件放到本系统文件夹（soj 目录）里，点「复制」后粘贴到终端执行：</p>
         <div class="cmd-line">
@@ -219,9 +227,9 @@ onMounted(loadBackup)
         <p class="cmd-note">上一条＝普通模式（钥匙在服务器上，自动取用）；下一条＝高安全模式（用启用时保存的「恢复钥匙.txt」，把 xxxx 换成实际备份文件名）。恢复会整体覆盖现有数据，脚本会再让你确认一次。</p>
       </div>
 
-      <el-divider content-position="left">
+      <el-divider content-position="center">
         <div class="guide-head">
-          <span>使用说明（如何备份 / 恢复 / 在本机查看）</span>
+          <span class="section-title">使用说明（如何备份 / 恢复 / 在本机查看）</span>
           <el-button
             v-if="userStore.can('admin.settings')"
             size="small"
@@ -274,6 +282,7 @@ onMounted(loadBackup)
       v-model="showGuideEdit"
       title="编辑使用说明（Markdown；清空保存即恢复内置默认）"
       width="900"
+      destroy-on-close
     >
       <MdEditor v-model="guideDraft" height="400px" />
       <template #footer>
@@ -362,6 +371,13 @@ onMounted(loadBackup)
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 分区标题：默认 divider 文字 14px 偏小，按需求放大居中（正文 16px + 半粗） */
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
 }
 
 .guide-md {
