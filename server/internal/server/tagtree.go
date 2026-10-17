@@ -28,6 +28,26 @@ func (h *Handlers) GetTagTree(c *gin.Context) {
 	ok(c, gin.H{"nodes": nodes})
 }
 
+// AdminTagTree root 管理面板数据：整棵树 + 每节点被引用题数（角标常驻展示，
+// 并供前端把「删除/改名被引用拦截」提前到交互层，不必等保存 400）。
+func (h *Handlers) AdminTagTree(c *gin.Context) {
+	ctx := c.Request.Context()
+	nodes, err := h.repo.GetTagTree(ctx)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取标签树失败")
+		return
+	}
+	if nodes == nil {
+		nodes = []repo.TagNode{}
+	}
+	counts, err := h.repo.TagUsageCounts(ctx)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "统计标签引用失败")
+		return
+	}
+	ok(c, gin.H{"nodes": nodes, "counts": counts})
+}
+
 // AdminReplaceTagTree root 整树覆盖保存：形状校验 → 按名对齐身份（同名继承旧 ID、
 // 新名取新号）→ 删除拦截（待删节点被题目引用则 400 附引用题目明细）→ 覆盖写入。
 func (h *Handlers) AdminReplaceTagTree(c *gin.Context) {

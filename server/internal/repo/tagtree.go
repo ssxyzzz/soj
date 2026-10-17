@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
@@ -164,6 +165,31 @@ func (r *Repo) TagRefProblems(ctx context.Context, tagIDs []int64) ([]*Problem, 
 	var out []*Problem
 	if err := cursor.All(ctx, &out); err != nil {
 		return nil, err
+	}
+	return out, nil
+}
+
+// TagUsageCounts 统计每个标签节点被题目直接引用的题数（聚合 Problem.Tags，
+// 与题库筛选「精确匹配」同口径，不做子树扩散）。管理面板角标与删除/改名的前置拦截用。
+func (r *Repo) TagUsageCounts(ctx context.Context) (map[int64]int64, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$unwind", Value: "$tags"}},
+		{{Key: "$group", Value: bson.M{"_id": "$tags", "n": bson.M{"$sum": 1}}}},
+	}
+	cursor, err := r.Problems.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		ID int64 `bson:"_id"`
+		N  int64 `bson:"n"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	out := make(map[int64]int64, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.N
 	}
 	return out, nil
 }

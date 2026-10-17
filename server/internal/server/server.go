@@ -168,7 +168,9 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.POST("/backup/run", RequirePerm(repo.PermBackupRun), h.BackupRun)
 				adminG.POST("/backup/offline-key", RequirePerm(repo.PermBackupKeys), h.BackupOfflineKey)
 
-				// 标签树（v0.5f）：仅 root 可改（硬编码不下放，同角色管理先例）
+				// 标签树（v0.5f）：仅 root 可改（硬编码不下放，同角色管理先例）；
+				// 管理面板读走 /admin/tagtree（附每节点引用数），公开读仍走 /tags/tree
+				adminG.GET("/tagtree", RequireRoot(), h.AdminTagTree)
 				adminG.PUT("/tagtree", RequireRoot(), h.AdminReplaceTagTree)
 			}
 		}

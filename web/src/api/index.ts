@@ -28,6 +28,7 @@ import type {
   RoleInfo,
   Submission,
   SubmissionListResult,
+  AdminTagTreeResult,
   TagNode,
   TagTreeResult,
 } from '@/types'
@@ -165,6 +166,7 @@ export const problemApi = {
 // 标签树（v0.5f）：读公开（题库/详情/表单共用），写仅 root（后端 RequireRoot）
 export const tagApi = {
   tree: () => get<TagTreeResult>('/tags/tree'),
+  adminTree: () => get<AdminTagTreeResult>('/admin/tagtree'),
   save: (nodes: TagNode[]) => put<{ count: number }>('/admin/tagtree', { nodes }),
 }
 

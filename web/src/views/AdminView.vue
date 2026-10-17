@@ -4,6 +4,7 @@
 // 的跨面板联动；面板实现见 components/admin/*，角色清单由 stores/adminRoles 共享。
 // 角色管理仅 root 可见（后端同样硬编码 root，增删改不可下放）。
 import { ref } from 'vue'
+import { ElMessageBox } from 'element-plus'
 
 import BackupPanel from '@/components/admin/BackupPanel.vue'
 import NoticePanel from '@/components/admin/NoticePanel.vue'
@@ -16,6 +17,25 @@ import { useUserStore } from '@/stores/user'
 const userStore = useUserStore()
 
 const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup'>('users')
+
+// 标签树面板草稿的脏状态：切走分区前拦截确认（面板 v-if 销毁，草稿随组件丢失）
+const tagsDirty = ref(false)
+
+async function switchSection(target: typeof section.value) {
+  if (section.value === 'tags' && tagsDirty.value && target !== 'tags') {
+    try {
+      await ElMessageBox.confirm('标签树有未保存的修改，离开后将丢失。确定离开？', '未保存的修改', {
+        type: 'warning',
+        confirmButtonText: '离开',
+        cancelButtonText: '留下',
+      })
+    } catch {
+      return
+    }
+  }
+  tagsDirty.value = false
+  section.value = target
+}
 </script>
 
 <template>
@@ -24,7 +44,7 @@ const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup
       <div
         class="nav-item"
         :class="{ active: section === 'users' }"
-        @click="section = 'users'"
+        @click="switchSection('users')"
       >
         <span class="nav-title">编辑用户</span>
         <span class="nav-sub">搜索 / 建号 / 角色 / 重置密码</span>
@@ -33,7 +53,7 @@ const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup
         v-if="userStore.role === 'root'"
         class="nav-item"
         :class="{ active: section === 'roles' }"
-        @click="section = 'roles'"
+        @click="switchSection('roles')"
       >
         <span class="nav-title">角色管理</span>
         <span class="nav-sub">权限位 / 自定义角色</span>
@@ -42,15 +62,15 @@ const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup
         v-if="userStore.role === 'root'"
         class="nav-item"
         :class="{ active: section === 'tags' }"
-        @click="section = 'tags'"
+        @click="switchSection('tags')"
       >
         <span class="nav-title">标签树</span>
-        <span class="nav-sub">多级标签 / 大纲编辑</span>
+        <span class="nav-sub">多级标签 / 卡片编辑</span>
       </div>
       <div
         class="nav-item"
         :class="{ active: section === 'notice' }"
-        @click="section = 'notice'"
+        @click="switchSection('notice')"
       >
         <span class="nav-title">公告编辑</span>
         <span class="nav-sub">首页公告（Markdown）</span>
@@ -58,7 +78,7 @@ const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup
       <div
         class="nav-item"
         :class="{ active: section === 'settings' }"
-        @click="section = 'settings'"
+        @click="switchSection('settings')"
       >
         <span class="nav-title">系统设置</span>
         <span class="nav-sub">提交限速等</span>
@@ -67,7 +87,7 @@ const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup
         v-if="userStore.can('backup.run') || userStore.can('backup.keys')"
         class="nav-item"
         :class="{ active: section === 'backup' }"
-        @click="section = 'backup'"
+        @click="switchSection('backup')"
       >
         <span class="nav-title">数据备份</span>
         <span class="nav-sub">一键备份 / 恢复方法</span>
@@ -77,7 +97,7 @@ const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup
     <main class="admin-main">
       <UsersPanel v-if="section === 'users'" />
       <RolesPanel v-else-if="section === 'roles'" />
-      <TagsPanel v-else-if="section === 'tags'" />
+      <TagsPanel v-else-if="section === 'tags'" @update:dirty="tagsDirty = $event" />
       <NoticePanel v-else-if="section === 'notice'" />
       <SettingsPanel v-else-if="section === 'settings'" />
       <BackupPanel v-else-if="section === 'backup'" />

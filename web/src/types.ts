@@ -43,6 +43,12 @@ export interface TagTreeResult {
   nodes: TagNode[]
 }
 
+// 管理面板读（GET /admin/tagtree）：树 + 每节点被引用题数（key 为节点 ID 字符串，未出现 = 0）
+export interface AdminTagTreeResult {
+  nodes: TagNode[]
+  counts: Record<string, number>
+}
+
 // 标签树保存被拒（删除被引用标签）时 failData 附带的引用题目明细
 export interface TagRefProblem {
   id: number
