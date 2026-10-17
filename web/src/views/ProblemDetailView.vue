@@ -204,25 +204,6 @@ onUnmounted(stopPolling)
         </ProblemStatement>
 
         <template #aside>
-        <el-card class="aside-card">
-          <template #header><span>题目信息</span></template>
-          <div class="info-stats">
-            <span>提交 <b>{{ problem.submit_count ?? 0 }}</b></span>
-            <span>通过 <b>{{ problem.accepted_count ?? 0 }}</b></span>
-            <span>通过率 <b>{{ acceptRate }}</b></span>
-          </div>
-          <div v-if="tagNames.length" class="info-tags">
-            <el-tag v-for="name in shownTagNames" :key="name" size="small" type="info">{{ name }}</el-tag>
-            <el-tooltip v-if="restTagNames" placement="top" effect="light">
-              <template #content>
-                <div style="max-width: 320px">{{ restTagNames }}</div>
-              </template>
-              <el-tag size="small" type="info">+{{ tagNames.length - 6 }}</el-tag>
-            </el-tooltip>
-          </div>
-          <div v-else class="dim">暂无标签</div>
-        </el-card>
-
         <el-card v-if="problem.can_edit_statement" class="aside-card">
           <template #header><span>管理</span></template>
           <el-button type="primary" style="width: 100%" @click="showEdit = true">编辑题目</el-button>
@@ -241,6 +222,25 @@ onUnmounted(stopPolling)
             <el-button plain style="width: 100%" @click="openOthers">他人代码</el-button>
             <div v-if="submitDisabledReason" class="dim center">{{ submitDisabledReason }}</div>
           </div>
+        </el-card>
+
+        <el-card class="aside-card">
+          <template #header><span>题目信息</span></template>
+          <div class="info-stats">
+            <span>提交 <b>{{ problem.submit_count ?? 0 }}</b></span>
+            <span>通过 <b>{{ problem.accepted_count ?? 0 }}</b></span>
+            <span>通过率 <b>{{ acceptRate }}</b></span>
+          </div>
+          <div v-if="tagNames.length" class="info-tags">
+            <el-tag v-for="name in shownTagNames" :key="name" size="small" type="info">{{ name }}</el-tag>
+            <el-tooltip v-if="restTagNames" placement="top" effect="light">
+              <template #content>
+                <div style="max-width: 320px">{{ restTagNames }}</div>
+              </template>
+              <el-tag size="small" type="info">+{{ tagNames.length - 6 }}</el-tag>
+            </el-tooltip>
+          </div>
+          <div v-else class="dim">暂无标签</div>
         </el-card>
       </template>
     </PageShell>
@@ -309,5 +309,10 @@ onUnmounted(stopPolling)
 
 .center {
   text-align: center;
+}
+
+/* 隐藏按钮推到题面卡右上角（v0.5e 拆分时丢失的样式，导致按钮贴到标题旁） */
+.hidden-btn {
+  margin-left: auto;
 }
 </style>
