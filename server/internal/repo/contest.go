@@ -77,9 +77,53 @@ func (r *Repo) roundsCol(kind string) *mongo.Collection {
 	return r.db.Collection("contests")
 }
 
-// SetContestIntro 更新主题库比赛说明（Markdown）。
-func (r *Repo) SetContestIntro(ctx context.Context, id int64, intro string) error {
-	res, err := r.db.Collection("contests").UpdateOne(ctx,
+// roundsSeq 比赛与考试独立取号（contests/exams 各自的 _id 序列）。
+func roundsSeq(kind string) string {
+	if kind == KindExam {
+		return "exam"
+	}
+	return "contest"
+}
+
+// ---------- 比赛/考试同构 CRUD（v0.5e ① 合并：handler 侧差异见 server/round.go） ----------
+
+// CreateRound 创建比赛或考试（按 kind 入对应集合并独立取号）。
+func (r *Repo) CreateRound(ctx context.Context, kind string, c *Contest) error {
+	var err error
+	c.ID, err = r.nextSeq(ctx, roundsSeq(kind))
+	if err != nil {
+		return err
+	}
+	c.CreatedAt = time.Now()
+	_, err = r.roundsCol(kind).InsertOne(ctx, c)
+	return err
+}
+
+// GetRound 按 kind 取比赛/考试。
+func (r *Repo) GetRound(ctx context.Context, kind string, id int64) (*Contest, error) {
+	var c Contest
+	if err := r.roundsCol(kind).FindOne(ctx, bson.M{"_id": id}).Decode(&c); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// DeleteRound 仅允许删除未开始的比赛/考试（调用方校验权限与状态）。
+func (r *Repo) DeleteRound(ctx context.Context, kind string, id int64) error {
+	res, err := r.roundsCol(kind).DeleteOne(ctx,
+		bson.M{"_id": id, "start": bson.M{"$gt": time.Now()}})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// SetRoundIntro 更新比赛/考试说明（Markdown）。
+func (r *Repo) SetRoundIntro(ctx context.Context, kind string, id int64, intro string) error {
+	res, err := r.roundsCol(kind).UpdateOne(ctx,
 		bson.M{"_id": id}, bson.M{"$set": bson.M{"intro": intro}})
 	if err != nil {
 		return err
@@ -90,44 +134,39 @@ func (r *Repo) SetContestIntro(ctx context.Context, id int64, intro string) erro
 	return nil
 }
 
+// SetRoundFileIO 设置「本场启用文件 IO」场景开关（创建者/root；中途可改，后续提交按新设置判题）。
+func (r *Repo) SetRoundFileIO(ctx context.Context, kind string, id int64, enabled bool) error {
+	res, err := r.roundsCol(kind).UpdateOne(ctx,
+		bson.M{"_id": id}, bson.M{"$set": bson.M{"fileIo": enabled}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// SetContestIntro/SetContestFileIO/SetExamIntro/SetExamFileIO/CreateContest/GetContest/
+// DeleteContest/CreateExam/GetExam/DeleteExam 等 kind 双份薄包装已并入上方 Round 系列
+// （v0.5e ①，调用方全部改走 kind 参数化方法）。
+
+// ListClassExams 某班级的考试列表（按开始时间倒序）。
+func (r *Repo) ListClassExams(ctx context.Context, classID int64) ([]*Exam, error) {
+	return listRounds(ctx, r.db.Collection("exams"), bson.M{"classId": classID})
+}
+
+// ListUnpublishedExams 未发布的考试（锁题判定用，量小）。
+func (r *Repo) ListUnpublishedExams(ctx context.Context) ([]*Exam, error) {
+	return listRounds(ctx, r.db.Collection("exams"), bson.M{"published": false})
+}
+
 // roundsIDField 比赛/考试提交在 submissions 中的引用字段名。
 func roundsIDField(kind string) string {
 	if kind == KindExam {
 		return "examId"
 	}
 	return "contestId"
-}
-
-func (r *Repo) CreateContest(ctx context.Context, c *Contest) error {
-	var err error
-	c.ID, err = r.nextSeq(ctx, "contest")
-	if err != nil {
-		return err
-	}
-	c.CreatedAt = time.Now()
-	_, err = r.db.Collection("contests").InsertOne(ctx, c)
-	return err
-}
-
-func (r *Repo) GetContest(ctx context.Context, id int64) (*Contest, error) {
-	var c Contest
-	if err := r.db.Collection("contests").FindOne(ctx, bson.M{"_id": id}).Decode(&c); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
-// DeleteContest 仅允许删除未开始的比赛（调用方校验权限与状态）。
-func (r *Repo) DeleteContest(ctx context.Context, id int64) error {
-	res, err := r.db.Collection("contests").DeleteOne(ctx,
-		bson.M{"_id": id, "start": bson.M{"$gt": time.Now()}})
-	if err != nil {
-		return err
-	}
-	if res.DeletedCount == 0 {
-		return mongo.ErrNoDocuments
-	}
-	return nil
 }
 
 // ListContests 主题库比赛列表。
@@ -253,44 +292,9 @@ func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, rou
 	return list, nil
 }
 
-// SetContestFileIO 设置比赛「本场启用文件 IO」场景开关（创建者/root；中途可改，后续提交按新设置判题）。
-func (r *Repo) SetContestFileIO(ctx context.Context, id int64, enabled bool) error {
-	res, err := r.db.Collection("contests").UpdateOne(ctx,
-		bson.M{"_id": id}, bson.M{"$set": bson.M{"fileIo": enabled}})
-	if err != nil {
-		return err
-	}
-	if res.MatchedCount == 0 {
-		return mongo.ErrNoDocuments
-	}
-	return nil
-}
-
-// SetExamFileIO 设置考试「本场启用文件 IO」场景开关（创建者/root；中途可改，后续提交按新设置判题）。
-func (r *Repo) SetExamFileIO(ctx context.Context, id int64, enabled bool) error {
-	res, err := r.db.Collection("exams").UpdateOne(ctx,
-		bson.M{"_id": id}, bson.M{"$set": bson.M{"fileIo": enabled}})
-	if err != nil {
-		return err
-	}
-	if res.MatchedCount == 0 {
-		return mongo.ErrNoDocuments
-	}
-	return nil
-}
-
-// ContestLeaderboard 计算比赛榜单（考试榜单走 ExamLeaderboard，同一实现）。
+// RoundLeaderboard 计算比赛/考试榜单。
 // 排名规则：总分降序 → 最后得分提交时间早者靠前 → 并列。
-func (r *Repo) ContestLeaderboard(ctx context.Context, c *Contest) ([]*LeaderRow, error) {
-	return r.roundLeaderboard(ctx, KindContest, c.ID)
-}
-
-// ExamLeaderboard 计算考试榜单（规则与比赛一致）。
-func (r *Repo) ExamLeaderboard(ctx context.Context, e *Exam) ([]*LeaderRow, error) {
-	return r.roundLeaderboard(ctx, KindExam, e.ID)
-}
-
-func (r *Repo) roundLeaderboard(ctx context.Context, kind string, roundID int64) ([]*LeaderRow, error) {
+func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64) ([]*LeaderRow, error) {
 	cursor, err := r.Submissions.Find(ctx,
 		bson.M{roundsIDField(kind): roundID},
 		options.Find().SetProjection(bson.M{

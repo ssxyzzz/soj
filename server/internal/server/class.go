@@ -353,3 +353,47 @@ func (h *Handlers) ImportMembers(c *gin.Context) {
 	}
 	ok(c, gin.H{"added": added, "total": len(fields)})
 }
+
+// ---------- 班级多管理员 ----------
+
+// SetMemberRole 设置班级成员角色（建班人、班级管理员或 root；owner 角色不可改）。
+func (h *Handlers) SetMemberRole(c *gin.Context) {
+	classID, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	targetUID, okUID := parseID(c, "uid")
+	if !okUID {
+		return
+	}
+	var req struct {
+		Role string `json:"role" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数不完整")
+		return
+	}
+	if req.Role != repo.ClassRoleAdmin && req.Role != repo.ClassRoleMember {
+		fail(c, http.StatusBadRequest, "角色只能设为 admin 或 member")
+		return
+	}
+	ctx := c.Request.Context()
+	cl, err := h.repo.GetClass(ctx, classID)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	}
+	if !h.classManageable(c, cl) {
+		fail(c, http.StatusForbidden, "仅班级管理员可以设置成员角色")
+		return
+	}
+	if targetUID == cl.OwnerID {
+		fail(c, http.StatusBadRequest, "不能修改建班人的角色")
+		return
+	}
+	if err := h.repo.SetClassMemberRole(ctx, classID, targetUID, req.Role); err != nil {
+		fail(c, http.StatusInternalServerError, "设置失败")
+		return
+	}
+	ok(c, gin.H{"updated": targetUID, "role": req.Role})
+}

@@ -150,14 +150,14 @@ func (h *Handlers) GetSubmission(c *gin.Context) {
 	masked := false
 
 	if s.ContestID != 0 {
-		ct, err := h.repo.GetContest(ctx, s.ContestID)
+		ct, err := h.repo.GetRound(ctx, repo.KindContest, s.ContestID)
 		if err == nil && !ct.Published && !(logged && (uid == ct.CreatedBy || privileged)) {
 			fail(c, http.StatusNotFound, "该提交来自隐藏期内的比赛")
 			return
 		}
 	}
 	if s.ExamID != 0 {
-		e, err := h.repo.GetExam(ctx, s.ExamID)
+		e, err := h.repo.GetRound(ctx, repo.KindExam, s.ExamID)
 		if err == nil && !e.Published && !(logged && (uid == e.CreatedBy || privileged)) {
 			fail(c, http.StatusNotFound, "该提交来自隐藏期内的考试")
 			return
