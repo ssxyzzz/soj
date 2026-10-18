@@ -8,6 +8,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { authApi, contestApi, examApi, type RoundKind } from '@/api'
+import { downloadCsv } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -134,6 +135,19 @@ async function loadLeaders() {
   }
 }
 
+// 成绩导出 CSV（v0.5c）：仅组织者可见；服务端现算榜单，列含排名/用户名/各题得分/总分
+//（真实姓名列由 user.realname.view 权限位决定），文件名以服务端 Content-Disposition 为准
+const exporting = ref(false)
+async function exportCsv() {
+  if (!round.value) return
+  exporting.value = true
+  try {
+    await downloadCsv(`/${props.kind}s/${round.value.id}/export`, `${round.value.title}.csv`)
+  } finally {
+    exporting.value = false
+  }
+}
+
 // 右列成绩摘要：榜单可见时取自己那一行
 const mySummary = computed(() => {
   if (myUid.value == null) return null
@@ -254,6 +268,9 @@ onUnmounted(() => {
             </el-tab-pane>
             <el-tab-pane label="榜单" name="board">
               <el-button v-if="boardVisible" size="small" @click="loadLeaders">刷新榜单</el-button>
+              <el-button v-if="round.is_organizer" size="small" :loading="exporting" @click="exportCsv">
+                导出 CSV
+              </el-button>
               <el-alert
                 v-if="round.status === 'running' && !round.is_organizer"
                 :title="`OI 赛制：${name}进行中不显示榜单与判题结果`"

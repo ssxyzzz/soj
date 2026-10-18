@@ -13,6 +13,7 @@ package server
 // 不再被误限速。另删除 ContestMySubmissions 里 classId!=0 的迁移期遗留死代码。
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -613,6 +614,93 @@ func (h *Handlers) ContestLeaderboard(c *gin.Context) { h.roundLeaderboard(c, sc
 
 // ExamLeaderboard 考试榜单：考时与隐藏期内仅组织者/root 可见。
 func (h *Handlers) ExamLeaderboard(c *gin.Context) { h.roundLeaderboard(c, scopeExam) }
+
+// ---------- 成绩导出 CSV（v0.5c 老师教学闭环） ----------
+
+// roundExport 比赛/考试成绩单导出（organizer/root）：
+// 列 = 排名/用户名/真实姓名（持 user.realname.view 才含）/各题得分/总分，行序与榜单一致；
+// 直接现算榜单不走 leaderCache（导出要的是导出时刻的准确数据）。
+func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
+	uid, _, role, logged := currentUser(c)
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	ctx := c.Request.Context()
+	ct, err := h.repo.GetRound(ctx, s.Kind, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, s.Name+"不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取"+s.Name+"失败")
+		return
+	}
+	if !logged || (uid != ct.CreatedBy && role != repo.RoleRoot) {
+		fail(c, http.StatusForbidden, "仅组织者可导出成绩")
+		return
+	}
+	rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "计算榜单失败")
+		return
+	}
+	// 真实姓名列（v0.5c 拍板）：仅持 user.realname.view 的导出方可见（部署者自建教务角色授权）
+	wantRealName := hasPerm(c, repo.PermUserRealNameView)
+	users := map[int64]*repo.User{}
+	if wantRealName {
+		uids := make([]int64, 0, len(rows))
+		for _, r := range rows {
+			uids = append(uids, r.UID)
+		}
+		if users, err = h.repo.GetUsersByIDs(ctx, uids); err != nil {
+			fail(c, http.StatusInternalServerError, "读取用户失败")
+			return
+		}
+	}
+	header := []string{"排名", "用户名"}
+	if wantRealName {
+		header = append(header, "真实姓名")
+	}
+	for _, cp := range ct.Problems {
+		title := ""
+		if p, err := h.repo.GetProblem(ctx, cp.PID); err == nil {
+			title = p.Title
+		}
+		if title == "" {
+			title = fmt.Sprintf("P%d", cp.PID) // 题目已删除时以题号兜底
+		}
+		header = append(header, title)
+	}
+	header = append(header, "总分")
+	out := [][]string{header}
+	for i, r := range rows {
+		row := []string{strconv.Itoa(i + 1), r.Username}
+		if wantRealName {
+			if u := users[r.UID]; u != nil {
+				row = append(row, u.RealName)
+			} else {
+				row = append(row, "")
+			}
+		}
+		for _, cp := range ct.Problems {
+			score := 0
+			if cell := r.Problems[cp.PID]; cell != nil {
+				score = cell.Score
+			}
+			row = append(row, strconv.Itoa(score))
+		}
+		row = append(row, strconv.Itoa(r.Total))
+		out = append(out, row)
+	}
+	serveCSV(c, fmt.Sprintf("%s_%s.csv", csvSafeName(ct.Title), time.Now().Format("2006-01-02")), out)
+}
+
+// ContestExport 比赛成绩导出。
+func (h *Handlers) ContestExport(c *gin.Context) { h.roundExport(c, scopeContest) }
+
+// ExamExport 考试成绩导出。
+func (h *Handlers) ExamExport(c *gin.Context) { h.roundExport(c, scopeExam) }
 
 // ---------- 考试列表（班级维度） ----------
 

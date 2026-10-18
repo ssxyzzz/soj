@@ -29,6 +29,7 @@ export interface ProblemListItem {
   lock_phase?: string
   submit_count?: number // 公开态提交数（通过率展示用）
   accepted_count?: number // 其中 AC 的提交数
+  status?: 'ac' | 'tried' // 我的做题状态（登录才返回，v0.5c）：ac=已通过，tried=有提交未通过
   tags?: number[] // 标签树节点 ID，名字由前端标签树映射
 }
 

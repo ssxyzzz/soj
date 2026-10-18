@@ -22,7 +22,7 @@ func (h *Handlers) AdminListUsers(c *gin.Context) {
 	items := make([]gin.H, 0, len(list))
 	for _, u := range list {
 		j := userJSON(u)
-		j["real_name"] = u.RealName // 真实姓名仅管理员后台可见
+		j["real_name"] = u.RealName // 真实姓名：后台用户列表对 admin.user.manage 持有者可见（导出场景另见 user.realname.view）
 		items = append(items, j)
 	}
 	ok(c, gin.H{"list": items, "total": total})

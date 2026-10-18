@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -324,4 +327,91 @@ func (h *Handlers) AssignmentProgress(c *gin.Context) {
 		})
 	}
 	ok(c, items)
+}
+
+// AssignmentExport 作业成绩导出（班级管理员/root，v0.5c）：
+// 列 = 用户名/真实姓名（持 user.realname.view 才含）/各题最高分/总分（最高分合计）/通过题数/做过题数，
+// 行序 = 班级成员清单序（与进度表一致；作业无竞技排名，不设排名列）。
+func (h *Handlers) AssignmentExport(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	ctx := c.Request.Context()
+	a, err := h.repo.GetAssignment(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "作业不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取作业失败")
+		return
+	}
+	cl, cerr := h.repo.GetClass(ctx, a.ClassID)
+	if cerr != nil || !h.classManageable(c, cl) {
+		fail(c, http.StatusForbidden, "仅班级管理员可导出成绩")
+		return
+	}
+	members, err := h.repo.ListMembers(ctx, a.ClassID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取成员失败")
+		return
+	}
+	uids := make([]int64, 0, len(members))
+	for _, m := range members {
+		uids = append(uids, m.UID)
+	}
+	rows, err := h.repo.AssignmentProgress(ctx, a, uids)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "统计失败")
+		return
+	}
+	// 真实姓名列（v0.5c 拍板）：仅持 user.realname.view 的导出方可见（部署者自建教务角色授权）
+	wantRealName := hasPerm(c, repo.PermUserRealNameView)
+	users := map[int64]*repo.User{}
+	if wantRealName {
+		if users, err = h.repo.GetUsersByIDs(ctx, uids); err != nil {
+			fail(c, http.StatusInternalServerError, "读取用户失败")
+			return
+		}
+	}
+	header := []string{"用户名"}
+	if wantRealName {
+		header = append(header, "真实姓名")
+	}
+	for _, pid := range a.Problems {
+		title := ""
+		if p, err := h.repo.GetProblem(ctx, pid); err == nil {
+			title = p.Title
+		}
+		if title != "" {
+			header = append(header, fmt.Sprintf("P%d %s", pid, title))
+		} else {
+			header = append(header, fmt.Sprintf("P%d", pid)) // 题目已删除时以题号兜底
+		}
+	}
+	header = append(header, "总分", "通过题数", "做过题数")
+	out := [][]string{header}
+	for _, r := range rows {
+		row := []string{r.Username}
+		if wantRealName {
+			if u := users[r.UID]; u != nil {
+				row = append(row, u.RealName)
+			} else {
+				row = append(row, "")
+			}
+		}
+		total := 0
+		for _, pid := range a.Problems {
+			best := 0
+			if cell := r.Cells[pid]; cell != nil {
+				best = cell.Best
+			}
+			row = append(row, strconv.Itoa(best))
+			total += best
+		}
+		row = append(row, strconv.Itoa(total), strconv.Itoa(r.Solved), strconv.Itoa(r.Attempt))
+		out = append(out, row)
+	}
+	serveCSV(c, fmt.Sprintf("%s_%s_%s.csv", csvSafeName(cl.Name), csvSafeName(a.Title), time.Now().Format("2006-01-02")), out)
 }

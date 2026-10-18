@@ -170,6 +170,13 @@ stripe
               <span v-else class="dim">—</span>
             </template>
           </el-table-column>
+          <el-table-column v-if="userStore.token" label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.status === 'ac'" size="small" type="success">已通过</el-tag>
+              <el-tag v-else-if="row.status === 'tried'" size="small" type="warning">未过</el-tag>
+              <span v-else class="dim">未做</span>
+            </template>
+          </el-table-column>
           <el-table-column label="通过率" width="110">
             <template #default="{ row }">
               <el-tooltip

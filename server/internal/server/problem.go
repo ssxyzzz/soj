@@ -55,7 +55,7 @@ func orEmptyInt64(s []int64) []int64 {
 //   - admin/root 可见全部并带标记；
 //   - tags=1,5,9 标签筛选：并集、精确匹配节点 ID（v0.5f）。
 func (h *Handlers) ListProblems(c *gin.Context) {
-	uid, _, role, _ := currentUser(c)
+	uid, _, role, logged := currentUser(c)
 	page, pageSize := queryPage(c)
 	privileged := hasPerm(c, repo.PermProblemViewAll)
 	// 题库搜索：标题包含（忽略大小写）或 ID 精确匹配
@@ -135,6 +135,16 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		st := stats[it["id"].(int64)]
 		it["submit_count"] = st.Total
 		it["accepted_count"] = st.Accepted
+	}
+	// 「已通过」状态列（v0.5c）：登录用户按当前页批查自己的做题状态；失败不阻塞列表（该列回退未做）
+	if logged {
+		if statuses, err := h.repo.UserProblemStatuses(ctx, uid, pids); err == nil {
+			for _, it := range pageItems {
+				if st := statuses[it["id"].(int64)]; st != "" {
+					it["status"] = st
+				}
+			}
+		}
 	}
 	ok(c, gin.H{"list": pageItems, "total": total})
 }

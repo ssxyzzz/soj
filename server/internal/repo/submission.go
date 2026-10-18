@@ -173,6 +173,43 @@ func (r *Repo) HasSolved(ctx context.Context, uid, pid int64) (bool, error) {
 	return n > 0, err
 }
 
+// UserProblemStatuses 批量查某用户在一组题目的做题状态（题库「已通过」状态列，v0.5c）：
+// "ac" = 任一 AC 提交，"tried" = 有提交无 AC，未出现 = 无提交。
+// 口径与通过率统计/总榜一致（published=true）：比赛/考试隐藏期内的提交不计，
+// 防 OI 赛制下从状态列推测赛中判题结果。
+func (r *Repo) UserProblemStatuses(ctx context.Context, uid int64, pids []int64) (map[int64]string, error) {
+	out := make(map[int64]string, len(pids))
+	if uid <= 0 || len(pids) == 0 {
+		return out, nil
+	}
+	cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
+		{"$match": bson.M{"uid": uid, "pid": bson.M{"$in": pids}, "published": true}},
+		{"$group": bson.M{
+			"_id": "$pid",
+			"ac":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", StatusAccepted}}, 1, 0}}},
+		}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var row struct {
+			ID int64 `bson:"_id"`
+			Ac int64 `bson:"ac"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			return nil, err
+		}
+		if row.Ac > 0 {
+			out[row.ID] = "ac"
+		} else {
+			out[row.ID] = "tried"
+		}
+	}
+	return out, cursor.Err()
+}
+
 // ListPidSubmissions 题目维提交列表（含代码，分页）。
 // uid > 0 时只看该用户的（我的提交，最新在前）；uid = 0 为他人代码视图：
 // sort=time（默认，耗时升序、并列按内存）/ sort=mem（内存升序、并列按耗时），

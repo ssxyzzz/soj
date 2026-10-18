@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, authApi, contestApi, problemApi } from '@/api'
+import { downloadCsv } from '@/api/download'
 import PageShell from '@/components/PageShell.vue'
 import { useUserStore } from '@/stores/user'
 import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
@@ -60,6 +61,18 @@ async function loadProgress() {
     progress.value = []
   } finally {
     progressLoading.value = false
+  }
+}
+
+// 成绩导出 CSV（v0.5c）：服务端按成员清单现算进度；文件名以服务端 Content-Disposition 为准
+const exporting = ref(false)
+async function exportCsv() {
+  if (!assignment.value) return
+  exporting.value = true
+  try {
+    await downloadCsv(`/assignments/${assignment.value.id}/export`, `${assignment.value.title}.csv`)
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -244,7 +257,10 @@ onMounted(() => {
           <template #header>
             <div class="head">
               <span>完成情况（{{ progress.length }} 名学生）</span>
-              <el-button size="small" :loading="progressLoading" @click="loadProgress">刷新</el-button>
+              <span>
+                <el-button size="small" :loading="progressLoading" @click="loadProgress">刷新</el-button>
+                <el-button size="small" :loading="exporting" @click="exportCsv">导出 CSV</el-button>
+              </span>
             </div>
           </template>
           <el-table stripe v-loading="progressLoading" :data="progress">

@@ -122,6 +122,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.PUT("/assignments/:id/problems", h.SetAssignmentProblems)
 			authed.DELETE("/assignments/:id/problems/:pid", h.RemoveAssignmentProblem)
 			authed.GET("/assignments/:id/progress", h.AssignmentProgress)
+			authed.GET("/assignments/:id/export", h.AssignmentExport) // 成绩导出 CSV（v0.5c）
 
 			// 比赛：创建（主题库=root，班级=班级管理员，handler 内校验）/删除/赛时提交/我的提交/榜单
 			authed.POST("/contests", h.CreateContest)
@@ -131,6 +132,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/contests/:id/submissions/mine", h.ContestMySubmissions)
 			authed.GET("/contests/:id/problems/:pid/submissions", h.ContestUserSubmissions)
 			authed.GET("/contests/:id/leaderboard", h.ContestLeaderboard)
+			authed.GET("/contests/:id/export", h.ContestExport) // 成绩导出 CSV（v0.5c）
 
 			// 班级考试：发起（班级管理员）/删除/考时提交/我的提交/榜单
 			authed.POST("/classes/:id/exams", h.CreateExam)
@@ -141,6 +143,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/submissions/mine", h.ExamMySubmissions)
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
+			authed.GET("/exams/:id/export", h.ExamExport) // 成绩导出 CSV（v0.5c）
 			authed.PATCH("/exams/:id/intro", h.SetExamIntro)
 			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
 			authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)

@@ -18,6 +18,7 @@ const (
 	PermSubmissionViewUser   = "submission.view.user"   // 榜单/进度表中点看指定用户在某题的提交明细（含代码）
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
 	PermSolutionManage       = "solution.manage"        // 题解管理：置顶/删除他人题解（v0.5b-1）
+	PermUserRealNameView     = "user.realname.view"     // 查看用户真实姓名（成绩导出 CSV 姓名列，v0.5c）
 	PermAdminUserManage      = "admin.user.manage"      // 管理端用户管理
 	PermAdminSettings        = "admin.settings"         // 系统设置
 	PermBackupRun            = "backup.run"             // 一键备份下载（v0.4.9 备份面板）
@@ -65,6 +66,7 @@ var PermCatalog = []PermInfo{
 	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码", "submission"},
 	{PermSubmissionViewUser, "查看用户提交明细", "榜单/进度表中点看指定用户在某题的全部提交（含代码与测试点明细）", "submission"},
 	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},
+	{PermUserRealNameView, "查看真实姓名", "成绩导出 CSV 含用户真实姓名列（教务对号成绩单用，v0.5c）", "submission"},
 	{PermAdminUserManage, "用户管理", "管理后台：建号/改角色/重置密码", "admin"},
 	{PermAdminSettings, "系统设置", "管理后台：公告与提交限速等站点设置", "admin"},
 	{PermBackupRun, "备份下载", "一键备份到本地（加密归档下载）", "admin"},

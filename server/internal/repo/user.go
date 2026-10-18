@@ -46,7 +46,7 @@ type User struct {
 	Nickname     string     `bson:"nickname"`
 	Role         string     `bson:"role"`
 	CreatedAt    time.Time  `bson:"createdAt"`
-	RealName     string     `bson:"realName,omitempty"` // 真实姓名：仅管理员可改，仅本人与管理员后台可见
+	RealName     string     `bson:"realName,omitempty"` // 真实姓名：仅管理员可改；可见 = 本人 + 管理员后台 + 持 user.realname.view（成绩导出 CSV，v0.5c）
 	Gender       string     `bson:"gender,omitempty"`   // 性别/学校/年级/QQ：本人自助修改，他人不可见
 	School       string     `bson:"school,omitempty"`
 	Grade        string     `bson:"grade,omitempty"`
