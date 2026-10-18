@@ -225,6 +225,31 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 	return nil
 }
 
+// seedDone 读 meta.migrations 的 seedV1 标记：种子题目只在首次部署播种一次，
+// 置位后启动不再播种（此后加题走 make import / 网页建题，见 importer.SeedAll）。
+func (r *Repo) seedDone(ctx context.Context) (bool, error) {
+	var done bson.M
+	err := r.db.Collection("meta").FindOne(ctx, bson.M{"_id": "migrations"}).Decode(&done)
+	if IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	b, _ := done["seedV1"].(bool)
+	return b, nil
+}
+
+// markSeedDone 置位 seedV1（全量播种成功后才调用；中途失败留待下次启动重试）。
+func (r *Repo) markSeedDone(ctx context.Context) error {
+	meta := r.db.Collection("meta")
+	if _, err := meta.InsertOne(ctx, bson.M{"_id": "migrations"}); err != nil && !mongo.IsDuplicateKeyError(err) {
+		return err
+	}
+	_, err := meta.UpdateOne(ctx, bson.M{"_id": "migrations"}, bson.M{"$set": bson.M{"seedV1": true}})
+	return err
+}
+
 // migrateExams 考试拆分迁移：把 contests 里 classId≠0 的班级比赛搬入 exams 集合，
 // 其提交的 contestId/contestTitle 同步改名为 examId/examTitle。
 func (r *Repo) migrateExams(ctx context.Context) error {

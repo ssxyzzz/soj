@@ -12,6 +12,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"go.mongodb.org/mongo-driver/v2/bson"
+
 	"soj/internal/testdata"
 )
 
@@ -41,8 +43,29 @@ type problemYAML struct {
 	Subtasks      []yamlSubtask `yaml:"subtasks"` // 可选：子任务分组给分（组内全过才得分）
 }
 
-// SeedAll 导入 seedDir 下的全部题目目录（按目录名排序），幂等可重复执行。
+// seedPID 从目录名解析题号：数字前缀即题号（如 "6_hidden" → 6）；无前缀、
+// 非数字或非正数返回 0（由调用方决定自动分配）。ImportDir 与 SeedAll 共用同一条规则。
+func seedPID(name string) int64 {
+	if n, err := strconv.ParseInt(strings.SplitN(name, "_", 2)[0], 10, 64); err == nil && n > 0 {
+		return n
+	}
+	return 0
+}
+
+// SeedAll 首次部署播种 seedDir 下的全部题目目录（按目录名排序）：meta.migrations
+// 的 seedV1 旗标置位后直接跳过——此后加题走 make import / 网页建题，启动不再播种
+// （此前每次启动重播会让 UpsertProblem 的整文档替换冲掉网页端对种子题的全部修改）。
+// 首次播种中途失败不置旗标，下次启动重试；循环内的逐目录补缺跳过保护这个重试窗口，
+// 避免已入库的题被二次覆盖。
 func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
+	done, err := im.Repo.seedDone(ctx)
+	if err != nil {
+		return err
+	}
+	if done {
+		fmt.Println("[seed] 已播种过（meta.seedV1），跳过——新增题目用 make import 或网页建题")
+		return nil
+	}
 	entries, err := os.ReadDir(seedDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -58,22 +81,63 @@ func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		pr, err := im.ImportDir(ctx, filepath.Join(seedDir, name))
+		dir := filepath.Join(seedDir, name)
+		skip, why, err := im.seedSkipReason(ctx, dir, name)
+		if err != nil {
+			return err
+		}
+		if skip {
+			fmt.Printf("[seed] 跳过 %s（%s）\n", name, why)
+			continue
+		}
+		pr, err := im.ImportDir(ctx, dir)
 		if err != nil {
 			return fmt.Errorf("导入 %s: %w", name, err)
 		}
 		fmt.Printf("[seed] 已导入题目 #%d (%s)\n", pr.ID, name)
 	}
+	if err := im.Repo.markSeedDone(ctx); err != nil {
+		return err
+	}
+	fmt.Println("[seed] 首次播种完成，已标记 seedV1（此后启动不再播种）")
 	return nil
+}
+
+// seedSkipReason 判断种子目录是否跳过（补缺不覆盖）：有数字前缀按题号查库；
+// 无前缀按 problem.yaml 标题（缺省用目录名，与 ImportDir 的 Title 兜底一致）查同名题。
+// 返回 (是否跳过, 原因, 错误)。
+func (im *Importer) seedSkipReason(ctx context.Context, dir, name string) (bool, string, error) {
+	if pid := seedPID(name); pid > 0 {
+		err := im.Repo.Problems.FindOne(ctx, bson.M{"_id": pid}).Err()
+		if err == nil {
+			return true, fmt.Sprintf("#%d 已存在，补缺不覆盖，保护线上修改", pid), nil
+		}
+		if !IsNotFound(err) {
+			return false, "", err
+		}
+		return false, "", nil
+	}
+	title := name
+	if raw, err := os.ReadFile(filepath.Join(dir, "problem.yaml")); err == nil {
+		var meta problemYAML
+		if yaml.Unmarshal(raw, &meta) == nil && meta.Title != "" {
+			title = meta.Title
+		}
+	}
+	n, err := im.Repo.Problems.CountDocuments(ctx, bson.M{"title": title})
+	if err != nil {
+		return false, "", err
+	}
+	if n > 0 {
+		return true, fmt.Sprintf("已存在同名题「%s」，防重复播种", title), nil
+	}
+	return false, "", nil
 }
 
 // ImportDir 导入单个题目目录，返回创建的题目（含 config.yaml/内置 checker 解析结果）。
 func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error) {
 	base := filepath.Base(dir)
-	pid := int64(0)
-	if n, err := strconv.ParseInt(strings.SplitN(base, "_", 2)[0], 10, 64); err == nil && n > 0 {
-		pid = n
-	}
+	pid := seedPID(base)
 
 	raw, err := os.ReadFile(filepath.Join(dir, "problem.yaml"))
 	if err != nil {
