@@ -30,7 +30,9 @@ server/internal/webui/dist/*
 
 # 只忽略根目录下的 md（不含子目录）
 /*.md
-# 但根目录的 README*.md 保留
+# 但根目录的 README*.md / plan.md / notes.md 保留（开发文档入库）
 !/README*.md
+!/plan.md
+!/notes.md
 # 本地联调测试数据（判题样例自容器卷拷贝，不入库）
 server/data/
