@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 题目详情（v0.5e ② 拆分后主视图）：题面/锁定指引/隐藏开关/右列入口卡 + 提交链路；
-// 题解、我的提交、他人代码、编辑题目四个弹窗已拆至 components/problem/*（自治拉数据）。
+// 题解、我的提交、他人代码三个弹窗拆至 components/problem/*（自治拉数据）；编辑题目为独立路由页。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -9,7 +9,6 @@ import { problemApi, submissionApi } from '@/api'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import EditProblemDialog from '@/components/problem/EditProblemDialog.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import OthersCodeDialog from '@/components/problem/OthersCodeDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
@@ -36,7 +35,6 @@ const submitting = ref(false)
 const showMine = ref(false)
 const showOthers = ref(false)
 const showSolutions = ref(false)
-const showEdit = ref(false)
 const mineDialogRef = ref<InstanceType<typeof MySubmissionsDialog>>()
 
 const lockedRunning = computed(() => !!problem.value?.locked)
@@ -206,7 +204,7 @@ onUnmounted(stopPolling)
         <template #aside>
         <el-card v-if="problem.can_edit_statement" class="aside-card">
           <template #header><span>管理</span></template>
-          <el-button type="primary" style="width: 100%" @click="showEdit = true">编辑题目</el-button>
+          <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
         </el-card>
 
         <el-card class="aside-card">
@@ -265,9 +263,7 @@ onUnmounted(stopPolling)
     <MySubmissionsDialog ref="mineDialogRef" v-model="showMine" :problem-id="problem.id" />
 
     <OthersCodeDialog v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
-
-    <EditProblemDialog v-model="showEdit" :problem="problem" @saved="load" />
-  </template>
+</template>
   </div>
 </template>
 
@@ -295,13 +291,11 @@ onUnmounted(stopPolling)
   flex-wrap: wrap;
 }
 
-/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
-
 .center {
   text-align: center;
 }
 
-/* 隐藏按钮推到题面卡右上角（v0.5e 拆分时丢失的样式，导致按钮贴到标题旁） */
+/* 隐藏按钮推到题面卡右上角 */
 .hidden-btn {
   margin-left: auto;
 }

@@ -380,8 +380,7 @@ onMounted(() => {
   vertical-align: baseline;
 }
 
-/* 卡片纵向间距 16px（编辑器上方；原 .mb8/.mt8 名实不符，批三改名）；
-   .ml8/.head/.aside-card/.entry-actions 已上提 main.css 全局 */
+/* 卡片纵向间距 16px（编辑器上方） */
 .mb16 {
   margin-bottom: 16px;
 }

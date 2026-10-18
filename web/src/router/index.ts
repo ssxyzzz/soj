@@ -16,6 +16,7 @@ import LoginView from '@/views/LoginView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
 import ProblemDetailView from '@/views/ProblemDetailView.vue'
 import ProblemCreateView from '@/views/ProblemCreateView.vue'
+import ProblemEditView from '@/views/ProblemEditView.vue'
 import ProblemListView from '@/views/ProblemListView.vue'
 import RankView from '@/views/RankView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -45,6 +46,13 @@ const router = createRouter({
           name: 'problem-create',
           component: ProblemCreateView,
           meta: { title: '新建题目', requiresPerm: 'problem.create' },
+        },
+        {
+          path: 'problems/:id/edit',
+          name: 'problem-edit',
+          component: ProblemEditView,
+          // 编辑权限是题目级（can_edit_statement），由编辑页自查；静态权限位守卫不适用
+          meta: { title: '编辑题目', requiresAuth: true },
         },
         {
           path: 'problems/:id',

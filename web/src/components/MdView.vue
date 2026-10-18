@@ -38,8 +38,7 @@ async function render() {
   mountCopyButtons()
 }
 
-// 代码块复制按钮（v0.5d）：vditor 自带的图标过于隐蔽且无反馈，
-// 替换为统一样式的「复制」按钮——取 code 内容复制，成功后按钮内联提示「已复制」。
+// 代码块复制按钮：vditor 自带图标过隐蔽，替换为统一「复制」按钮，成功后内联提示「已复制」
 function mountCopyButtons() {
   if (!el.value) return
   el.value.querySelectorAll('.vditor-copy').forEach((n) => n.remove()) // 移除 vditor 自带弱化图标
@@ -60,8 +59,7 @@ function mountCopyButtons() {
       }, 2500)
     })
     pre.appendChild(btn)
-    // 语言徽标（视觉融合·批二，显示端）：vditor 高亮输出的 code 带 language-xxx 类，
-    // 取出挂 pre 左上角（右上角是复制按钮，构成代码块顶栏两端）；无语言的块不加。
+    // 语言徽标：挂 pre 左上角（右上角是复制按钮，构成代码块顶栏）；无语言的块不加
     pre.querySelectorAll('code').forEach((codeEl) => {
       const m = /language-([\w+#.-]+)/.exec(codeEl.className)
       if (m && !pre.querySelector('.md-lang-badge')) {
@@ -84,14 +82,13 @@ watch(() => props.content, render)
 </template>
 
 <style scoped>
-/* vditor 4.x 预览会把 vditor-reset 类加在挂载元素自身（本组件根 div）。
-   覆盖其样式必须以 .md-view.vditor-reset 开头，并用 :deep 穿透运行时生成的子元素——
-   普通后代/同类选择器会因类不在后代位置、或运行时子元素缺 data-v 而静默失效 */
+/* vditor 把 vditor-reset 类挂在组件根元素自身：覆盖须以 .md-view.vditor-reset 开头
+   并用 :deep 穿透运行时子元素，普通后代选择器会静默失效 */
 .md-view.vditor-reset {
   padding: 0;
 }
 
-/* 内容列限宽 860 居中（视觉融合·批二；与编辑端 .vditor-wysiwyg 同规则，见 main.css） */
+/* 内容列限宽 860 居中（与编辑端同规则，见 main.css） */
 .md-view {
   max-width: 860px;
   margin: 0 auto;

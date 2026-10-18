@@ -1,8 +1,6 @@
-// Markdown 编辑器工具栏图标（视觉融合·批二追加）——Editor.js 官方图标包
-// @codexteam/icons（Apache-2.0，SVG 原样取自 dist/index.mjs）为主，
-// Editor.js 缺位的编辑器功能键（缩进/全屏/导出/插入代码）用 Lucide（ISC）补齐。
-// 两者同为 24×24 线性 stroke + currentColor 上色，悬停配色自动跟随工具栏；
-// 渲染尺寸由 main.css 的 .vditor-toolbar .vditor-toolbar__item svg 统一压到 16px。
+// Markdown 编辑器工具栏图标：Editor.js 官方包 @codexteam/icons（Apache-2.0）为主，
+// 缺位的编辑器功能键（缩进/全屏/导出/插入代码）用 Lucide（ISC）补齐；
+// 均 24×24 线性 stroke + currentColor。渲染尺寸由 main.css 统一（20px，Lucide 17px 找平）
 
 const headings = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M9 7L9 12M9 17V12M9 12L15 12M15 7V12M15 17L15 12"/></svg>'
 

@@ -139,8 +139,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* .head / .ml8 / .pager 已上提 main.css 全局（批三收编） */
-
 /* 状态标签可点击查看代码与测试点明细（悬停说明样式走全局 .status-tag/.status-tip） */
 .status-tag.clickable {
   cursor: pointer;

@@ -176,7 +176,7 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 
-/* 实体名（班级名）：主色链接感区分层级，不靠字号字重（批三·实体名规范） */
+/* 实体名（班级名）主色 */
 .class-name {
   margin: 0 0 6px;
   color: var(--el-color-primary);

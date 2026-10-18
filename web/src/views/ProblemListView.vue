@@ -238,12 +238,10 @@ stripe
   margin: 0 6px 4px 0;
 }
 
-/* 实体名（题名）：主色链接感区分层级，不靠字号字重（批三·实体名规范；整行可点击） */
+/* 实体名（题名）主色，整行可点击 */
 .title {
   color: var(--el-color-primary);
 }
-
-/* .pager / .ml8 / .entry-actions（原本视图别名 .aside-actions）已上提 main.css 全局 */
 
 .tip {
   margin-top: 8px;

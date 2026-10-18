@@ -362,8 +362,6 @@ defineExpose({ refresh: loadDefaultView })
 </template>
 
 <style scoped>
-/* .head / .ml8 已上提 main.css 全局（批三收编） */
-
 .search-row {
   display: flex;
   align-items: center;
@@ -413,6 +411,4 @@ defineExpose({ refresh: loadDefaultView })
   justify-content: flex-end;
   margin-top: 12px;
 }
-
-/* .ml8 已上提 main.css 全局（批三收编） */
 </style>

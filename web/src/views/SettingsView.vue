@@ -175,8 +175,6 @@ onMounted(load)
 </template>
 
 <style scoped>
-/* .tips 已上提 main.css 全局（批三收编） */
-
 .tpl {
   width: 100%;
   display: flex;

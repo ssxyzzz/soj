@@ -221,8 +221,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* .head / .muted 已上提 main.css 全局（批三收编） */
-
 .role-alert {
   margin-top: 4px;
 }

@@ -442,8 +442,6 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
-
 /* 倒计时大字（22/600，强调档） */
 .countdown {
   font-size: 22px;

@@ -472,8 +472,6 @@ stripe
   margin: 16px 0;
 }
 
-/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
-
 .info-line {
   display: flex;
   justify-content: space-between;

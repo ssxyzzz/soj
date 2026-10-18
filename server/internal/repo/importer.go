@@ -52,11 +52,9 @@ func seedPID(name string) int64 {
 	return 0
 }
 
-// SeedAll 首次部署播种 seedDir 下的全部题目目录（按目录名排序）：meta.migrations
-// 的 seedV1 旗标置位后直接跳过——此后加题走 make import / 网页建题，启动不再播种
-// （此前每次启动重播会让 UpsertProblem 的整文档替换冲掉网页端对种子题的全部修改）。
-// 首次播种中途失败不置旗标，下次启动重试；循环内的逐目录补缺跳过保护这个重试窗口，
-// 避免已入库的题被二次覆盖。
+// SeedAll 首次部署播种 seedDir 下全部题目目录：meta.migrations.seedV1 置位后跳过
+// （每次启动重播会以整文档替换冲掉网页端对种子题的修改）。中途失败不置旗标、
+// 下次启动重试，循环内的逐目录补缺跳过保护重试窗口。
 func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 	done, err := im.Repo.seedDone(ctx)
 	if err != nil {
@@ -103,9 +101,8 @@ func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 	return nil
 }
 
-// seedSkipReason 判断种子目录是否跳过（补缺不覆盖）：有数字前缀按题号查库；
-// 无前缀按 problem.yaml 标题（缺省用目录名，与 ImportDir 的 Title 兜底一致）查同名题。
-// 返回 (是否跳过, 原因, 错误)。
+// seedSkipReason 判断种子目录是否跳过（补缺不覆盖）：有数字前缀按题号查库，
+// 无前缀按 problem.yaml 标题（缺省用目录名）查同名题。返回 (是否跳过, 原因, 错误)。
 func (im *Importer) seedSkipReason(ctx context.Context, dir, name string) (bool, string, error) {
 	if pid := seedPID(name); pid > 0 {
 		err := im.Repo.Problems.FindOne(ctx, bson.M{"_id": pid}).Err()

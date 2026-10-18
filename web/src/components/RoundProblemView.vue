@@ -268,8 +268,6 @@ onUnmounted(() => {
   margin-left: auto;
 }
 
-/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
-
 .center {
   text-align: center;
 }

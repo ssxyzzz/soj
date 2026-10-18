@@ -713,10 +713,9 @@ async function onSave() {
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;
-  line-height: 20px; /* 显式行高与 TagChips 同高（防宿主容器行高渗入，见 TagChips 注释） */
-  /* 层级色只来自全局 .lv-1~.lv-5（main.css）；此处不写 --lv* 兜底——
-     scoped .tag-card[data-v] 特异度会压过全局 .lv-N 把层级色吞成一级蓝。
-     新增白卡（add-card）不用 --lv：自带显式底色/边框与 hover 主色 */
+  line-height: 20px; /* 显式行高，防宿主容器（EP 表单 32px）渗入 */
+  /* 层级色只来自全局 .lv-1~.lv-5（main.css）：不可写 --lv 兜底，scoped 特异度
+     会压过全局把层级吞成一级蓝；新增白卡（add-card）不用 --lv，自带显式底色/边框 */
   background: var(--lv-bg);
   border: 1px solid var(--lv-border);
   border-radius: 6px;

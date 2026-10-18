@@ -158,9 +158,8 @@ onBeforeUnmount(() => {
   align-items: flex-start;
 }
 
-/* 卡片样式与后台 TagsPanel 同款。层级色只来自全局 .lv-1~.lv-5（main.css）——
-   这里不能再写 --lv* 兜底：scoped 的 .tag-card[data-v] 特异度(0,2,0)会压过
-   全局 .lv-N(0,1,0)，把所有层级吞成一级蓝（批三验收期抓回的级联 bug） */
+/* 层级色只来自全局 .lv-1~.lv-5（main.css）：此处不可写 --lv 兜底，
+   scoped 特异度会压过全局，把各层级吞成一级蓝 */
 .tag-card {
   display: inline-flex;
   align-items: center;

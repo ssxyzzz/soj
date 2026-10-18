@@ -186,6 +186,4 @@ async function togglePin(s: SolutionItem) {
   display: flex;
   gap: 4px;
 }
-
-/* .side-pager 与 main.css 全局重复，批三删本地 */
 </style>

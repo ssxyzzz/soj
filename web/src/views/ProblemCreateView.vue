@@ -3,12 +3,11 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
-import PageShell from '@/components/PageShell.vue'
 import ProblemForm from '@/components/ProblemForm.vue'
 import type { ProblemFormPayload } from '@/components/ProblemForm.vue'
 import { problemApi } from '@/api'
 
-// 网页建题（v0.5b-1）：表单字段/布局/校验在 ProblemForm 共享组件（编辑题目复用同一套），
+// 网页建题：表单字段/布局/校验在 ProblemForm 共享组件（编辑页复用同一套），
 // 本页只保留提交流程：元数据 + 题面 + 测试数据 zip 一次 FormData 交齐。
 const router = useRouter()
 const saving = ref(false)
@@ -39,15 +38,16 @@ async function onSubmit(p: ProblemFormPayload) {
 </script>
 
 <template>
-  <PageShell>
-    <el-card v-loading="saving">
-      <template #header><span>新建题目</span></template>
-      <ProblemForm mode="create" :saving="saving" @submit="onSubmit" />
-    </el-card>
-
-    <template #aside>
+  <ProblemForm
+    mode="create"
+    :saving="saving"
+    confirm-text="确认创建"
+    @submit="onSubmit"
+    @cancel="router.push('/problems')"
+  >
+    <template #aside-bottom>
       <el-card shadow="never">
-        <template #header><span>说明</span></template>
+        <template #header><span>建题须知</span></template>
         <div class="tips">
           <p>创建后题目默认公开可见，可在题目详情页对学生隐藏。</p>
           <p>测试点按 cases/ 下目录编号从小到大计分（单点等分）；子任务分组与样例标记暂不支持网页配置。</p>
@@ -56,9 +56,5 @@ async function onSubmit(p: ProblemFormPayload) {
         </div>
       </el-card>
     </template>
-  </PageShell>
+  </ProblemForm>
 </template>
-
-<style scoped>
-/* .tips 已上提 main.css 全局（批三收编） */
-</style>

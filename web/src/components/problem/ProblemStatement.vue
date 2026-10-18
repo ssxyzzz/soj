@@ -1,7 +1,6 @@
 <script setup lang="ts">
-// 题面主卡（编辑器体验小批追加需求）：题目详情页主列与在线编程左栏共用一份渲染——
-// #id 标题 + 时限/内存 + 可选文件 IO 提示 + 题面 Markdown，改一处两处生效。
-// 标题行右侧扩展位走 #extra 插槽（详情页放「主题库隐藏」标签与隐藏开关）。
+// 题面主卡：详情页主列与在线编程左栏共用——#id 标题 + 时限/内存 + 可选文件 IO 提示 + 题面；
+// 标题行右侧扩展位走 #extra 插槽。
 import MdView from '@/components/MdView.vue'
 import { fmtMem } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
@@ -14,8 +13,7 @@ defineProps<{
 
 <template>
   <el-card>
-    <!-- 内容列 860 居中：标题/时限信息/题面 Markdown 同列对齐——此前标题行铺满卡片、
-       Markdown 单独 860 居中（卡片内容宽 ~916px 时左右各缩 28px），天然错位 -->
+    <!-- 内容列 860 居中：标题与正文同列对齐 -->
     <div class="statement">
       <div class="title-row">
         <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
@@ -40,8 +38,7 @@ defineProps<{
 </template>
 
 <style scoped>
-/* 内容列 860 居中（与 MdView/vditor 编辑端同宽：标题与正文同列，见模板注释）；
-   在线编程左栏容器窄于 860 时此规则自然退化为全宽 */
+/* 内容列 860 居中（窄容器自然退化全宽） */
 .statement {
   max-width: 860px;
   margin: 0 auto;
@@ -53,7 +50,7 @@ defineProps<{
   gap: 8px;
 }
 
-/* 页头大标题标准档（22/600）：全站层级顶点，题面内 Markdown 标题一律低于它 */
+/* 页头大标题 22/600：层级顶点 */
 .big-title {
   font-size: 22px;
   font-weight: 600;

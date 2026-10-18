@@ -294,8 +294,6 @@ onMounted(loadBackup)
 </template>
 
 <style scoped>
-/* .head / .muted / .tips 已上提 main.css 全局（批三收编） */
-
 .backup-status {
   display: flex;
   align-items: center;
