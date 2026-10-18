@@ -1,14 +1,14 @@
 <script setup lang="ts">
-// 标签树管理（v0.5f 建面板，卡片化交互重构于编辑器体验小批同期，仅 root）：
-// 层级下钻卡片流——点卡片展开下一级、双击改名、长按浮起（拖动同级换位 / 点 × 删除）、
-// 行尾白卡 + 新增；右上角常驻角标 = 被引用题数（GET /admin/tagtree 附带）。
+// 标签树管理（v0.5f 建面板，卡片化交互 + 悬停导航，仅 root）：
+// 悬停到哪层展开到哪层（导航全靠悬停，移开即收起）；单击卡片在下方列出只挂此标签的题目，
+// 双击进编辑态（原地改名 + × 删除）；长按拖动 = 纯同级换位（与删除解绑）；＋ 默认隐藏、悬停行才显示。
 // 草稿为本地状态，保存仍是整树覆盖 + 二次确认 + 服务端被引用拦截；
 // 身份按名字对齐（改名 = 删除＋新增），被引用节点的删除/改名在交互层前置拦截。
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { tagApi } from '@/api'
-import type { TagNode, TagRefProblem } from '@/types'
+import { problemApi, tagApi } from '@/api'
+import type { ProblemListItem, TagNode, TagRefProblem } from '@/types'
 import { useTagTreeStore } from '@/stores/tagtree'
 
 const emit = defineEmits<{ (e: 'update:dirty', v: boolean): void }>()
@@ -29,7 +29,8 @@ const counts = ref<Record<string, number>>({})
 const loading = ref(true)
 const saving = ref(false)
 const blockedProblems = ref<TagRefProblem[] | null>(null)
-const selectedPath = ref<number[]>([]) // selectedPath[i] = 第 i 级行选中的节点 id
+const path = ref<number[]>([]) // 悬停路径：path[i] = 第 i 层悬停的节点 id，其子级即第 i+1 行——悬停即「当前在哪」
+const search = ref('') // 标签搜索：非空时整树按名匹配平铺展示（悬停导航/＋/拖拽停用）
 const floating = ref<number | null>(null) // 长按浮动态中的节点 id
 const draggingId = ref<number | null>(null)
 const editing = ref<{ id: number; name: string } | null>(null)
@@ -45,15 +46,37 @@ const total = computed(() => {
   return walk(draft.value)
 })
 
-// 下钻行：第 0 行 = 根；第 i+1 行 = 第 i 行选中节点的子级（无子级则止）
-const rows = computed<DraftNode[][]>(() => {
-  const out: DraftNode[][] = [draft.value]
-  let list = draft.value
-  for (const id of selectedPath.value) {
-    const next = findNode(list, id)?.children
+// 展示行：第 0 行 = 根；第 i+1 行 = 悬停路径上第 i 个节点的子级——
+// 悬停到哪就展开到哪（depth 为层级语义），移开整块后收起。
+// 搜索时整体替换为「全部命中标签」的平铺行（每个节点按其在树中的真实层级着色）。
+interface TagItem {
+  node: DraftNode
+  depth: number
+}
+
+interface TagRow {
+  items: TagItem[]
+  depth: number
+}
+
+const rows = computed<TagRow[]>(() => {
+  const q = search.value.trim().toLowerCase()
+  if (q) {
+    const hits: TagItem[] = []
+    const walk = (list: DraftNode[], depth: number) => {
+      for (const n of list) {
+        if (n.name.toLowerCase().includes(q)) hits.push({ node: n, depth })
+        walk(n.children, depth + 1)
+      }
+    }
+    walk(draft.value, 0)
+    return [{ items: hits, depth: 0 }]
+  }
+  const out: TagRow[] = [{ items: draft.value.map((n) => ({ node: n, depth: 0 })), depth: 0 }]
+  for (let d = 0; d < path.value.length; d++) {
+    const next = findNode(draft.value, path.value[d])?.children
     if (!next || !next.length) break
-    out.push(next)
-    list = next
+    out.push({ items: next.map((n) => ({ node: n, depth: d + 1 })), depth: d + 1 })
   }
   return out
 })
@@ -95,7 +118,14 @@ function validateName(raw: string, siblings: DraftNode[], self?: DraftNode): str
 
 // ---- 点击下钻 / 双击改名 / 长按拖拽 ----
 
-function onCardClick(row: number, node: DraftNode) {
+// 单击 = 在面板下方列出只挂此标签的题目（题库接口 tags 精确匹配，与角标同口径；20 条/页可翻页）
+const PAGE_SIZE = 20
+const tagProblems = ref<{ id: number; name: string; total: number; list: ProblemListItem[] } | null>(null)
+const problemsPage = ref(1)
+const problemsLoading = ref(false)
+let problemsSeq = 0
+
+function onCardClick(node: DraftNode) {
   if (suppressClick) {
     suppressClick = false
     return
@@ -105,7 +135,38 @@ function onCardClick(row: number, node: DraftNode) {
     return
   }
   if (editing.value || adding.value) return
-  selectedPath.value = [...selectedPath.value.slice(0, row), node.id]
+  void fetchTagProblems(node.id, node.name, 1)
+}
+
+async function fetchTagProblems(id: number, name: string, page: number) {
+  const seq = ++problemsSeq
+  if (id <= 0) {
+    // 新建未保存的标签还没有 ID，不可能被引用
+    tagProblems.value = { id, name, total: 0, list: [] }
+    return
+  }
+  problemsLoading.value = true
+  try {
+    const r = await problemApi.list(page, PAGE_SIZE, undefined, [id])
+    if (seq !== problemsSeq) return
+    tagProblems.value = { id, name, total: r.total, list: r.list }
+    problemsPage.value = page
+  } catch {
+    // 错误提示已由 axios 拦截器统一弹出
+  } finally {
+    if (seq === problemsSeq) problemsLoading.value = false
+  }
+}
+
+function onProblemsPage(page: number) {
+  if (!tagProblems.value) return
+  void fetchTagProblems(tagProblems.value.id, tagProblems.value.name, page)
+}
+
+// 双击 = 原地改名（输入框 + 右侧 ×）
+function startRename(node: DraftNode) {
+  if (floating.value !== null || editing.value || adding.value) return
+  editing.value = { id: node.id, name: node.name }
 }
 
 // 层级配色：同级同色、不同级不同色，1-5 级各一色（更深层沿用第五级）
@@ -113,15 +174,53 @@ function lvClass(row: number): string {
   return `lv-${Math.min(row + 1, 5)}`
 }
 
-// 悬停弹层里点子级 = 直接下钻（与点击卡片同一选中语义）
-function peekDrill(row: number, child: DraftNode) {
-  if (editing.value || adding.value) return
-  selectedPath.value = [...selectedPath.value.slice(0, row), child.id]
+// 悬停导航：移到某卡上，路径截断到该层并追加它（子级行随即展开），移开 180ms 后
+// 整体收起（延时桥接跨行间隙）；编辑/输入/拖拽期间冻结——行结构就是当前编辑上下文。
+let hoverTimer: ReturnType<typeof setTimeout> | undefined
+
+function hoverLocked(): boolean {
+  return !!(editing.value || adding.value || draggingId.value !== null)
 }
 
-function startRename(node: DraftNode) {
-  if (floating.value !== null || editing.value || adding.value) return
-  editing.value = { id: node.id, name: node.name }
+function onCardHover(row: number, node: DraftNode) {
+  if (hoverLocked() || search.value.trim()) return
+  if (hoverTimer) {
+    clearTimeout(hoverTimer)
+    hoverTimer = undefined
+  }
+  path.value = [...path.value.slice(0, row), node.id]
+}
+
+function scheduleHoverClear() {
+  if (hoverLocked()) return
+  if (hoverTimer) clearTimeout(hoverTimer)
+  hoverTimer = setTimeout(() => {
+    path.value = []
+    hoverTimer = undefined
+  }, 180)
+}
+
+function cancelHoverClear() {
+  if (hoverTimer) {
+    clearTimeout(hoverTimer)
+    hoverTimer = undefined
+  }
+}
+
+// ＋ 默认全隐藏：显示悬停行（路径最深处）的行尾 ＋ 与该空标签下的 mini-add；
+// 无悬停时回退到根行（保证任何时候都能建一级标签）。
+function showRowAdd(depth: number): boolean {
+  if (search.value.trim()) return false
+  if (adding.value && addParentId(depth) === adding.value.parentId) return true
+  if (path.value.length) return depth === path.value.length - 1
+  return depth === 0
+}
+
+function showMini(node: DraftNode): boolean {
+  if (search.value.trim() || node.children.length) return false
+  if (adding.value?.parentId === node.id) return true
+  const last = path.value[path.value.length - 1]
+  return last !== undefined && node.id === last
 }
 
 function commitRename(fromBlur = false) {
@@ -163,13 +262,14 @@ function removeNode(node: DraftNode) {
   const list = findList(draft.value, node.id)
   const idx = list ? list.findIndex((n) => n.id === node.id) : -1
   if (list && idx >= 0) list.splice(idx, 1)
-  const pi = selectedPath.value.indexOf(node.id)
-  if (pi >= 0) selectedPath.value = selectedPath.value.slice(0, pi)
+  const pi = path.value.indexOf(node.id)
+  if (pi >= 0) path.value = path.value.slice(0, pi)
+  if (editing.value?.id === node.id) editing.value = null
   floating.value = null
 }
 
 function addParentId(row: number): number {
-  return row === 0 ? 0 : selectedPath.value[row - 1]
+  return row === 0 ? 0 : path.value[row - 1]
 }
 
 function startAdd(row: number) {
@@ -210,8 +310,8 @@ function commitAdd(fromBlur = false) {
   adding.value = null
   // 建完即下钻到父级展开新行（mini-add 首子级场景立即可见；行尾 + 与根行场景为幂等不变）
   if (ad.parentId !== 0) {
-    const prow = rows.value.findIndex((l) => l.some((n) => n.id === ad.parentId))
-    if (prow >= 0) selectedPath.value = [...selectedPath.value.slice(0, prow), ad.parentId]
+    const prow = rows.value.findIndex((l) => l.items.some((it) => it.node.id === ad.parentId))
+    if (prow >= 0) path.value = [...path.value.slice(0, prow), ad.parentId]
   }
 }
 
@@ -223,7 +323,7 @@ let pressStart = { x: 0, y: 0 }
 let dragCleanup: (() => void) | null = null
 
 function onCardPointerDown(e: PointerEvent, row: number, node: DraftNode) {
-  if (e.button !== 0 || editing.value || adding.value) return
+  if (e.button !== 0 || editing.value || adding.value || search.value.trim()) return
   cancelPress()
   pressStart = { x: e.clientX, y: e.clientY }
   const rowEl = (e.currentTarget as HTMLElement).closest('.tag-row')
@@ -350,6 +450,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', onBeforeUnload)
   cancelPress()
   dragCleanup?.()
+  if (hoverTimer) clearTimeout(hoverTimer)
 })
 
 async function onSave() {
@@ -373,7 +474,7 @@ async function onSave() {
     draft.value = fromServer(fresh.nodes)
     counts.value = fresh.counts
     savedJson.value = JSON.stringify(draft.value)
-    selectedPath.value = []
+    path.value = []
     await tagStore.load()
   } catch (e) {
     // 拦截器已 toast 文案；这里取 failData 附带的引用题目明细做表格展示
@@ -401,50 +502,48 @@ async function onSave() {
     </template>
     <el-alert type="info" :closable="false" class="howto">
       <p>
-        点击卡片展开下一级；双击改名；长按卡片浮起后可拖动换位（同级）、点 × 删除；行尾白卡 ＋
-        新增该级标签；无子级的标签下方有白色 ＋ 小卡，点它直接新建子标签。卡片右上角数字 =
-        被题目引用数；颜色区分层级（一至五级各一色，更深层沿用第五级色）。
-      </p>
-      <p>
-        身份按名字对齐：同名标签保留 ID、题目引用不断；被引用的标签删除/改名会被拦截（改名 =
-        删除＋新增），需先在题目上解绑。保存为整树覆盖。
+        悬停展开下一级；单击列出包含此标签的题目；双击改名（回车确认）；点右侧 × 删除；长按拖动换位；
+        悬停行尾或空标签下方的 ＋ 新增。修改后点右上角「保存标签树」生效，被题目使用的标签需先解绑才能删除。
       </p>
     </el-alert>
 
+    <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
     <div class="tag-board" @click.self="exitFloating">
-      <div v-for="(list, row) in rows" :key="row" class="tag-row" @click.self="exitFloating">
-        <el-popover
-          v-for="node in list"
-          :key="node.id"
-          placement="bottom-start"
-          trigger="hover"
-          :show-after="150"
-          :hide-after="60"
-          :disabled="!node.children.length || floating !== null || draggingId !== null"
-          popper-class="tag-peek-popper"
+      <div
+        v-for="(r, i) in rows"
+        :key="i"
+        class="tag-row"
+        @click.self="exitFloating"
+        @mouseenter="cancelHoverClear"
+        @mouseleave="scheduleHoverClear"
+      >
+        <TransitionGroup name="tag">
+        <div
+          v-for="item in r.items"
+          :key="item.node.id"
+          class="tag-cell"
+          @mouseenter="onCardHover(item.depth, item.node)"
         >
-          <template #reference>
-            <div class="tag-cell">
-            <div
-              :data-id="node.id"
-              class="tag-card"
-              :class="[
-                {
-                  selected: selectedPath[row] === node.id,
-                  floating: floating === node.id,
-                  dragging: draggingId === node.id,
-                },
-                lvClass(row),
-              ]"
-              @click="onCardClick(row, node)"
-              @dblclick="startRename(node)"
-              @pointerdown="onCardPointerDown($event, row, node)"
-            >
-            <span v-if="node.id > 0" class="count-badge" :class="{ hot: countOf(node.id) > 0 }">
-              {{ countOf(node.id) }}
+          <div
+            :data-id="item.node.id"
+            class="tag-card"
+            :class="[
+              {
+                active: path[item.depth] === item.node.id,
+                floating: floating === item.node.id,
+                dragging: draggingId === item.node.id,
+              },
+              lvClass(item.depth),
+            ]"
+            @click="onCardClick(item.node)"
+            @dblclick="startRename(item.node)"
+            @pointerdown="onCardPointerDown($event, item.depth, item.node)"
+          >
+            <span v-if="item.node.id > 0" class="count-badge" :class="{ hot: countOf(item.node.id) > 0 }">
+              {{ countOf(item.node.id) }}
             </span>
             <el-input
-              v-if="editing && editing.id === node.id"
+              v-if="editing && editing.id === item.node.id"
               v-model="editing.name"
               size="small"
               class="card-input"
@@ -455,60 +554,52 @@ async function onSave() {
               @keydown.esc.stop="editing = null"
               @blur="commitRename(true)"
             />
-            <template v-else>{{ node.name }}</template>
-            <span v-if="node.children.length" class="caret">▸</span>
+            <template v-else>{{ item.node.name }}</template>
+            <span v-if="item.node.children.length" class="caret">▸</span>
             <span
-              v-if="floating === node.id"
+              v-if="editing && editing.id === item.node.id"
               class="del-x"
               title="删除（含子级）"
-              @click.stop="removeNode(node)"
+              @mousedown.prevent
+              @click.stop="removeNode(item.node)"
             >
               ×
             </span>
-            </div>
-            <div
-              v-if="!node.children.length"
-              class="mini-add"
-              title="新增子标签"
-              @click.stop="startAddUnder(node)"
-            >
-              <el-input
-                v-if="adding && adding.parentId === node.id"
-                v-model="adding.name"
-                size="small"
-                class="card-input"
-                :ref="focusRef"
-                @click.stop
-                @keydown.enter.prevent="commitAdd()"
-                @keydown.esc.stop="adding = null"
-                @blur="commitAdd(true)"
-              />
-              <template v-else>＋</template>
-            </div>
-            </div>
-          </template>
-          <div class="peek-list">
-            <div
-              v-for="c in node.children"
-              :key="c.id"
-              class="peek-item"
-              :class="lvClass(row + 1)"
-              @click.stop="peekDrill(row, c)"
-            >
-              <span>{{ c.name }}</span>
-              <span class="peek-count">{{ countOf(c.id) }}</span>
-            </div>
           </div>
-        </el-popover>
-        <div class="tag-card add-card" title="新增标签" @click.stop="startAdd(row)">
+          <div
+            v-if="showMini(item.node)"
+            class="tag-card add-card"
+            title="新增子标签"
+            @click.stop="startAddUnder(item.node)"
+          >
+            <el-input
+              v-if="adding && adding.parentId === item.node.id"
+              v-model="adding.name"
+              size="small"
+              class="card-input"
+              :ref="focusRef"
+              @click.stop
+              @keydown.enter.prevent="commitAdd()"
+              @keydown.esc.stop="adding = null"
+              @blur="commitAdd(true)"
+            />
+            <template v-else>＋</template>
+          </div>
+        </div>
+        </TransitionGroup>
+        <div
+          v-if="showRowAdd(r.depth)"
+          class="tag-card add-card"
+          title="新增标签"
+          @click.stop="startAdd(r.depth)"
+        >
           <el-input
-            v-if="adding && adding.parentId === addParentId(row)"
+            v-if="adding && adding.parentId === addParentId(r.depth)"
             v-model="adding.name"
             size="small"
             class="card-input"
             :ref="focusRef"
             @click.stop
-            @dblclick.stop
             @keydown.enter.prevent="commitAdd()"
             @keydown.esc.stop="adding = null"
             @blur="commitAdd(true)"
@@ -516,7 +607,31 @@ async function onSave() {
           <template v-else>＋</template>
         </div>
       </div>
-      <div v-if="!rows[0].length" class="dim empty-tip">（空树：用上面的 ＋ 建第一个标签）</div>
+      <div v-if="!rows[0].items.length" class="dim empty-tip">
+        {{ search.trim() ? '没有匹配的标签' : '（空树：用上面的 ＋ 建第一个标签）' }}
+      </div>
+    </div>
+
+    <div v-if="tagProblems" class="tag-problems">
+      <div class="tp-head">
+        <span>包含标签「{{ tagProblems.name }}」的题目：{{ tagProblems.total }} 道</span>
+        <el-pagination
+          v-if="tagProblems.total > PAGE_SIZE"
+          v-model:current-page="problemsPage"
+          :page-size="PAGE_SIZE"
+          :total="tagProblems.total"
+          layout="prev, pager, next"
+          size="small"
+          @current-change="onProblemsPage"
+        />
+        <el-button link size="small" @click="tagProblems = null">收起</el-button>
+      </div>
+      <div v-if="tagProblems.list.length" class="tp-links">
+        <router-link v-for="p in tagProblems.list" :key="p.id" :to="`/problems/${p.id}`" target="_blank">
+          #{{ p.id }} {{ p.title }}
+        </router-link>
+      </div>
+      <div v-else class="dim">（还没有题目使用此标签）</div>
     </div>
 
     <template v-if="blockedProblems">
@@ -567,6 +682,11 @@ async function onSave() {
   margin: 2px 0;
 }
 
+.tag-search {
+  width: 260px;
+  margin-bottom: 10px;
+}
+
 .tag-board {
   display: flex;
   flex-direction: column;
@@ -586,31 +706,6 @@ async function onSave() {
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
-}
-
-.mini-add {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 2px 6px;
-  background: #fff;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 4px;
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
-  line-height: 18px;
-  cursor: pointer;
-  user-select: none;
-  touch-action: none;
-}
-
-.mini-add:hover {
-  border-color: var(--el-color-primary);
-  color: var(--el-color-primary);
-}
-
-.mini-add .card-input {
-  width: 100%;
 }
 
 .tag-card {
@@ -635,8 +730,8 @@ async function onSave() {
   border-color: var(--lv);
 }
 
-/* 选中（已下钻）：本层级色实底，与未选浅色区分 */
-.tag-card.selected {
+/* 悬停路径上的卡（「当前在哪」）：本层级色实底 */
+.tag-card.active {
   background: var(--lv);
   border-color: var(--lv);
   color: #fff;
@@ -682,7 +777,14 @@ async function onSave() {
 }
 
 .tag-card.dragging {
-  opacity: 0.85;
+  transform: scale(1.05) rotate(1.5deg);
+  box-shadow: var(--el-box-shadow-dark);
+  opacity: 0.92;
+}
+
+/* 拖拽换位的 FLIP 动效：被挤开的卡片滑到新位置，而不是瞬间跳位 */
+.tag-move {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .count-badge {
@@ -704,7 +806,7 @@ async function onSave() {
   background: var(--el-color-primary);
 }
 
-.tag-card.selected .count-badge.hot {
+.tag-card.active .count-badge.hot {
   background: var(--el-color-primary-light-3);
 }
 
@@ -746,6 +848,36 @@ async function onSave() {
   padding: 4px 0;
 }
 
+.tag-problems {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.tp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.tp-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+}
+
+.tp-links a {
+  color: var(--el-color-primary);
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.tp-links a:hover {
+  text-decoration: underline;
+}
+
 .blocked-alert {
   margin-top: 12px;
 }
@@ -755,54 +887,3 @@ async function onSave() {
 }
 </style>
 
-<style>
-/* 悬停预览弹层内容 teleport 到 body，脱离组件作用域——全局类以 popper-class 收敛命名 */
-.tag-peek-popper .peek-list {
-  display: flex;
-  flex-direction: column;
-  max-width: 280px;
-  max-height: 260px;
-  overflow: auto;
-}
-
-.tag-peek-popper .peek-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.tag-peek-popper .peek-item:hover {
-  background: var(--el-fill-color-light);
-}
-
-/* 弹层子级按其层级着色（与卡片五级色一致） */
-.tag-peek-popper .peek-item.lv-1 {
-  color: var(--el-color-primary);
-}
-
-.tag-peek-popper .peek-item.lv-2 {
-  color: var(--el-color-success);
-}
-
-.tag-peek-popper .peek-item.lv-3 {
-  color: var(--el-color-warning);
-}
-
-.tag-peek-popper .peek-item.lv-4 {
-  color: var(--el-color-danger);
-}
-
-.tag-peek-popper .peek-item.lv-5 {
-  color: var(--el-color-info);
-}
-
-.tag-peek-popper .peek-count {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-</style>

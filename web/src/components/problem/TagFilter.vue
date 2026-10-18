@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 题库标签筛选（v0.5f）：一级标签一排，悬停预览下级（TagChips 递归），点击才选中；
-// 多选并集、精确匹配，选中集变化即上抛（列表实时刷新）。已选行常显便于取消。
+// 标签多选卡片流（题库筛选 + 建题/编辑表单共用）：悬停展开下级、可搜索、点击选中；
+// 多选并集、精确匹配，选中集变化即上抛。已选行常显便于取消。
 import { computed, onMounted } from 'vue'
 
 import { useTagTreeStore } from '@/stores/tagtree'

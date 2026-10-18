@@ -9,6 +9,7 @@ import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
 import MdEditor from '@/components/MdEditor.vue'
+import TagFilter from '@/components/problem/TagFilter.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
 
@@ -55,8 +56,13 @@ const form = reactive({
 
 const tagStore = useTagTreeStore()
 tagStore.ensure()
-// 级联面板数据：空树时展示「管理员尚未配置标签树」占位
+// 空树时展示「管理员尚未配置标签树」占位
 const tagTreeEmpty = computed(() => !tagStore.nodes.length)
+
+// 标签卡片流点选回调：整体替换 tag_ids（数组顺序即点选顺序）
+function onTagsChange(ids: number[]) {
+  form.tag_ids = ids
+}
 
 const fileList = ref<UploadUserFile[]>([])
 const checkerList = ref<UploadUserFile[]>([])
@@ -216,22 +222,13 @@ defineExpose({ payload })
           标签
           <el-tooltip
             placement="top"
-            content="从标签树选择，可多选、可选任意层级；树的层级由 root 在后台「标签树」维护，改名后全站展示自动跟随"
+            content="悬停展开下级、可搜索；单击卡片选中/取消，选中的标签显示在下方（点 × 可移除）；树的层级由 root 在后台「标签树」维护，改名后全站展示自动跟随"
           >
             <el-icon class="dim"><QuestionFilled /></el-icon>
           </el-tooltip>
         </span>
       </template>
-      <el-cascader
-        v-if="!tagTreeEmpty"
-        v-model="form.tag_ids"
-        :options="tagStore.nodes"
-        :props="{ multiple: true, checkStrictly: true, emitPath: false, value: 'id', label: 'name', children: 'children' }"
-        clearable
-        filterable
-        placeholder="从标签树选择（可输入关键字过滤）"
-        style="width: 100%"
-      />
+      <TagFilter v-if="!tagTreeEmpty" :selected="form.tag_ids" @change="onTagsChange" />
       <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
     </el-form-item>
     <el-form-item v-if="mode === 'create'" label="自定义校验器（可选）">
