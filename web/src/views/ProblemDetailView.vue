@@ -275,7 +275,6 @@ onUnmounted(stopPolling)
 .info-stats {
   display: flex;
   gap: 14px;
-  font-size: 15px;
 }
 
 .info-stats b {
@@ -296,16 +295,7 @@ onUnmounted(stopPolling)
   flex-wrap: wrap;
 }
 
-.aside-card + .aside-card {
-  margin-top: 16px;
-}
-
-.entry-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
+/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
 
 .center {
   text-align: center;

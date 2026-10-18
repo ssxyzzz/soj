@@ -175,21 +175,13 @@ onMounted(load)
 </template>
 
 <style scoped>
+/* .tips 已上提 main.css 全局（批三收编） */
+
 .tpl {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.tips {
-  font-size: 15px;
-  color: var(--el-text-color-regular);
-  line-height: 1.8;
-}
-
-.tips p {
-  margin: 0 0 8px;
 }
 
 .ac-row {

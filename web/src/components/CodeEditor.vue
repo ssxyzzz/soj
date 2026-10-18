@@ -23,7 +23,7 @@ const props = withDefaults(
     height: '420px',
     autocomplete: true,
     placeholder: '',
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: 'Consolas',
     tabIndent: false,
   },
@@ -189,7 +189,7 @@ onUnmounted(() => view?.destroy())
 .code-editor {
   width: 100%;
   border: 1px solid var(--el-border-color);
-  border-radius: 4px;
+  border-radius: var(--el-border-radius-base);
   overflow: hidden;
 }
 

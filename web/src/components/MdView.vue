@@ -60,6 +60,18 @@ function mountCopyButtons() {
       }, 2500)
     })
     pre.appendChild(btn)
+    // 语言徽标（视觉融合·批二，显示端）：vditor 高亮输出的 code 带 language-xxx 类，
+    // 取出挂 pre 左上角（右上角是复制按钮，构成代码块顶栏两端）；无语言的块不加。
+    pre.querySelectorAll('code').forEach((codeEl) => {
+      const m = /language-([\w+#.-]+)/.exec(codeEl.className)
+      if (m && !pre.querySelector('.md-lang-badge')) {
+        pre.classList.add('has-lang')
+        const badge = document.createElement('span')
+        badge.className = 'md-lang-badge'
+        badge.textContent = m[1]
+        pre.appendChild(badge)
+      }
+    })
   })
 }
 
@@ -79,14 +91,32 @@ watch(() => props.content, render)
   padding: 0;
 }
 
-/* 代码框（样例输入/输出等）与行内代码统一 15px（vditor 默认 85%≈13.6px，数字可读性差） */
-.md-view.vditor-reset :deep(pre > code),
-.md-view.vditor-reset :deep(:not(pre) > code) {
-  font-size: 15px;
+/* 内容列限宽 860 居中（视觉融合·批二；与编辑端 .vditor-wysiwyg 同规则，见 main.css） */
+.md-view {
+  max-width: 860px;
+  margin: 0 auto;
 }
 
 .md-view :deep(pre) {
-  position: relative; /* 复制按钮的定位基准 */
+  position: relative; /* 复制按钮与语言徽标的定位基准 */
+}
+
+/* 语言徽标 + 让出首行空间（右上角为复制按钮，两端构成代码块顶栏） */
+.md-view :deep(pre.has-lang) {
+  padding-top: 34px;
+}
+
+.md-view :deep(.md-lang-badge) {
+  position: absolute;
+  top: 7px;
+  left: 10px;
+  padding: 0 8px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
 }
 
 .md-view :deep(.md-copy-btn) {
@@ -94,19 +124,19 @@ watch(() => props.content, render)
   top: 6px;
   right: 6px;
   z-index: 1;
-  padding: 1px 8px; /* 15px 字号下收紧行高与内边距，保持徽章紧凑 */
-  font-size: 15px;
+  padding: 1px 8px;
+  font-size: 14px; /* 内容区 16px 环境下显式对齐全站界面字号 */
   line-height: 1.3;
   color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);
   border: 1px solid var(--el-color-primary-light-7);
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s;
 }
 
 .md-view :deep(.md-copy-btn:hover) {
-  color: #fff;
+  color: var(--el-color-white);
   background: var(--el-color-primary);
   border-color: var(--el-color-primary);
 }

@@ -85,7 +85,7 @@ function onCommand(command: string) {
 }
 
 .header {
-  background: #fff;
+  background: var(--el-bg-color);
   border-bottom: 1px solid var(--el-border-color-light);
   padding: 0;
   height: 60px;
@@ -106,9 +106,10 @@ function onCommand(command: string) {
   gap: 8px;
 }
 
+/* 品牌字 22/600（批三：字重两档 400/600，700 淘汰） */
 .brand {
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--el-color-primary);
   cursor: pointer;
   margin-right: 16px;
@@ -139,7 +140,6 @@ function onCommand(command: string) {
   display: inline-flex;
   align-items: center;
   padding: 0 var(--el-menu-base-level-padding, 20px);
-  font-size: var(--el-menu-item-font-size, 14px);
   color: var(--el-menu-text-color, var(--el-text-color-primary));
   border-bottom: 2px solid transparent;
   white-space: nowrap;
@@ -164,7 +164,7 @@ function onCommand(command: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: 14px;
   margin-right: 8px;
   transition:
     background-color var(--el-transition-duration, 0.3s),
@@ -173,11 +173,12 @@ function onCommand(command: string) {
 
 .username:hover .user-chip {
   background: var(--el-color-primary);
-  color: #fff;
+  color: var(--el-color-white);
 }
 
+/* 画布统一走批三令牌（原 --el-fill-color-light 与 body 画布双源并存，批三统一指向） */
 .main {
-  background: var(--el-fill-color-light);
+  background: var(--el-bg-color-page);
 }
 
 .footer {
@@ -185,7 +186,6 @@ function onCommand(command: string) {
   align-items: center;
   justify-content: center;
   color: var(--el-text-color-secondary);
-  font-size: 15px;
-  background: var(--el-fill-color-light);
+  background: var(--el-bg-color-page);
 }
 </style>

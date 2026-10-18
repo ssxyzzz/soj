@@ -284,7 +284,7 @@ onMounted(loadBackup)
       width="900"
       destroy-on-close
     >
-      <MdEditor v-model="guideDraft" height="400px" />
+      <MdEditor v-model="guideDraft" variant="compact" height="400px" />
       <template #footer>
         <el-button @click="showGuideEdit = false">取消</el-button>
         <el-button type="primary" @click="saveGuide">保存</el-button>
@@ -294,17 +294,7 @@ onMounted(loadBackup)
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.muted {
-  color: var(--el-text-color-secondary);
-  font-weight: 400;
-  font-size: 15px;
-}
+/* .head / .muted / .tips 已上提 main.css 全局（批三收编） */
 
 .backup-status {
   display: flex;
@@ -314,23 +304,12 @@ onMounted(loadBackup)
 
 .backup-desc {
   margin: 12px 0;
-  font-size: 15px;
   color: var(--el-text-color-regular);
 }
 
 .backup-actions {
   display: flex;
   gap: 8px;
-}
-
-.tips {
-  font-size: 15px;
-  color: var(--el-text-color-regular);
-  line-height: 1.8;
-}
-
-.tips p {
-  margin: 0 0 8px;
 }
 
 .cmd-line {
@@ -345,12 +324,10 @@ onMounted(loadBackup)
 
 .cmd-line code {
   flex: 1;
-  font-size: 15px;
   word-break: break-all;
 }
 
 .cmd-note {
-  font-size: 15px;
   color: var(--el-text-color-secondary);
 }
 
@@ -362,7 +339,6 @@ onMounted(loadBackup)
 }
 
 .key-warning {
-  font-size: 15px;
   color: var(--el-color-danger);
   font-weight: 600;
 }
@@ -373,14 +349,10 @@ onMounted(loadBackup)
   gap: 10px;
 }
 
-/* 分区标题：默认 divider 文字 14px 偏小，按需求放大居中（正文 16px + 半粗） */
+/* 分区标题：区块小标题标准档（16/600） */
 .section-title {
   font-size: 16px;
   font-weight: 600;
   color: var(--el-text-color-primary);
-}
-
-.guide-md {
-  font-size: 15px;
 }
 </style>

@@ -190,7 +190,7 @@ onMounted(() => {
 <template>
   <div v-loading="loading">
     <PageShell v-if="assignment">
-        <el-card class="mb8">
+        <el-card class="mb16">
           <template #header>
             <div class="head">
               <span>{{ assignment.title }}</span>
@@ -211,13 +211,13 @@ onMounted(() => {
           <div v-else class="dim">{{ userStore.token ? '暂无你的做题记录' : '登录后可查看自己的完成进度' }}</div>
         </el-card>
 
-        <el-card v-if="assignment.intro" class="mb8">
+        <el-card v-if="assignment.intro" class="mb16">
           <div class="intro">{{ assignment.intro }}</div>
         </el-card>
 
         <el-card>
           <template #header><span>作业题目（{{ assignment.problems.length }}）</span></template>
-          <el-table :data="assignment.problems">
+          <el-table stripe :data="assignment.problems">
             <el-table-column prop="id" label="ID" width="100" />
             <el-table-column label="题目">
               <template #default="{ row }">
@@ -240,14 +240,14 @@ onMounted(() => {
           <el-empty v-if="!assignment.problems.length" description="作业里还没有题目" :image-size="60" />
         </el-card>
 
-        <el-card v-if="assignment.manageable" class="mt8">
+        <el-card v-if="assignment.manageable" class="mt16">
           <template #header>
             <div class="head">
               <span>完成情况（{{ progress.length }} 名学生）</span>
               <el-button size="small" :loading="progressLoading" @click="loadProgress">刷新</el-button>
             </div>
           </template>
-          <el-table v-loading="progressLoading" :data="progress">
+          <el-table stripe v-loading="progressLoading" :data="progress">
             <el-table-column prop="username" label="用户名" min-width="140" />
             <el-table-column prop="nickname" label="昵称" min-width="120" />
             <el-table-column
@@ -331,12 +331,12 @@ onMounted(() => {
 
     <!-- 完成情况单元格点看的用户提交明细（含代码展开） -->
     <el-dialog v-model="showUserSubs" :title="`提交明细 · ${userSubsTitle}`" width="1020" top="4vh">
-      <el-table v-loading="userSubsLoading" :data="userSubs" border>
+      <el-table stripe v-loading="userSubsLoading" :data="userSubs" border>
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="user-subs-detail">
               <pre v-if="row.code" class="mono sub-code">{{ row.code }}</pre>
-              <el-table v-if="row.detail?.length" :data="row.detail" size="small" border>
+              <el-table stripe v-if="row.detail?.length" :data="row.detail" size="small" border>
                 <el-table-column prop="index" label="测试点" width="90" />
                 <el-table-column label="结果">
                   <template #default="{ row: c }">
@@ -380,46 +380,25 @@ onMounted(() => {
   vertical-align: baseline;
 }
 
-/* 本视图 mb8=16px（编辑器上方间距），显式覆盖全局 8px 款 */
-.mb8 {
+/* 卡片纵向间距 16px（编辑器上方；原 .mb8/.mt8 名实不符，批三改名）；
+   .ml8/.head/.aside-card/.entry-actions 已上提 main.css 全局 */
+.mb16 {
   margin-bottom: 16px;
 }
 
-.mt8 {
+.mt16 {
   margin-top: 16px;
-}
-
-.ml8 {
-  margin-left: 8px;
-}
-
-.head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .progress-line {
   display: flex;
   justify-content: space-between;
   margin-bottom: 8px;
-  font-size: 15px;
 }
 
 .intro {
   color: var(--el-text-color-regular);
   line-height: 1.7;
-}
-
-.aside-card + .aside-card {
-  margin-top: 16px;
-}
-
-.entry-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
 }
 
 .adjust-pick {
@@ -430,7 +409,7 @@ onMounted(() => {
 
 .adjust-list {
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 4px;
+  border-radius: 6px;
   max-height: 320px;
   overflow: auto;
   margin-bottom: 8px;
@@ -443,7 +422,7 @@ onMounted(() => {
   padding: 8px 12px;
   border-bottom: 1px solid var(--el-fill-color);
   cursor: grab;
-  background: #fff;
+  background: var(--el-bg-color);
 }
 
 .adjust-row:hover {
@@ -459,7 +438,6 @@ onMounted(() => {
   width: 24px;
   text-align: center;
   color: var(--el-text-color-secondary);
-  font-size: 15px;
 }
 
 .adjust-title {

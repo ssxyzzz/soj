@@ -60,13 +60,5 @@ async function onSubmit(p: ProblemFormPayload) {
 </template>
 
 <style scoped>
-.tips {
-  font-size: 15px;
-  color: var(--el-text-color-regular);
-  line-height: 1.8;
-}
-
-.tips p {
-  margin: 0 0 8px;
-}
+/* .tips 已上提 main.css 全局（批三收编） */
 </style>

@@ -255,9 +255,8 @@ defineExpose({ payload })
 </template>
 
 <style scoped>
-/* 表单标签统一 15px（不加粗） */
+/* 表单标签不加粗（Ant：标签与正文同字重 400，颜色不降档） */
 :deep(.el-form-item__label) {
-  font-size: 15px;
   font-weight: 400;
   color: var(--el-text-color-primary);
 }
@@ -276,7 +275,6 @@ defineExpose({ payload })
 }
 
 .field-label {
-  font-size: 15px;
   font-weight: 400;
   color: var(--el-text-color-primary);
   margin-bottom: 8px;
@@ -328,9 +326,8 @@ defineExpose({ payload })
   gap: 8px;
 }
 
-/* 浮点容差为次级条件字段：字号与全站统一 15px，字重颜色保持默认（不随表单主标签加粗） */
+/* 浮点容差为次级条件字段：字重颜色降一档（不随表单主标签加粗） */
 .plain-label :deep(.el-form-item__label) {
-  font-size: 15px;
   font-weight: 400;
   color: var(--el-text-color-regular);
 }

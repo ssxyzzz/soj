@@ -134,10 +134,10 @@ onMounted(() => {
           />
         </div>
         <div v-if="tagStore.nodes.length || tagSel.length" class="tag-row">
-          <span class="dim tag-row-label">标签筛选</span>
           <TagFilter :selected="tagSel" @change="onTagChange" />
         </div>
         <el-table
+stripe
           v-loading="loading"
           :data="list"
           style="cursor: pointer"
@@ -146,7 +146,7 @@ onMounted(() => {
           <el-table-column prop="id" label="ID" width="100" />
           <el-table-column label="题目" min-width="320">
             <template #default="{ row }">
-              {{ row.title }}
+              <span class="title">{{ row.title }}</span>
               <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏</el-tag>
               <el-tag v-if="row.locked" size="small" type="warning" class="ml8">
                 {{ row.lock_kind === 'exam' ? '考试中' : '比赛中' }}
@@ -156,12 +156,13 @@ onMounted(() => {
           <el-table-column label="标签" min-width="170">
             <template #default="{ row }">
               <template v-if="row.tags?.length">
-                <el-tag v-for="id in shownTags(row)" :key="id" size="small" type="info" class="cell-tag">
+                <el-tag v-for="id in shownTags(row as ProblemListItem)" :key="id" size="small" type="info" class="cell-tag">
                   {{ tagStore.nameOf(id) }}
                 </el-tag>
                 <el-tooltip v-if="(row.tags?.length ?? 0) > 3" placement="top" effect="light">
                   <template #content>
-                    <div style="max-width: 320px">{{ restTagNames(row) }}</div>
+                    <!-- 标签列插槽与 tooltip 内容插槽的 row 是宽松类型（DefaultRow），收窄回列表项类型 -->
+                    <div style="max-width: 320px">{{ restTagNames(row as ProblemListItem) }}</div>
                   </template>
                   <el-tag size="small" type="info">+{{ (row.tags?.length ?? 0) - 3 }}</el-tag>
                 </el-tooltip>
@@ -187,7 +188,7 @@ onMounted(() => {
     <template #aside>
       <el-card v-if="userStore.can('problem.create')" class="aside-card">
         <template #header><span>题目管理</span></template>
-        <div class="aside-actions">
+        <div class="entry-actions">
           <el-button type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
           <el-button style="width: 100%" @click="comingSoon">导入题目</el-button>
         </div>
@@ -229,45 +230,29 @@ onMounted(() => {
   align-items: flex-start;
   padding: 8px 12px;
   background: var(--el-fill-color-light);
-  border-radius: 4px;
+  border-radius: var(--el-border-radius-base);
   margin-bottom: 12px;
-  font-size: 15px;
-}
-
-.tag-row-label {
-  flex-shrink: 0;
-  line-height: 28px;
-  margin-right: 12px;
 }
 
 .cell-tag {
   margin: 0 6px 4px 0;
 }
 
-.pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
+/* 实体名（题名）：主色链接感区分层级，不靠字号字重（批三·实体名规范；整行可点击） */
+.title {
+  color: var(--el-color-primary);
 }
 
-.ml8 {
-  margin-left: 8px;
-}
-
-.aside-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
+/* .pager / .ml8 / .entry-actions（原本视图别名 .aside-actions）已上提 main.css 全局 */
 
 .tip {
   margin-top: 8px;
 }
 
+/* 统计大数字（32/600，强调档） */
 .stat-big {
   font-size: 32px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--el-color-primary);
   line-height: 1.2;
 }

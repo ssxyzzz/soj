@@ -112,9 +112,11 @@ onMounted(async () => {
   padding: 32px 0;
 }
 
+/* hero 标题 30/600（强调档最高级） */
 .title {
   margin: 0 0 8px;
   font-size: 30px;
+  font-weight: 600;
 }
 
 .subtitle {
@@ -151,11 +153,11 @@ onMounted(async () => {
 
 .feature h3 {
   margin: 8px 0;
+  font-weight: 600;
 }
 
 .feature p {
   color: var(--el-text-color-regular);
-  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -174,14 +176,14 @@ onMounted(async () => {
   margin-bottom: 12px;
 }
 
+/* 实体名（班级名）：主色链接感区分层级，不靠字号字重（批三·实体名规范） */
 .class-name {
   margin: 0 0 6px;
-  font-size: 16px;
+  color: var(--el-color-primary);
 }
 
 .class-intro {
   color: var(--el-text-color-secondary);
-  font-size: 15px;
   height: 36px;
   overflow: hidden;
   text-overflow: ellipsis;

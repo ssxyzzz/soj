@@ -362,11 +362,7 @@ defineExpose({ refresh: loadDefaultView })
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+/* .head / .ml8 已上提 main.css 全局（批三收编） */
 
 .search-row {
   display: flex;
@@ -392,7 +388,6 @@ defineExpose({ refresh: loadDefaultView })
 
 .sug-nickname {
   color: var(--el-text-color-secondary);
-  font-size: 15px;
   flex: 1 1 auto;
 }
 
@@ -406,7 +401,6 @@ defineExpose({ refresh: loadDefaultView })
 
 .row-hint {
   color: var(--el-text-color-secondary);
-  font-size: 15px;
 }
 
 .user-table :deep(.el-table__row) .row-group,
@@ -420,7 +414,5 @@ defineExpose({ refresh: loadDefaultView })
   margin-top: 12px;
 }
 
-.ml8 {
-  margin-left: 8px;
-}
+/* .ml8 已上提 main.css 全局（批三收编） */
 </style>

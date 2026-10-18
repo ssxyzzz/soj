@@ -90,7 +90,7 @@ onMounted(load)
           </div>
         </template>
         <el-empty v-if="!running.length" description="当前没有进行中的比赛" :image-size="50" />
-        <el-table v-else :data="running" style="cursor: pointer" @row-click="openContest">
+        <el-table stripe v-else :data="running" style="cursor: pointer" @row-click="openContest">
           <el-table-column prop="title" label="比赛" min-width="220" />
           <el-table-column label="时间" min-width="280">
             <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
@@ -104,7 +104,7 @@ onMounted(load)
           <div class="group-head scheduled-head"><span class="dot scheduled-dot" /> 近期比赛</div>
         </template>
         <el-empty v-if="!scheduled.length" description="近期暂无比赛" :image-size="50" />
-        <el-table v-else :data="scheduled" style="cursor: pointer" @row-click="openContest">
+        <el-table stripe v-else :data="scheduled" style="cursor: pointer" @row-click="openContest">
           <el-table-column prop="title" label="比赛" min-width="220" />
           <el-table-column label="时间" min-width="280">
             <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
@@ -118,7 +118,7 @@ onMounted(load)
           <div class="group-head"><span class="dot ended-dot" /> 已结束的比赛</div>
         </template>
         <el-empty v-if="!ended.length" description="还没有已结束的比赛" :image-size="50" />
-        <el-table v-else :data="ended" style="cursor: pointer" @row-click="openContest">
+        <el-table stripe v-else :data="ended" style="cursor: pointer" @row-click="openContest">
           <el-table-column prop="title" label="比赛" min-width="220" />
           <el-table-column label="时间" min-width="280">
             <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
@@ -222,10 +222,6 @@ onMounted(load)
 
 .scheduled-head {
   color: var(--el-color-warning-dark-2);
-}
-
-.aside-card + .aside-card {
-  margin-top: 16px;
 }
 
 .rule-text p {

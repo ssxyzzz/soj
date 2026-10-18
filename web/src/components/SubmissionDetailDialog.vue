@@ -82,7 +82,7 @@ watch(
         <pre class="mono sub-code">{{ sub.code }}</pre>
         <template v-if="sub.detail?.length">
           <div class="detail-sub">测试点明细</div>
-          <el-table :data="sub.detail" size="small" border>
+          <el-table stripe :data="sub.detail" size="small" border>
             <el-table-column prop="index" label="测试点" width="90" />
             <el-table-column label="结果">
               <template #default="{ row }">

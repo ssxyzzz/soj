@@ -94,7 +94,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="tag-flow" @mouseleave="scheduleHoverClear">
-    <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
+    <div class="tag-top">
+      <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
+      <!-- 顶行右侧插槽：TagFilter 在此挂已选展示（搜索标签框右边） -->
+      <div class="tag-top-right">
+        <slot name="top-right" />
+      </div>
+    </div>
     <div
       v-for="(r, i) in rows"
       :key="i"
@@ -126,9 +132,23 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+/* 顶行：搜索标签框 + 右侧插槽（已选），随内容换行 */
+.tag-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.tag-top-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .tag-search {
   width: 240px;
-  margin-bottom: 4px;
 }
 
 .tag-row {
@@ -138,18 +158,17 @@ onBeforeUnmount(() => {
   align-items: flex-start;
 }
 
-/* 卡片样式与后台 TagsPanel 同款（--lv 由 .lv-1~.lv-5 按层注入），尺寸按筛选场景略收紧 */
+/* 卡片样式与后台 TagsPanel 同款。层级色只来自全局 .lv-1~.lv-5（main.css）——
+   这里不能再写 --lv* 兜底：scoped 的 .tag-card[data-v] 特异度(0,2,0)会压过
+   全局 .lv-N(0,1,0)，把所有层级吞成一级蓝（批三验收期抓回的级联 bug） */
 .tag-card {
-  --lv: var(--el-color-primary);
-  --lv-bg: var(--el-color-primary-light-9);
-  --lv-border: var(--el-color-primary-light-7);
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;
+  line-height: 20px;
   background: var(--lv-bg);
   border: 1px solid var(--lv-border);
   border-radius: 6px;
-  font-size: 14px;
   cursor: pointer;
   user-select: none;
   transition: background 0.15s, border-color 0.15s;
@@ -163,37 +182,7 @@ onBeforeUnmount(() => {
 .tag-card.active {
   background: var(--lv);
   border-color: var(--lv);
-  color: #fff;
-}
-
-.tag-card.lv-1 {
-  --lv: var(--el-color-primary);
-  --lv-bg: var(--el-color-primary-light-9);
-  --lv-border: var(--el-color-primary-light-7);
-}
-
-.tag-card.lv-2 {
-  --lv: var(--el-color-success);
-  --lv-bg: var(--el-color-success-light-9);
-  --lv-border: var(--el-color-success-light-7);
-}
-
-.tag-card.lv-3 {
-  --lv: var(--el-color-warning);
-  --lv-bg: var(--el-color-warning-light-9);
-  --lv-border: var(--el-color-warning-light-7);
-}
-
-.tag-card.lv-4 {
-  --lv: var(--el-color-danger);
-  --lv-bg: var(--el-color-danger-light-9);
-  --lv-border: var(--el-color-danger-light-7);
-}
-
-.tag-card.lv-5 {
-  --lv: var(--el-color-info);
-  --lv-bg: var(--el-color-info-light-9);
-  --lv-border: var(--el-color-info-light-7);
+  color: var(--el-color-white);
 }
 
 .caret {

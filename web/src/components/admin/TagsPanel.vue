@@ -641,7 +641,7 @@ async function onSave() {
         class="blocked-alert"
         title="保存被拒：以下题目仍在使用将被删除的标签，请先在题目上解绑（编辑题目 → 标签）"
       />
-      <el-table :data="blockedProblems" size="small">
+      <el-table stripe :data="blockedProblems" size="small">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="题目" min-width="240" />
         <el-table-column label="使用的标签" min-width="260">
@@ -683,20 +683,20 @@ async function onSave() {
 }
 
 .tag-search {
-  width: 260px;
+  width: 240px;
   margin-bottom: 10px;
 }
 
 .tag-board {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .tag-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
 }
 
@@ -712,11 +712,11 @@ async function onSave() {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 6px 14px;
-  /* 层级色变量：由 .lv-1~.lv-5 按行注入，默认一级（primary）兜底 */
-  --lv: var(--el-color-primary);
-  --lv-bg: var(--el-color-primary-light-9);
-  --lv-border: var(--el-color-primary-light-7);
+  padding: 4px 12px;
+  line-height: 20px; /* 显式行高与 TagChips 同高（防宿主容器行高渗入，见 TagChips 注释） */
+  /* 层级色只来自全局 .lv-1~.lv-5（main.css）；此处不写 --lv* 兜底——
+     scoped .tag-card[data-v] 特异度会压过全局 .lv-N 把层级色吞成一级蓝。
+     新增白卡（add-card）不用 --lv：自带显式底色/边框与 hover 主色 */
   background: var(--lv-bg);
   border: 1px solid var(--lv-border);
   border-radius: 6px;
@@ -734,38 +734,7 @@ async function onSave() {
 .tag-card.active {
   background: var(--lv);
   border-color: var(--lv);
-  color: #fff;
-}
-
-/* 五级各占一款基色：1 蓝 / 2 绿 / 3 橙 / 4 红 / 5 灰 */
-.tag-card.lv-1 {
-  --lv: var(--el-color-primary);
-  --lv-bg: var(--el-color-primary-light-9);
-  --lv-border: var(--el-color-primary-light-7);
-}
-
-.tag-card.lv-2 {
-  --lv: var(--el-color-success);
-  --lv-bg: var(--el-color-success-light-9);
-  --lv-border: var(--el-color-success-light-7);
-}
-
-.tag-card.lv-3 {
-  --lv: var(--el-color-warning);
-  --lv-bg: var(--el-color-warning-light-9);
-  --lv-border: var(--el-color-warning-light-7);
-}
-
-.tag-card.lv-4 {
-  --lv: var(--el-color-danger);
-  --lv-bg: var(--el-color-danger-light-9);
-  --lv-border: var(--el-color-danger-light-7);
-}
-
-.tag-card.lv-5 {
-  --lv: var(--el-color-info);
-  --lv-bg: var(--el-color-info-light-9);
-  --lv-border: var(--el-color-info-light-7);
+  color: var(--el-color-white);
 }
 
 /* 长按浮起：抬升 + 阴影，可拖可删 */
@@ -797,7 +766,7 @@ async function onSave() {
   padding: 0 4px;
   border-radius: 8px;
   background: var(--el-color-info);
-  color: #fff;
+  color: var(--el-color-white);
   font-size: 12px;
   text-align: center;
 }
@@ -818,7 +787,7 @@ async function onSave() {
   text-align: center;
   border-radius: 50%;
   background: var(--el-color-danger);
-  color: #fff;
+  color: var(--el-color-white);
   font-size: 12px;
 }
 
@@ -829,7 +798,7 @@ async function onSave() {
 .add-card {
   min-width: 40px;
   justify-content: center;
-  background: #fff;
+  background: var(--el-bg-color);
   border: 1px dashed var(--el-border-color);
   color: var(--el-text-color-secondary);
   font-size: 16px;
@@ -871,7 +840,6 @@ async function onSave() {
 .tp-links a {
   color: var(--el-color-primary);
   text-decoration: none;
-  font-size: 15px;
 }
 
 .tp-links a:hover {

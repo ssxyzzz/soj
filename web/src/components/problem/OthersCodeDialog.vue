@@ -78,6 +78,7 @@ function openOthersDetail(s: Submission) {
       <span class="dim">共 {{ othersTotal }} 份，显示前 {{ PAGE_SIZE }} 份</span>
     </div>
     <el-table
+stripe
       :data="others"
       size="small"
       border

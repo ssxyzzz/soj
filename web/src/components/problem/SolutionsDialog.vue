@@ -146,7 +146,7 @@ async function togglePin(s: SolutionItem) {
       top="4vh"
       append-to-body
     >
-      <MdEditor v-model="solutionDraft" height="420px" />
+      <MdEditor v-model="solutionDraft" variant="compact" height="420px" />
       <template #footer>
         <el-button @click="showSolutionEditor = false">取消</el-button>
         <el-button type="primary" plain @click="saveSolution">发布</el-button>
@@ -187,9 +187,5 @@ async function togglePin(s: SolutionItem) {
   gap: 4px;
 }
 
-.side-pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
-}
+/* .side-pager 与 main.css 全局重复，批三删本地 */
 </style>

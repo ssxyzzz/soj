@@ -231,7 +231,7 @@ onUnmounted(() => {
         <el-card class="block">
           <el-tabs v-model="tab">
             <el-tab-pane label="题目" name="problems">
-              <el-table v-if="round.problems" :data="round.problems">
+              <el-table stripe v-if="round.problems" :data="round.problems">
                 <el-table-column prop="id" label="ID" width="100" />
                 <el-table-column label="题目">
                   <template #default="{ row }">
@@ -261,7 +261,7 @@ onUnmounted(() => {
                 :closable="false"
                 class="mt8"
               />
-              <el-table v-if="leaders.length" :data="leaders" class="mt8">
+              <el-table stripe v-if="leaders.length" :data="leaders" class="mt8">
                 <el-table-column prop="rank" label="排名" width="70" fixed />
                 <el-table-column prop="username" label="用户名" min-width="130" fixed />
                 <el-table-column prop="nickname" label="昵称" min-width="110" />
@@ -364,12 +364,12 @@ onUnmounted(() => {
 
     <!-- 榜单单元格点看的用户提交明细（含代码展开） -->
     <el-dialog v-model="showUserSubs" :title="`提交明细 · ${userSubsTitle}`" width="1020" top="4vh">
-      <el-table v-loading="userSubsLoading" :data="userSubs" border>
+      <el-table stripe v-loading="userSubsLoading" :data="userSubs" border>
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="user-subs-detail">
               <pre v-if="row.code" class="mono sub-code">{{ row.code }}</pre>
-              <el-table v-if="row.detail?.length" :data="row.detail" size="small" border>
+              <el-table stripe v-if="row.detail?.length" :data="row.detail" size="small" border>
                 <el-table-column prop="index" label="测试点" width="90" />
                 <el-table-column label="结果">
                   <template #default="{ row: c }">
@@ -416,9 +416,10 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
+/* 页头大标题标准档（22/600）：全站层级顶点 */
 .big-title {
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .intro {
@@ -441,13 +442,12 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-.aside-card + .aside-card {
-  margin-top: 16px;
-}
+/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
 
+/* 倒计时大字（22/600，强调档） */
 .countdown {
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--el-color-primary);
   margin-bottom: 10px;
   text-align: center;
@@ -462,14 +462,6 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   padding: 4px 0;
-  font-size: 15px;
-}
-
-.entry-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
 }
 
 .cell-tries {

@@ -33,7 +33,7 @@ const divider = ref<HTMLElement>()
 const userStore = useUserStore()
 const acOn = computed(() => autocompleteOn())
 const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
-const codeFontSize = computed(() => userStore.prefs.codeFontSize || 15)
+const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
 
 // 字体/字号即改即存：先乐观更新本地 store（编辑器点击瞬间重绘，不等网络往返），
 // 再全量字段落库（整体覆盖语义，见 utils/code.ts mergedPrefs）。
@@ -167,7 +167,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 2000;
-  background: #fff;
+  background: var(--el-bg-color);
   display: flex;
   flex-direction: column;
 }
@@ -184,7 +184,6 @@ onBeforeUnmount(() => {
 
 .wb-title {
   font-weight: 600;
-  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -200,7 +199,6 @@ onBeforeUnmount(() => {
   padding: 8px 20px;
   background: var(--el-color-warning-light-9);
   color: var(--el-color-warning);
-  font-size: 15px;
   flex: none;
 }
 
@@ -239,7 +237,5 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.mono {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
-}
+/* .mono 已上提 main.css 全局（批三收编） */
 </style>

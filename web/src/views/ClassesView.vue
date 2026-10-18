@@ -202,17 +202,15 @@ onMounted(load)
   flex-wrap: wrap;
 }
 
+/* 实体名（班级名）：主色链接感区分层级，不靠字号字重（批三·实体名规范） */
 .name {
   margin: 0;
-  font-size: 16px;
   cursor: pointer;
   color: var(--el-color-primary);
-  font-weight: 600;
 }
 
 .intro {
   color: var(--el-text-color-secondary);
-  font-size: 15px;
   min-height: 36px;
   margin: 6px 0 8px;
 }
@@ -222,21 +220,11 @@ onMounted(load)
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  font-size: 15px;
 }
 
 .join-btn {
   margin-left: auto;
 }
 
-.aside-card + .aside-card {
-  margin-top: 16px;
-}
-
-.entry-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-}
+/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
 </style>

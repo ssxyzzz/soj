@@ -127,7 +127,7 @@ async function switchSection(target: typeof section.value) {
 .nav-item {
   background: var(--el-color-primary-light-9);
   border: 1px solid var(--el-color-primary-light-7);
-  border-radius: 8px;
+  border-radius: var(--el-border-radius-base);
   padding: 14px 16px;
   cursor: pointer;
   transition: all 0.2s;
@@ -147,17 +147,15 @@ async function switchSection(target: typeof section.value) {
 
 .nav-item.active .nav-title,
 .nav-item.active .nav-sub {
-  color: #fff;
+  color: var(--el-color-white);
 }
 
 .nav-title {
   font-weight: 600;
-  font-size: 15px;
   color: var(--el-text-color-primary);
 }
 
 .nav-sub {
-  font-size: 15px;
   color: var(--el-text-color-secondary);
 }
 

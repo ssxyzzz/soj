@@ -6,14 +6,51 @@ body,
   min-height: 100vh;
 }
 
-/* 全站字阶（2026-10）：正文 16 / 界面与提示 15 / 代码 15。
-   --el-font-size-base 抬高 Element Plus 组件基础字号（按钮/输入框/表格等 14 → 15） */
+/* 全站字阶（视觉融合·批三，2026-10）：长文阅读正文 16（vditor-reset）/ 界面与表格 14 /
+   代码 14 / 区块小标题 16·600 / 页头大标题 20·600 / hero 与统计大数字 30·32·600。
+   基线回到 EP 默认 14px（Ant 对齐），EP 默认即 14 的覆盖全部删除，仅留 EP 硬编码
+   小字号（12px 系）的升位覆盖 */
 :root {
-  --el-font-size-base: 15px;
+  /* 按钮等组件字重 500 → 400（Ant：正文与按钮同字重，强调只靠 600 档与颜色） */
+  --el-font-weight-primary: 400;
+
+  /* ---- 视觉融合·批三（Ant Design 对齐）：画布 / 圆角 / 边框 / 填充 ---- */
+  /* 画布与内容面：Ant colorBgLayout #f5f5f5，卡片/弹窗纯白从背景浮出；
+     --el-bg-color（组件面）保持纯白不动 */
+  --el-bg-color-page: #f5f5f5;
+  /* 圆角两档（Ant：控件 6 / 卡片 8；小控件 4）：批一 8/12 收一档，tag/弹层 6 维持。
+     注意：base/small 是 EP 的 :root 级通用变量，这里覆盖有效；但卡片/弹窗/tag/popover
+     的专属圆角变量 EP 声明在组件类自己身上（.el-card{--el-card-border-radius:...}），
+     CSS 规则「元素自身声明压过继承值」——必须下沉到各组件类覆盖（见下方各块），
+     写在这里会被 EP 无声无视（批一/批三期间一直失效，2026-10-18 验收期抓回） */
+  --el-border-radius-base: 6px;
+  --el-border-radius-small: 4px;
+  /* 边框换 Ant 梯度：控件 #d9d9d9（colorBorder）/ 分隔线 #f0f0f0（colorSplit）两档，
+     light 与 lighter 同指 #f0f0f0（Ant 只有这两档边框） */
+  --el-border-color: #d9d9d9;
+  --el-border-color-light: #f0f0f0;
+  --el-border-color-lighter: #f0f0f0;
+  --el-border-color-extra-light: #f5f5f5;
+  /* 填充去蓝灰调，对齐 Ant 中性填充梯度（基础档 EP 默认 #f0f2f5 带蓝调，2026-10-18 补中性化；
+     斑马纹 #fafafa 即 --el-fill-color-lighter 默认值，不动）：
+     基础 #f0f0f0 > light #f5f5f5 > lighter #fafafa，梯度方向与 EP 一致 */
+  --el-fill-color: #f0f0f0;
+  --el-fill-color-light: #f5f5f5;
+
+  /* 文字色阶保持 rgba 墨水模型（Ant 同款）：0.88 / 0.65 / 0.45 / 0.25，
+     为深色模式铺路（反转画布文字色自动成立） */
+  --el-text-color-primary: rgba(0, 0, 0, 0.88);
+  --el-text-color-regular: rgba(0, 0, 0, 0.65);
+  --el-text-color-secondary: rgba(0, 0, 0, 0.45);
+  --el-text-color-placeholder: rgba(0, 0, 0, 0.25);
+  --el-text-color-disabled: rgba(0, 0, 0, 0.25);
+
+  /* 表格文字色不在 :root 覆盖：EP 把这两个变量声明在 .el-table 组件类上，
+     :root 同名值是继承兜底会被无视——覆盖在下方 .el-table 块内（见该块注释） */
 }
 
 body {
-  font-size: 15px;
+  font-size: 14px;
   font-family:
     'Helvetica Neue',
     Arial,
@@ -21,8 +58,63 @@ body {
     'Hiragino Sans GB',
     'Microsoft YaHei',
     sans-serif;
-  background-color: var(--el-fill-color-light);
+  background-color: var(--el-bg-color-page);
   color: var(--el-text-color-primary);
+}
+
+/* 卡片扁平化：默认无阴影，靠边框与画布对比分层；
+   需要 hover 浮起的场景继续用 shadow="hover"（is-hover-shadow 机制不变） */
+.el-card.is-always-shadow {
+  box-shadow: none;
+}
+
+/* ---- 表格 Ant 化（批三·关键信息载体醒目化）----
+   表头 #fafafa 底（--el-fill-color-lighter）+ 600 + 单元格竖线（colorSplit 档）；
+   表体斑马纹走模板 stripe 属性（EP 原生 .el-table__row--striped，底色即
+   --el-fill-color-lighter #fafafa，对展开行/合并行计数正确）；
+   分隔线单独指 #f0f0f0：比控件边框 #d9d9d9 浅、比旧值深一档，表格从页面里立出来 */
+.el-table {
+  --el-table-header-bg-color: var(--el-fill-color-lighter);
+  --el-table-border-color: var(--el-border-color-light);
+  --el-table-row-hover-bg-color: var(--el-fill-color-light);
+  /* 表格文字 Ant 化（组件类级覆盖）：EP 默认表体 regular 0.65 / 表头 secondary 0.45，
+     且自声明在 .el-table 上——:root 覆盖无效（继承压不过元素自身声明）。
+     表头正文黑 + 600 字重（下方规则），表体同步升黑 */
+  --el-table-header-text-color: var(--el-text-color-primary);
+  --el-table-text-color: var(--el-text-color-primary);
+}
+
+/* 卡片/弹窗/messagebox 圆角 8（组件类级覆盖，机制同上：EP 自声明在组件类上） */
+.el-card {
+  --el-card-border-radius: 8px;
+}
+
+.el-dialog {
+  --el-dialog-border-radius: 8px;
+}
+
+.el-message-box {
+  --el-messagebox-border-radius: 8px;
+}
+
+/* 弹层圆角 6（组件类级覆盖，同上） */
+.el-popover {
+  --el-popover-border-radius: 6px;
+}
+
+.el-table th.el-table__cell > .cell {
+  font-weight: 600;
+}
+
+/* 表头竖线（Ant 标志性表头分隔）：每个表头单元格右边框，末列与滚动条占位列不带 */
+.el-table th.el-table__cell:not(:last-child) {
+  border-right: 1px solid var(--el-border-color-light);
+}
+
+/* 描述列表（评测详情等）Ant 化：带边框款的标签列去 EP 默认 700 加粗、底色指 #fafafa */
+.el-descriptions__label.el-descriptions__cell.is-bordered-label {
+  font-weight: 400;
+  --el-descriptions-item-bordered-label-background: var(--el-fill-color-lighter);
 }
 
 .page {
@@ -42,50 +134,315 @@ pre {
   word-break: break-all;
 }
 
-/* 全局小提示（各视图本地 .dim 定义已移除，统一走这里；字号继承 body 15px） */
+/* 全局小提示（各视图本地 .dim 定义已移除，统一走这里；字号继承 body 14px） */
 .dim {
   color: var(--el-text-color-secondary);
 }
 
-/* 徽章类 el-tag 与小号按钮：字号对齐全站 15px（EP 默认 12px 偏小），高度随内容自适应 */
+/* 字重两档制（批三）：浏览器默认把 b/strong 渲染成 700，显式收进 600 档 */
+b,
+strong {
+  font-weight: 600;
+}
+
+/* ---- 标签五级层级色（卡片流共用：后台 TagsPanel / 前台 TagChips；批三收编双份拷贝）----
+   1 蓝 / 2 绿 / 3 橙 / 4 红 / 5 灰（更深层沿用第五级）；--lv* 由 .lv-N 注入卡片 */
+.lv-1 {
+  --lv: var(--el-color-primary);
+  --lv-bg: var(--el-color-primary-light-9);
+  --lv-border: var(--el-color-primary-light-7);
+}
+
+.lv-2 {
+  --lv: var(--el-color-success);
+  --lv-bg: var(--el-color-success-light-9);
+  --lv-border: var(--el-color-success-light-7);
+}
+
+.lv-3 {
+  --lv: var(--el-color-warning);
+  --lv-bg: var(--el-color-warning-light-9);
+  --lv-border: var(--el-color-warning-light-7);
+}
+
+.lv-4 {
+  --lv: var(--el-color-danger);
+  --lv-bg: var(--el-color-danger-light-9);
+  --lv-border: var(--el-color-danger-light-7);
+}
+
+.lv-5 {
+  --lv: var(--el-color-info);
+  --lv-bg: var(--el-color-info-light-9);
+  --lv-border: var(--el-color-info-light-7);
+}
+
+/* ---- 布局工具类（批三上提：原各视图 scoped 重复抄写的同名类收敛到全局） ---- */
+/* 右列相邻卡片间距（PageShell side-col 内通用） */
+.aside-card + .aside-card {
+  margin-top: 16px;
+}
+
+/* 右列纵向动作组（按钮逐个全宽堆叠） */
+.entry-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 卡片头：左标题右动作 */
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.muted {
+  color: var(--el-text-color-secondary);
+}
+
+/* 表格下方右对齐分页 */
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.ml8 {
+  margin-left: 8px;
+}
+
+/* 文件 IO 开关行（建比赛/发起考试弹窗）：开关与说明文字横向对齐
+   （原两视图模板使用但无定义的孤儿类，批三收编时补上真定义） */
+.fileio-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 说明文字（建题须知/恢复指南等） */
+.tips {
+  color: var(--el-text-color-regular);
+  line-height: 1.8;
+}
+
+.tips p {
+  margin: 0 0 8px;
+}
+
+/* 徽章类 el-tag 与小号按钮：字号对齐全站 14px（EP 默认 12px 偏小），高度随内容自适应；
+   tag 圆角 6 是组件类级覆盖（EP 自声明在 .el-tag 上，:root 无效） */
 .el-tag {
-  font-size: 15px;
+  --el-tag-border-radius: 6px;
+  font-size: 14px;
   height: auto;
-  padding: 3px 10px;
+  padding: 2px 8px;
   line-height: 1.4;
 }
 
 .el-button--small {
-  font-size: 15px;
+  font-size: 14px;
   height: auto;
   padding: 5px 11px;
 }
 
-/* 表格与描述列表：字号对齐全站 15px（EP 对 small 尺寸/单元格硬编码 12-14px），保留紧凑内边距 */
+/* 表格与描述列表：small 尺寸 EP 硬编码 12-14px，对齐 14 */
 .el-table--small {
-  font-size: 15px;
+  font-size: 14px;
 }
 
-.el-descriptions__body .el-descriptions__table .el-descriptions__cell {
-  font-size: 15px;
-}
-
-/* small 尺寸描述列表（评测详情等）：EP 带 --small 前缀的选择器多一个类，必须同规格覆盖 */
 .el-descriptions--small .el-descriptions__body .el-descriptions__table .el-descriptions__cell {
-  font-size: 15px;
+  font-size: 14px;
 }
 
-/* 弹窗内容：EP 硬编码 --el-dialog-content-font-size:14px，对齐全站界面字号 15px */
-.el-dialog {
-  --el-dialog-content-font-size: 15px;
+/* ---- Markdown 排版（视觉融合·批二）：vditor-reset 同时挂在 Vditor 编辑内容区与
+   静态预览（MdView）上，此处一段规则同时约束「编辑所见」与「显示所得」 ----
+   长文正文档 16px（批二字阶，2026-10-18 补落地：此前从未显式声明，一直继承 body 14px）、
+   标题 600 与正文拉开节奏、行高 1.7、引用 callout 化、
+   代码块圆角、行内 code 徽章、表格细边框斑马纹、图片圆角限宽、链接主色。
+   本段必须保持晚于 vditor 自带样式生效（vditor css 在 main.ts 静态引入、排在本文件前），
+   同优先级规则由加载顺序分胜负——若改动引入方式导致顺序反转，标题梯度会被 vditor 反压 */
+.vditor-reset {
+  color: var(--el-text-color-primary);
+  font-size: 16px;
+  line-height: 1.7;
 }
 
-/* 代码显示面：等宽字体视觉偏小且各处曾靠继承拿字号，显式统一 15px（编辑器 CodeMirror 有自己的字号主题，不受影响） */
+/* 标题梯度压过 vditor 自带（1.75/1.55/1.38…，原懒加载反压时代的实际渲染值）：
+   页头大标题 22/600 必须是题面卡的层级顶点，题面内标题一律低于它 */
+.vditor-reset h1,
+.vditor-reset h2,
+.vditor-reset h3,
+.vditor-reset h4,
+.vditor-reset h5,
+.vditor-reset h6 {
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1.5em 0 0.5em;
+}
+
+.vditor-reset h1 {
+  font-size: 1.35em;
+}
+
+.vditor-reset h2 {
+  font-size: 1.2em;
+}
+
+.vditor-reset h3 {
+  font-size: 1.08em;
+}
+
+.vditor-reset h4,
+.vditor-reset h5,
+.vditor-reset h6 {
+  font-size: 1em;
+}
+
+.vditor-reset p {
+  margin: 0.55em 0;
+}
+
+.vditor-reset ul,
+.vditor-reset ol {
+  margin: 0.55em 0;
+  padding-left: 1.6em;
+}
+
+.vditor-reset li {
+  margin: 0.2em 0;
+}
+
+.vditor-reset a {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+.vditor-reset a:hover {
+  text-decoration: underline;
+}
+
+.vditor-reset hr {
+  border: 0;
+  border-top: 1px solid var(--el-border-color-lighter);
+  margin: 1.6em 0;
+}
+
+.vditor-reset img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* 引用块 callout 化：浅底圆角 + 左侧主色条 */
+.vditor-reset blockquote {
+  margin: 0.8em 0;
+  padding: 10px 14px;
+  background: var(--el-color-primary-light-9);
+  border-left: 3px solid var(--el-color-primary-light-5);
+  border-radius: var(--el-border-radius-base);
+  color: var(--el-text-color-regular);
+}
+
+.vditor-reset blockquote p {
+  margin: 0.3em 0;
+}
+
+/* 行内 code 徽章化（块级代码由下方 pre 规则管）。
+   类名写两遍是特异度手段：vditor 用 .vditor-reset code:not(.hljs):not(.highlight-chroma)
+   （0,3,1）锁字号/内边距/圆角，单类写法（0,2,2）压不过——翻倍后 (0,3,2) 稳赢 */
+.vditor-reset.vditor-reset :not(pre) > code {
+  padding: 1px 6px;
+  background: var(--el-fill-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--el-border-radius-small);
+  font-size: 0.9em;
+}
+
+/* 块级代码：14px 对齐全站代码字号（压过 Vditor 默认 85%，编辑端与 MdView 同规则） */
+.vditor-reset pre,
+.vditor-reset pre code {
+  font-size: 14px;
+}
+
+.vditor-reset pre {
+  background: var(--el-fill-color-lighter);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--el-border-radius-base);
+}
+
+.vditor-reset th,
+.vditor-reset td {
+  border: 1px solid var(--el-border-color-lighter);
+  padding: 6px 12px;
+}
+
+.vditor-reset th {
+  background: var(--el-fill-color-light);
+  font-weight: 600;
+}
+
+.vditor-reset tbody tr:nth-child(2n) {
+  background: var(--el-fill-color-lighter);
+}
+
+.vditor-reset > :first-child {
+  margin-top: 0;
+}
+
+/* 内容列限宽 860 居中：编辑端（wysiwyg 内容区 / ir 内容）与显示端（MdView，
+   其 max-width 在组件内声明）同规则——工具栏与卡片仍是全宽，只有内容列收窄 */
+.vditor-wysiwyg,
+.vditor-ir .vditor-reset {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* 编辑器 chrome（Editor.js 气质）：白底工具栏、与卡片边框融合、弹层面板小圆角 */
+.vditor {
+  border-color: var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
+}
+
+.vditor-toolbar {
+  background: var(--el-bg-color);
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  border-radius: var(--el-border-radius-base) var(--el-border-radius-base) 0 0;
+  padding: 0 4px;
+}
+
+.vditor-toolbar__item {
+  margin: 0 1px;
+}
+
+.vditor-panel {
+  border-radius: var(--el-border-radius-base);
+  border-color: var(--el-border-color-lighter);
+}
+
+/* 工具栏图标：Editor.js/Lucide 为线性 stroke 图标，必须压过 Vditor 运行时注入的
+   「fill: currentColor; stroke-width: 0」默认（那会把线性图标涂成实心色块）；
+   两级类选择器同时赢回注入顺序与优先级，尺寸统一 20px（批三 18 → 20） */
+.vditor-toolbar .vditor-toolbar__item svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  width: 20px;
+  height: 20px;
+}
+
+/* Lucide 系图标铺满 24 视框，同尺寸下比 Editor.js（留白多）视觉偏大，缩一号找平 */
+.vditor-toolbar .vditor-toolbar__item svg.tb-md-lucide {
+  width: 17px;
+  height: 17px;
+}
+
+/* 代码显示面：等宽字体视觉偏小且各处曾靠继承拿字号，显式统一 14px（编辑器 CodeMirror 有自己的字号主题，不受影响） */
 pre,
 code,
 kbd,
 samp {
-  font-size: 15px;
+  font-size: 14px;
 }
 
 /* ---- 评测/提交查看通用样式（v0.5e ② 自各弹窗/视图收敛；类名足够特化，全局共享） ----
@@ -130,16 +487,12 @@ samp {
   margin: 0;
   padding: 10px 14px;
   background: var(--el-fill-color-lighter);
-  border-radius: 4px;
+  border-radius: var(--el-border-radius-base);
   max-height: 320px;
   overflow: auto;
 }
 
-.mono {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
-}
-
-/* 小号下拉选择器（管理后台角色选择等）：字号对齐全站 15px（EP small 为 12px） */
+/* 小号下拉选择器（管理后台角色选择等）：字号对齐全站 14px（EP small 为 12px） */
 .el-select--small .el-select__wrapper {
-  font-size: 15px;
+  font-size: 14px;
 }

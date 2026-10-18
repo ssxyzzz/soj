@@ -221,17 +221,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.muted {
-  color: var(--el-text-color-secondary);
-  font-weight: 400;
-  font-size: 15px;
-}
+/* .head / .muted 已上提 main.css 全局（批三收编） */
 
 .role-alert {
   margin-top: 4px;
@@ -270,13 +260,11 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 15px;
 }
 
 .col-act {
   cursor: pointer;
   color: var(--el-text-color-secondary);
-  font-size: 15px;
 }
 
 .col-act:hover {
@@ -295,7 +283,7 @@ onMounted(async () => {
 .root-check {
   color: var(--el-color-success);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .perm-blocks {
@@ -307,7 +295,6 @@ onMounted(async () => {
 
 .perm-block-title {
   font-weight: 600;
-  font-size: 15px;
   color: var(--el-text-color-primary);
   margin-bottom: 4px;
 }

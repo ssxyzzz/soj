@@ -26,7 +26,7 @@ const code = ref('')
 const userStore = useUserStore()
 const acOn = computed(() => autocompleteOn())
 const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
-const codeFontSize = computed(() => userStore.prefs.codeFontSize || 15)
+const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
 
 watch(() => props.modelValue, (open) => {
   if (open) code.value = templateFor(lang.value)
@@ -53,7 +53,7 @@ function doSubmit() {
     :model-value="modelValue"
     :title="`提交代码 · ${title}`"
     width="1020"
-    top="6vh"
+    top="4vh"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
     <div class="bar">

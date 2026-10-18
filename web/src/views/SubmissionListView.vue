@@ -62,7 +62,7 @@ onUnmounted(() => {
           <el-button :icon="Refresh" size="small" @click="load">刷新</el-button>
         </div>
       </template>
-      <el-table v-loading="loading" :data="list">
+      <el-table stripe v-loading="loading" :data="list">
         <el-table-column prop="id" label="ID" width="90" />
         <el-table-column label="结果" width="130">
           <template #default="{ row }">
@@ -139,21 +139,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.ml8 {
-  margin-left: 8px;
-}
-
-.pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
-}
+/* .head / .ml8 / .pager 已上提 main.css 全局（批三收编） */
 
 /* 状态标签可点击查看代码与测试点明细（悬停说明样式走全局 .status-tag/.status-tip） */
 .status-tag.clickable {

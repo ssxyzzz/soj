@@ -251,7 +251,6 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  font-size: 15px;
 }
 
 .sa-switch {
@@ -269,16 +268,7 @@ onUnmounted(() => {
   margin-left: auto;
 }
 
-.aside-card + .aside-card {
-  margin-top: 16px;
-}
-
-.entry-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
+/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
 
 .center {
   text-align: center;
@@ -298,13 +288,11 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
   flex-wrap: wrap;
 }
 
 .sub-time {
   margin-left: auto;
-  font-size: 15px;
 }
 
 /* 列表行内的代码块：与上一行留间距、不继承行的手型光标（其余走全局 .sub-code/.mono） */

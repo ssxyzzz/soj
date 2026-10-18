@@ -60,7 +60,7 @@ defineExpose({ refresh: loadMine })
     @closed="mineView = 'list'"
   >
     <template v-if="mineView === 'list'">
-      <el-table :data="mySubs" highlight-current-row @row-click="openMineDetail">
+      <el-table stripe :data="mySubs" highlight-current-row @row-click="openMineDetail">
         <el-table-column label="状态" width="170">
           <template #default="{ row }">
             <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
@@ -128,7 +128,7 @@ defineExpose({ refresh: loadMine })
       <pre class="mono sub-code">{{ mineDetail.code }}</pre>
       <template v-if="mineDetail.detail?.length">
         <div class="detail-sub">测试点明细</div>
-        <el-table :data="mineDetail.detail" border>
+        <el-table stripe :data="mineDetail.detail" border>
           <el-table-column prop="index" label="测试点" width="90" />
           <el-table-column label="结果">
             <template #default="{ row }">

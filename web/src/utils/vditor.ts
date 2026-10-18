@@ -1,14 +1,13 @@
 // Vditor（Markdown 编辑/渲染内核）体积大，动态 import 拆出主包：
-// 首次挂载编辑器/渲染组件时才加载对应 chunk 与样式，不拖累首屏。
+// 首次挂载编辑器/渲染组件时才加载 JS chunk，不拖累首屏。
+// 样式（index.css）不走这里——它在 main.ts 静态引入，保证排在 main.css 之前，
+// 否则懒加载样式会反压 main.css 里的 vditor-reset 排版规则（见 main.ts 注释）。
 type VditorCtor = (typeof import('vditor'))['default']
 
 let loading: Promise<VditorCtor> | null = null
 
 export function loadVditor(): Promise<VditorCtor> {
-  loading ??= Promise.all([
-    import('vditor'),
-    import('vditor/dist/index.css'),
-  ]).then(([mod]) => mod.default)
+  loading ??= import('vditor').then((mod) => mod.default)
   return loading
 }
 

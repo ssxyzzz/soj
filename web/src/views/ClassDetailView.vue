@@ -255,6 +255,7 @@ onMounted(() => {
             />
             <template v-else>
               <el-table
+stripe
                 :data="assignments"
                 style="cursor: pointer"
                 @row-click="(row: AssignmentListItem) => router.push(`/assignments/${row.id}`)"
@@ -274,6 +275,7 @@ onMounted(() => {
 
           <template v-else-if="section === 'exams'">
             <el-table
+stripe
               v-if="examsVisible"
               :data="exams"
               style="cursor: pointer"
@@ -300,7 +302,7 @@ onMounted(() => {
           </template>
 
           <template v-else>
-            <el-table :data="cl.members">
+            <el-table stripe :data="cl.members">
               <el-table-column prop="uid" label="ID" width="100" />
               <el-table-column prop="username" label="用户名" min-width="160" />
               <el-table-column label="身份" width="200">
@@ -443,9 +445,10 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+/* 页头大标题标准档（22/600）：全站层级顶点 */
 .big-title {
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .intro {
@@ -469,27 +472,13 @@ onMounted(() => {
   margin: 16px 0;
 }
 
-.aside-card + .aside-card {
-  margin-top: 16px;
-}
+/* .aside-card / .entry-actions 已上提 main.css 全局（批三收编） */
 
 .info-line {
   display: flex;
   justify-content: space-between;
   padding: 4px 0;
-  font-size: 15px;
   color: var(--el-text-color-regular);
-}
-
-.info-line b.small {
-  font-size: 15px;
-}
-
-.entry-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
 }
 
 .tip {
