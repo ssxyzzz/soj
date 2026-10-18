@@ -231,8 +231,11 @@ function onSubmitClick() {
             </div>
           </el-form-item>
           <!-- 说明框：占位留位，内容为后续功能（待定） -->
-          <el-form-item>说明
-            <div class="pf-note dim">来源/年份/地市，用,分隔</div>
+          <el-form-item>
+            <div class="field-group">
+              <div class="field-label">说明</div>
+              <div class="pf-note dim">来源/年份/地市，用,分隔</div>
+            </div>
           </el-form-item>
           <el-form-item>
             <div class="field-group">
