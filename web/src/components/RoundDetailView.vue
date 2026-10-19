@@ -361,7 +361,7 @@ onUnmounted(() => {
           <template #header><span>管理</span></template>
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit('full')">编辑{{ name }}</el-button>
-            <el-button type="warning" style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
+            <el-button type="success" style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
             <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">删除{{ name }}</el-button>
           </div>
           <div class="scene-row">
