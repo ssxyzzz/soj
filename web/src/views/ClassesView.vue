@@ -111,7 +111,7 @@ onMounted(load)
         <el-col v-for="c in list" :key="c.id" :xs="24" :sm="12">
           <el-card class="card" shadow="hover">
             <div class="name-row">
-              <h4 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h4>
+              <h3 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h3>
               <el-tag v-if="c.private" size="small" type="warning">私密</el-tag>
               <el-tag v-if="c.joined" size="small" type="success">已加入</el-tag>
             </div>

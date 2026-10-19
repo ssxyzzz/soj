@@ -869,7 +869,7 @@ async function onSave() {
 /* 底部两行缓冲垫片：末级展开后鼠标习惯性继续下移查找，若移出容器会触发
    mouseleave 收起——垫片在容器内且 mouseenter 取消收起计时，移动不断开 */
 .tag-board-pad {
-  height: 80px;
+  height: 40px;
 }
 
 /* 每级一行独立滚动：行内不换行，超出本行宽度即横移（无滚动条，滚轮驱动见 onWheel）；
@@ -899,7 +899,9 @@ async function onSave() {
   flex-direction: column;
   gap: 14px; /* 层级行距（一级/二级……之间） */
   min-width: 0;
-  padding-top: 8px; /* 拖起卡片放大/阴影的顶部余量 */
+  padding: 8px 12px; /* 与题库筛选区 .tag-row 同内距；顶部同时保留拖起卡片余量 */
+  background: var(--el-fill-color-light); /* #f5f5f5 */
+  border-radius: var(--el-border-radius-base);
 }
 
 /* 纵向 cell：卡片 + 空标签的 mini-add 小卡 */
@@ -950,7 +952,7 @@ async function onSave() {
 }
 
 .tag-card.dragging {
-  transform: scale(1.05) rotate(1.5deg);
+  transform: scale(1.05);
   box-shadow: var(--el-box-shadow-dark);
   opacity: 0.92;
 }

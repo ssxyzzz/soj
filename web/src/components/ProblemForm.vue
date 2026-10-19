@@ -157,7 +157,9 @@ function onSubmitClick() {
                 </el-tooltip>
               </span>
             </template>
-            <TagFilter v-if="!tagTreeEmpty" :selected="form.tag_ids" @change="onTagsChange" />
+            <div v-if="!tagTreeEmpty" class="tag-bar">
+              <TagFilter :selected="form.tag_ids" @change="onTagsChange" />
+            </div>
             <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
           </el-form-item>
           <el-form-item label="题面" required>
@@ -331,6 +333,15 @@ function onSubmitClick() {
 /* 纵向按钮组：EP 默认给相邻按钮 margin-left: 12px，纵向排列会把下面的按钮顶离中线 */
 .pf :deep(.entry-actions .el-button + .el-button) {
   margin-left: 0;
+}
+
+/* 标签栏：与题库筛选区 .tag-row 同底色/圆角/内距（#f5f5f5） */
+.tag-bar {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: var(--el-border-radius-base);
 }
 
 /* 说明框：占位留位（内容为后续功能） */

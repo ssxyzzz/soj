@@ -1,26 +1,173 @@
 /* ============================================================
-   全站字号登记表（改字号先查/改这张表；改后必须重跑产物核对）
+   全站字号登记表（当前实际渲染值）
    ------------------------------------------------------------
-   基线        14  body（界面/表单/按钮/菜单/表格文字与表头/弹窗内容/代码显示）
-   表格内标签  13  .el-table .el-tag（唯一表格特例，压过全局 tag 14）
-   全局标签    14  .el-tag
-   小徽章      12  caret ▸ / 引用数角标 / 删除钮 / MdView 语言徽标
-   区块小标题  16  BackupPanel .section-title / RolesPanel .root-check（600）
-   页头大标题  22  .big-title ×3 / 倒计时 / SOJ 品牌（600）
-   首页 hero   30  HomeView .title（600）
-   统计大数字  32  ProblemListView .stat-big（600）
-   emoji 图标  36  HomeView .feature-icon
-   代码显示    14  pre,code,kbd,samp
-   CM6 编辑器  14  CodeEditor 默认（可调 12-48）
-   ---- Markdown 富文本（.rich，基准 16，行内单位 em）----
-   正文        16  .rich
-   h1/h2/h3    1.35/1.2/1.08em   h4-h6 1em
-   行内 code  0.9em（翻倍类选择器）   块级 code 14px
-   ---- EP 出厂未覆盖（如实渲染值，改则另行加覆盖）----
-   tooltip/popover/alert/message/分页/上传文字 14
-   确认框与弹窗标题 18（--el-font-size-large）
-   404 el-result 标题 20
-   （vditor 弹层 chrome 段已随 v0.6 换血删除）
+   核对口径：2026-10-19，运行站点 http://localhost（admin 登录，
+   1440×1000），逐页读 getComputedStyle；覆盖 19 个路由（含登录/404）+
+   提交/题解/新建用户/公式弹窗 + 标签树编辑态 + CodeMirror 补全浮层。
+   桌面 1440 视口实测；三处 @media 只改布局、不改字号。
+   改字号先查/改这张表；改后必须重跑产物核对。
+
+   ══ A. 全局界面层级（非富文本）══════════════════════════
+   36/400   HomeView .feature-icon
+            首页四张特性卡的 emoji 图标
+   32/600   ProblemListView .stat-big
+            题库页统计卡大数字（已解决/提交/通过率）
+   30/600   HomeView .title
+            首页 hero 标题
+   22/600   页头大标题 / 倒计时 / 品牌
+            .brand：全站顶栏 SOJ
+            .big-title：题目详情、比赛详情、赛题、考试详情、考题
+            .countdown：比赛/考试详情倒计时
+   16.38/600 HomeView .feature h3
+            首页特性卡小标题；浏览器 h3 默认 1.17em，非 16 档
+   16.38/700 原生 h3 实体名
+            ClassesView .name、ClassDetailView .title-row h3
+            （浏览器 h3 默认 1.17em + 原生粗体 700）
+   16/600   .section-title / .root-check
+            BackupPanel 分区标题；RolesPanel root 列标记
+   16/400   TagsPanel .add-card
+            标签树“＋”新增卡
+   14/700   HomeView .class-name
+            首页班级卡名称（原生 h4 默认 700）
+   14/600   分组/导航/详情小标题
+            ContestsView .group-head；AdminView .nav-title；
+            SubmissionDetailDialog .detail-sub；SubStatus .sub-status；
+            .el-table th .cell；b/strong
+   14/400   界面基线（body）
+            表单、按钮、菜单、表格文字/表头、卡片头、页脚、弹窗内容、
+            pre/code/kbd/samp（代码显示）、登录页、设置页、后台六面板
+   14/400   .el-tag
+            普通标签：首页技术栈、题目标签、状态标签、班级标签
+   13       .el-table .el-tag
+            表格内标签：题库列表、排名、提交记录赛事、作业进度、角色矩阵
+            （角色矩阵表头内的标签随表头字重 600，字号仍 13）
+   13.3333  .el-tag__close
+            可关闭标签的 ×；EP 未设字号，浏览器 button 默认 13.3333，本站未覆盖
+   12/400   小徽章/微文字
+            .caret：标签树 ▸
+            .count-badge：标签引用数角标
+            .del-x：标签编辑态 ×
+            .md-lang-badge：MdView 代码块语言徽标
+            .el-table__expand-icon：用户管理展开箭头
+            .el-input__count-inner：建题标题 0/64 计数
+            .tb-btn 文本：编辑器行+/行-/列+/列-
+            .el-popper：tooltip 内容（EP 核心规则，详见 B）
+
+   ══ B. Element Plus（本站覆盖 / EP 出厂）════════════════
+   14       --el-font-size-base（EP 根变量）
+   14       .el-button / .el-button--small
+            本站把 small 从 EP 12 提到 14；全站按钮
+   14       .el-input / .el-textarea / .el-select__wrapper / .el-input-number
+            登录、建题、设置、后台表单、提交弹窗语言选择
+   14       .el-select--small .el-select__wrapper
+            本站覆盖 EP 12；班级成员角色下拉
+   12       .el-input--small
+            EP 出厂未覆盖；仅 TagsPanel 标签卡改名/新增输入
+            这是界面输入类唯一的 12px 例外
+   14       .el-form-item__label
+   14       .el-checkbox__label / .el-radio__label / .el-radio-button__inner
+            角色新建弹窗权限位；登录/注册切换；建题比对方式
+   14/500   .el-tabs__item
+            比赛/考试详情“题目 / 榜单”
+   14       .el-table--small
+            本站覆盖 EP 13；提交明细、角色矩阵、题目测试点
+   14/600   .el-table th .cell
+   12       .el-table__expand-icon（EP；用户管理展开箭头）
+   14       .el-descriptions（--small 已覆盖）
+            提交详情 3 列（标签列已去 700 加粗）
+   14       .el-pagination
+            题库、提交记录、题解弹窗；当前页数字 700
+   14       .el-dropdown-menu__item
+            顶栏用户菜单、编辑器标题菜单
+   14       .el-select-dropdown__item
+            语言/角色/班级选择
+   12       .el-popper / .el-tooltip
+            EP 核心 popper 规则；状态说明、权限说明、表单帮助 tooltip
+            下拉/选择弹层内部项另为 14
+   14       .el-popover.el-popper
+            题目标签浮层（popover 覆写为 14）
+   14       .el-alert__title（无描述）
+            锁定提示、角色说明、备份离线钥匙警告等
+   16       .el-alert__title.with-description
+            文件 IO 题提示（标题 16）
+   14       .el-alert__description / 默认 slot
+            文件 IO 描述、标签树使用说明、锁定提示正文
+   14       .el-message__content
+            ElMessage 成功/警告/错误（“代码不能为空”等）
+   18       .el-dialog__title / .el-message-box__title
+            提交、题解、公式、新建用户/角色、恢复钥匙、评测详情；
+            确认/改名/删除/未保存修改等 message box
+   14       .el-dialog__body / .el-message-box__message / 按钮
+   20       .el-result__title p
+            404 大标题（注意：外层 .el-result__title 仍是 14）
+   14       .el-result__subtitle p
+   14       .el-empty__description p
+            空列表：比赛、提交记录、题解、班级作业
+   12       .el-input__count-inner
+            建题/编辑页标题 0/64 计数
+   16.8/16  .el-progress__text
+            动态内联字号（EP 公式 12 + stroke×0.4）：
+            作业页 stroke 12 → 16.8；比赛/考试详情 stroke 10 → 16
+   14       .el-upload-dragger / .zip-hint / .checker-tip
+            建题/编辑页上传区与校验器说明（自定义文字）
+   12       .el-upload__tip
+            EP 出厂；本站未使用（上传区走自定义 .zip-hint）
+   12       .el-form-item__error
+            EP 出厂；本站表单校验走 ElMessage 14，当前页面未出现
+
+   ══ C. Markdown 富文本（.rich，基准 16，行内单位 em）════
+   16/400   .rich 基准；p / li / blockquote / td / a
+            使用方：MdView（题面、比赛/考试说明、班级/作业简介、
+            首页公告、题解、BackupPanel 恢复指南）；
+            Tiptap 内容区（MdEditorInner）
+   16/600   th（富文本表格表头）
+   21.6/600 h1（1.35em；富文本一级标题，当前题面未用，用户内容可用）
+   19.2/600 h2（1.2em；题面“题目描述/输入格式/输出格式/样例”）
+   17.28/600 h3（1.08em；题面“样例 1”、指南小节）
+   16/600   h4-h6（1em；富文本内小标题）
+   14.4     行内 code（0.9em；题面/公告/题解中的内联代码）
+   14       块级 code / pre（题面样例、指南代码块）
+   19.36    .katex（1.21em；题面行内/块级公式）
+   12       .md-lang-badge（有 language-* 的 MdView 代码块）
+   14       .md-copy-btn（MdView 代码块“复制”）
+   13       公式占位符（.rich .tiptap ...:empty::before）
+            当前不生效：.tiptap 自身就是 .rich（无祖先 .rich），且
+            Tiptap 数学节点始终渲染 KaTeX 包裹，永远不 :empty。
+            如需占位提示须按实际节点结构另写规则，不能只改选择器。
+
+   ══ D. 编辑器 ═══════════════════════════════════════════
+   Tiptap（MdEditorInner）
+   16/400   .tiptap 内容区（与 .rich 同规则）
+   16/400   空内容 placeholder（::before）
+   12/400   .tb-btn 文字（行+/行-/列+/列-；纯图标按钮无文字）
+   20px     工具栏图标（lucide 17px）
+   14/400   标题下拉项（正文/标题 1-4）
+   16/400   compact 变体内容（题解/备份指南）
+   18/400   MdMathDialog 标题
+   14/400   MdMathDialog TeX 输入框 / 按钮
+   16.94    MdMathDialog KaTeX 预览（14 × 1.21）
+            使用方：ProblemForm 题面、NoticePanel 公告、
+            SolutionsDialog 题解、BackupPanel 指南、
+            RoundDetailView 比赛/考试说明
+
+   CodeMirror（CodeEditor）
+   14/400   组件默认（CodeEditor.vue fontSize 默认 14）
+   18/400   当前 admin 实际（偏好 codeFontSize=18；
+            内容、行号、补全浮层全跟随）
+   12-48    用户可调范围（CodeWorkbench 头部数字输入）
+   14/400   CodeWorkbench 头部语言选择 / 字号输入
+            使用方：SubmitDialog 提交弹窗、CodeWorkbench 在线编程
+
+   ══ E. 易误判的例外（不要按 14 基线套）══════════════════
+   - Tooltip 12；Popover 14。
+   - Alert 无描述 14；带描述标题 16 + 描述 14。
+   - 进度百分比动态 16.8 / 16（stroke 12 / 10）。
+   - 首页 feature h3 16.38/600；班级名 h3 16.38/700；HomeView h4 班级名 14/700。
+   - 标签树 small input 12；tag 关闭钮 13.3333。
+   - 行内 code 14.4；KaTeX 19.36（公式弹窗 16.94）。
+   - 404 标题 20 在内层 p；外层容器 14。
+   - CM6 当前账号 18，默认 14，最终以用户偏好为准。
+   - 公式占位 13 规则当前不生效（详见 C）。
    ============================================================ */
 html,
 body,
@@ -486,7 +633,10 @@ strong {
   overflow-x: auto;
 }
 
-/* 编辑态块级公式空节点可见可点（查看端有 KaTeX 内容撑起，编辑端空 latex 时给占位高度） */
+/* 编辑态公式占位（当前不生效，登记表 C 段已注明）：
+   Tiptap 内容根节点本身即 .rich.tiptap，没有祖先 .rich；
+   且 Mathematics 节点始终渲染 KaTeX 包裹，不会 :empty。
+   保留规则待后续按实际节点结构重做，不能只改选择器。 */
 .rich .tiptap [data-type="block-math"]:empty::before,
 .rich .tiptap [data-type="inline-math"]:empty::before {
   content: "公式（双击编辑 TeX）";

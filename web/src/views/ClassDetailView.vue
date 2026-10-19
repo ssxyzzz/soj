@@ -217,7 +217,7 @@ onMounted(() => {
     <PageShell v-if="cl">
         <el-card>
           <div class="title-row">
-            <span class="big-title">{{ cl.name }}</span>
+            <h3>{{ cl.name }}</h3>
             <el-tag v-if="cl.private" size="small" type="warning">私密班</el-tag>
             <el-tag v-if="cl.joined" size="small" type="success">已加入</el-tag>
           </div>
@@ -443,12 +443,6 @@ stripe
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-
-/* 页头大标题标准档（22/600）：全站层级顶点 */
-.big-title {
-  font-size: 22px;
-  font-weight: 600;
 }
 
 .intro {
