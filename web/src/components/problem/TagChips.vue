@@ -87,6 +87,19 @@ function cancelHoverClear() {
   }
 }
 
+// 滚轮横移：竖向滚轮增量映射到横向滚动（当前层级的标签一览）；触摸板横扫 deltaX 优先。
+// 已滚到头（或本就无溢出）时不拦截，滚轮自然下放滚页面——不在标签树上困住滚动。
+function onWheel(e: WheelEvent) {
+  const el = e.currentTarget as HTMLElement
+  const max = el.scrollWidth - el.clientWidth
+  if (max <= 0) return
+  const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+  if (delta === 0) return
+  if ((delta > 0 && el.scrollLeft >= max - 0.5) || (delta < 0 && el.scrollLeft <= 0.5)) return
+  e.preventDefault()
+  el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
+}
+
 onBeforeUnmount(() => {
   if (hoverTimer) clearTimeout(hoverTimer)
 })
@@ -101,8 +114,8 @@ onBeforeUnmount(() => {
         <slot name="top-right" />
       </div>
     </div>
-    <!-- 单一横向滚动容器：所有层级行共用最下面一条拖动条；行内不换行 -->
-    <div class="tag-scroll" @mouseenter="cancelHoverClear">
+    <!-- 单一横向滚动容器：无滚动条，鼠标滚轮（竖向/触摸板横向增量）直接横移浏览当前层级 -->
+    <div class="tag-scroll" @mouseenter="cancelHoverClear" @wheel="onWheel">
       <div class="tag-canvas">
         <div v-for="(r, i) in rows" :key="i" class="tag-row" @mouseenter="cancelHoverClear">
           <div
@@ -158,26 +171,14 @@ onBeforeUnmount(() => {
   width: 240px;
 }
 
-/* 一级一行、二级一行……行内不换行；超右边界出横向拖动条 */
-/* 单一横向滚动容器：所有层级行共用最下面一条拖动条（行内不再各自出滚动条） */
+/* 一级一行、二级一行……行内不换行；超右边界不出滚动条——滚轮横移浏览（onWheel） */
 .tag-scroll {
   overflow-x: auto;
-  padding-bottom: 6px; /* 滚动条占位，不裁切标签 */
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: var(--el-border-color-darker) transparent;
+  scrollbar-width: none; /* Firefox */
 }
 
 .tag-scroll::-webkit-scrollbar {
-  height: 8px;
-}
-
-.tag-scroll::-webkit-scrollbar-thumb {
-  background: var(--el-border-color-darker);
-  border-radius: 4px;
-}
-
-.tag-scroll::-webkit-scrollbar-track {
-  background: transparent;
+  display: none;
 }
 
 /* 画布随最宽行伸展，垫片覆盖全部可滚区域 */

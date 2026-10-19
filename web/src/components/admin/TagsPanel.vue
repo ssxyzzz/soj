@@ -207,6 +207,20 @@ function cancelHoverClear() {
   }
 }
 
+// 滚轮横移：竖向滚轮增量映射到横向滚动（当前层级的标签一览）；触摸板横扫 deltaX 优先。
+// 已滚到头（或本就无溢出）时不拦截，滚轮自然下放滚页面——不在标签树上困住滚动。
+// 与 TagChips 同款（题库筛选/建题表单/后台管理三处标签树行为一致）。
+function onWheel(e: WheelEvent) {
+  const el = e.currentTarget as HTMLElement
+  const max = el.scrollWidth - el.clientWidth
+  if (max <= 0) return
+  const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
+  if (delta === 0) return
+  if ((delta > 0 && el.scrollLeft >= max - 0.5) || (delta < 0 && el.scrollLeft <= 0.5)) return
+  e.preventDefault()
+  el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
+}
+
 // ＋ 默认全隐藏：显示悬停行（路径最深处）的行尾 ＋ 与该空标签下的 mini-add；
 // 无悬停时回退到根行（保证任何时候都能建一级标签）。
 function showRowAdd(depth: number): boolean {
@@ -658,8 +672,8 @@ async function onSave() {
 
     <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
     <div class="tag-board" @click.self="exitFloating" @mouseleave="scheduleHoverClear">
-      <!-- 单一横向滚动容器：所有层级行共用最下面一条拖动条 -->
-      <div class="tag-scroll" @mouseenter="cancelHoverClear" @click.self="exitFloating">
+      <!-- 单一横向滚动容器：无滚动条，鼠标滚轮横移浏览当前层级 -->
+      <div class="tag-scroll" @mouseenter="cancelHoverClear" @click.self="exitFloating" @wheel="onWheel">
         <div class="tag-canvas" @click.self="exitFloating">
       <div
         v-for="(r, i) in rows"
@@ -865,26 +879,15 @@ async function onSave() {
   align-items: flex-start;
 }
 
-/* 单一横向滚动容器：所有层级行共用最下面一条拖动条（行内不再各自出滚动条） */
+/* 单一横向滚动容器：不出滚动条——鼠标滚轮横移浏览当前层级（onWheel，与 TagChips 同款） */
 .tag-scroll {
   overflow-x: auto;
   padding-top: 8px;
-  padding-bottom: 6px; /* 滚动条占位，不裁切标签 */
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: var(--el-border-color-darker) transparent;
+  scrollbar-width: none; /* Firefox */
 }
 
 .tag-scroll::-webkit-scrollbar {
-  height: 8px;
-}
-
-.tag-scroll::-webkit-scrollbar-thumb {
-  background: var(--el-border-color-darker);
-  border-radius: 4px;
-}
-
-.tag-scroll::-webkit-scrollbar-track {
-  background: transparent;
+  display: none;
 }
 
 /* 画布随最宽行伸展，垫片覆盖全部可滚区域 */
