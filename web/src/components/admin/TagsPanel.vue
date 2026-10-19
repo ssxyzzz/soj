@@ -208,16 +208,16 @@ function cancelHoverClear() {
 }
 
 // 滚轮横移：竖向滚轮增量映射到横向滚动（当前层级的标签一览）；触摸板横扫 deltaX 优先。
-// 已滚到头（或本就无溢出）时不拦截，滚轮自然下放滚页面——不在标签树上困住滚动。
+// 行内有溢出时**整行接管滚轮**——滚到头也不再放行，持续滚动不会带动页面下滑
+// （鼠标停在本行即浏览本行）；行本身没有溢出才不拦截，滚轮交给页面正常滚动。
 // 与 TagChips 同款（题库筛选/建题表单/后台管理三处标签树行为一致）。
 function onWheel(e: WheelEvent) {
   const el = e.currentTarget as HTMLElement
   const max = el.scrollWidth - el.clientWidth
   if (max <= 0) return
+  e.preventDefault()
   const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
   if (delta === 0) return
-  if ((delta > 0 && el.scrollLeft >= max - 0.5) || (delta < 0 && el.scrollLeft <= 0.5)) return
-  e.preventDefault()
   el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
 }
 
@@ -672,7 +672,8 @@ async function onSave() {
 
     <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
     <div class="tag-board" @click.self="exitFloating" @mouseleave="scheduleHoverClear">
-      <!-- 每级行独立横向滚动：无滚动条，滚轮只在鼠标所在行拦截+横移；各行各自记位置，到头放行 -->
+      <!-- 每级行独立横向滚动：无滚动条，滚轮只在鼠标所在行拦截+横移；各行各自记位置，
+           行内有溢出即整行接管（滚到头也不带动页面下滑） -->
       <div class="tag-canvas" @click.self="exitFloating" @mouseenter="cancelHoverClear">
       <div
         v-for="(r, i) in rows"
