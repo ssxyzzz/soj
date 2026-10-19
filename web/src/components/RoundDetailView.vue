@@ -1,25 +1,26 @@
 <script setup lang="ts">
-// 比赛/考试详情页共享组件（v0.5.4 ① 合并，原 ContestDetailView/ExamDetailView 94% 同构）。
-// 差异收敛为：文案（比赛/考试）、路由前缀、加载失败与删除后的回退路由
-// （比赛 → /contests；考试 → 班级列表/班级详情）、两个条件块
-// （比赛头部的「主题库 · 全员」tag；考试未登录时的参赛建议 alert）。
+// 比赛/考试详情页共享组件（v0.5.4 合并；v0.7 按 design.md 重排）。
+// 主列：名称卡（20px + 说明）→ 时间/提交进度卡 → 题目表（T1/状态/题目/标签/通过率）。
+// 副列：管理卡（编辑比赛/考试、调整题目、文件 IO/成绩表/赛期内不可见开关）→ 成绩表。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { authApi, contestApi, examApi, type RoundKind } from '@/api'
 import { downloadCsv } from '@/api/download'
-import MdEditor from '@/components/MdEditor.vue'
+import EditRoundDialog from '@/components/EditRoundDialog.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import FitTags from '@/components/problem/FitTags.vue'
+import SubStatus from '@/components/SubStatus.vue'
 import { buildRoundBoard } from '@/components/score/adapters'
 import ScoreBoardDialog from '@/components/score/ScoreBoardDialog.vue'
 import ScoreSummaryCard from '@/components/score/ScoreSummaryCard.vue'
 import type { ScoreBoardView } from '@/components/score/types'
 import UserSubmissionsDialog from '@/components/score/UserSubmissionsDialog.vue'
+import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
 import { fmtDate } from '@/utils/format'
-import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
 import type { ContestDetail, LeaderRow, Submission } from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
@@ -27,6 +28,7 @@ const props = defineProps<{ kind: RoundKind }>()
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const tagStore = useTagTreeStore()
 
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
 const name = computed(() => (props.kind === 'exam' ? '考试' : '比赛'))
@@ -52,6 +54,7 @@ const scoreEmptyText = computed(() => {
   if (!userStore.token) return '登录后查看成绩'
   if (round.value?.status === 'scheduled') return `${name.value}开始前不显示成绩`
   if (round.value?.status === 'running') return `OI 赛制：${name.value}进行中不显示成绩`
+  if (round.value && !round.value.published) return '结果尚未公开'
   return '暂无成绩'
 })
 const showUserSubs = ref(false)
@@ -76,6 +79,7 @@ function inspectCell(payload: { uid: number; name: string; pid: number; title: s
 }
 
 const fileIOSaving = ref(false)
+const flagSaving = ref(false)
 
 async function toggleFileIO(v: boolean) {
   fileIOSaving.value = true
@@ -88,9 +92,27 @@ async function toggleFileIO(v: boolean) {
   }
 }
 
-const showEditIntro = ref(false)
-const editIntro = ref('')
-const savingIntro = ref(false)
+// v0.7 两个场景开关：保存后重载详情（题目表可见性/成绩表入口随之变化）
+async function saveFlag(patch: { scoreboard?: boolean; hide_during?: boolean }) {
+  if (!round.value) return
+  flagSaving.value = true
+  try {
+    await api.value.update(round.value.id, patch)
+    await load()
+    ElMessage.success('设置已保存')
+  } finally {
+    flagSaving.value = false
+  }
+}
+
+const showEditRound = ref(false)
+const editMode = ref<'full' | 'problems'>('full')
+
+function openEdit(mode: 'full' | 'problems') {
+  editMode.value = mode
+  showEditRound.value = true
+}
+
 let timer: ReturnType<typeof setInterval> | undefined
 
 const now = ref(Date.now())
@@ -120,7 +142,24 @@ const progressPct = computed(() => {
   return Math.min(100, Math.max(0, Math.round(((now.value - start) / total) * 100)))
 })
 
-const boardVisible = computed(() => !!round.value && (round.value.is_organizer || round.value.status === 'ended'))
+const submittedCount = computed(
+  () => (round.value?.problems ?? []).filter((p) => p.submitted).length,
+)
+const problemTotal = computed(() => round.value?.problems?.length ?? 0)
+const submitProgressPct = computed(() => {
+  const total = problemTotal.value
+  if (total <= 0) return 0
+  return Math.round((submittedCount.value / total) * 100)
+})
+
+// 成绩表可见：组织者恒可见；参与者需开启成绩表且结果已发布（关隐藏时赛中实时可见）
+const boardVisible = computed(() => {
+  const c = round.value
+  if (!c || !userStore.token) return false
+  if (c.is_organizer) return true
+  if (!c.scoreboard) return false
+  return c.published || (c.status === 'running' && !c.hide_during)
+})
 
 function fmtDur(ms: number): string {
   if (ms <= 0) return '0'
@@ -132,10 +171,17 @@ function fmtDur(ms: number): string {
   return (d > 0 ? `${d}天` : '') + `${h}小时${m}分${sec}秒`
 }
 
+// 通过率 = AC 提交 / 总提交（与题库同口径）
+function acceptRate(row: { submit_count?: number; accepted_count?: number }): string {
+  if (!row.submit_count) return '—'
+  const pct = ((row.accepted_count ?? 0) / row.submit_count) * 100
+  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
+}
+
 async function load() {
   try {
     round.value = await api.value.detail(Number(route.params.id))
-    if (boardVisible.value && userStore.token) loadLeaders()
+    if (boardVisible.value) loadLeaders()
   } catch {
     // 加载失败回退：比赛回赛事列表；考试回班级列表（考试路由不在主导航）
     router.replace(props.kind === 'exam' ? '/classes' : '/contests')
@@ -159,8 +205,7 @@ async function loadLeaders() {
   }
 }
 
-// 成绩导出 CSV（v0.5.6）：仅组织者可见；服务端现算榜单，列含排名/昵称/各题得分/总分，
-// 文件名以服务端 Content-Disposition 为准
+// 成绩导出 CSV（v0.5.6）：仅组织者可见；服务端现算榜单，列含排名/昵称/各题得分/总分
 const exporting = ref(false)
 async function exportCsv() {
   if (!round.value) return
@@ -169,33 +214,6 @@ async function exportCsv() {
     await downloadCsv(`/${props.kind}s/${round.value.id}/export`, `${round.value.title}.csv`)
   } finally {
     exporting.value = false
-  }
-}
-
-// 右列成绩摘要已迁到 ScoreSummaryCard（统一成绩表 §2.4）
-function openEditIntro() {
-  editIntro.value = round.value?.intro_html ?? round.value?.intro ?? ''
-  showEditIntro.value = true
-}
-
-async function saveIntro() {
-  if (!round.value) return
-  if (!editIntro.value.trim()) {
-    ElMessage.warning(`${name.value}说明不能为空`)
-    return
-  }
-  if (richtextBytes(editIntro.value) > MAX_RICHTEXT_BYTES) {
-    ElMessage.error(`${name.value}说明过长（上限 256KB）`)
-    return
-  }
-  savingIntro.value = true
-  try {
-    await api.value.setIntro(round.value.id, editIntro.value)
-    round.value.intro_html = editIntro.value
-    ElMessage.success(`${name.value}说明已保存`)
-    showEditIntro.value = false
-  } finally {
-    savingIntro.value = false
   }
 }
 
@@ -217,6 +235,7 @@ async function remove() {
 }
 
 onMounted(() => {
+  tagStore.ensure() // 标签名映射异步就绪，题目表标签列响应式跟随
   if (userStore.token) {
     authApi.me().then((me) => {
       myUid.value = me.id
@@ -237,7 +256,9 @@ onUnmounted(() => {
 <template>
   <div v-loading="loading">
     <PageShell v-if="round">
-        <el-card>
+      <!-- 名称卡：名称 20px + 说明（说明不再单独成卡） -->
+      <el-card>
+        <div class="round-body">
           <div class="title-row">
             <span class="big-title">{{ round.title }}</span>
             <el-tag :type="round.status === 'running' ? 'success' : round.status === 'scheduled' ? 'warning' : 'info'">
@@ -259,34 +280,90 @@ onUnmounted(() => {
               赛后隐藏至 {{ fmtDate(round.hidden_until) }}
             </el-tag>
           </div>
-        </el-card>
+        </div>
+      </el-card>
 
-        <el-card class="block">
-          <el-table stripe v-if="round.problems" :data="round.problems">
-            <el-table-column prop="id" label="ID" width="100" />
-            <el-table-column label="题目">
-              <template #default="{ row }">
-                <el-link
-                  type="primary"
-                  @click="router.push(`${roundBase}/${round!.id}/problems/${row.id}`)"
-                >
-                  {{ row.title }}
-                </el-link>
-              </template>
-            </el-table-column>
-            <el-table-column prop="score" label="满分" width="100" />
-          </el-table>
-          <el-alert
-            v-else
-            :title="round.status === 'scheduled' ? `${name}开始前题目隐藏，开始后可见` : '仅本班成员可见题目'"
-            type="info"
-            :closable="false"
-          />
-        </el-card>
+      <!-- 时间进度 + 提交进度 -->
+      <el-card class="block">
+        <div class="progress-head">
+          <span class="progress-title">{{ round.status === 'scheduled' ? '开始倒计时' : round.status === 'running' ? '剩余时间' : '赛程' }}</span>
+          <span class="countdown">{{ countdownLabel }}</span>
+        </div>
+        <el-progress
+          :percentage="progressPct"
+          :status="round.status === 'ended' ? 'success' : undefined"
+          :stroke-width="10"
+        />
+        <div class="dim center">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</div>
+        <template v-if="userStore.token && round.participant && problemTotal > 0">
+          <div class="submit-head">
+            <span>提交进度</span>
+            <span>{{ submittedCount }} / {{ problemTotal }}</span>
+          </div>
+          <el-progress :percentage="submitProgressPct" :stroke-width="8" />
+        </template>
+      </el-card>
+
+      <!-- 题目表：T1 / 状态 / 题目 / 标签 / 通过率 -->
+      <el-card class="block">
+        <template #header><span>题目（{{ problemTotal }}）</span></template>
+        <el-table v-if="round.problems?.length" stripe :data="round.problems">
+          <el-table-column label="题号" width="80">
+            <template #default="{ $index }">T{{ $index + 1 }}</template>
+          </el-table-column>
+          <el-table-column v-if="userStore.token" label="状态" width="150">
+            <template #default="{ row }">
+            <template v-if="row.result_hidden">
+              <el-tag v-if="row.submitted" size="small" type="info">已提交</el-tag>
+              <span v-else class="dim">—</span>
+            </template>
+            <SubStatus v-else-if="row.status" :status="row.status" :score="row.my_score" />
+            <span v-else class="dim">未做</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="题目" min-width="260">
+            <template #default="{ row }">
+              <el-link type="primary" @click="router.push(`${roundBase}/${round!.id}/problems/${row.id}`)">
+                {{ row.title }}
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column label="标签" min-width="170">
+            <template #default="{ row }">
+              <FitTags v-if="!row.result_hidden && row.tags?.length" :ids="row.tags" />
+              <span v-else class="dim">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="通过率" width="110">
+            <template #default="{ row }">
+              <el-tooltip
+                v-if="!row.result_hidden && row.submit_count"
+                :content="`AC ${row.accepted_count ?? 0} / 提交 ${row.submit_count}`"
+                placement="top"
+              >
+                <span>{{ acceptRate(row) }}</span>
+              </el-tooltip>
+              <span v-else class="dim">—</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-alert
+          v-else
+          :title="round.status === 'scheduled' ? `${name}开始前题目隐藏，开始后可见` : '仅本班成员可见题目'"
+          type="info"
+          :closable="false"
+        />
+      </el-card>
 
       <template #aside>
+        <!-- 管理卡：编辑比赛/考试（名称/时间/说明）、调整题目 → 文件 IO / 成绩表 / 赛期内不可见 -->
         <el-card v-if="round.is_organizer" class="aside-card">
-          <template #header><span>本场场景</span></template>
+          <template #header><span>管理</span></template>
+          <div class="entry-actions">
+            <el-button type="primary" style="width: 100%" @click="openEdit('full')">编辑{{ name }}</el-button>
+            <el-button type="warning" style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
+            <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">删除{{ name }}</el-button>
+          </div>
           <div class="scene-row">
             <span>启用文件 IO</span>
             <el-switch
@@ -295,57 +372,51 @@ onUnmounted(() => {
               @change="(v: string | number | boolean) => toggleFileIO(!!v)"
             />
           </div>
-          <div class="dim" style="margin-top: 8px; line-height: 1.6">
-            启用后本场所有题按各题文件名对以文件读写方式判题，题面下方展示文件 IO 说明；可随时开关，之后的提交按新设置判。
+          <div class="scene-row">
+            <span>开启成绩表</span>
+            <el-switch
+              :model-value="round.scoreboard"
+              :disabled="flagSaving"
+              @change="(v: string | number | boolean) => saveFlag({ scoreboard: !!v })"
+            />
           </div>
-        </el-card>
-
-        <el-card class="aside-card">
-          <template #header>
-            <span>{{ round.status === 'scheduled' ? '开始倒计时' : round.status === 'running' ? '剩余时间' : '赛程' }}</span>
-          </template>
-          <div class="countdown">{{ countdownLabel }}</div>
-          <el-progress
-            :percentage="progressPct"
-            :status="round.status === 'ended' ? 'success' : undefined"
-            :stroke-width="10"
-          />
-          <div class="dim center">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</div>
+          <div class="scene-row">
+            <span>赛期内不可见</span>
+            <el-switch
+              :model-value="round.hide_during"
+              :disabled="flagSaving"
+              @change="(v: string | number | boolean) => saveFlag({ hide_during: !!v })"
+            />
+          </div>
+          <div class="dim scene-note">
+            文件 IO 改动只影响之后的提交。关闭「成绩表」后参与者不再看到成绩表，组织者仍可见；
+            关闭「赛期内不可见」后参赛者在赛中即可看到状态、标签与通过率（成绩表按开关与发布态显示）。
+          </div>
         </el-card>
 
         <ScoreSummaryCard
+          v-if="boardVisible"
           class="aside-card"
           :board="scoreBoard"
           :loading="leadersLoading"
-          :visible="boardVisible && !!userStore.token"
+          :visible="true"
           :empty-text="scoreEmptyText"
           :my-uid="myUid"
-          :can-refresh="boardVisible && !!userStore.token"
+          :can-refresh="true"
           @open="showScoreBoard = true"
           @refresh="loadLeaders"
         />
-
-        <el-card v-if="round.is_organizer || round.deletable" class="aside-card">
-          <template #header><span>管理</span></template>
-          <div class="entry-actions">
-            <el-button v-if="round.is_organizer" type="primary" style="width: 100%" @click="openEditIntro">
-              编辑说明
-            </el-button>
-            <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">
-              删除{{ name }}
-            </el-button>
-          </div>
-        </el-card>
       </template>
     </PageShell>
 
-    <el-dialog v-model="showEditIntro" :title="`编辑${name}说明（Markdown / 所见即所得）`" width="1020" top="4vh">
-      <MdEditor v-model="editIntro" height="380px" />
-      <template #footer>
-        <el-button @click="showEditIntro = false">取消</el-button>
-        <el-button type="primary" :loading="savingIntro" @click="saveIntro">保存</el-button>
-      </template>
-    </el-dialog>
+    <EditRoundDialog
+      v-if="round"
+      v-model="showEditRound"
+      :kind="kind"
+      :round="round"
+      :mode="editMode"
+      @saved="load"
+    />
 
     <ScoreBoardDialog
       v-model="showScoreBoard"
@@ -377,7 +448,13 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-/* 页头大标题标准档（22/600）：全站层级顶点 */
+/* 名称卡与题面同列 860 居中，标题与说明左缘对齐 */
+.round-body {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+/* 页面名称 20px（v0.7 design.md；token 在 v0.7 统一调整） */
 .big-title {
   font-size: var(--soj-fs-page-title);
   font-weight: var(--soj-fw-emphasis);
@@ -403,13 +480,23 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
+.progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.progress-title {
+  font-weight: var(--soj-fw-emphasis);
+}
+
 /* 倒计时大字（22/600，强调档） */
 .countdown {
   font-size: var(--soj-fs-page-title);
   font-weight: var(--soj-fw-emphasis);
   color: var(--el-color-primary);
-  margin-bottom: 10px;
-  text-align: center;
 }
 
 .center {
@@ -417,10 +504,23 @@ onUnmounted(() => {
   margin-top: 6px;
 }
 
+.submit-head {
+  display: flex;
+  justify-content: space-between;
+  margin: 14px 0 6px;
+  color: var(--el-text-color-regular);
+}
+
 .scene-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin-top: 10px;
+}
+
+.scene-note {
+  margin-top: 10px;
+  line-height: 1.6;
 }
 </style>

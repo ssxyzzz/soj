@@ -240,6 +240,26 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		}
 		log.Printf("[boot] 已补发昵称修改权限位（user.nickname.edit），真实姓名权限位已清理")
 	}
+	if !flagDone("roundFlagsV1") {
+		// v0.7：比赛/考试新增「开启成绩表」「赛期内不可见」两个开关。存量场次补默认值：
+		// 两者都开——成绩表保持现状可见规则，赛期内不可见保持 OI 现状。
+		for _, col := range []*mongo.Collection{r.roundsCol(KindContest), r.roundsCol(KindExam)} {
+			if _, err := col.UpdateMany(ctx,
+				bson.M{"scoreboard": bson.M{"$exists": false}},
+				bson.M{"$set": bson.M{"scoreboard": true}}); err != nil {
+				return err
+			}
+			if _, err := col.UpdateMany(ctx,
+				bson.M{"hideDuring": bson.M{"$exists": false}},
+				bson.M{"$set": bson.M{"hideDuring": true}}); err != nil {
+				return err
+			}
+		}
+		if err := setFlag("roundFlagsV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 比赛/考试已补默认开关（成绩表开、赛期内不可见开）")
+	}
 	return nil
 }
 

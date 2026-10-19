@@ -17,6 +17,7 @@ type Assignment struct {
 	ClassID   int64     `bson:"classId"`
 	Title     string    `bson:"title"`
 	Intro     string    `bson:"intro"`
+	IntroHTML string    `bson:"introHtml,omitempty"` // 作业说明富文本（v0.7）；原 md intro 冻结为回退源
 	Problems  []int64   `bson:"problems"`
 	CreatedAt time.Time `bson:"createdAt"`
 }
@@ -43,6 +44,18 @@ func (r *Repo) GetAssignment(ctx context.Context, id int64) (*Assignment, error)
 		return nil, err
 	}
 	return &a, nil
+}
+
+// UpdateAssignment 编辑作业名称/说明（set 键值由 handler 校验）。
+func (r *Repo) UpdateAssignment(ctx context.Context, id int64, set bson.M) error {
+	res, err := r.db.Collection("assignments").UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 // DeleteAssignment 删除作业（引用解除，不影响题库题目本身）。

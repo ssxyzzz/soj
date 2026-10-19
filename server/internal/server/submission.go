@@ -67,7 +67,8 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 	}
 	lk := lockMap[p.ID]
 	privileged := hasPerm(c, repo.PermProblemViewAll)
-	if p.Hidden && !privileged && !(lk != nil && lk.Phase == "running" && lk.Bank) {
+	// v0.7：主题库隐藏题任何非特权场景都不可见/不可提交（备题用）
+	if p.Hidden && !privileged {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}

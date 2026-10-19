@@ -51,7 +51,7 @@ func orEmptyInt64(s []int64) []int64 {
 }
 
 // ListProblems 题库列表（按视角过滤）：
-//   - 主题库隐藏题对 guest/default 不可见（被主题库比赛赛中解锁时除外）；
+//   - 主题库隐藏题对 guest/default 不可见（v0.7 起任何场景均不可见，比赛/考试也不可见）；
 //   - 被比赛锁定（赛前/隐藏期）的题对受影响视角不可见，赛中带锁标记与指引；
 //   - admin/root 可见全部并带标记；
 //   - tags=1,5,9 标签筛选：并集、精确匹配节点 ID（v0.5.5）。
@@ -94,8 +94,9 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		}
 		lk := lockMap[p.ID]
 		if !privileged {
-			hiddenBlocked := p.Hidden && !(lk != nil && lk.Phase == "running" && lk.Bank)
-			if hiddenBlocked || (lk != nil && lk.Phase != "running") {
+			// v0.7：主题库隐藏 = 任何场景都不可见（备题用，比赛/考试也不可见）；
+			// 不再沿用「主题库比赛赛中临时解锁隐藏题」的旧语义。
+			if p.Hidden || (lk != nil && lk.Phase != "running") {
 				continue
 			}
 		}
@@ -186,8 +187,8 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	}
 	lk := lockMap[p.ID]
 
-	// 隐藏题：default/guest 不可见（主题库比赛赛中解锁）
-	if p.Hidden && !privileged && !(lk != nil && lk.Phase == "running" && lk.Bank) {
+	// 隐藏题：v0.7 起任何非特权视角都不可见（比赛/考试中也不可见）
+	if p.Hidden && !privileged {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}

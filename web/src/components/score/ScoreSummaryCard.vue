@@ -110,7 +110,6 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
   gap: 6px;
   align-items: center;
   padding: 3px 4px;
-  margin: 0 -4px;
   border-radius: 4px;
   cursor: pointer;
 }

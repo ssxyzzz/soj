@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/lang"
 	"soj/internal/repo"
@@ -38,7 +39,7 @@ var (
 
 // ---------- 共享创建 ----------
 
-// roundCreateReq 创建请求（比赛/考试字段一致，FileIO 见 v0.5.2-3）。
+// roundCreateReq 创建请求（比赛/考试字段一致，FileIO 见 v0.5.2-3，v0.7 增两个开关）。
 type roundCreateReq struct {
 	Title      string    `json:"title" binding:"required"`
 	Intro      string    `json:"intro"`
@@ -47,6 +48,8 @@ type roundCreateReq struct {
 	HiddenDays int       `json:"hidden_days"`
 	ProblemIDs []int64   `json:"problem_ids" binding:"required"`
 	FileIO     bool      `json:"file_io"`
+	Scoreboard *bool     `json:"scoreboard"`  // 缺省 true：开启成绩表
+	HideDuring *bool     `json:"hide_during"` // 缺省 true：赛期内对参赛者隐藏结果
 }
 
 // validateRoundCreate 校验创建参数；ok=false 时已写响应。
@@ -135,14 +138,16 @@ func (h *Handlers) createRound(c *gin.Context, s roundScope, classID int64) {
 		return
 	}
 	ct := &repo.Contest{
-		ClassID:   classID,
-		Title:     req.Title,
-		Intro:     req.Intro,
-		Start:     req.Start,
-		End:       req.End,
-		Problems:  problems,
-		CreatedBy: uid,
-		FileIO:    req.FileIO,
+		ClassID:    classID,
+		Title:      req.Title,
+		Intro:      req.Intro,
+		Start:      req.Start,
+		End:        req.End,
+		Problems:   problems,
+		CreatedBy:  uid,
+		FileIO:     req.FileIO,
+		Scoreboard: req.Scoreboard == nil || *req.Scoreboard,
+		HideDuring: req.HideDuring == nil || *req.HideDuring,
 	}
 	if req.HiddenDays > 0 {
 		ct.HiddenUntil = req.End.AddDate(0, 0, req.HiddenDays)
@@ -181,22 +186,81 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 		"participant":   participant,
 		"is_organizer":  isOrganizer,
 		"deletable":     isOrganizer && status == "scheduled",
-		"file_io":       ct.FileIO, // 本场启用文件 IO（v0.5.2-3）
+		"published":     ct.Published,
+		"file_io":       ct.FileIO,     // 本场启用文件 IO（v0.5.2-3）
+		"scoreboard":    ct.Scoreboard, // v0.7：是否开启成绩表
+		"hide_during":   ct.HideDuring, // v0.7：赛期内对参赛者隐藏结果
 	}
 	if !ct.HiddenUntil.IsZero() {
 		resp["hidden_until"] = ct.HiddenUntil
 	}
-	// 题目列表：赛中对参赛者可见；赛前只给组织者看
-	if isOrganizer || (status != "scheduled" && participant) {
+	// 结果可见性：组织者恒可见；发布后所有人可见；关闭「赛期内不可见」时赛中参赛者可见。
+	// 赛后隐藏期（hidden_until）仍按原 OI 规则隐藏。
+	resultHidden := !isOrganizer && !ct.Published && !(status == "running" && !ct.HideDuring)
+	resp["result_hidden"] = resultHidden
+	// 题目列表：赛前只给组织者；比赛开始后对所有人开放，考试仅本班成员。
+	canSeeProblems := isOrganizer || (status != "scheduled" && (participant || s.Kind == repo.KindContest))
+	if canSeeProblems {
+		// 本人在本场次的提交（原始态，含赛时未发布）：用于「已提交」与关闭隐藏后的实时状态。
+		submitted := map[int64]bool{}
+		best := map[int64]repo.UserBestStatus{}
+		if logged {
+			if subs, err := h.repo.RoundSubmissions(ctx, s.Kind, ct.ID, uid); err == nil {
+				for _, sub := range subs {
+					submitted[sub.ProblemID] = true
+					if old, ok := best[sub.ProblemID]; !ok || sub.Score > old.Score {
+						best[sub.ProblemID] = repo.UserBestStatus{Status: sub.Status, Score: sub.Score}
+					}
+				}
+			}
+		}
 		problems := make([]gin.H, 0, len(ct.Problems))
 		for _, cp := range ct.Problems {
-			title := ""
-			if p, err := h.repo.GetProblem(ctx, cp.PID); err == nil {
-				title = p.Title
+			p, err := h.repo.GetProblem(ctx, cp.PID)
+			if err != nil || p.Hidden {
+				continue // 题目已删除或主题库隐藏（备题）：不进入比赛/考试题目表
 			}
-			problems = append(problems, gin.H{"id": cp.PID, "title": title, "score": cp.Score})
+			item := gin.H{"id": cp.PID, "title": p.Title, "score": cp.Score, "result_hidden": resultHidden}
+			if logged {
+				item["submitted"] = submitted[cp.PID]
+			}
+			if !resultHidden {
+				item["tags"] = orEmptyInt64(p.Tags)
+				if st, ok := best[cp.PID]; ok {
+					item["status"] = st.Status
+					item["my_score"] = st.Score
+				}
+			}
+			problems = append(problems, item)
+		}
+		// 通过率：公开态提交口径（与题库一致）；结果隐藏时不返回。
+		if !resultHidden {
+			pids := make([]int64, 0, len(problems))
+			for _, it := range problems {
+				pids = append(pids, it["id"].(int64))
+			}
+			if stats, err := h.repo.ListProblemStats(ctx, pids); err == nil {
+				for _, it := range problems {
+					st := stats[it["id"].(int64)]
+					it["submit_count"] = st.Total
+					it["accepted_count"] = st.Accepted
+				}
+			}
 		}
 		resp["problems"] = problems
+	}
+	// 组织者编辑用完整清单：包含主题库隐藏题（不进上表，但编辑时不能悄悄丢失）。
+	if isOrganizer {
+		edit := make([]gin.H, 0, len(ct.Problems))
+		for _, cp := range ct.Problems {
+			item := gin.H{"id": cp.PID, "score": cp.Score, "title": ""}
+			if p, err := h.repo.GetProblem(ctx, cp.PID); err == nil {
+				item["title"] = p.Title
+				item["hidden"] = p.Hidden
+			}
+			edit = append(edit, item)
+		}
+		resp["edit_problems"] = edit
 	}
 	ok(c, resp)
 }
@@ -289,29 +353,6 @@ func (h *Handlers) roundDelete(c *gin.Context, s roundScope) {
 	ok(c, gin.H{"deleted": ct.ID})
 }
 
-func (h *Handlers) roundSetIntro(c *gin.Context, s roundScope) {
-	var req struct {
-		HTML string `json:"intro_html" binding:"required"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		fail(c, http.StatusBadRequest, s.Name+"说明不能为空")
-		return
-	}
-	if len(req.HTML) > maxStatementSize {
-		fail(c, http.StatusBadRequest, s.Name+"说明过长（上限 256KB）")
-		return
-	}
-	ct, okR := h.roundOrganizerOnly(c, s)
-	if !okR {
-		return
-	}
-	if err := h.repo.SetRoundIntroHTML(c.Request.Context(), s.Kind, ct.ID, req.HTML); err != nil {
-		fail(c, http.StatusInternalServerError, "保存失败")
-		return
-	}
-	ok(c, gin.H{"id": ct.ID})
-}
-
 func (h *Handlers) roundSetFileIO(c *gin.Context, s roundScope) {
 	var req struct {
 		Enabled *bool `json:"enabled"`
@@ -331,14 +372,122 @@ func (h *Handlers) roundSetFileIO(c *gin.Context, s roundScope) {
 	ok(c, gin.H{"file_io": *req.Enabled})
 }
 
+// roundUpdate 组织者编辑比赛/考试：名称、起止时间、题目集合与顺序、成绩表/赛期内不可见开关。
+// 赛中修改不做后端拦截（前端会二次确认并提示影响），权限沿用 organizer/root。
+func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
+	var req struct {
+		Title      *string    `json:"title"`
+		Start      *time.Time `json:"start"`
+		End        *time.Time `json:"end"`
+		IntroHTML  *string    `json:"intro_html"`
+		ProblemIDs *[]int64   `json:"problem_ids"`
+		Scoreboard *bool      `json:"scoreboard"`
+		HideDuring *bool      `json:"hide_during"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	ct, okR := h.roundOrganizerOnly(c, s)
+	if !okR {
+		return
+	}
+	ctx := c.Request.Context()
+	set := bson.M{}
+	if req.Title != nil {
+		title := trimTo(*req.Title, 64)
+		if title == "" {
+			fail(c, http.StatusBadRequest, s.Name+"名称不能为空")
+			return
+		}
+		set["title"] = title
+	}
+	if req.IntroHTML != nil {
+		if len(*req.IntroHTML) > maxStatementSize {
+			fail(c, http.StatusBadRequest, s.Name+"说明过长（上限 256KB）")
+			return
+		}
+		set["introHtml"] = *req.IntroHTML
+	}
+	if req.Start != nil || req.End != nil {
+		start, end := ct.Start, ct.End
+		if req.Start != nil {
+			start = *req.Start
+		}
+		if req.End != nil {
+			end = *req.End
+		}
+		if !start.Before(end) {
+			fail(c, http.StatusBadRequest, "开始时间必须早于结束时间")
+			return
+		}
+		if end.Sub(start) > repo.MaxContestDuration {
+			fail(c, http.StatusBadRequest, s.Name+"时长最长 7 天")
+			return
+		}
+		set["start"] = start
+		set["end"] = end
+		// 原赛后隐藏期若存在，按原相对天数跟到新结束时间，避免出现隐藏期早于结束时间
+		if !ct.HiddenUntil.IsZero() {
+			days := int(ct.HiddenUntil.Sub(ct.End).Hours() / 24)
+			if days > 0 {
+				set["hiddenUntil"] = end.AddDate(0, 0, days)
+			} else {
+				set["hiddenUntil"] = time.Time{}
+			}
+		}
+	}
+	if req.ProblemIDs != nil {
+		if len(*req.ProblemIDs) == 0 {
+			fail(c, http.StatusBadRequest, s.Name+"至少需要一道题目")
+			return
+		}
+		existing := make(map[int64]int, len(ct.Problems))
+		for _, cp := range ct.Problems {
+			existing[cp.PID] = cp.Score
+		}
+		seen := map[int64]bool{}
+		problems := make([]repo.ContestProblem, 0, len(*req.ProblemIDs))
+		for _, pid := range *req.ProblemIDs {
+			if pid <= 0 || seen[pid] {
+				continue
+			}
+			seen[pid] = true
+			if _, err := h.repo.GetProblem(ctx, pid); err != nil {
+				fail(c, http.StatusNotFound, "题目不存在: "+strconv.FormatInt(pid, 10))
+				return
+			}
+			score := existing[pid]
+			if score <= 0 {
+				score = 100
+			}
+			problems = append(problems, repo.ContestProblem{PID: pid, Score: score})
+		}
+		if len(problems) == 0 {
+			fail(c, http.StatusBadRequest, s.Name+"至少需要一道题目")
+			return
+		}
+		set["problems"] = problems
+	}
+	if req.Scoreboard != nil {
+		set["scoreboard"] = *req.Scoreboard
+	}
+	if req.HideDuring != nil {
+		set["hideDuring"] = *req.HideDuring
+	}
+	if len(set) == 0 {
+		fail(c, http.StatusBadRequest, "没有需要更新的字段")
+		return
+	}
+	if err := h.repo.UpdateRoundFields(ctx, s.Kind, ct.ID, set); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"updated": ct.ID})
+}
+
 func (h *Handlers) DeleteContest(c *gin.Context) { h.roundDelete(c, scopeContest) }
 func (h *Handlers) DeleteExam(c *gin.Context)    { h.roundDelete(c, scopeExam) }
-
-// SetContestIntro 编辑比赛说明（Markdown，创建者/root）。
-func (h *Handlers) SetContestIntro(c *gin.Context) { h.roundSetIntro(c, scopeContest) }
-
-// SetExamIntro 编辑考试说明（Markdown，组织者/root）。
-func (h *Handlers) SetExamIntro(c *gin.Context) { h.roundSetIntro(c, scopeExam) }
 
 // SetContestFileIO 设置比赛「本场启用文件 IO」场景开关（创建者/root，中途可改：
 // 改动只影响之后的提交，此前提交的结果不回滚——需要时用后续的重测功能）。
@@ -346,6 +495,12 @@ func (h *Handlers) SetContestFileIO(c *gin.Context) { h.roundSetFileIO(c, scopeC
 
 // SetExamFileIO 设置考试「本场启用文件 IO」场景开关（语义同比赛）。
 func (h *Handlers) SetExamFileIO(c *gin.Context) { h.roundSetFileIO(c, scopeExam) }
+
+// UpdateContest 组织者编辑比赛（v0.7：名称/时间/题目集合与顺序/成绩表与不可见开关）。
+func (h *Handlers) UpdateContest(c *gin.Context) { h.roundUpdate(c, scopeContest) }
+
+// UpdateExam 组织者编辑考试（语义同比赛）。
+func (h *Handlers) UpdateExam(c *gin.Context) { h.roundUpdate(c, scopeExam) }
 
 // ---------- 共享提交 ----------
 
@@ -415,6 +570,11 @@ func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}
+	// v0.7：主题库隐藏题不从比赛/考试题目表出现，也不接受非特权提交
+	if p.Hidden && !hasPerm(c, repo.PermProblemViewAll) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
 	var ctArg, eArg *repo.Contest
 	if s.Kind == repo.KindExam {
 		eArg = ct
@@ -463,7 +623,8 @@ func (h *Handlers) roundMySubmissions(c *gin.Context, s roundScope) {
 			return
 		}
 	}
-	revealed := ct.Published || uid == ct.CreatedBy || role == repo.RoleRoot
+	revealed := ct.Published || uid == ct.CreatedBy || role == repo.RoleRoot ||
+		(!ct.HideDuring && ct.Status(time.Now()) == "running")
 
 	subs, err := h.repo.RoundSubmissions(ctx, s.Kind, ct.ID, uid)
 	if err != nil {
@@ -581,9 +742,17 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 		}
 	}
 	isOrganizer := logged && (uid == ct.CreatedBy || role == repo.RoleRoot)
-	if !ct.Published && !isOrganizer {
-		fail(c, http.StatusForbidden, "榜单暂不可见")
-		return
+	if !isOrganizer {
+		if !ct.Scoreboard {
+			fail(c, http.StatusForbidden, "本场未开启成绩表")
+			return
+		}
+		// 默认 OI：发布后可见；关闭「赛期内不可见」时赛中实时可见（赛后隐藏期仍按发布态）。
+		live := ct.Status(time.Now()) == "running" && !ct.HideDuring
+		if !ct.Published && !live {
+			fail(c, http.StatusForbidden, "榜单暂不可见")
+			return
+		}
 	}
 
 	cacheKey := s.Kind + "-" + strconv.FormatInt(ct.ID, 10)

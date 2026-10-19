@@ -20,7 +20,7 @@ import (
 type contestLock struct {
 	Round *repo.Contest // 比赛与考试同构，Kind 区分
 	Phase string        // scheduled | running | hidden（已结束未发布）
-	Bank  bool          // 主题库比赛（隐藏题赛中临时解锁、全局指引）
+	Bank  bool          // 主题库比赛（锁优先于班级考试、全局指引）
 	Kind  string        // contest | exam
 	RefID int64         // 比赛/考试 ID（前端指引跳转用）
 }

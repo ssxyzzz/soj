@@ -8,17 +8,21 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/repo"
 	"soj/internal/richtext"
 )
 
-// assignmentIntroHTML 作业说明富文本（v0.6 富文本口径：说明为纯文本/简单 md，读时计算）。
-func assignmentIntroHTML(intro string) string {
-	if intro == "" {
+// assignmentIntroHTML 作业说明富文本（v0.7 起写 introHtml；存量 md 读时计算回退）。
+func assignmentIntroHTML(a *repo.Assignment) string {
+	if a.IntroHTML != "" {
+		return a.IntroHTML
+	}
+	if a.Intro == "" {
 		return ""
 	}
-	return richtext.MdToHTML(intro)
+	return richtext.MdToHTML(a.Intro)
 }
 
 // assignmentAccessible 作业仅本班成员与班级管理员/root 可见。
@@ -62,6 +66,62 @@ func (h *Handlers) CreateAssignment(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"id": a.ID, "title": a.Title})
+}
+
+// UpdateAssignment 编辑作业名称/说明（班级管理员/root，v0.7）。
+func (h *Handlers) UpdateAssignment(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Title     *string `json:"title"`
+		IntroHTML *string `json:"intro_html"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	ctx := c.Request.Context()
+	a, err := h.repo.GetAssignment(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "作业不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取作业失败")
+		return
+	}
+	cl, cerr := h.repo.GetClass(ctx, a.ClassID)
+	if cerr != nil || !h.classManageable(c, cl) {
+		fail(c, http.StatusForbidden, "仅班级管理员可编辑作业")
+		return
+	}
+	set := bson.M{}
+	if req.Title != nil {
+		title := trimTo(*req.Title, 64)
+		if title == "" {
+			fail(c, http.StatusBadRequest, "作业名称不能为空")
+			return
+		}
+		set["title"] = title
+	}
+	if req.IntroHTML != nil {
+		if len(*req.IntroHTML) > maxStatementSize {
+			fail(c, http.StatusBadRequest, "作业说明过长（上限 256KB）")
+			return
+		}
+		set["introHtml"] = *req.IntroHTML
+	}
+	if len(set) == 0 {
+		fail(c, http.StatusBadRequest, "没有需要更新的字段")
+		return
+	}
+	if err := h.repo.UpdateAssignment(ctx, id, set); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"updated": id})
 }
 
 // ListClassAssignments 班级作业列表；非本班成员返回空列表。
@@ -164,6 +224,43 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取比赛状态失败")
 		return
 	}
+	now := time.Now()
+	// 普通题状态按题库口径（仅公开态提交）；轮次来源题用本场次原始提交，
+	// 以便关闭「赛期内不可见」时显示实时状态。
+	allPids := make([]int64, 0, len(a.Problems))
+	for _, pid := range a.Problems {
+		allPids = append(allPids, pid)
+	}
+	bestPub := map[int64]repo.UserBestStatus{}
+	if logged {
+		if best, err := h.repo.UserBestStatuses(ctx, uid, allPids); err == nil {
+			bestPub = best
+		}
+	}
+	type roundSubs struct {
+		submitted map[int64]bool
+		best      map[int64]repo.UserBestStatus
+	}
+	rawRounds := map[string]*roundSubs{}
+	loadRaw := func(lk *contestLock) *roundSubs {
+		key := lk.Kind + ":" + strconv.FormatInt(lk.RefID, 10)
+		if rs, ok := rawRounds[key]; ok {
+			return rs
+		}
+		rs := &roundSubs{submitted: map[int64]bool{}, best: map[int64]repo.UserBestStatus{}}
+		if logged {
+			if subs, err := h.repo.RoundSubmissions(ctx, lk.Kind, lk.RefID, uid); err == nil {
+				for _, sub := range subs {
+					rs.submitted[sub.ProblemID] = true
+					if old, ok := rs.best[sub.ProblemID]; !ok || sub.Score > old.Score {
+						rs.best[sub.ProblemID] = repo.UserBestStatus{Status: sub.Status, Score: sub.Score}
+					}
+				}
+			}
+		}
+		rawRounds[key] = rs
+		return rs
+	}
 	problems := make([]gin.H, 0, len(a.Problems))
 	for _, pid := range a.Problems {
 		lk := lockMap[pid]
@@ -171,24 +268,74 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 			continue // 赛前/隐藏期对该视角隐藏
 		}
 		p, err := h.repo.GetProblem(ctx, pid)
-		if err != nil {
-			continue // 题目已删除
+		if err != nil || p.Hidden {
+			continue // 题目已删除或主题库隐藏（备题）
 		}
 		item := gin.H{"id": p.ID, "title": p.Title}
+		resultHidden := false
 		if lk != nil {
 			if lk.Kind == repo.KindExam {
 				item["exam_id"] = lk.RefID
 			} else {
 				item["contest_id"] = lk.RefID
 			}
+			r := lk.Round
+			resultHidden = !manage && !r.Published &&
+				!(r.Status(now) == "running" && !r.HideDuring)
+		}
+		item["result_hidden"] = resultHidden
+		if logged {
+			var st repo.UserBestStatus
+			var has bool
+			submitted := false
+			if lk != nil {
+				rs := loadRaw(lk)
+				submitted = rs.submitted[pid]
+				st, has = rs.best[pid]
+			} else {
+				st, has = bestPub[pid]
+				submitted = has
+			}
+			item["submitted"] = submitted
+			if !resultHidden && has {
+				item["status"] = st.Status
+				item["my_score"] = st.Score
+			}
+		}
+		if !resultHidden {
+			item["tags"] = orEmptyInt64(p.Tags)
 		}
 		problems = append(problems, item)
 	}
-	ok(c, gin.H{
+	if stats, err := h.repo.ListProblemStats(ctx, allPids); err == nil {
+		for _, it := range problems {
+			if it["result_hidden"] == true {
+				continue
+			}
+			st := stats[it["id"].(int64)]
+			it["submit_count"] = st.Total
+			it["accepted_count"] = st.Accepted
+		}
+	}
+	resp := gin.H{
 		"id": a.ID, "class_id": a.ClassID, "title": a.Title, "intro": a.Intro,
-		"intro_html": assignmentIntroHTML(a.Intro),
+		"intro_html": assignmentIntroHTML(a),
 		"problems":   problems, "manageable": manage,
-	})
+	}
+	// 管理员调整题目用完整清单：含赛前/隐藏期/主题库隐藏题，避免保存时悄悄丢失。
+	if manage {
+		edit := make([]gin.H, 0, len(a.Problems))
+		for _, pid := range a.Problems {
+			item := gin.H{"id": pid, "title": ""}
+			if p, err := h.repo.GetProblem(ctx, pid); err == nil {
+				item["title"] = p.Title
+				item["hidden"] = p.Hidden
+			}
+			edit = append(edit, item)
+		}
+		resp["edit_problems"] = edit
+	}
+	ok(c, resp)
 }
 
 // DeleteAssignment 删除作业。

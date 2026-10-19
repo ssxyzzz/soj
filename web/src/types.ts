@@ -169,6 +169,13 @@ export interface AssignmentProblem {
   title: string
   contest_id?: number
   exam_id?: number
+  submitted?: boolean
+  status?: string
+  my_score?: number
+  tags?: number[]
+  submit_count?: number
+  accepted_count?: number
+  result_hidden?: boolean
 }
 
 export interface AssignmentDetail {
@@ -178,6 +185,7 @@ export interface AssignmentDetail {
   intro: string
   intro_html: string
   problems: AssignmentProblem[]
+  edit_problems?: { id: number; title: string; hidden?: boolean }[] // 管理员调整题目用完整清单
   manageable: boolean
 }
 
@@ -315,6 +323,13 @@ export interface ContestProblem {
   id: number
   title: string
   score: number
+  submitted?: boolean // 当前用户在本场次是否提交过（登录才返回）
+  status?: string // 当前用户本场次最高分提交状态（结果可见时返回）
+  my_score?: number
+  tags?: number[] // 标签节点 ID（结果不可见时不返回）
+  submit_count?: number // 通过率（公开态提交；结果不可见时不返回）
+  accepted_count?: number
+  result_hidden?: boolean // 该题结果/状态/标签/通过率是否对本视角隐藏
 }
 
 export interface ContestDetail {
@@ -330,9 +345,14 @@ export interface ContestDetail {
   participant: boolean
   is_organizer: boolean
   deletable: boolean
+  published: boolean // 赛后隐藏期结束、结果已公开
   file_io?: boolean // 本场启用文件 IO（v0.5.2-3）
+  scoreboard: boolean // v0.7：是否开启成绩表
+  hide_during: boolean // v0.7：赛期内对参赛者隐藏结果
+  result_hidden: boolean // 当前视角是否隐藏结果
   class_id?: number // 考试归属班级（v0.5.4 起两种详情同构返回）
   problems?: ContestProblem[]
+  edit_problems?: { id: number; title: string; score: number; hidden?: boolean }[] // 组织者编辑用完整清单
 }
 
 // ---------- 考试（班级级赛事，v0.4.2） ----------

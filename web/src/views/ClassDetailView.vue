@@ -40,6 +40,8 @@ const examForm = ref({
   hiddenDays: 0,
   selectedProblems: [] as number[],
   fileIO: false,
+  scoreboard: true,
+  hideDuring: true,
 })
 
 async function loadExams() {
@@ -77,6 +79,8 @@ async function createExam() {
       hidden_days: examForm.value.hiddenDays,
       problem_ids: examForm.value.selectedProblems,
       file_io: examForm.value.fileIO,
+      scoreboard: examForm.value.scoreboard,
+      hide_during: examForm.value.hideDuring,
     })
     ElMessage.success('考试创建成功')
     showExam.value = false
@@ -428,6 +432,18 @@ stripe
             </span>
           </div>
         </el-form-item>
+        <el-form-item>
+          <div class="fileio-switch">
+            <el-switch v-model="examForm.scoreboard" />
+            <span>开启成绩表 <span class="dim">（关闭后参与者看不到成绩表，组织者仍可见）</span></span>
+          </div>
+        </el-form-item>
+        <el-form-item>
+          <div class="fileio-switch">
+            <el-switch v-model="examForm.hideDuring" />
+            <span>赛期内对考生不可见 <span class="dim">（隐藏状态/标签/通过率）</span></span>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showExam = false">取消</el-button>
@@ -446,8 +462,8 @@ stripe
 }
 
 .title-row h3 {
-  font-size: var(--soj-fs-entity-title);
-  font-weight: var(--soj-fw-bold);
+  font-size: var(--soj-fs-page-title);
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .intro {

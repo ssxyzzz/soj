@@ -5,6 +5,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ArrowLeft } from '@element-plus/icons-vue'
 
 import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
@@ -145,11 +146,17 @@ onUnmounted(() => {
     <PageShell v-if="round && problem">
       <template #standalone>
         <el-card class="standalone-card" :body-style="{ padding: '10px 20px' }">
-          <div class="sa-time">
-            <el-link type="primary" @click="router.push(`${roundBase}/${round.id}`)">{{ round.title }}</el-link>
-            <el-tag size="small" :type="running ? 'success' : 'info'">{{ statusText }}</el-tag>
-            <span class="dim">{{ name }}时间：{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
-            <span v-if="!revealed" class="dim">OI 赛制：赛时只记录提交次数，不出分</span>
+          <div class="sa-head">
+            <div class="sa-time">
+              <span class="sa-title">{{ round.title }}</span>
+              <el-tag size="small" :type="running ? 'success' : 'info'">{{ statusText }}</el-tag>
+              <span class="dim">{{ name }}时间：{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
+              <span v-if="!revealed" class="dim">OI 赛制：赛时只记录提交次数，不出分</span>
+            </div>
+            <el-button class="sa-back" @click="router.push(`${roundBase}/${round.id}`)">
+              <el-icon><ArrowLeft /></el-icon>
+              返回{{ name }}
+            </el-button>
           </div>
           <div class="sa-switch">
             <el-button
@@ -162,7 +169,6 @@ onUnmounted(() => {
             >
               {{ i + 1 }}
             </el-button>
-            <el-link class="sa-back" type="primary" @click="router.push(`${roundBase}/${round.id}`)">返回{{ name }}</el-link>
           </div>
         </el-card>
       </template>
@@ -245,11 +251,27 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
+.sa-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sa-title {
+  font-size: var(--soj-fs-page-title);
+  font-weight: var(--soj-fw-emphasis);
+}
+
 .sa-time {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.sa-back {
+  flex: none;
 }
 
 .sa-switch {
@@ -261,10 +283,6 @@ onUnmounted(() => {
 
 .switch-btn {
   font-weight: var(--soj-fw-emphasis);
-}
-
-.sa-back {
-  margin-left: auto;
 }
 
 .center {

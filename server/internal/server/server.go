@@ -119,6 +119,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.POST("/classes/:id/assignments", h.CreateAssignment)
 			authed.DELETE("/assignments/:id", h.DeleteAssignment)
 			authed.GET("/assignments/:id", h.GetAssignmentDetail)
+			authed.PATCH("/assignments/:id", h.UpdateAssignment) // v0.7 编辑名称/说明
 			authed.POST("/assignments/:id/problems", h.AddAssignmentProblem)
 			authed.PUT("/assignments/:id/problems", h.SetAssignmentProblems)
 			authed.DELETE("/assignments/:id/problems/:pid", h.RemoveAssignmentProblem)
@@ -128,7 +129,7 @@ func Run(ctx context.Context, deps *Deps) {
 
 			// 比赛：创建（主题库=root，班级=班级管理员，handler 内校验）/删除/赛时提交/我的提交/榜单
 			authed.POST("/contests", h.CreateContest)
-			authed.PATCH("/contests/:id/intro", h.SetContestIntro)
+			authed.PATCH("/contests/:id", h.UpdateContest) // v0.7 编辑名称/时间/说明/题目/开关
 			authed.DELETE("/contests/:id", h.DeleteContest)
 			authed.POST("/contests/:id/problems/:pid/submissions", h.SubmitToContest)
 			authed.GET("/contests/:id/submissions/mine", h.ContestMySubmissions)
@@ -140,13 +141,13 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.POST("/classes/:id/exams", h.CreateExam)
 			authed.GET("/classes/:id/exams", h.ListClassExams)
 			authed.DELETE("/exams/:id", h.DeleteExam)
+			authed.PATCH("/exams/:id", h.UpdateExam) // v0.7 编辑名称/时间/说明/题目/开关
 			authed.GET("/exams/:id", h.ExamDetail)
 			authed.POST("/exams/:id/problems/:pid/submissions", h.SubmitToExam)
 			authed.GET("/exams/:id/submissions/mine", h.ExamMySubmissions)
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
 			authed.GET("/exams/:id/export", h.ExamExport) // 成绩导出 CSV（v0.5.6）
-			authed.PATCH("/exams/:id/intro", h.SetExamIntro)
 			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
 			authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
 

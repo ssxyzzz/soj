@@ -23,10 +23,11 @@ const form = ref({
   hiddenDays: 0,
   pids: '' as string,
   fileIO: false,
+  scoreboard: true,
+  hideDuring: true,
 })
 
 const running = computed(() => list.value.filter((c) => c.status === 'running'))
-const scheduled = computed(() => list.value.filter((c) => c.status === 'scheduled'))
 const ended = computed(() => list.value.filter((c) => c.status === 'ended'))
 
 async function load() {
@@ -61,6 +62,8 @@ async function create() {
       hidden_days: form.value.hiddenDays,
       problem_ids: problemIds,
       file_io: form.value.fileIO,
+      scoreboard: form.value.scoreboard,
+      hide_during: form.value.hideDuring,
     })
     ElMessage.success('比赛创建成功')
     showCreate.value = false
@@ -91,20 +94,6 @@ onMounted(load)
         </template>
         <el-empty v-if="!running.length" description="当前没有进行中的比赛" :image-size="50" />
         <el-table stripe v-else :data="running" style="cursor: pointer" @row-click="openContest">
-          <el-table-column prop="title" label="比赛" min-width="220" />
-          <el-table-column label="时间" min-width="280">
-            <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
-          </el-table-column>
-          <el-table-column prop="problem_count" label="题数" width="80" />
-        </el-table>
-      </el-card>
-
-      <el-card v-loading="loading" class="group">
-        <template #header>
-          <div class="group-head scheduled-head"><span class="dot scheduled-dot" /> 近期比赛</div>
-        </template>
-        <el-empty v-if="!scheduled.length" description="近期暂无比赛" :image-size="50" />
-        <el-table stripe v-else :data="scheduled" style="cursor: pointer" @row-click="openContest">
           <el-table-column prop="title" label="比赛" min-width="220" />
           <el-table-column label="时间" min-width="280">
             <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
@@ -177,6 +166,24 @@ onMounted(load)
           </span>
         </div>
       </el-form-item>
+      <el-form-item>
+        <div class="fileio-switch">
+          <el-switch v-model="form.scoreboard" />
+          <span>
+            开启成绩表
+            <span class="dim">（关闭后参与者看不到成绩表，组织者仍可见）</span>
+          </span>
+        </div>
+      </el-form-item>
+      <el-form-item>
+        <div class="fileio-switch">
+          <el-switch v-model="form.hideDuring" />
+          <span>
+            赛期内对参赛者不可见
+            <span class="dim">（隐藏状态/标签/通过率；关闭后赛中即可查看结果）</span>
+          </span>
+        </div>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="showCreate = false">取消</el-button>
@@ -208,20 +215,12 @@ onMounted(load)
   background: var(--el-color-success);
 }
 
-.scheduled-dot {
-  background: var(--el-color-warning);
-}
-
 .ended-dot {
   background: var(--el-text-color-placeholder);
 }
 
 .running-head {
   color: var(--el-color-success-dark-2);
-}
-
-.scheduled-head {
-  color: var(--el-color-warning-dark-2);
 }
 
 .rule-text p {

@@ -15,7 +15,7 @@
    --soj-fs-16  16px  区块小标题/富文本正文
    --soj-fs-18  18px  弹窗/确认框标题
    --soj-fs-20  20px  404 标题
-   --soj-fs-22  22px  页头大标题/品牌/倒计时
+   --soj-fs-22  22px  品牌/倒计时
    --soj-fs-30  30px  首页 hero
    --soj-fs-32  32px  统计大数字
    --soj-fs-36  36px  首页 emoji 图标
@@ -23,7 +23,7 @@
 
    ── 语义字号（--soj-fs-*）────────────────────────────────
    body 14            body/表单/按钮/菜单/表格/弹窗/代码显示/登录/设置/后台
-   nav 14             顶栏菜单项（design.md Phase 6 调 16）
+   nav 16             顶栏菜单项（v0.7 design.md）
    brand 22           顶栏 SOJ（独立于 nav，不随导航菜单变）
    tag 14             普通 .el-tag（首页技术栈/题目标签/状态标签/班级标签）
    tag-table 13       .el-table .el-tag（题库/排名/提交/作业/角色矩阵）
@@ -35,8 +35,7 @@
    feature-title 16.38 = calc(--soj-fs-14 * 1.17)  首页特性卡 h3（600）
    entity-title 16.38 = calc(--soj-fs-14 * 1.17)   班级名 h3（ClassesView/ClassDetail，700）
    card-title 14      首页班级卡 h4（700）
-   page-title 22      .big-title（题目/比赛/赛题/考试/考题）/ .countdown
-                      （design.md 目标 20，Phase 6 调）
+   page-title 20      .big-title（题目/比赛/赛题/考试/考题）/ .countdown
    hero 30            首页 hero
    stat 32            题库统计大数字
    emoji 36           首页 feature-icon
@@ -106,7 +105,7 @@ body,
 
   /* 语义字号 */
   --soj-fs-body: var(--soj-fs-14);
-  --soj-fs-nav: var(--soj-fs-14);
+  --soj-fs-nav: var(--soj-fs-16);
   --soj-fs-brand: var(--soj-fs-22);
   --soj-fs-tag: var(--soj-fs-14);
   --soj-fs-tag-table: var(--soj-fs-13);
@@ -117,7 +116,7 @@ body,
   --soj-fs-feature-title: calc(var(--soj-fs-14) * 1.17);
   --soj-fs-entity-title: calc(var(--soj-fs-14) * 1.17);
   --soj-fs-card-title: var(--soj-fs-14);
-  --soj-fs-page-title: var(--soj-fs-22);
+  --soj-fs-page-title: var(--soj-fs-20);
   --soj-fs-hero: var(--soj-fs-30);
   --soj-fs-stat: var(--soj-fs-32);
   --soj-fs-emoji: var(--soj-fs-36);
@@ -442,7 +441,7 @@ strong {
   line-height: 1.7;
 }
 
-/* 标题梯度低于页头大标题（22/600 是题面卡层级顶点） */
+/* 标题梯度低于页头大标题（20/600 是题面卡层级顶点） */
 .rich h1,
 .rich h2,
 .rich h3,

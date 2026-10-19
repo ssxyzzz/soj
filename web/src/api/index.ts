@@ -209,6 +209,8 @@ export const assignmentApi = {
   create: (classId: number, title: string, intro: string) =>
     post<{ id: number; title: string }>(`/classes/${classId}/assignments`, { title, intro }),
   detail: (id: number) => get<AssignmentDetail>(`/assignments/${id}`),
+  update: (id: number, body: { title?: string; intro_html?: string }) =>
+    patch<{ updated: number }>(`/assignments/${id}`, body),
   remove: (id: number) => del<{ deleted: number }>(`/assignments/${id}`),
   setProblems: (id: number, pids: number[]) =>
     put<{ count: number }>(`/assignments/${id}/problems`, { pids }),
@@ -257,6 +259,8 @@ export interface CreateContestPayload {
   hidden_days?: number
   problem_ids: number[]
   file_io?: boolean
+  scoreboard?: boolean // v0.7：开启成绩表（默认 true）
+  hide_during?: boolean // v0.7：赛期内对参赛者隐藏结果（默认 true）
 }
 
 // ---------- 比赛/考试（v0.5.4 ① 合并：10 对同构接口收敛为 roundApiOf(kind) 工厂） ----------
@@ -268,7 +272,8 @@ const roundApiOf = (kind: RoundKind) => {
   const base = `/${kind}s`
   return {
     detail: (id: number) => get<ContestDetail>(`${base}/${id}`),
-    setIntro: (id: number, html: string) => patch<{ id: number }>(`${base}/${id}/intro`, { intro_html: html }),
+    update: (id: number, body: { title?: string; start?: string; end?: string; intro_html?: string; problem_ids?: number[]; scoreboard?: boolean; hide_during?: boolean }) =>
+      patch<{ updated: number }>(`${base}/${id}`, body),
     remove: (id: number) => del<{ deleted: number }>(`${base}/${id}`),
     submit: (roundId: number, pid: number, language: string, code: string) =>
       post<{ id: number }>(`${base}/${roundId}/problems/${pid}/submissions`, { language, code }),
@@ -306,6 +311,8 @@ export interface CreateExamPayload {
   hidden_days?: number
   problem_ids: number[]
   file_io?: boolean
+  scoreboard?: boolean // v0.7：开启成绩表（默认 true）
+  hide_during?: boolean // v0.7：赛期内对参赛者隐藏结果（默认 true）
 }
 
 // ---------- 首页公告 ----------
