@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 公告编辑面板（v0.5e ② 拆分自 AdminView）
+// 公告编辑面板（v0.5.4 ② 拆分自 AdminView）
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 

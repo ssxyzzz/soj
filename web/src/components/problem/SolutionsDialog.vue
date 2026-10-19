@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 题解弹窗（v0.5e ② 拆分自 ProblemDetailView，v0.5b-1 实现）：
+// 题解弹窗（v0.5.4 ② 拆分自 ProblemDetailView，v0.5.2-1 实现）：
 // 置顶优先 10 条/页；发表/编辑走编辑器弹窗；置顶/删他人需 solution.manage（后端下发 can_manage）。
 import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

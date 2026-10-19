@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 代码编辑器（v0.5d）：CodeMirror 6 共享组件，提交弹窗与在线编程复用。
+// 代码编辑器（v0.5.3）：CodeMirror 6 共享组件，提交弹窗与在线编程复用。
 // CM6 全量走动态 import → 独立懒加载 chunk（不进主包、零 CDN）；
 // 语言与自动补全用 Compartment 热切换；自动补全开关走 utils/code.ts 的策略接口（预留等级门槛）。
 // 补全三层源：include 上下文 → 精选清单（utils/completions.ts）→ 文档内词（completeAnyWord）。

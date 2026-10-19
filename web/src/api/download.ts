@@ -1,4 +1,4 @@
-// CSV 成绩导出下载（v0.5c 老师教学闭环）。
+// CSV 成绩导出下载（v0.5.6 老师教学闭环）。
 // 独立模块的原因：api/index.ts 的响应拦截层面向 JSON ApiResponse（业务码检查），
 // blob 下载走不进去；与 BackupPanel 的备份下载同一模式——裸 axios + 同一身份源的鉴权头。
 import axios from 'axios'

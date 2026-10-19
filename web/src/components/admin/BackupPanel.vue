@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 数据备份面板（v0.5e ② 拆分自 AdminView，v0.4.9/v0.5a 实现）：
+// 数据备份面板（v0.5.4 ② 拆分自 AdminView，v0.4.9/v0.5.1 实现）：
 // 状态卡 + 一键备份下载 + Tier 1 私钥一次性弹窗 + 可编辑使用说明。
 import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'

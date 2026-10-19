@@ -30,7 +30,7 @@ type CaseMeta struct {
 	AnsSHA  string `bson:"ansSha"  json:"ansSha"`
 }
 
-// 比对模式（v0.5b-1）：exact = 现状语义（行尾空白/文末换行无关的全文比对）；
+// 比对模式（v0.5.2-1）：exact = 现状语义（行尾空白/文末换行无关的全文比对）；
 // tolerant = 在 exact 基础上按空白分词、数字 token 按容差比较。空值 = exact（存量零迁移）。
 const (
 	CompareExact    = "exact"
@@ -51,7 +51,7 @@ type Problem struct {
 	Visibility     string     `bson:"visibility"`
 	Hidden         bool       `bson:"hidden"`             // 主题库隐藏：default/guest 永不可见不可交
 	CreatedBy      int64      `bson:"createdBy"`          // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
-	Tags           []int64    `bson:"tags"`               // 标签树节点 ID（v0.5f），名字与层级由 tags 集合的树实时解析
+	Tags           []int64    `bson:"tags"`               // 标签树节点 ID（v0.5.5），名字与层级由 tags 集合的树实时解析
 	Subtasks       []Subtask  `bson:"subtasks,omitempty"` // nil = 单点等分
 	Cases          []CaseMeta `bson:"cases"`
 	Compare        string     `bson:"compare,omitempty"`        // 比对模式，空 = exact
@@ -59,7 +59,7 @@ type Problem struct {
 	CheckerFile    string     `bson:"checkerFile,omitempty"`    // 校验器源文件（存测试数据卷，非空 = checker 判定）
 	CheckerSHA     string     `bson:"checkerSha,omitempty"`
 	CheckerFileID  string     `bson:"checkerFileId,omitempty"` // 沙箱编译产物缓存（失效自动重编）
-	FileIO         bool       `bson:"fileIo,omitempty"`        // 文件 IO 模式（v0.5b-3 生效）
+	FileIO         bool       `bson:"fileIo,omitempty"`        // 文件 IO 模式（v0.5.2-3 生效）
 	FileIOInput    string     `bson:"fileIoInput,omitempty"`
 	FileIOOutput   string     `bson:"fileIoOutput,omitempty"`
 	CreatedAt      time.Time  `bson:"createdAt"`

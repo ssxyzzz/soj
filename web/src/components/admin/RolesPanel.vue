@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 角色管理面板（v0.5e ② 拆分自 AdminView）：Hydro 风格二维矩阵（权限为行、
+// 角色管理面板（v0.5.4 ② 拆分自 AdminView）：Hydro 风格二维矩阵（权限为行、
 // 角色为列，按分类插分组行），点选即保存。角色增删改后用户面板随 v-if 切换重建自然刷新。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

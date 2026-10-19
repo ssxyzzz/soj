@@ -1,6 +1,6 @@
 package server
 
-// 题面图片上传（v0.5a）：POST /api/uploads 多文件上传（Vditor 钩子），
+// 题面图片上传（v0.5.1）：POST /api/uploads 多文件上传（Vditor 钩子），
 // GET /uploads/:file 公开读取（题面公开、图片随公开；随机名不可枚举）。
 // 权限：持有题面编辑或系统设置权限位者（能打开编辑器的人群），不新增权限位。
 // 文件访问一律经 os.Root（内核级限制在图片目录内，路径穿越从语言层被拒绝）。

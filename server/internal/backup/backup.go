@@ -35,7 +35,7 @@ const (
 	manifestName  = "manifest.json"
 	mongoDumpName = "mongo.archive.gz"
 	testdataName  = "testdata.tar.gz"
-	uploadsName   = "uploads.tar.gz" // 题面图片（v0.5a 起；旧归档无此文件，恢复端自动跳过）
+	uploadsName   = "uploads.tar.gz" // 题面图片（v0.5.1 起；旧归档无此文件，恢复端自动跳过）
 	archivePrefix = "soj-backup-"
 	archiveSuffix = ".v1.tar.age"
 )
@@ -58,7 +58,7 @@ var runMu sync.Mutex
 type Options struct {
 	MongoURI   string    // 传给 mongodump 的连接串（SOJ_MONGO_URI）
 	DataDir    string    // 测试数据卷根目录（SOJ_DATA_DIR）
-	UploadsDir string    // 题面图片目录（SOJ_UPLOADS_DIR，v0.5a 起）
+	UploadsDir string    // 题面图片目录（SOJ_UPLOADS_DIR，v0.5.1 起）
 	BackupDir  string    // 密文归档输出目录（服务器留存一份）
 	KeysDir    string    // 密钥卷目录
 	Now        time.Time // 测试注入用；零值取当前时间

@@ -1,6 +1,6 @@
 package server
 
-// 网页建题与元数据编辑（v0.5b-1）：
+// 网页建题与元数据编辑（v0.5.2-1）：
 //   - POST /api/problems：multipart 建题（元数据字段 + 题面 + 测试数据 zip），
 //     zip 只需 cases/<N>/in|ans 结构（根下平铺 N.in/N.ans 或顶层单目录包裹亦可，
 //     解压后归一/下钻），problem.yaml / statement.md 由表单生成；
@@ -80,7 +80,7 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "题面过长（上限 256KB）")
 		return
 	}
-	// 标签（v0.5f）：级联选择直传节点 ID（JSON 数组字符串），存在性由 importer 校验
+	// 标签（v0.5.5）：级联选择直传节点 ID（JSON 数组字符串），存在性由 importer 校验
 	var tagIDs []int64
 	if raw := formValue(form, "tag_ids"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &tagIDs); err != nil || len(tagIDs) > 50 {
@@ -171,7 +171,7 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 			}
 		}
 	}
-	// 文件 IO 基础文件名（v0.5b-3，单字段）：填 problem 即 problem.in / problem.out；
+	// 文件 IO 基础文件名（v0.5.2-3，单字段）：填 problem 即 problem.in / problem.out；
 	// zip 内 config.yaml 已声明 file_io_input/file_io_output 的以 config 为准
 	if pr.FileIOInput == "" && pr.FileIOOutput == "" {
 		if name := strings.TrimSpace(formValue(form, "file_io_name")); name != "" {
@@ -279,7 +279,7 @@ func (h *Handlers) RemoveChecker(c *gin.Context) {
 	ok(c, gin.H{"removed": true})
 }
 
-// ReplaceProblemTestdata 整包替换题目测试数据（编辑题目 v0.5b-4）：
+// ReplaceProblemTestdata 整包替换题目测试数据（编辑题目 v0.5.2-4）：
 // 旧测试点文件全部删除，按新 zip 重建 cases；元数据与题面正文保留，
 // 样例章节按新数据重建；新包 config.yaml 可覆盖样例/子任务/文件 IO/校验器。
 func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
@@ -378,7 +378,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		Compare        *string  `json:"compare"`
 		FloatTolerance *float64 `json:"float_tolerance"`
 		FileIOName     *string  `json:"file_io_name"`
-		TagIDs         *[]int64 `json:"tag_ids"` // 指针语义：缺省不动，空数组清空（v0.5f）
+		TagIDs         *[]int64 `json:"tag_ids"` // 指针语义：缺省不动，空数组清空（v0.5.5）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -421,7 +421,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		}
 		set["floatTolerance"] = *req.FloatTolerance
 	}
-	// 文件 IO 基础文件名（v0.5b-3，单字段）：填 problem 即 problem.in / problem.out；
+	// 文件 IO 基础文件名（v0.5.2-3，单字段）：填 problem 即 problem.in / problem.out；
 	// 允许清空（回退默认 problem），非法文件名字符（路径分隔/空白/点开头的扩展名混淆）拒绝
 	if req.FileIOName != nil {
 		t := strings.TrimSpace(*req.FileIOName)
@@ -437,7 +437,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			set["fileIoOutput"] = ""
 		}
 	}
-	// 标签（v0.5f）：节点 ID 数组，全部存在于树中才接受
+	// 标签（v0.5.5）：节点 ID 数组，全部存在于树中才接受
 	if req.TagIDs != nil {
 		if err := h.repo.ValidateTagRefs(c.Request.Context(), *req.TagIDs); err != nil {
 			fail(c, http.StatusBadRequest, err.Error())

@@ -36,7 +36,7 @@ type Contest struct {
 	Problems    []ContestProblem `bson:"problems"`
 	CreatedBy   int64            `bson:"createdBy"`
 	Published   bool             `bson:"published"` // 隐藏期结束，提交/榜单已并入公开态
-	FileIO      bool             `bson:"fileIo,omitempty"` // 本场启用文件 IO：场内所有题按各题文件名对以文件读写方式判题（v0.5b-3）
+	FileIO      bool             `bson:"fileIo,omitempty"` // 本场启用文件 IO：场内所有题按各题文件名对以文件读写方式判题（v0.5.2-3）
 	CreatedAt   time.Time        `bson:"createdAt"`
 }
 
@@ -85,7 +85,7 @@ func roundsSeq(kind string) string {
 	return "contest"
 }
 
-// ---------- 比赛/考试同构 CRUD（v0.5e ① 合并：handler 侧差异见 server/round.go） ----------
+// ---------- 比赛/考试同构 CRUD（v0.5.4 ① 合并：handler 侧差异见 server/round.go） ----------
 
 // CreateRound 创建比赛或考试（按 kind 入对应集合并独立取号）。
 func (r *Repo) CreateRound(ctx context.Context, kind string, c *Contest) error {
@@ -149,7 +149,7 @@ func (r *Repo) SetRoundFileIO(ctx context.Context, kind string, id int64, enable
 
 // SetContestIntro/SetContestFileIO/SetExamIntro/SetExamFileIO/CreateContest/GetContest/
 // DeleteContest/CreateExam/GetExam/DeleteExam 等 kind 双份薄包装已并入上方 Round 系列
-// （v0.5e ①，调用方全部改走 kind 参数化方法）。
+// （v0.5.4 ①，调用方全部改走 kind 参数化方法）。
 
 // ListClassExams 某班级的考试列表（按开始时间倒序）。
 func (r *Repo) ListClassExams(ctx context.Context, classID int64) ([]*Exam, error) {

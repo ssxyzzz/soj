@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 import { adminApi } from '@/api'
 import type { PermGroupInfo, PermInfo, RoleInfo } from '@/types'
 
-// 管理后台角色清单（v0.5e ② 拆分自 AdminView）：用户面板（角色下拉/分组）与
+// 管理后台角色清单（v0.5.4 ② 拆分自 AdminView）：用户面板（角色下拉/分组）与
 // 角色面板（矩阵）共享同一份数据，避免各拉一份。无 admin.user.manage 权限位时
 // 拉取会 403——ensure() 容错返回，保证仅有公告/设置/备份权限的面板正常工作。
 export const useAdminRolesStore = defineStore('adminRoles', () => {

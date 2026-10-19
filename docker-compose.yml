@@ -46,7 +46,7 @@ services:
       SOJ_SANDBOX_ADDR: "http://sandbox:5050"
       SOJ_BACKUP_DIR: "/data/backups"
       SOJ_KEYS_DIR: "/data/keys" # 密钥卷：与 testdata 卷分离，私钥/公钥不入库不进备份
-      SOJ_UPLOADS_DIR: "/data/uploads" # 题面图片卷（v0.5a）
+      SOJ_UPLOADS_DIR: "/data/uploads" # 题面图片卷（v0.5.1）
     ports:
       - "80:8080" # 站点入口 http://localhost（容器内仍是 8080，主机侧只暴露 80）
     volumes:

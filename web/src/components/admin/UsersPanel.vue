@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 用户管理面板（v0.5e ② 拆分自 AdminView，行为不变）：
+// 用户管理面板（v0.5.4 ② 拆分自 AdminView，行为不变）：
 // 单表 + 前端分组行渲染；搜索 200ms 防抖自动匹配、点选定位；default 学生组默认不显示。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

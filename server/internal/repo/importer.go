@@ -39,7 +39,7 @@ type problemYAML struct {
 	Visibility    string        `yaml:"visibility"`
 	Hidden        bool          `yaml:"hidden"` // 主题库隐藏
 	Tags          []string      `yaml:"tags"`
-	Compare       string        `yaml:"compare"`  // 比对模式 exact/tolerant（v0.5b-1）
+	Compare       string        `yaml:"compare"`  // 比对模式 exact/tolerant（v0.5.2-1）
 	Subtasks      []yamlSubtask `yaml:"subtasks"` // 可选：子任务分组给分（组内全过才得分）
 }
 
@@ -157,14 +157,14 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		meta.Visibility = VisibilityPublic
 	}
 
-	// config.yaml 白名单字段覆盖 problem.yaml（v0.5b-2）：未知字段忽略不报错
+	// config.yaml 白名单字段覆盖 problem.yaml（v0.5.2-2）：未知字段忽略不报错
 	cfg, err := parseProblemConfig(dir)
 	if err != nil {
 		return nil, fmt.Errorf("解析 config.yaml: %w", err)
 	}
 	cfg.applyTo(&meta)
 
-	// 标签挂载（v0.5f）：网页建题直传节点 ID（校验存在性），否则 yaml tags 按名匹配
+	// 标签挂载（v0.5.5）：网页建题直传节点 ID（校验存在性），否则 yaml tags 按名匹配
 	//（同名取首个，未命中忽略——树里没有的名字不阻塞导入）
 	tagIDs, err := im.resolveTags(ctx, meta.Tags)
 	if err != nil {
@@ -214,7 +214,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		sampleSet[i] = true
 	}
 
-	// 内置校验器（v0.5b-2）：目录内的 checker 源文件存入测试数据卷
+	// 内置校验器（v0.5.2-2）：目录内的 checker 源文件存入测试数据卷
 	checkerRel, checkerSha, checkerSrc := "", "", []byte(nil)
 	if cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
 		src, err := os.ReadFile(filepath.Join(dir, *cfg.Checker))
@@ -388,7 +388,7 @@ func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, e
 	return out, nil
 }
 
-// ReplaceCases 整包替换既有题目的测试数据（编辑题目复用建题界面，v0.5b-4）：
+// ReplaceCases 整包替换既有题目的测试数据（编辑题目复用建题界面，v0.5.2-4）：
 // dir 为新数据包解压目录（cases/<N>/in|ans 结构），旧测试点文件全部删除；
 // 标题/时限/内存/隐藏态等元数据保持不变，新包 config.yaml 可覆盖
 // 样例/子任务/文件 IO/校验器（与建题的「config 优先」语义一致）；

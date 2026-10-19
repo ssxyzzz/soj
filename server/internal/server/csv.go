@@ -1,6 +1,6 @@
 package server
 
-// 成绩导出 CSV（v0.5c 老师教学闭环）：比赛/考试榜单与作业进度的成绩单下载。
+// 成绩导出 CSV（v0.5.6 老师教学闭环）：比赛/考试榜单与作业进度的成绩单下载。
 // 文件统一 UTF-8 BOM 头（老师侧 Excel 直接打开中文不乱码），文件名走
 // RFC 5987 filename*（中文文件名在 Content-Disposition 里正确编码）。
 

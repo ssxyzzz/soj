@@ -1,6 +1,6 @@
 package repo
 
-// config.yaml 白名单解析族（v0.5e ② 自 importer.go 拆出）：题包配置的解析、
+// config.yaml 白名单解析族（v0.5.4 ② 自 importer.go 拆出）：题包配置的解析、
 // 别名归一与平铺布局归一，与导入/替换流程（importer.go）解耦——zip 上传与
 // 命令行导入两条路径共用。yamlSubtask 同属本族（subtasks 字段类型）。
 
@@ -30,9 +30,9 @@ type configYAML struct {
 	CheckerType    *string        `yaml:"checker_type"`  // default→exact、tokens→tolerant、strict→exact、custom→需配 checker 文件
 	Checker        *string        `yaml:"checker"`       // 校验器源文件名（zip 内）
 	FloatTolerance *float64       `yaml:"float_tolerance"`
-	FileIO         *bool          `yaml:"file_io"`        // v0.5b-3 生效
-	FileIOInput    *string        `yaml:"file_io_input"`  // v0.5b-3 生效
-	FileIOOutput   *string        `yaml:"file_io_output"` // v0.5b-3 生效
+	FileIO         *bool          `yaml:"file_io"`        // v0.5.2-3 生效
+	FileIOInput    *string        `yaml:"file_io_input"`  // v0.5.2-3 生效
+	FileIOOutput   *string        `yaml:"file_io_output"` // v0.5.2-3 生效
 	Samples        *[]int         `yaml:"samples"`
 	Subtasks       *[]yamlSubtask `yaml:"subtasks"`
 }

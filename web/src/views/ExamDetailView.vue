@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 考试详情（薄壳，v0.5e ①：实现见 RoundDetailView）
+// 考试详情（薄壳，v0.5.4 ①：实现见 RoundDetailView）
 import RoundDetailView from '@/components/RoundDetailView.vue'
 </script>
 

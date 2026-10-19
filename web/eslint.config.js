@@ -1,4 +1,4 @@
-// v0.5e ④：ESLint 引入（推荐规则集，不做激进风格配置——风格交给现有约定）
+// v0.5.4 ④：ESLint 引入（推荐规则集，不做激进风格配置——风格交给现有约定）
 // vue-tsc 管类型，ESLint 管未用导入/变量、Vue 语义规则与可维护性。
 import pluginVue from 'eslint-plugin-vue'
 import vueTsEslintConfig from '@vue/eslint-config-typescript'

@@ -199,7 +199,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		log.Printf("[boot] 样例已并入题面（Markdown）")
 	}
 	if !flagDone("solutionManageV1") {
-		// v0.5b-1：题解管理权限位（初始归属 admin）补发存量 admin 角色
+		// v0.5.2-1：题解管理权限位（初始归属 admin）补发存量 admin 角色
 		if _, err := r.Roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": PermSolutionManage}}); err != nil {
@@ -211,7 +211,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		log.Printf("[boot] admin 角色已补发题解管理权限位（solution.manage）")
 	}
 	if !flagDone("submissionViewUserV1") {
-		// v0.5b-2：查看用户提交明细权限位（初始归属 admin）补发存量 admin 角色
+		// v0.5.2-2：查看用户提交明细权限位（初始归属 admin）补发存量 admin 角色
 		if _, err := r.Roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": PermSubmissionViewUser}}); err != nil {

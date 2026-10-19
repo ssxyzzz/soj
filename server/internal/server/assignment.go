@@ -329,7 +329,7 @@ func (h *Handlers) AssignmentProgress(c *gin.Context) {
 	ok(c, items)
 }
 
-// AssignmentExport 作业成绩导出（班级管理员/root，v0.5c）：
+// AssignmentExport 作业成绩导出（班级管理员/root，v0.5.6）：
 // 列 = 用户名/真实姓名（持 user.realname.view 才含）/各题最高分/总分（最高分合计）/通过题数/做过题数，
 // 行序 = 班级成员清单序（与进度表一致；作业无竞技排名，不设排名列）。
 func (h *Handlers) AssignmentExport(c *gin.Context) {
@@ -366,7 +366,7 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "统计失败")
 		return
 	}
-	// 真实姓名列（v0.5c 拍板）：仅持 user.realname.view 的导出方可见（部署者自建教务角色授权）
+	// 真实姓名列（v0.5.6 拍板）：仅持 user.realname.view 的导出方可见（部署者自建教务角色授权）
 	wantRealName := hasPerm(c, repo.PermUserRealNameView)
 	users := map[int64]*repo.User{}
 	if wantRealName {

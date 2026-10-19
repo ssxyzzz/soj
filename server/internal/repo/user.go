@@ -34,7 +34,7 @@ type UserPrefs struct {
 	DefaultLang   string            `bson:"defaultLang,omitempty" json:"defaultLang,omitempty"`
 	CodeTemplates map[string]string `bson:"codeTemplates,omitempty" json:"codeTemplates,omitempty"`
 	MdEditMode    string            `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"` // wysiwyg / ir / sv，空为默认所见即所得
-	Autocomplete  *bool             `bson:"autocomplete,omitempty" json:"autocomplete,omitempty"` // 代码自动补全（v0.5d，默认开箱开启；后续按用户等级门槛放开——预留接口）
+	Autocomplete  *bool             `bson:"autocomplete,omitempty" json:"autocomplete,omitempty"` // 代码自动补全（v0.5.3，默认开箱开启；后续按用户等级门槛放开——预留接口）
 	CodeFont      string            `bson:"codeFont,omitempty" json:"codeFont,omitempty"`         // 代码编辑器字体：Consolas / Menlo / Monaco，空为 Consolas
 	CodeFontSize  int               `bson:"codeFontSize,omitempty" json:"codeFontSize,omitempty"` // 编辑器字号 px（12-48），0 为默认 15
 }
@@ -46,7 +46,7 @@ type User struct {
 	Nickname     string     `bson:"nickname"`
 	Role         string     `bson:"role"`
 	CreatedAt    time.Time  `bson:"createdAt"`
-	RealName     string     `bson:"realName,omitempty"` // 真实姓名：仅管理员可改；可见 = 本人 + 管理员后台 + 持 user.realname.view（成绩导出 CSV，v0.5c）
+	RealName     string     `bson:"realName,omitempty"` // 真实姓名：仅管理员可改；可见 = 本人 + 管理员后台 + 持 user.realname.view（成绩导出 CSV，v0.5.6）
 	Gender       string     `bson:"gender,omitempty"`   // 性别/学校/年级/QQ：本人自助修改，他人不可见
 	School       string     `bson:"school,omitempty"`
 	Grade        string     `bson:"grade,omitempty"`

@@ -1,6 +1,6 @@
 package server
 
-// 比赛/考试同构 handler（v0.5e ① 合并，2026-10-17 差异盘点定稿）。
+// 比赛/考试同构 handler（v0.5.4 ① 合并，2026-10-17 差异盘点定稿）。
 //
 // 差异清单（合并依据，全部差异收敛为四点）：
 //  1. 存取集合与文案：kind/name（contests/exams 集合，「比赛」/「考试」）；
@@ -37,7 +37,7 @@ var (
 
 // ---------- 共享创建 ----------
 
-// roundCreateReq 创建请求（比赛/考试字段一致，FileIO 见 v0.5b-3）。
+// roundCreateReq 创建请求（比赛/考试字段一致，FileIO 见 v0.5.2-3）。
 type roundCreateReq struct {
 	Title      string    `json:"title" binding:"required"`
 	Intro      string    `json:"intro"`
@@ -175,7 +175,7 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 		"participant":   participant,
 		"is_organizer":  isOrganizer,
 		"deletable":     isOrganizer && status == "scheduled",
-		"file_io":       ct.FileIO, // 本场启用文件 IO（v0.5b-3）
+		"file_io":       ct.FileIO, // 本场启用文件 IO（v0.5.2-3）
 	}
 	if !ct.HiddenUntil.IsZero() {
 		resp["hidden_until"] = ct.HiddenUntil
@@ -615,7 +615,7 @@ func (h *Handlers) ContestLeaderboard(c *gin.Context) { h.roundLeaderboard(c, sc
 // ExamLeaderboard 考试榜单：考时与隐藏期内仅组织者/root 可见。
 func (h *Handlers) ExamLeaderboard(c *gin.Context) { h.roundLeaderboard(c, scopeExam) }
 
-// ---------- 成绩导出 CSV（v0.5c 老师教学闭环） ----------
+// ---------- 成绩导出 CSV（v0.5.6 老师教学闭环） ----------
 
 // roundExport 比赛/考试成绩单导出（organizer/root）：
 // 列 = 排名/用户名/真实姓名（持 user.realname.view 才含）/各题得分/总分，行序与榜单一致；
@@ -645,7 +645,7 @@ func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
 		fail(c, http.StatusInternalServerError, "计算榜单失败")
 		return
 	}
-	// 真实姓名列（v0.5c 拍板）：仅持 user.realname.view 的导出方可见（部署者自建教务角色授权）
+	// 真实姓名列（v0.5.6 拍板）：仅持 user.realname.view 的导出方可见（部署者自建教务角色授权）
 	wantRealName := hasPerm(c, repo.PermUserRealNameView)
 	users := map[int64]*repo.User{}
 	if wantRealName {
