@@ -6,7 +6,8 @@ import { Refresh } from '@element-plus/icons-vue'
 import { submissionApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
-import { fmtDate, fmtMem, statusDesc, statusStyle } from '@/utils/format'
+import SubStatus from '@/components/SubStatus.vue'
+import { fmtDate, fmtMem, statusDesc } from '@/utils/format'
 import type { Submission } from '@/types'
 
 const router = useRouter()
@@ -63,8 +64,7 @@ onUnmounted(() => {
         </div>
       </template>
       <el-table stripe v-loading="loading" :data="list">
-        <el-table-column prop="id" label="ID" width="90" />
-        <el-table-column label="结果" width="130">
+        <el-table-column label="状态" width="140">
           <template #default="{ row }">
             <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
               <template #content>
@@ -73,22 +73,13 @@ onUnmounted(() => {
                   <div v-if="statusDesc(row.status)!.cause">常见原因：{{ statusDesc(row.status)!.cause }}</div>
                 </div>
               </template>
-              <el-tag
-                :type="statusStyle(row.status).type"
-                class="status-tag clickable"
-                @click.stop="openDetail(row.id)"
-              >
-{{ statusStyle(row.status).label }}
-</el-tag>
+              <span class="status-tag clickable" @click.stop="openDetail(row.id)">
+                <SubStatus :status="row.status" :score="row.score" />
+              </span>
             </el-tooltip>
-            <el-tag
-              v-else
-              :type="statusStyle(row.status).type"
-              class="status-tag clickable"
-              @click.stop="openDetail(row.id)"
-            >
-{{ statusStyle(row.status).label }}
-</el-tag>
+            <span v-else class="status-tag clickable" @click.stop="openDetail(row.id)">
+              <SubStatus :status="row.status" :score="row.score" />
+            </span>
           </template>
         </el-table-column>
         <el-table-column label="题目" min-width="200">
@@ -106,17 +97,11 @@ onUnmounted(() => {
         </el-table-column>
         <el-table-column prop="username" label="用户" width="140" />
         <el-table-column prop="language" label="语言" width="100" />
-        <el-table-column label="耗时" width="90">
+        <el-table-column label="总耗时" width="90">
           <template #default="{ row }">{{ row.time_ms }} ms</template>
         </el-table-column>
-        <el-table-column label="内存" width="100">
+        <el-table-column label="总内存" width="100">
           <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
-        </el-table-column>
-        <el-table-column label="得分" width="80">
-          <template #default="{ row }">
-            <span v-if="row.score != null">{{ row.score }}</span>
-            <span v-else class="dim">—</span>
-          </template>
         </el-table-column>
         <el-table-column label="提交时间" width="180">
           <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>

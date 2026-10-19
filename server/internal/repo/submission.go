@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -24,10 +25,11 @@ const (
 
 // CaseResult 单个测试点结果（状态缩写: AC/WA/TLE/MLE/RE/OLE/SE）。
 type CaseResult struct {
-	Index  int    `bson:"index"  json:"index"`
-	Status string `bson:"status" json:"status"`
-	TimeMS int    `bson:"timeMs" json:"timeMs"`
-	MemKB  int    `bson:"memKb"  json:"memKb"`
+	Index  int    `bson:"index"        json:"index"`
+	Status string `bson:"status"       json:"status"`
+	TimeMS int    `bson:"timeMs"       json:"time_ms"`
+	MemKB  int    `bson:"memKb"        json:"memory_kb"`
+	Msg    string `bson:"msg,omitempty" json:"msg,omitempty"` // 失败明细（如 超出时间限制 / 未生成输出文件 x.out），AC 为空
 }
 
 type Submission struct {
@@ -126,6 +128,28 @@ func (r *Repo) FinishSubmission(ctx context.Context, sid int64, status string, t
 	return err
 }
 
+// ErrJudging 提交正在评测中，不可重测。
+var ErrJudging = errors.New("submission is being judged")
+
+// RejudgeSubmission 重测：把一条非评测中的提交重置为 Pending，交还判题线程池自动领取重评。
+// 评测中的提交返回 ErrJudging；不存在返回 mongo.ErrNoDocuments。
+func (r *Repo) RejudgeSubmission(ctx context.Context, id int64) error {
+	err := r.Submissions.FindOneAndUpdate(ctx,
+		bson.M{"_id": id, "status": bson.M{"$nin": bson.A{StatusPending, StatusJudging}}},
+		bson.M{"$set": bson.M{"status": StatusPending}},
+	).Err()
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		// 区分「不存在」与「评测中」
+		if r.Submissions.FindOne(ctx, bson.M{"_id": id}).Err() == nil {
+			return ErrJudging
+		}
+	}
+	return err
+}
+
 func (r *Repo) GetSubmission(ctx context.Context, id int64) (*Submission, error) {
 	var s Submission
 	if err := r.Submissions.FindOne(ctx, bson.M{"_id": id}).Decode(&s); err != nil {
@@ -173,20 +197,28 @@ func (r *Repo) HasSolved(ctx context.Context, uid, pid int64) (bool, error) {
 	return n > 0, err
 }
 
-// UserProblemStatuses 批量查某用户在一组题目的做题状态（题库「已通过」状态列，v0.5c）：
-// "ac" = 任一 AC 提交，"tried" = 有提交无 AC，未出现 = 无提交。
+// UserBestStatus 该用户在某题的代表性提交：最高分那条的状态与得分（题库状态列，v0.5.6 升级）。
+type UserBestStatus struct {
+	Status string `bson:"status"`
+	Score  int    `bson:"score"`
+}
+
+// UserBestStatuses 批量查某用户在一组题目的最高分提交状态（题库状态列，v0.5.6 升级）：
+// 每题取 published 提交中得分最高的一条（并列取最新），未出现 = 无公开提交。
 // 口径与通过率统计/总榜一致（published=true）：比赛/考试隐藏期内的提交不计，
 // 防 OI 赛制下从状态列推测赛中判题结果。
-func (r *Repo) UserProblemStatuses(ctx context.Context, uid int64, pids []int64) (map[int64]string, error) {
-	out := make(map[int64]string, len(pids))
+func (r *Repo) UserBestStatuses(ctx context.Context, uid int64, pids []int64) (map[int64]UserBestStatus, error) {
+	out := make(map[int64]UserBestStatus, len(pids))
 	if uid <= 0 || len(pids) == 0 {
 		return out, nil
 	}
 	cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
 		{"$match": bson.M{"uid": uid, "pid": bson.M{"$in": pids}, "published": true}},
+		{"$sort": bson.M{"pid": 1, "score": -1, "_id": -1}},
 		{"$group": bson.M{
-			"_id": "$pid",
-			"ac":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{"$status", StatusAccepted}}, 1, 0}}},
+			"_id":    "$pid",
+			"status": bson.M{"$first": "$status"},
+			"score":  bson.M{"$first": "$score"},
 		}},
 	})
 	if err != nil {
@@ -195,24 +227,21 @@ func (r *Repo) UserProblemStatuses(ctx context.Context, uid int64, pids []int64)
 	defer cursor.Close(ctx)
 	for cursor.Next(ctx) {
 		var row struct {
-			ID int64 `bson:"_id"`
-			Ac int64 `bson:"ac"`
+			ID     int64  `bson:"_id"`
+			Status string `bson:"status"`
+			Score  int    `bson:"score"`
 		}
 		if err := cursor.Decode(&row); err != nil {
 			return nil, err
 		}
-		if row.Ac > 0 {
-			out[row.ID] = "ac"
-		} else {
-			out[row.ID] = "tried"
-		}
+		out[row.ID] = UserBestStatus{Status: row.Status, Score: row.Score}
 	}
 	return out, cursor.Err()
 }
 
 // ListPidSubmissions 题目维提交列表（含代码，分页）。
-// uid > 0 时只看该用户的（我的提交，最新在前）；uid = 0 为他人代码视图：
-// sort=time（默认，耗时升序、并列按内存）/ sort=mem（内存升序、并列按耗时），
+// uid > 0 时只看该用户的（我的提交，最新在前）；uid = 0 为所有代码视图：
+// sort 为空或 recent（默认，最近提交在前）/ time（耗时升序、并列按内存）/ mem（内存升序、并列按耗时），
 // lang 非空时按语言过滤。published=true 过滤掉隐藏期内比赛/考试的提交。
 func (r *Repo) ListPidSubmissions(ctx context.Context, pid int64, uid int64, page, pageSize int, sort, lang string) ([]*Submission, int64, error) {
 	filter := bson.M{"pid": pid, "published": true}
@@ -226,12 +255,11 @@ func (r *Repo) ListPidSubmissions(ctx context.Context, pid int64, uid int64, pag
 	if err != nil {
 		return nil, 0, err
 	}
-	sortSpec := bson.D{{Key: "_id", Value: -1}}
-	if uid == 0 {
+	sortSpec := bson.D{{Key: "_id", Value: -1}} // 我的提交 / 所有代码默认：最近提交在前
+	if uid == 0 && sort == "time" {
 		sortSpec = bson.D{{Key: "timeMs", Value: 1}, {Key: "memKb", Value: 1}}
-		if sort == "mem" {
-			sortSpec = bson.D{{Key: "memKb", Value: 1}, {Key: "timeMs", Value: 1}}
-		}
+	} else if uid == 0 && sort == "mem" {
+		sortSpec = bson.D{{Key: "memKb", Value: 1}, {Key: "timeMs", Value: 1}}
 	}
 	cursor, err := r.Submissions.Find(ctx, filter,
 		options.Find().SetSort(sortSpec).

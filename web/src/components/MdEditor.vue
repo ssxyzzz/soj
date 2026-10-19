@@ -76,9 +76,13 @@ onMounted(async () => {
     mode,
     value: props.modelValue,
     cache: { enable: false },
+    preview: {
+      // SV/IR 分屏预览区顶部只留渲染结果：去掉 Desktop/Tablet/Mobile 设备切换与公众号/知乎导出动作条
+      actions: [],
+    },
     toolbar: TOOLBARS[props.variant] ?? TOOLBARS.full,
     placeholder: '支持 Markdown 与所见即所得，右上角可切换编辑模式；可直接粘贴/拖入图片',
-    // 题面图片上传（v0.5a）：粘贴截图或拖入图片自动上传，成功后插入 /uploads/ 引用。
+    // 题面图片上传（v0.5.1）：粘贴截图或拖入图片自动上传，成功后插入 /uploads/ 引用。
     // 后端响应即 Vditor 约定格式（succMap/errFiles）；鉴权头与全局拦截器同一身份源。
     upload: {
       url: '/api/uploads',
@@ -122,7 +126,7 @@ onUnmounted(() => inst?.destroy())
    仅内容区滚动（工具栏固定），全屏态交给 vditor 自己的 fixed 定位不参与 */
 .md-editor--grow :deep(.vditor:not(.vditor--fullscreen)) {
   height: auto !important;
-  min-height: v-bind('props.height');
+  min-height: 300px; /* 空内容时的可用下限，其余高度完全跟内容走 */
   max-height: v-bind('props.maxHeight');
   display: flex;
   flex-direction: column;

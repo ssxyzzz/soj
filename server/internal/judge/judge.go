@@ -123,7 +123,7 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 	cmp := newOutputComparer(problem)
 	chk := j.checkerRunnerFor(problem)
 
-	// 文件 IO 模式（v0.5b-3）：仅比赛/考试「本场启用文件 IO」时生效；
+	// 文件 IO 模式（v0.5.2-3）：仅比赛/考试「本场启用文件 IO」时生效；
 	// 题库/练习/作业恒为 stdio。文件名对取题目配置，缺省 problem.in / problem.out。
 	fio := fileIOParams{}
 	if sub.ContestID > 0 {
@@ -145,22 +145,18 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 	return j.evaluatePoints(ctx, language, fileID, sub.Code, problem, cmp, chk, fio)
 }
 
-// evalState 评测过程中的累计状态。
+// evalState 评测过程中的累计状态。提交级耗时/内存为各测试点之**和**（总耗时/总内存）。
 type evalState struct {
-	maxTimeMS int
-	maxMemKB  int
+	sumTimeMS int
+	sumMemKB  int
 	detail    []*repo.CaseResult
 }
 
 func (s *evalState) observe(res *sandbox.Result) (timeMS, memKB int) {
 	timeMS = int(res.Time / int64(time.Millisecond))
 	memKB = int(res.Memory / 1024)
-	if timeMS > s.maxTimeMS {
-		s.maxTimeMS = timeMS
-	}
-	if memKB > s.maxMemKB {
-		s.maxMemKB = memKB
-	}
+	s.sumTimeMS += timeMS
+	s.sumMemKB += memKB
 	return timeMS, memKB
 }
 
@@ -246,19 +242,36 @@ type fileIOParams struct {
 	outName string
 }
 
-// programOutput 取考生输出：stdio 模式为 stdout 管道；文件模式为收集到的输出文件。
-// 文件模式下未生成输出文件返回 ok=false（判 WA 并注明文件名）。
-func programOutput(res *sandbox.Result, fio fileIOParams) (string, bool) {
-	if !fio.enabled {
-		return res.Stdout(), true
+// programOutput 取考生输出：优先响应内联内容；copyOutCached 形态（大输出走沙箱文件
+// 缓存、不经 /run 响应 JSON——MB 级输出会撑爆响应读取上限）按 fileID 拉取，取完即删。
+// err 非 nil 为基础设施错误（调用方判 System Error）。
+func (j *Judger) programOutput(ctx context.Context, res *sandbox.Result, fio fileIOParams) (string, bool, error) {
+	name := "stdout"
+	if fio.enabled {
+		name = fio.outName
 	}
-	if !res.HasFile(fio.outName) {
-		return "", false
+	if s, ok := res.Files[name]; ok {
+		return sandbox.DecodeContent(s), true, nil
 	}
-	return res.File(fio.outName), true
+	id, ok := res.FileID(name)
+	if !ok {
+		return "", false, nil
+	}
+	fctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	data, err := j.Sandbox.FetchFile(fctx, id, maxStdout)
+	dctx, dcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dcancel()
+	if derr := j.Sandbox.DeleteFile(dctx, id); derr != nil {
+		log.Printf("[judge] 清理输出缓存文件失败: %v", derr)
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("拉取考生输出失败: %w", err)
+	}
+	return string(data), true, nil
 }
 
-// judgeCase 单测试点判定核心（v0.5e ③ 去重：evaluatePoints 与 evaluateSubtasks 原各持一份同构实现）。
+// judgeCase 单测试点判定核心（v0.5.4 ③ 去重：evaluatePoints 与 evaluateSubtasks 原各持一份同构实现）。
 // 返回 caseStatus（明细行）/ finalStatus（整体终态，空 = 继续）/ reason；err 非 nil 为致命错误
 // （答案读取/校验器异常），由调用方整体判 System Error。
 func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.Result, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (caseStatus, finalStatus, reason string, err error) {
@@ -270,7 +283,10 @@ func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.R
 		caseStatus, finalStatus, reason = caseVerdict(res, res.Stdout(), "", cmp)
 		return caseStatus, finalStatus, reason, nil
 	}
-	progOut, progOK := programOutput(res, fio)
+	progOut, progOK, perr := j.programOutput(ctx, res, fio)
+	if perr != nil {
+		return "", "", "", fmt.Errorf("读取考生输出失败: %w", perr)
+	}
 	if !progOK {
 		return "WA", repo.StatusWrongAnswer, fmt.Sprintf("未生成输出文件 %s", fio.outName), nil
 	}
@@ -292,30 +308,47 @@ func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.R
 	return caseStatus, finalStatus, reason, nil
 }
 
-// evaluatePoints 单点等分模式：每点 100/n 分，首个失败即终止（历史行为）。
+// evaluatePoints 单点等分模式：每点 100/n 分。超时（TLE）只判失当前点、继续评测后续点
+// （得分=通过点数×100/n，首个 TLE 点作为整卷状态）；其余失败维持首个失败即终止的历史行为。
 func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	st := &evalState{}
+	n := len(problem.Cases)
+	passed := 0
+	tleIdx := 0 // 首个超时点（1 基，0 = 无）
 	for i, tc := range problem.Cases {
 		res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 		if err != nil {
-			return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
+			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(i, n),
 				"沙箱调用失败: " + err.Error(), st.detail
 		}
 		t, m := st.observe(res)
 		caseStatus, finalStatus, reason, jerr := j.judgeCase(ctx, tc, res, problem, cmp, chk, fio)
 		if jerr != nil {
-			return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
+			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(i, n),
 				jerr.Error(), st.detail
 		}
 		if caseStatus != "" {
-			st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m})
+			st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
 		}
-		if finalStatus != "" {
-			return finalStatus, st.maxTimeMS, st.maxMemKB, partialScore(i, len(problem.Cases)),
-				fmt.Sprintf("第 %d 个测试点: %s", i+1, reason), st.detail
+		if finalStatus == "" {
+			passed++
+			continue
 		}
+		if finalStatus == repo.StatusTLE {
+			// 超时只判失当前点，继续评测后续点
+			if tleIdx == 0 {
+				tleIdx = i + 1
+			}
+			continue
+		}
+		return finalStatus, st.sumTimeMS, st.sumMemKB, partialScore(i, n),
+			fmt.Sprintf("第 %d 个测试点: %s", i+1, reason), st.detail
 	}
-	return repo.StatusAccepted, st.maxTimeMS, st.maxMemKB, 100, "", st.detail
+	if tleIdx > 0 {
+		return repo.StatusTLE, st.sumTimeMS, st.sumMemKB, passed * 100 / n,
+			fmt.Sprintf("第 %d 个测试点: 超出时间限制", tleIdx), st.detail
+	}
+	return repo.StatusAccepted, st.sumTimeMS, st.sumMemKB, 100, "", st.detail
 }
 
 // evaluateSubtasks 子任务模式：组内测试点全过才得该组分；组内失败跳过该组剩余点继续下一组。
@@ -334,22 +367,22 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, 
 		for _, caseIdx := range subtask.Cases {
 			tc, ok := byIndex[caseIdx]
 			if !ok {
-				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					"子任务配置引用了不存在的测试点", st.detail
 			}
 			res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 			if err != nil {
-				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					"沙箱调用失败: " + err.Error(), st.detail
 			}
 			t, m := st.observe(res)
 			caseStatus, finalStatus, reason, jerr := j.judgeCase(ctx, tc, res, problem, cmp, chk, fio)
 			if jerr != nil {
-				return repo.StatusSystemError, st.maxTimeMS, st.maxMemKB, total,
+				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					jerr.Error(), st.detail
 			}
 			if caseStatus != "" {
-				st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m})
+				st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
 			}
 			if finalStatus != "" {
 				passed = false
@@ -366,12 +399,12 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, 
 	}
 
 	if total == 100 {
-		return repo.StatusAccepted, st.maxTimeMS, st.maxMemKB, 100, "", st.detail
+		return repo.StatusAccepted, st.sumTimeMS, st.sumMemKB, 100, "", st.detail
 	}
 	if firstFailStatus == "" {
 		firstFailStatus, firstFailReason = repo.StatusWrongAnswer, "未通过全部子任务"
 	}
-	return firstFailStatus, st.maxTimeMS, st.maxMemKB, total, firstFailReason, st.detail
+	return firstFailStatus, st.sumTimeMS, st.sumMemKB, total, firstFailReason, st.detail
 }
 
 // partialScore 已通过的测试点数占比（单点等分模式）。
@@ -464,7 +497,10 @@ func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code stri
 		ClockLimit:  cpuLimit * 3, // 墙钟上限，防止 sleep 绕过 CPU 限制
 		MemoryLimit: int64(p.MemoryLimitKB) << 10,
 		ProcLimit:   64,
-		CopyOut:     []string{"stdout", "stderr"},
+		CopyOut:     []string{"stderr"},
+		// stdout 走 copyOutCached（沙箱文件缓存，按 fileID 拉取）：MB 级输出内联在
+		// /run 响应 JSON 里会撑爆响应读取上限（曾致大输出测试点误判 System Error）
+		CopyOutCached: []string{"stdout"},
 	}
 	if l.NeedCompile {
 		cmd.CopyIn = map[string]sandbox.CopyFile{"main": {FileID: fileID}}
@@ -473,9 +509,9 @@ func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code stri
 	}
 	if fio.enabled {
 		// 文件 IO：测试点输入按题目配置的文件名拷入工作目录，
-		// 程序 freopen 读入、把答案写到输出文件名，判题收集该文件比对
+		// 程序 freopen 读入、把答案写到输出文件名，判题收集该文件比对（同样走缓存形态）
 		cmd.CopyIn[fio.inName] = sandbox.CopyFile{Content: string(input)}
-		cmd.CopyOut = append(cmd.CopyOut, fio.outName)
+		cmd.CopyOutCached = append(cmd.CopyOutCached, fio.outName)
 	}
 	results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
 	if err != nil || len(results) == 0 {
@@ -515,7 +551,7 @@ func truncate(s string, n int) string {
 	return s[:n] + "\n...(已截断)"
 }
 
-// ---- checker（v0.5b-2）：自定义校验器 ----
+// ---- checker（v0.5.2-2）：自定义校验器 ----
 
 // checkerRunner checker 判定器：懒编译（编译产物 fileId 缓存进题目元数据，
 // 缓存失效自动重编一次）+ 三流执行。调用约定与 testlib 惯例一致：

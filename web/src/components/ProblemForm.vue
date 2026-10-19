@@ -161,11 +161,7 @@ function onSubmitClick() {
             <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
           </el-form-item>
           <el-form-item label="题面" required>
-            <MdEditor
-              v-model="form.statement"
-              :height="mode === 'edit' ? '960px' : '840px'"
-              :max-height="mode === 'edit' ? '1920px' : '1680px'"
-            />
+            <MdEditor v-model="form.statement" max-height="4000px" />
           </el-form-item>
         </el-card>
       </div>
@@ -241,9 +237,9 @@ function onSubmitClick() {
             <div class="field-group">
               <div class="field-label">时限 / 内存</div>
               <div class="limits">
-                <el-input-number v-model="form.time_limit_ms" :min="100" :max="600000" :step="100" />
+                <el-input-number v-model="form.time_limit_ms" :controls="false" :min="100" :max="600000" :step="100" />
                 <span class="dim">ms</span>
-                <el-input-number v-model="form.memory_limit_mb" :min="16" :max="1024" :step="16" />
+                <el-input-number v-model="form.memory_limit_mb" :controls="false" :min="16" :max="1024" :step="16" />
                 <span class="dim">MB</span>
               </div>
             </div>
@@ -373,7 +369,12 @@ function onSubmitClick() {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap; /* 时限与内存一行排布 */
+}
+
+/* 纯填空框（去加减按钮）并限宽，保证两个框加单位在右列一行放下 */
+.limits :deep(.el-input-number) {
+  width: 90px;
 }
 
 .zip-upload {
@@ -382,6 +383,8 @@ function onSubmitClick() {
 
 .zip-upload :deep(.el-upload-dragger) {
   width: 100%;
+  /* 纵向内边距 40 → 10：拖拽框高度约减半（高度 = 上下内边距 + 两行提示文字） */
+  --el-upload-dragger-padding-vertical: 10px;
 }
 
 .zip-replace-hint {

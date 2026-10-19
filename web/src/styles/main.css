@@ -1,3 +1,27 @@
+/* ============================================================
+   全站字号登记表（改字号先查/改这张表；改后必须重跑产物核对）
+   ------------------------------------------------------------
+   基线        14  body（界面/表单/按钮/菜单/表格文字与表头/弹窗内容/代码显示）
+   表格内标签  13  .el-table .el-tag（唯一表格特例，压过全局 tag 14）
+   全局标签    14  .el-tag
+   小徽章      12  caret ▸ / 引用数角标 / 删除钮 / MdView 语言徽标
+   区块小标题  16  BackupPanel .section-title / RolesPanel .root-check（600）
+   页头大标题  22  .big-title ×3 / 倒计时 / SOJ 品牌（600）
+   首页 hero   30  HomeView .title（600）
+   统计大数字  32  ProblemListView .stat-big（600）
+   emoji 图标  36  HomeView .feature-icon
+   代码显示    14  pre,code,kbd,samp
+   CM6 编辑器  14  CodeEditor 默认（可调 12-48）
+   ---- Markdown 富文本（vditor-reset，基准 16，行内单位 em）----
+   正文        16  .vditor-reset
+   h1/h2/h3    1.35/1.2/1.08em   h4-h6 1em
+   行内 code  0.9em（翻倍类选择器）   块级 code 14px
+   ---- EP 出厂未覆盖（如实渲染值，改则另行加覆盖）----
+   tooltip/popover/alert/message/分页/上传文字 14
+   确认框与弹窗标题 18（--el-font-size-large）
+   404 el-result 标题 20
+   vditor 弹层 chrome：面板 14 / hint·计数·大纲 12（出厂值）
+   ============================================================ */
 html,
 body,
 #app {
@@ -57,7 +81,7 @@ body {
 }
 
 /* ---- 表格 Ant 化：表头 #fafafa 底 + 竖线；表体斑马纹走模板 stripe 属性
-   （底色即 --el-fill-color-lighter #fafafa，展开行/合并行计数正确）----
+   （底色即 --el-fill-color-lighter #fafafa，展开行/合并行计数正确）---- */
 .el-table {
   --el-table-header-bg-color: var(--el-fill-color-lighter);
   --el-table-border-color: var(--el-border-color-light);
@@ -65,6 +89,11 @@ body {
   /* EP 自声明在 .el-table 上（:root 覆盖无效）：表体/表头文字升 primary 黑 */
   --el-table-header-text-color: var(--el-text-color-primary);
   --el-table-text-color: var(--el-text-color-primary);
+}
+
+/* 表内仅标签字号 13（其余表内文字维持界面基线 14；覆盖全局 .el-tag 的 14） */
+.el-table .el-tag {
+  font-size: 13px;
 }
 
 /* 卡片/弹窗/messagebox 圆角 8（EP 自声明在组件类上，须在此覆盖） */
@@ -126,6 +155,72 @@ pre {
 b,
 strong {
   font-weight: 600;
+}
+
+/* ---- 提交状态小圆灯（CSS 圆点而非 emoji：跨平台尺寸/颜色一致）----
+   灯 + 英文简称 + 同色分数（SubStatus 组件三件套）；色语义：
+   绿=通过 红=答案/运行错 黄=超限类 灰=编译错·排队·系统错 蓝=评测中 */
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot.green {
+  background: var(--el-color-success);
+}
+
+.dot.yellow {
+  background: var(--el-color-warning);
+}
+
+.dot.red {
+  background: var(--el-color-danger);
+}
+
+.dot.blue {
+  background: var(--el-color-primary);
+}
+
+.dot.gray {
+  background: var(--el-color-info);
+}
+
+.sub-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.sub-status.green {
+  color: var(--el-color-success);
+}
+
+.sub-status.yellow {
+  color: var(--el-color-warning);
+}
+
+.sub-status.red {
+  color: var(--el-color-danger);
+}
+
+.sub-status.blue {
+  color: var(--el-color-primary);
+}
+
+.sub-status.gray {
+  color: var(--el-text-color-secondary);
+}
+
+/* 测试点明细「明细」列：有内容即红字（失败原因/系统级错误） */
+.case-err {
+  color: var(--el-color-danger);
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 /* ---- 标签五级层级色（后台 TagsPanel / 前台 TagChips 卡片流共用）----
@@ -387,6 +482,11 @@ strong {
 
 .vditor-toolbar__item {
   margin: 0 1px;
+}
+
+/* vditor 全屏态自身不画背景（fixed 透明层会透出页面内容），补实底 */
+.vditor--fullscreen {
+  background: var(--el-bg-color);
 }
 
 .vditor-panel {

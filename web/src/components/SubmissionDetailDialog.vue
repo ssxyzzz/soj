@@ -2,9 +2,14 @@
 // 评测详情弹窗（共享）：状态标签点击后查看该评测记录的代码与测试点明细。
 // 数据来源二选一：submissionId（按需拉取 /submissions/:id，可见性由后端判定）或
 // submission（列表已带代码与明细时直接传入，避免多余请求）。
+// 教师级权限（submission.view.all）可重测：重置 Pending 交还判题池，轮询至终态。
 import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+
 import { submissionApi } from '@/api'
-import { fmtDate, fmtMem, statusDesc, statusStyle } from '@/utils/format'
+import SubStatus from '@/components/SubStatus.vue'
+import { fmtDate, fmtMem, statusDesc } from '@/utils/format'
+import { useUserStore } from '@/stores/user'
 import type { Submission } from '@/types'
 
 const props = withDefaults(
@@ -19,11 +24,26 @@ const props = withDefaults(
 
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 
+const userStore = useUserStore()
 const loading = ref(false)
 const detail = ref<Submission | null>(null)
+const polled = ref<Submission | null>(null) // 重测轮询拿到的最新数据（优先于传入的列表快照）
+const rejudging = ref(false)
+let pollToken = 0
 
-const sub = computed<Submission | null>(() => props.submission ?? detail.value)
+const sub = computed<Submission | null>(() => polled.value ?? props.submission ?? detail.value)
 const heading = computed(() => props.title || (sub.value ? `评测详情 #${sub.value.id}` : '评测详情'))
+const canRejudge = computed(() => userStore.can('submission.view.all'))
+const judging = computed(() => sub.value?.status === 'Pending' || sub.value?.status === 'Judging')
+// 测试点按题目数据顺序展示（防后端返回顺序波动）；系统级错误（沙箱失败等）并入表尾明细行
+const sortedDetail = computed(() => {
+  const rows = [...(sub.value?.detail ?? [])].sort((a, b) => a.index - b.index)
+  const info = sub.value?.error_info
+  // 「第 N 个测试点: …」形态的失败原因已由逐点明细行的 msg 覆盖，不重复并入；
+  // 只有基础设施类错误（沙箱调用失败/编译错误等，无对应明细行）才补表尾行
+  if (info && !/^第 \d+ 个测试点/.test(info)) rows.push({ msg: info } as never)
+  return rows
+})
 
 async function load() {
   if (!props.submissionId) return
@@ -38,11 +58,46 @@ async function load() {
   }
 }
 
+async function onRejudge() {
+  const id = sub.value?.id
+  if (!id || rejudging.value) return
+  rejudging.value = true
+  try {
+    await submissionApi.rejudge(id)
+    ElMessage.success(`#${id} 已加入重测队列`)
+    pollUntilDone(id)
+  } finally {
+    rejudging.value = false
+  }
+}
+
+// 重测轮询：1.2s 一次拉详情，到终态停并提示
+function pollUntilDone(id: number) {
+  const token = ++pollToken
+  const tick = async () => {
+    if (token !== pollToken || !props.modelValue) return
+    try {
+      const s = await submissionApi.get(id)
+      polled.value = s
+      if (s.status === 'Pending' || s.status === 'Judging') {
+        window.setTimeout(tick, 1200)
+      } else {
+        ElMessage.success(`#${id} 重测完成`)
+      }
+    } catch {
+      // 拉取失败已由拦截器提示，停止本轮轮询
+    }
+  }
+  window.setTimeout(tick, 1200)
+}
+
 watch(
   () => props.modelValue,
   (open) => {
+    pollToken++ // 关闭弹窗即停止重测轮询
     if (open) {
       detail.value = null
+      polled.value = null
       if (props.submissionId && !props.submission) load()
     } else {
       detail.value = null
@@ -64,41 +119,58 @@ watch(
                   <div v-if="statusDesc(sub.status)!.cause">常见原因：{{ statusDesc(sub.status)!.cause }}</div>
                 </div>
               </template>
-              <el-tag size="small" :type="statusStyle(sub.status).type" class="status-tag">{{ statusStyle(sub.status).label }}</el-tag>
+              <SubStatus :status="sub.status" :score="sub.score" />
             </el-tooltip>
-            <el-tag v-else size="small" :type="statusStyle(sub.status).type">{{ statusStyle(sub.status).label }}</el-tag>
+            <SubStatus v-else :status="sub.status" :score="sub.score" />
+            <el-button
+              v-if="canRejudge"
+              link
+              type="primary"
+              size="small"
+              class="ml8"
+              :loading="rejudging || judging"
+              :disabled="judging"
+              @click="onRejudge"
+            >
+              {{ judging ? '评测中' : '重测' }}
+            </el-button>
           </el-descriptions-item>
-          <el-descriptions-item label="得分">{{ sub.score }}</el-descriptions-item>
           <el-descriptions-item label="语言">{{ sub.language }}</el-descriptions-item>
-          <el-descriptions-item label="耗时">{{ sub.time_ms }} ms</el-descriptions-item>
-          <el-descriptions-item label="内存">{{ fmtMem(sub.memory_kb) }}</el-descriptions-item>
+          <el-descriptions-item label="总耗时">{{ sub.time_ms }} ms</el-descriptions-item>
+          <el-descriptions-item label="总内存">{{ fmtMem(sub.memory_kb) }}</el-descriptions-item>
           <el-descriptions-item label="提交时间">{{ fmtDate(sub.created_at) }}</el-descriptions-item>
         </el-descriptions>
-        <template v-if="sub.error_info">
-          <div class="detail-sub">错误信息</div>
-          <pre class="mono sub-code">{{ sub.error_info }}</pre>
-        </template>
         <div class="detail-sub">代码</div>
         <pre class="mono sub-code">{{ sub.code }}</pre>
         <template v-if="sub.detail?.length">
           <div class="detail-sub">测试点明细</div>
-          <el-table stripe :data="sub.detail" size="small" border>
+          <el-table stripe :data="sortedDetail" size="small" border>
             <el-table-column prop="index" label="测试点" width="90" />
             <el-table-column label="结果">
               <template #default="{ row }">
-                <el-tag size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+                <SubStatus v-if="row.status" :status="row.status" />
               </template>
             </el-table-column>
-            <el-table-column label="耗时" width="120">
-              <template #default="{ row }">{{ row.time_ms }} ms</template>
+            <el-table-column label="明细" min-width="150">
+              <template #default="{ row }">
+                <span v-if="row.msg" class="case-err">{{ row.msg }}</span>
+              </template>
             </el-table-column>
-            <el-table-column label="内存" width="120">
-              <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
+            <el-table-column label="耗时" width="90">
+              <template #default="{ row }">{{ row.time_ms != null ? `${row.time_ms} ms` : '' }}</template>
+            </el-table-column>
+            <el-table-column label="内存" width="90">
+              <template #default="{ row }">{{ row.memory_kb ? fmtMem(row.memory_kb) : '' }}</template>
             </el-table-column>
           </el-table>
+        </template>
+        <template v-else-if="sub.error_info">
+          <div class="detail-sub">错误信息</div>
+          <pre class="mono sub-code">{{ sub.error_info }}</pre>
         </template>
       </template>
     </div>
   </el-dialog>
 </template>
+
 

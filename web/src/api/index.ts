@@ -163,7 +163,7 @@ export const problemApi = {
     patch<{ id: number }>(`/problems/${id}/statement`, { statement }),
 }
 
-// 标签树（v0.5f）：读公开（题库/详情/表单共用），写仅 root（后端 RequireRoot）
+// 标签树（v0.5.5）：读公开（题库/详情/表单共用），写仅 root（后端 RequireRoot）
 export const tagApi = {
   tree: () => get<TagTreeResult>('/tags/tree'),
   adminTree: () => get<AdminTagTreeResult>('/admin/tagtree'),
@@ -174,6 +174,7 @@ export const submissionApi = {
   create: (problemId: number, language: string, code: string) =>
     post<{ id: number }>('/submissions', { problem_id: problemId, language, code }),
   get: (id: number) => get<Submission>(`/submissions/${id}`),
+  rejudge: (id: number) => post<{ id: number }>(`/submissions/${id}/rejudge`, {}),
   list: (params: { page: number; page_size: number; problem_id?: number }) =>
     get<SubmissionListResult>('/submissions', { ...params }),
 }
@@ -255,7 +256,7 @@ export interface CreateContestPayload {
   file_io?: boolean
 }
 
-// ---------- 比赛/考试（v0.5e ① 合并：10 对同构接口收敛为 roundApiOf(kind) 工厂） ----------
+// ---------- 比赛/考试（v0.5.4 ① 合并：10 对同构接口收敛为 roundApiOf(kind) 工厂） ----------
 
 export type RoundKind = 'contest' | 'exam'
 

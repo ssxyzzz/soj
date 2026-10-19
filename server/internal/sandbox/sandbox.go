@@ -80,6 +80,12 @@ func (r *Result) HasFile(name string) bool {
 	return ok
 }
 
+// FileID 取 copyOutCached 缓存文件的 fileId（大输出走沙箱文件形态时使用）。
+func (r *Result) FileID(name string) (string, bool) {
+	id, ok := r.FileIDs[name]
+	return id, ok
+}
+
 type Client struct {
 	baseURL string
 	http    *http.Client
@@ -146,6 +152,32 @@ func (c *Client) Run(ctx context.Context, cmds []Cmd) ([]Result, error) {
 		return obj.Results, nil
 	}
 	return nil, fmt.Errorf("无法解析沙箱响应: %s", truncate(string(data), 512))
+}
+
+// FetchFile 取回 copyOutCached 缓存的文件内容（原始字节直传，不经 /run 响应的 JSON 信封——
+// MB 级考生输出若内联在响应里会撑爆响应读取上限）。max 为内容字节上限，超出报错
+// （正常不会触发：收集管道的 Max 已先行封顶）。
+func (c *Client) FetchFile(ctx context.Context, fileID string, max int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/file/"+url.PathEscape(fileID), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("拉取沙箱文件返回 %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > max {
+		return nil, fmt.Errorf("沙箱文件超过 %d 字节上限", max)
+	}
+	return data, nil
 }
 
 // DeleteFile 释放 copyOutCached 缓存的编译产物。

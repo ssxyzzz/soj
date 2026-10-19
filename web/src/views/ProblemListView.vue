@@ -5,6 +5,8 @@ import { ElMessage } from 'element-plus'
 
 import { authApi, problemApi, rankApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
+import FitTags from '@/components/problem/FitTags.vue'
+import SubStatus from '@/components/SubStatus.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
@@ -52,18 +54,6 @@ function onTagChange(ids: number[]) {
   tagSel.value = ids
   page.value = 1
   load()
-}
-
-// 表格标签列：前 3 个直接显示，其余收进 +N 悬浮
-function shownTags(row: ProblemListItem): number[] {
-  return (row.tags ?? []).slice(0, 3)
-}
-
-function restTagNames(row: ProblemListItem): string {
-  return (row.tags ?? [])
-    .slice(3)
-    .map((id) => tagStore.nameOf(id))
-    .join('、')
 }
 
 async function loadOverview() {
@@ -144,6 +134,12 @@ stripe
           @row-click="(row: ProblemListItem) => problemRoute(row)"
         >
           <el-table-column prop="id" label="ID" width="100" />
+          <el-table-column v-if="userStore.token" label="状态" width="150">
+            <template #default="{ row }">
+              <SubStatus v-if="row.status" :status="row.status" :score="row.my_score" />
+              <span v-else class="dim">未做</span>
+            </template>
+          </el-table-column>
           <el-table-column label="题目" min-width="320">
             <template #default="{ row }">
               <span class="title">{{ row.title }}</span>
@@ -155,26 +151,8 @@ stripe
           </el-table-column>
           <el-table-column label="标签" min-width="170">
             <template #default="{ row }">
-              <template v-if="row.tags?.length">
-                <el-tag v-for="id in shownTags(row as ProblemListItem)" :key="id" size="small" type="info" class="cell-tag">
-                  {{ tagStore.nameOf(id) }}
-                </el-tag>
-                <el-tooltip v-if="(row.tags?.length ?? 0) > 3" placement="top" effect="light">
-                  <template #content>
-                    <!-- 标签列插槽与 tooltip 内容插槽的 row 是宽松类型（DefaultRow），收窄回列表项类型 -->
-                    <div style="max-width: 320px">{{ restTagNames(row as ProblemListItem) }}</div>
-                  </template>
-                  <el-tag size="small" type="info">+{{ (row.tags?.length ?? 0) - 3 }}</el-tag>
-                </el-tooltip>
-              </template>
+              <FitTags v-if="row.tags?.length" :ids="row.tags" />
               <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column v-if="userStore.token" label="状态" width="90">
-            <template #default="{ row }">
-              <el-tag v-if="row.status === 'ac'" size="small" type="success">已通过</el-tag>
-              <el-tag v-else-if="row.status === 'tried'" size="small" type="warning">未过</el-tag>
-              <span v-else class="dim">未做</span>
             </template>
           </el-table-column>
           <el-table-column label="通过率" width="110">
@@ -199,7 +177,7 @@ stripe
           <el-button type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
           <el-button style="width: 100%" @click="comingSoon">导入题目</el-button>
         </div>
-        <div class="dim tip">网页出题（含测试数据 zip 上传）在 v0.5b 上线</div>
+        <div class="dim tip">网页出题（含测试数据 zip 上传）在 v0.5.2 上线</div>
       </el-card>
 
       <el-card class="aside-card">
@@ -239,10 +217,6 @@ stripe
   background: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
   margin-bottom: 12px;
-}
-
-.cell-tag {
-  margin: 0 6px 4px 0;
 }
 
 /* 实体名（题名）主色，整行可点击 */

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 标签树管理（v0.5f 建面板，卡片化交互 + 悬停导航，仅 root）：
+// 标签树管理（v0.5.5 建面板，卡片化交互 + 悬停导航，仅 root）：
 // 悬停到哪层展开到哪层（导航全靠悬停，移开即收起）；单击卡片在下方列出只挂此标签的题目，
 // 双击进编辑态（原地改名 + × 删除）；长按拖动 = 纯同级换位（与删除解绑）；＋ 默认隐藏、悬停行才显示。
 // 草稿为本地状态，保存仍是整树覆盖 + 二次确认 + 服务端被引用拦截；
@@ -453,6 +453,152 @@ onBeforeUnmount(() => {
   if (hoverTimer) clearTimeout(hoverTimer)
 })
 
+// ---- 模板下载 / CSV 导入（批量维护标签树）----
+// 模板 = 当前草稿树导出为五列表格 CSV（一级~五级，每行一条完整路径；空树给示例行），
+// 带 UTF-8 BOM 保证 Excel 直接打开不乱码；导入解析同格式 CSV 覆盖当前草稿
+// （保存仍走既有「二次确认 + 整树覆盖 + 被引用禁删」管道，导入本身不落库）。
+const IMPORT_COLUMNS = ['一级', '二级', '三级', '四级', '五级']
+const importInput = ref<HTMLInputElement>()
+
+function csvEscape(v: string): string {
+  return /[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+}
+
+function downloadTemplate() {
+  const rows: string[][] = [IMPORT_COLUMNS]
+  const walk = (list: DraftNode[], path: string[]) => {
+    for (const n of list) {
+      const p = [...path, n.name]
+      rows.push([...p, '', '', '', ''].slice(0, 5))
+      walk(n.children, p)
+    }
+  }
+  walk(draft.value, [])
+  if (rows.length === 1) rows.push(['示例一级', '示例二级', '', '', ''], ['示例一级', '', '', '', ''])
+  const blob = new Blob(['\uFEFF' + rows.map((r) => r.map(csvEscape).join(',')).join('\r\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = '标签树模板.csv'
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+function pickImport() {
+  importInput.value?.click()
+}
+
+// 最小 CSV 解析：支持引号包裹（字段内逗号/换行/双引号转义）与 \r\n、\n 两种行尾
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cur = ''
+  let inQ = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQ) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          cur += '"'
+          i++
+        } else inQ = false
+      } else cur += ch
+    } else if (ch === '"') inQ = true
+    else if (ch === ',') {
+      row.push(cur)
+      cur = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(cur)
+      cur = ''
+      if (row.some((c) => c.trim() !== '')) rows.push(row)
+      row = []
+    } else cur += ch
+  }
+  row.push(cur)
+  if (row.some((c) => c.trim() !== '')) rows.push(row)
+  return rows
+}
+
+function countNodes(list: DraftNode[]): number {
+  return list.reduce((s, n) => s + 1 + countNodes(n.children), 0)
+}
+
+// CSV 编码探测解码：模板自带 UTF-8 BOM；但 Excel「另存为 CSV（默认）」产出的是 GBK/ANSI
+// 且无 BOM——按 BOM → 严格 UTF-8 → GBK 链式试解（GBK 文件几乎必然不是合法 UTF-8，顺序可靠）
+function decodeCsvText(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf)
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+    return new TextDecoder('utf-8').decode(bytes.subarray(3))
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    try {
+      return new TextDecoder('gbk', { fatal: true }).decode(bytes)
+    } catch {
+      return new TextDecoder('utf-8').decode(bytes)
+    }
+  }
+}
+
+async function onImportFile(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 允许重复选择同一文件
+  if (!file) return
+  const rows = parseCSV(decodeCsvText(await file.arrayBuffer()))
+  const body = rows[0] && rows[0].map((c) => c.trim()).join(',') === IMPORT_COLUMNS.join(',') ? rows.slice(1) : rows
+  if (!body.length) {
+    ElMessage.warning('文件里没有标签数据')
+    return
+  }
+  // 重建树：同名同级自动合并；新节点用负数临时 id（保存时由服务端按名取号）
+  const roots: DraftNode[] = []
+  for (const cells of body) {
+    const names = cells.slice(0, 5).map((c) => c.trim()).filter(Boolean)
+    let list = roots
+    for (const name of names) {
+      let hit = list.find((n) => n.name === name)
+      if (!hit) {
+        tempId -= 1
+        hit = { id: tempId, name, children: [] }
+        list.push(hit)
+      }
+      list = hit.children
+    }
+  }
+  const totalImported = countNodes(roots)
+  if (!totalImported) {
+    ElMessage.warning('文件里没有有效的标签（列：一级~五级，每行一条路径）')
+    return
+  }
+  if (totalImported > 500) {
+    ElMessage.warning(`导入的标签共 ${totalImported} 个，超出上限 500`)
+    return
+  }
+  const tooLong = roots.flatMap(function walk(n: DraftNode): string[] {
+    return [n.name, ...n.children.flatMap(walk)].filter((x) => x.length > 32)
+  })
+  if (tooLong.length) {
+    ElMessage.warning(`存在超过 32 字的标签名（如「${tooLong[0]}」），请改短后再导入`)
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `导入 ${totalImported} 个标签将覆盖当前草稿（含未保存的修改）；导入后需再点「保存标签树」才会生效。确定导入？`,
+      '导入标签树',
+      { type: 'warning', confirmButtonText: '导入', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  draft.value = roots
+  path.value = []
+  ElMessage.success(`已导入 ${totalImported} 个标签到草稿，检查无误后点「保存标签树」生效`)
+}
+
 async function onSave() {
   if (!dirty.value || saving.value) return
   try {
@@ -494,9 +640,12 @@ async function onSave() {
         <div class="header-actions">
           <el-tag v-if="dirty" type="warning" size="small">未保存</el-tag>
           <span class="dim">{{ total }} 个标签</span>
+          <el-button @click="downloadTemplate">下载标签树模板</el-button>
+          <el-button @click="pickImport">导入标签树</el-button>
           <el-button type="primary" :loading="saving" :disabled="!dirty" @click="onSave">
             保存标签树
           </el-button>
+          <input ref="importInput" type="file" accept=".csv" class="import-input" @change="onImportFile" />
         </div>
       </div>
     </template>
@@ -508,14 +657,16 @@ async function onSave() {
     </el-alert>
 
     <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
-    <div class="tag-board" @click.self="exitFloating">
+    <div class="tag-board" @click.self="exitFloating" @mouseleave="scheduleHoverClear">
+      <!-- 单一横向滚动容器：所有层级行共用最下面一条拖动条 -->
+      <div class="tag-scroll" @mouseenter="cancelHoverClear" @click.self="exitFloating">
+        <div class="tag-canvas" @click.self="exitFloating">
       <div
         v-for="(r, i) in rows"
         :key="i"
         class="tag-row"
         @click.self="exitFloating"
         @mouseenter="cancelHoverClear"
-        @mouseleave="scheduleHoverClear"
       >
         <TransitionGroup name="tag">
         <div
@@ -610,6 +761,10 @@ async function onSave() {
       <div v-if="!rows[0].items.length" class="dim empty-tip">
         {{ search.trim() ? '没有匹配的标签' : '（空树：用上面的 ＋ 建第一个标签）' }}
       </div>
+      <!-- 底部两行缓冲：末级展开后鼠标继续下移不出容器（进垫片取消收起计时） -->
+      <div class="tag-board-pad" @mouseenter="cancelHoverClear" />
+        </div>
+      </div>
     </div>
 
     <div v-if="tagProblems" class="tag-problems">
@@ -674,6 +829,10 @@ async function onSave() {
   gap: 10px;
 }
 
+.import-input {
+  display: none; /* 隐藏的 CSV 选择器，由「导入标签树」按钮触发 */
+}
+
 .howto {
   margin-bottom: 12px;
 }
@@ -684,7 +843,7 @@ async function onSave() {
 
 .tag-search {
   width: 240px;
-  margin-bottom: 10px;
+  margin-bottom: 16px; /* 与首行标签留出空隙（原 10px 比行距 14 还小，显挤） */
 }
 
 .tag-board {
@@ -693,15 +852,52 @@ async function onSave() {
   gap: 8px;
 }
 
+/* 底部两行缓冲垫片：末级展开后鼠标习惯性继续下移查找，若移出容器会触发
+   mouseleave 收起——垫片在容器内且 mouseenter 取消收起计时，移动不断开 */
+.tag-board-pad {
+  height: 80px;
+}
+
 .tag-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: flex-start;
 }
 
+/* 单一横向滚动容器：所有层级行共用最下面一条拖动条（行内不再各自出滚动条） */
+.tag-scroll {
+  overflow-x: auto;
+  padding-bottom: 6px; /* 滚动条占位，不裁切标签 */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--el-border-color-darker) transparent;
+}
+
+.tag-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tag-scroll::-webkit-scrollbar-thumb {
+  background: var(--el-border-color-darker);
+  border-radius: 4px;
+}
+
+.tag-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 画布随最宽行伸展，垫片覆盖全部可滚区域 */
+.tag-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 14px; /* 层级行距（一级/二级……之间） */
+  width: max-content;
+  min-width: 100%;
+}
+
 /* 纵向 cell：卡片 + 空标签的 mini-add 小卡 */
 .tag-cell {
+  flex: none; /* 行内不换行模式：卡片+mini-add 纵向格不压缩 */
   display: inline-flex;
   flex-direction: column;
   align-items: stretch;
@@ -710,6 +906,8 @@ async function onSave() {
 
 .tag-card {
   position: relative;
+  flex: none; /* 行内不换行模式：卡片不压缩，超出即出横向滚动条 */
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;
@@ -770,12 +968,15 @@ async function onSave() {
   text-align: center;
 }
 
+/* 被引用角标跟随标签自身层级色（--lv 由卡片上的全局 .lv-N 注入），不再一律蓝 */
 .count-badge.hot {
-  background: var(--el-color-primary);
+  background: var(--lv);
 }
 
+/* 卡片激活（层级色实底）时徽标反转为浅底深字，保持可读 */
 .tag-card.active .count-badge.hot {
-  background: var(--el-color-primary-light-3);
+  background: var(--lv-bg);
+  color: var(--lv);
 }
 
 .del-x {

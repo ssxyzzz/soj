@@ -29,11 +29,12 @@ export interface ProblemListItem {
   lock_phase?: string
   submit_count?: number // 公开态提交数（通过率展示用）
   accepted_count?: number // 其中 AC 的提交数
-  status?: 'ac' | 'tried' // 我的做题状态（登录才返回，v0.5c）：ac=已通过，tried=有提交未通过
+  status?: string // 我的最高分提交状态（登录才返回，全称如 Accepted/Wrong Answer）
+  my_score?: number // 该提交的得分
   tags?: number[] // 标签树节点 ID，名字由前端标签树映射
 }
 
-// 标签树（v0.5f）：嵌套 children 表达层级，数组顺序即展示顺序
+// 标签树（v0.5.5）：嵌套 children 表达层级，数组顺序即展示顺序
 export interface TagNode {
   id: number
   name: string
@@ -125,6 +126,7 @@ export interface CaseResult {
   status: string
   time_ms: number
   memory_kb: number
+  msg?: string // 失败明细（如 超出时间限制 / 未生成输出文件 x.out），AC 为空
 }
 
 export interface SubmissionListResult {
@@ -244,7 +246,7 @@ export interface UserProfile {
   prefs: UserPrefs
 }
 
-// ---------- 题解（v0.5b-1） ----------
+// ---------- 题解（v0.5.2-1） ----------
 
 export interface SolutionItem {
   id: number
@@ -321,8 +323,8 @@ export interface ContestDetail {
   participant: boolean
   is_organizer: boolean
   deletable: boolean
-  file_io?: boolean // 本场启用文件 IO（v0.5b-3）
-  class_id?: number // 考试归属班级（v0.5e 起两种详情同构返回）
+  file_io?: boolean // 本场启用文件 IO（v0.5.2-3）
+  class_id?: number // 考试归属班级（v0.5.4 起两种详情同构返回）
   problems?: ContestProblem[]
 }
 

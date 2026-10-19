@@ -101,26 +101,27 @@ onBeforeUnmount(() => {
         <slot name="top-right" />
       </div>
     </div>
-    <div
-      v-for="(r, i) in rows"
-      :key="i"
-      class="tag-row"
-      @mouseenter="cancelHoverClear"
-      @mouseleave="scheduleHoverClear"
-    >
-      <div
-        v-for="item in r.items"
-        :key="item.node.id"
-        class="tag-card"
-        :class="[lvClass(item.depth), { active: selected.has(item.node.id) }]"
-        @click="emit('toggle', item.node.id)"
-        @mouseenter="onCardHover(item.depth, item.node)"
-      >
-        {{ item.node.name }}
-        <span v-if="item.node.children?.length" class="caret">▸</span>
-        <span v-if="selected.has(item.node.id)" class="check">✓</span>
+    <!-- 单一横向滚动容器：所有层级行共用最下面一条拖动条；行内不换行 -->
+    <div class="tag-scroll" @mouseenter="cancelHoverClear">
+      <div class="tag-canvas">
+        <div v-for="(r, i) in rows" :key="i" class="tag-row" @mouseenter="cancelHoverClear">
+          <div
+            v-for="item in r.items"
+            :key="item.node.id"
+            class="tag-card"
+            :class="[lvClass(item.depth), { active: selected.has(item.node.id) }]"
+            @click="emit('toggle', item.node.id)"
+            @mouseenter="onCardHover(item.depth, item.node)"
+          >
+            {{ item.node.name }}
+            <span v-if="item.node.children?.length" class="caret">▸</span>
+            <span v-if="selected.has(item.node.id)" class="check">✓</span>
+          </div>
+          <div v-if="!r.items.length" class="dim">没有匹配的标签</div>
+        </div>
+        <!-- 底部两行缓冲：末级展开后鼠标习惯性继续下移查找，进垫片即取消收起计时（见 .tag-flow-pad） -->
+        <div class="tag-flow-pad" @mouseenter="cancelHoverClear" />
       </div>
-      <div v-if="!r.items.length" class="dim">没有匹配的标签</div>
     </div>
   </div>
 </template>
@@ -130,6 +131,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* 底部两行缓冲垫片：末级展开后鼠标习惯性继续下移查找，若移出容器会触发
+   mouseleave 收起——垫片在容器内且 mouseenter 取消收起计时，移动不断开 */
+.tag-flow-pad {
+  height: 80px;
 }
 
 /* 顶行：搜索标签框 + 右侧插槽（已选），随内容换行 */
@@ -151,9 +158,40 @@ onBeforeUnmount(() => {
   width: 240px;
 }
 
+/* 一级一行、二级一行……行内不换行；超右边界出横向拖动条 */
+/* 单一横向滚动容器：所有层级行共用最下面一条拖动条（行内不再各自出滚动条） */
+.tag-scroll {
+  overflow-x: auto;
+  padding-bottom: 6px; /* 滚动条占位，不裁切标签 */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: var(--el-border-color-darker) transparent;
+}
+
+.tag-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tag-scroll::-webkit-scrollbar-thumb {
+  background: var(--el-border-color-darker);
+  border-radius: 4px;
+}
+
+.tag-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 画布随最宽行伸展，垫片覆盖全部可滚区域 */
+.tag-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 14px; /* 层级行距（一级/二级……之间） */
+  width: max-content;
+  min-width: 100%;
+}
+
 .tag-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: flex-start;
 }
@@ -161,6 +199,8 @@ onBeforeUnmount(() => {
 /* 层级色只来自全局 .lv-1~.lv-5（main.css）：此处不可写 --lv 兜底，
    scoped 特异度会压过全局，把各层级吞成一级蓝 */
 .tag-card {
+  flex: none; /* 行内不换行模式：卡片不压缩，超出即出横向滚动条 */
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"strconv"
@@ -276,4 +277,27 @@ func submissionJSON(s *repo.Submission, withCode bool) gin.H {
 		h["detail"] = s.Detail // 测试点明细与代码同门槛（本人/总表/满分解锁）
 	}
 	return h
+}
+
+// RejudgeSubmission 重测一条提交（教师级权限）：重置 Pending 交还判题线程池自动重评。
+func (h *Handlers) RejudgeSubmission(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		fail(c, http.StatusBadRequest, "无效的提交 ID")
+		return
+	}
+	err = h.repo.RejudgeSubmission(c.Request.Context(), id)
+	if errors.Is(err, repo.ErrJudging) {
+		fail(c, http.StatusConflict, "该提交正在评测中，稍后再试")
+		return
+	}
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "提交不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "重测失败")
+		return
+	}
+	ok(c, gin.H{"id": id})
 }

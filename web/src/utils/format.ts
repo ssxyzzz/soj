@@ -1,27 +1,33 @@
 export interface StatusStyle {
   label: string
   type: 'success' | 'warning' | 'danger' | 'info'
+  /** 状态圆灯颜色（CSS .dot 工具类；与站点语义色一致） */
+  dot: 'green' | 'yellow' | 'red' | 'gray' | 'blue'
+  /** 灯后英文简称（AC/WA/TLE…；Pending/Judging 用原词） */
+  abbr: string
 }
 
 // 与后端 internal/model 中的状态常量对应
+// 灯色语义：绿=通过 / 红=答案或运行错误 / 黄=超限类（时/存/输出）/ 灰=编译错误·排队·系统错误 / 蓝=进行中
 const statusMap: Record<string, StatusStyle> = {
-  Pending: { label: '排队中', type: 'info' },
-  Judging: { label: '判题中', type: 'warning' },
-  Accepted: { label: '通过', type: 'success' },
-  'Wrong Answer': { label: '答案错误', type: 'danger' },
-  'Compile Error': { label: '编译错误', type: 'danger' },
-  'Time Limit Exceeded': { label: '超时', type: 'danger' },
-  'Memory Limit Exceeded': { label: '超内存', type: 'danger' },
-  'Runtime Error': { label: '运行错误', type: 'danger' },
-  'System Error': { label: '系统错误', type: 'info' },
+  Pending: { label: '排队中', type: 'info', dot: 'gray', abbr: 'Pending' },
+  Judging: { label: '判题中', type: 'warning', dot: 'blue', abbr: 'Judging' },
+  Accepted: { label: '通过', type: 'success', dot: 'green', abbr: 'AC' },
+  'Wrong Answer': { label: '答案错误', type: 'danger', dot: 'red', abbr: 'WA' },
+  'Compile Error': { label: '编译错误', type: 'danger', dot: 'gray', abbr: 'CE' },
+  'Time Limit Exceeded': { label: '超时', type: 'danger', dot: 'yellow', abbr: 'TLE' },
+  'Memory Limit Exceeded': { label: '超内存', type: 'danger', dot: 'yellow', abbr: 'MLE' },
+  'Runtime Error': { label: '运行错误', type: 'danger', dot: 'red', abbr: 'RE' },
+  'Output Limit Exceeded': { label: '输出超限', type: 'warning', dot: 'yellow', abbr: 'OLE' },
+  'System Error': { label: '系统错误', type: 'info', dot: 'gray', abbr: 'SE' },
   // 测试点明细使用缩写（judge 写入 CaseResult.Status）
-  AC: { label: '通过', type: 'success' },
-  WA: { label: '答案错误', type: 'danger' },
-  TLE: { label: '超时', type: 'danger' },
-  MLE: { label: '超内存', type: 'danger' },
-  RE: { label: '运行错误', type: 'danger' },
-  OLE: { label: '答案超长', type: 'warning' },
-  SE: { label: '系统错误', type: 'info' },
+  AC: { label: '通过', type: 'success', dot: 'green', abbr: 'AC' },
+  WA: { label: '答案错误', type: 'danger', dot: 'red', abbr: 'WA' },
+  TLE: { label: '超时', type: 'danger', dot: 'yellow', abbr: 'TLE' },
+  MLE: { label: '超内存', type: 'danger', dot: 'yellow', abbr: 'MLE' },
+  RE: { label: '运行错误', type: 'danger', dot: 'red', abbr: 'RE' },
+  OLE: { label: '答案超长', type: 'warning', dot: 'yellow', abbr: 'OLE' },
+  SE: { label: '系统错误', type: 'info', dot: 'gray', abbr: 'SE' },
 }
 
 // 评测状态说明（含义 + 常见原因）：提交记录/我的提交的状态标签悬停展示，方便学生定位问题。
@@ -70,7 +76,7 @@ export function statusDesc(status: string): StatusDoc | undefined {
 }
 
 export function statusStyle(status: string): StatusStyle {
-  return statusMap[status] ?? { label: status, type: 'info' }
+  return statusMap[status] ?? { label: status, type: 'info', dot: 'gray', abbr: status }
 }
 
 export function fmtMem(kb: number): string {

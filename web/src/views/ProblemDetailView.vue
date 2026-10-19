@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// 题目详情（v0.5e ② 拆分后主视图）：题面/锁定指引/隐藏开关/右列入口卡 + 提交链路；
-// 题解、我的提交、他人代码三个弹窗拆至 components/problem/*（自治拉数据）；编辑题目为独立路由页。
+// 题目详情（v0.5.4 ② 拆分后主视图）：题面/锁定指引/隐藏开关/右列入口卡 + 提交链路；
+// 题解、我的提交、所有代码三个弹窗拆至 components/problem/*（自治拉数据）；编辑题目为独立路由页。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -10,7 +10,7 @@ import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
-import OthersCodeDialog from '@/components/problem/OthersCodeDialog.vue'
+import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
@@ -28,7 +28,7 @@ const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
 let timer: ReturnType<typeof setInterval> | undefined
 
-// 右列：提交 / 在线编程 / 题解 / 我的提交 / 他人代码 五个入口，内容全部进弹窗
+// 右列：提交 / 在线编程 / 题解 / 我的提交 / 所有代码 五个入口，内容全部进弹窗
 const showSubmit = ref(false)
 const showWorkbench = ref(false)
 const submitting = ref(false)
@@ -53,10 +53,46 @@ const submitDisabledReason = computed(() => {
   return ''
 })
 
-// 题目信息卡（v0.5f）：统计 + 标签；比赛/考试做题页（RoundProblemView）为独立视图，天然无此卡
-const tagNames = computed(() => (problem.value?.tags ?? []).map((id) => tagStore.nameOf(id)))
-const shownTagNames = computed(() => tagNames.value.slice(0, 6))
-const restTagNames = computed(() => tagNames.value.slice(6).join('、'))
+// 题目信息卡（v0.5.5）：统计 + 标签；比赛/考试做题页（RoundProblemView）为独立视图，天然无此卡
+const tagIds = computed(() => problem.value?.tags ?? [])
+
+// 标签浮层：默认只显示「显示标签」入口。悬停即展、移开即收；点击则锁定，
+// 移开后保留 5 秒再收起（再点一次立即收起）。
+const tagsVisible = ref(false)
+const tagsLatched = ref(false)
+let tagsTimer: ReturnType<typeof setTimeout> | undefined
+
+function openTags() {
+  if (tagsTimer) {
+    clearTimeout(tagsTimer)
+    tagsTimer = undefined
+  }
+  tagsVisible.value = true
+}
+
+function scheduleCloseTags() {
+  if (tagsTimer) clearTimeout(tagsTimer)
+  if (tagsLatched.value) {
+    tagsTimer = setTimeout(() => {
+      tagsVisible.value = false
+      tagsLatched.value = false
+    }, 5000)
+  } else {
+    tagsVisible.value = false
+  }
+}
+
+function toggleTags() {
+  if (tagsLatched.value) {
+    tagsLatched.value = false
+    if (tagsTimer) clearTimeout(tagsTimer)
+    tagsVisible.value = false
+  } else {
+    tagsLatched.value = true
+    openTags()
+  }
+}
+
 const acceptRate = computed(() => {
   const p = problem.value
   if (!p?.submit_count) return '—'
@@ -217,7 +253,7 @@ onUnmounted(stopPolling)
             </el-button>
             <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
             <el-button v-if="userStore.token" plain style="width: 100%" @click="openMine">我的提交</el-button>
-            <el-button plain style="width: 100%" @click="openOthers">他人代码</el-button>
+            <el-button plain style="width: 100%" @click="openOthers">所有代码</el-button>
             <div v-if="submitDisabledReason" class="dim center">{{ submitDisabledReason }}</div>
           </div>
         </el-card>
@@ -229,14 +265,31 @@ onUnmounted(stopPolling)
             <span>通过 <b>{{ problem.accepted_count ?? 0 }}</b></span>
             <span>通过率 <b>{{ acceptRate }}</b></span>
           </div>
-          <div v-if="tagNames.length" class="info-tags">
-            <el-tag v-for="name in shownTagNames" :key="name" size="small" type="info">{{ name }}</el-tag>
-            <el-tooltip v-if="restTagNames" placement="top" effect="light">
-              <template #content>
-                <div style="max-width: 320px">{{ restTagNames }}</div>
+          <div v-if="tagIds.length" class="info-tags">
+            <el-popover :visible="tagsVisible" placement="bottom-start" popper-class="tags-pop">
+              <template #reference>
+                <span
+                  class="show-tags"
+                  title="悬停或点击显示本题标签"
+                  @mouseenter="openTags"
+                  @mouseleave="scheduleCloseTags"
+                  @click="toggleTags"
+                >
+                  显示标签
+                </span>
               </template>
-              <el-tag size="small" type="info">+{{ tagNames.length - 6 }}</el-tag>
-            </el-tooltip>
+              <div class="tags-pop-body" @mouseenter="openTags" @mouseleave="scheduleCloseTags">
+                <el-tag
+                  v-for="id in tagIds"
+                  :key="id"
+                  size="small"
+                  class="pop-tag"
+                  :class="`lv-${tagStore.levelOf(id)}`"
+                >
+                  {{ tagStore.nameOf(id) }}
+                </el-tag>
+              </div>
+            </el-popover>
           </div>
           <div v-else class="dim">暂无标签</div>
         </el-card>
@@ -262,7 +315,7 @@ onUnmounted(stopPolling)
 
     <MySubmissionsDialog ref="mineDialogRef" v-model="showMine" :problem-id="problem.id" />
 
-    <OthersCodeDialog v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
+    <AllCodesDialog v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
 </template>
   </div>
 </template>
@@ -298,5 +351,31 @@ onUnmounted(stopPolling)
 /* 隐藏按钮推到题面卡右上角 */
 .hidden-btn {
   margin-left: auto;
+}
+
+/* 「显示标签」入口 */
+.show-tags {
+  color: var(--el-color-primary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.show-tags:hover {
+  text-decoration: underline;
+}
+</style>
+
+<style>
+/* 标签浮层（el-popover 挂 body，需非 scoped）：同表格标签栏的五级配色 */
+.tags-pop-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tags-pop-body .el-tag {
+  background: var(--lv-bg);
+  border-color: var(--lv-border);
+  color: var(--el-text-color-primary);
 }
 </style>

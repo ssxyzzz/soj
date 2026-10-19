@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 比赛/考试做题页共享组件（v0.5e ① 合并，原 ContestProblemView/ExamProblemView 94→97% 同构）。
+// 比赛/考试做题页共享组件（v0.5.4 ① 合并，原 ContestProblemView/ExamProblemView 94→97% 同构）。
 // 差异仅三处：文案（比赛/考试）、详情页路由前缀（/contests|/exams）、加载失败回退
 // （比赛回赛事页、考试回班级列表）——全部由 kind 派生。
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -8,11 +8,12 @@ import { ElMessage } from 'element-plus'
 
 import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
+import SubStatus from '@/components/SubStatus.vue'
 import PageShell from '@/components/PageShell.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import { fmtDate, statusDesc, statusStyle } from '@/utils/format'
+import { fmtDate, statusDesc } from '@/utils/format'
 import type { ContestDetail, ContestMySubmission, ProblemDetail } from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
@@ -155,7 +156,6 @@ onUnmounted(() => {
               v-for="(p, i) in round.problems"
               :key="p.id"
               :type="p.id === pid ? 'primary' : 'default'"
-              circle
               size="small"
               class="switch-btn"
               @click="goProblem(p.id)"
@@ -203,10 +203,9 @@ onUnmounted(() => {
                       <div v-if="statusDesc(s.status)!.cause">常见原因：{{ statusDesc(s.status)!.cause }}</div>
                     </div>
                   </template>
-                  <el-tag size="small" :type="statusStyle(s.status).type" class="status-tag">{{ statusStyle(s.status).label }}</el-tag>
+                  <SubStatus :status="s.status" :score="s.score" />
                 </el-tooltip>
-                <el-tag v-else size="small" :type="statusStyle(s.status).type">{{ statusStyle(s.status).label }}</el-tag>
-                <span v-if="s.score != null">{{ s.score }} 分</span>
+                <SubStatus v-else :status="s.status" :score="s.score" />
                 <span v-if="s.time_ms != null" class="dim">{{ s.time_ms }} ms</span>
               </template>
               <span v-else class="dim">已记录</span>

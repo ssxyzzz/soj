@@ -55,6 +55,9 @@
 @media (max-width: 992px) {
   .cols {
     flex-direction: column;
+    /* 纵向折叠后恢复交叉轴拉伸：flex-start 会让主列宽度变成内容自适应，
+       被宽表格/不换行标签行撑出视口（横向滚动条落在视口外不可用） */
+    align-items: stretch;
   }
 
   .side-col {

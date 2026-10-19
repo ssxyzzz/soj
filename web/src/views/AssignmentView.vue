@@ -6,8 +6,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { assignmentApi, authApi, contestApi, problemApi } from '@/api'
 import { downloadCsv } from '@/api/download'
 import PageShell from '@/components/PageShell.vue'
+import SubStatus from '@/components/SubStatus.vue'
 import { useUserStore } from '@/stores/user'
-import { fmtDate, fmtMem, statusStyle } from '@/utils/format'
+import { fmtDate, fmtMem } from '@/utils/format'
 import type { AssignmentDetail, AssignmentProblem, ProgressRow, Submission } from '@/types'
 
 const route = useRoute()
@@ -64,7 +65,7 @@ async function loadProgress() {
   }
 }
 
-// 成绩导出 CSV（v0.5c）：服务端按成员清单现算进度；文件名以服务端 Content-Disposition 为准
+// 成绩导出 CSV（v0.5.6）：服务端按成员清单现算进度；文件名以服务端 Content-Disposition 为准
 const exporting = ref(false)
 async function exportCsv() {
   if (!assignment.value) return
@@ -352,36 +353,40 @@ onMounted(() => {
           <template #default="{ row }">
             <div class="user-subs-detail">
               <pre v-if="row.code" class="mono sub-code">{{ row.code }}</pre>
-              <el-table stripe v-if="row.detail?.length" :data="row.detail" size="small" border>
+              <el-table stripe v-if="row.detail?.length || row.error_info" :data="[...(row.detail ?? []), ...(row.error_info ? [{ msg: row.error_info }] : [])]" size="small" border>
                 <el-table-column prop="index" label="测试点" width="90" />
                 <el-table-column label="结果">
                   <template #default="{ row: c }">
-                    <el-tag size="small" :type="statusStyle(c.status).type">{{ statusStyle(c.status).label }}</el-tag>
+                    <SubStatus v-if="c.status" :status="c.status" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="明细" min-width="150">
+                  <template #default="{ row: c }">
+                    <span v-if="c.msg" class="case-err">{{ c.msg }}</span>
                   </template>
                 </el-table-column>
                 <el-table-column label="耗时" width="120">
-                  <template #default="{ row: c }">{{ c.time_ms }} ms</template>
+                  <template #default="{ row: c }">{{ c.time_ms ? `${c.time_ms} ms` : '' }}</template>
                 </el-table-column>
                 <el-table-column label="内存" width="120">
-                  <template #default="{ row: c }">{{ fmtMem(c.memory_kb) }}</template>
+                  <template #default="{ row: c }">{{ c.memory_kb ? fmtMem(c.memory_kb) : '' }}</template>
                 </el-table-column>
               </el-table>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="170">
+        <el-table-column label="状态" width="140">
           <template #default="{ row }">
-            <el-tag size="small" :type="statusStyle(row.status).type">{{ statusStyle(row.status).label }}</el-tag>
+            <SubStatus :status="row.status" :score="row.score" />
           </template>
         </el-table-column>
         <el-table-column prop="language" label="语言" width="100" />
-        <el-table-column label="耗时" width="100">
+        <el-table-column label="总耗时" width="100">
           <template #default="{ row }">{{ row.time_ms }} ms</template>
         </el-table-column>
-        <el-table-column label="内存" width="110">
+        <el-table-column label="总内存" width="110">
           <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
         </el-table-column>
-        <el-table-column prop="score" label="得分" width="80" />
         <el-table-column label="提交时间">
           <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
         </el-table-column>

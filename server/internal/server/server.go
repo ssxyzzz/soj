@@ -43,7 +43,7 @@ func Run(ctx context.Context, deps *Deps) {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery(), CORS(), Gzip())
 
-	// 题面图片公开读取（v0.5a）：非 /api 前缀，随机文件名 + immutable 缓存
+	// 题面图片公开读取（v0.5.1）：非 /api 前缀，随机文件名 + immutable 缓存
 	r.GET("/uploads/:file", h.ServeUpload)
 
 	api := r.Group("/api")
@@ -58,13 +58,14 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)
 		api.GET("/problems/:id/submissions", AuthRequired(h), h.ListProblemSubmissions)
 		api.GET("/problems/:id/my-submissions", AuthRequired(h), h.MyProblemSubmissions)
-		// 标签树（v0.5f）：公开读（题库筛选/详情卡/建题表单共用），写走 /admin/tagtree
+		// 标签树（v0.5.5）：公开读（题库筛选/详情卡/建题表单共用），写走 /admin/tagtree
 		api.GET("/tags/tree", AuthOptional(h), h.GetTagTree)
 
 		api.POST("/submissions", AuthRequired(h), h.CreateSubmission)
 		// 提交记录总表需「查看全部提交」权限位（学生查自己的历史走题目页「我的提交」）
 		api.GET("/submissions", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.ListSubmissions)
 		api.GET("/submissions/:id", AuthOptional(h), h.GetSubmission)
+		api.POST("/submissions/:id/rejudge", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.RejudgeSubmission)
 
 		api.GET("/rank", h.Rank)
 		api.GET("/notice", h.GetNotice)
@@ -83,17 +84,17 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/me/classes", h.MyClasses)
 			authed.GET("/me/profile", h.GetMyProfile)
 			authed.PATCH("/me/profile", h.UpdateMyProfile)
-			// 题面图片上传（v0.5a）：能打开编辑器的人群（题面编辑/系统设置权限位）
+			// 题面图片上传（v0.5.1）：能打开编辑器的人群（题面编辑/系统设置权限位）
 			authed.POST("/uploads", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn, repo.PermAdminSettings), h.UploadImages)
 
-			// 网页建题（v0.5b-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
+			// 网页建题（v0.5.2-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
 			authed.POST("/problems", RequirePerm(repo.PermProblemCreate), h.CreateProblem)
 			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
 			authed.POST("/problems/:id/testdata", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ReplaceProblemTestdata)
 			authed.POST("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateChecker)
 			authed.DELETE("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveChecker)
 
-			// 题解（v0.5b-1，多作者）：满分 ∨ 老师群体可看可写；置顶/删他人需 solution.manage
+			// 题解（v0.5.2-1，多作者）：满分 ∨ 老师群体可看可写；置顶/删他人需 solution.manage
 			authed.GET("/problems/:id/solutions", h.ListSolutions)
 			authed.POST("/problems/:id/solutions", h.PostSolution)
 			authed.PATCH("/problems/:id/solutions/:sid", h.UpdateSolution)
@@ -122,7 +123,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.PUT("/assignments/:id/problems", h.SetAssignmentProblems)
 			authed.DELETE("/assignments/:id/problems/:pid", h.RemoveAssignmentProblem)
 			authed.GET("/assignments/:id/progress", h.AssignmentProgress)
-			authed.GET("/assignments/:id/export", h.AssignmentExport) // 成绩导出 CSV（v0.5c）
+			authed.GET("/assignments/:id/export", h.AssignmentExport) // 成绩导出 CSV（v0.5.6）
 
 			// 比赛：创建（主题库=root，班级=班级管理员，handler 内校验）/删除/赛时提交/我的提交/榜单
 			authed.POST("/contests", h.CreateContest)
@@ -132,7 +133,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/contests/:id/submissions/mine", h.ContestMySubmissions)
 			authed.GET("/contests/:id/problems/:pid/submissions", h.ContestUserSubmissions)
 			authed.GET("/contests/:id/leaderboard", h.ContestLeaderboard)
-			authed.GET("/contests/:id/export", h.ContestExport) // 成绩导出 CSV（v0.5c）
+			authed.GET("/contests/:id/export", h.ContestExport) // 成绩导出 CSV（v0.5.6）
 
 			// 班级考试：发起（班级管理员）/删除/考时提交/我的提交/榜单
 			authed.POST("/classes/:id/exams", h.CreateExam)
@@ -143,7 +144,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/submissions/mine", h.ExamMySubmissions)
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
-			authed.GET("/exams/:id/export", h.ExamExport) // 成绩导出 CSV（v0.5c）
+			authed.GET("/exams/:id/export", h.ExamExport) // 成绩导出 CSV（v0.5.6）
 			authed.PATCH("/exams/:id/intro", h.SetExamIntro)
 			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
 			authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
@@ -171,7 +172,7 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.POST("/backup/run", RequirePerm(repo.PermBackupRun), h.BackupRun)
 				adminG.POST("/backup/offline-key", RequirePerm(repo.PermBackupKeys), h.BackupOfflineKey)
 
-				// 标签树（v0.5f）：仅 root 可改（硬编码不下放，同角色管理先例）；
+				// 标签树（v0.5.5）：仅 root 可改（硬编码不下放，同角色管理先例）；
 				// 管理面板读走 /admin/tagtree（附每节点引用数），公开读仍走 /tags/tree
 				adminG.GET("/tagtree", RequireRoot(), h.AdminTagTree)
 				adminG.PUT("/tagtree", RequireRoot(), h.AdminReplaceTagTree)

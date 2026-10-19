@@ -53,7 +53,7 @@ func orEmptyInt64(s []int64) []int64 {
 //   - 主题库隐藏题对 guest/default 不可见（被主题库比赛赛中解锁时除外）；
 //   - 被比赛锁定（赛前/隐藏期）的题对受影响视角不可见，赛中带锁标记与指引；
 //   - admin/root 可见全部并带标记；
-//   - tags=1,5,9 标签筛选：并集、精确匹配节点 ID（v0.5f）。
+//   - tags=1,5,9 标签筛选：并集、精确匹配节点 ID（v0.5.5）。
 func (h *Handlers) ListProblems(c *gin.Context) {
 	uid, _, role, logged := currentUser(c)
 	page, pageSize := queryPage(c)
@@ -136,12 +136,14 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		it["submit_count"] = st.Total
 		it["accepted_count"] = st.Accepted
 	}
-	// 「已通过」状态列（v0.5c）：登录用户按当前页批查自己的做题状态；失败不阻塞列表（该列回退未做）
+	// 状态列（v0.5.6 升级）：登录用户按当前页批查自己本题最高分提交的状态与得分；
+	// 失败不阻塞列表（该列回退未做）
 	if logged {
-		if statuses, err := h.repo.UserProblemStatuses(ctx, uid, pids); err == nil {
+		if bests, err := h.repo.UserBestStatuses(ctx, uid, pids); err == nil {
 			for _, it := range pageItems {
-				if st := statuses[it["id"].(int64)]; st != "" {
-					it["status"] = st
+				if st := bests[it["id"].(int64)]; st.Status != "" {
+					it["status"] = st.Status
+					it["my_score"] = st.Score
 				}
 			}
 		}
