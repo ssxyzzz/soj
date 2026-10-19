@@ -1,173 +1,73 @@
 /* ============================================================
-   全站字号登记表（当前实际渲染值）
+   SOJ 字号/字重 token 表（v0.6.3）
    ------------------------------------------------------------
-   核对口径：2026-10-19，运行站点 http://localhost（admin 登录，
-   1440×1000），逐页读 getComputedStyle；覆盖 19 个路由（含登录/404）+
-   提交/题解/新建用户/公式弹窗 + 标签树编辑态 + CodeMirror 补全浮层。
-   桌面 1440 视口实测；三处 @media 只改布局、不改字号。
-   改字号先查/改这张表；改后必须重跑产物核对。
+   唯一改值入口：:root 的 --soj-fs-* 与 --soj-fw-*。
+   - 改基础档位（--soj-fs-14 等）：所有引用它的语义角色一起变；
+   - 改语义 token（--soj-fs-section 等）：只影响该角色；
+   - 本表只记录“token → 当前值 → 使用方”，改这里的数字不会生效。
+   当前值 = 2026-10-19 线上 computed style 基线；Phase 1–4 零视觉 diff。
 
-   ══ A. 全局界面层级（非富文本）══════════════════════════
-   36/400   HomeView .feature-icon
-            首页四张特性卡的 emoji 图标
-   32/600   ProblemListView .stat-big
-            题库页统计卡大数字（已解决/提交/通过率）
-   30/600   HomeView .title
-            首页 hero 标题
-   22/600   页头大标题 / 倒计时 / 品牌
-            .brand：全站顶栏 SOJ
-            .big-title：题目详情、比赛详情、赛题、考试详情、考题
-            .countdown：比赛/考试详情倒计时
-   16.38/600 HomeView .feature h3
-            首页特性卡小标题；浏览器 h3 默认 1.17em，非 16 档
-   16.38/700 原生 h3 实体名
-            ClassesView .name、ClassDetailView .title-row h3
-            （浏览器 h3 默认 1.17em + 原生粗体 700）
-   16/600   .section-title / .root-check
-            BackupPanel 分区标题；RolesPanel root 列标记
-   16/400   TagsPanel .add-card
-            标签树“＋”新增卡
-   14/700   HomeView .class-name
-            首页班级卡名称（原生 h4 默认 700）
-   14/600   分组/导航/详情小标题
-            ContestsView .group-head；AdminView .nav-title；
-            SubmissionDetailDialog .detail-sub；SubStatus .sub-status；
-            .el-table th .cell；b/strong
-   14/400   界面基线（body）
-            表单、按钮、菜单、表格文字/表头、卡片头、页脚、弹窗内容、
-            pre/code/kbd/samp（代码显示）、登录页、设置页、后台六面板
-   14/400   .el-tag
-            普通标签：首页技术栈、题目标签、状态标签、班级标签
-   13       .el-table .el-tag
-            表格内标签：题库列表、排名、提交记录赛事、作业进度、角色矩阵
-            （角色矩阵表头内的标签随表头字重 600，字号仍 13）
-   13.3333  .el-tag__close
-            可关闭标签的 ×；EP 未设字号，浏览器 button 默认 13.3333，本站未覆盖
-   12/400   小徽章/微文字
-            .caret：标签树 ▸
-            .count-badge：标签引用数角标
-            .del-x：标签编辑态 ×
-            .md-lang-badge：MdView 代码块语言徽标
-            .el-table__expand-icon：用户管理展开箭头
-            .el-input__count-inner：建题标题 0/64 计数
-            .tb-btn 文本：编辑器行+/行-/列+/列-
-            .el-popper：tooltip 内容（EP 核心规则，详见 B）
+   ── 基础档位 ─────────────────────────────────────────────
+   --soj-fs-9   9px   分数错误角标（ScoreCell）
+   --soj-fs-12  12px  小徽章/微文字（下表按语义 token 引用）
+   --soj-fs-13  13px  表格内标签
+   --soj-fs-14  14px  界面基线
+   --soj-fs-16  16px  区块小标题/富文本正文
+   --soj-fs-18  18px  弹窗/确认框标题
+   --soj-fs-20  20px  404 标题
+   --soj-fs-22  22px  页头大标题/品牌/倒计时
+   --soj-fs-30  30px  首页 hero
+   --soj-fs-32  32px  统计大数字
+   --soj-fs-36  36px  首页 emoji 图标
+   --soj-fw-regular 400 / --soj-fw-medium 500 / --soj-fw-emphasis 600 / --soj-fw-bold 700
 
-   ══ B. Element Plus（本站覆盖 / EP 出厂）════════════════
-   14       --el-font-size-base（EP 根变量）
-   14       .el-button / .el-button--small
-            本站把 small 从 EP 12 提到 14；全站按钮
-   14       .el-input / .el-textarea / .el-select__wrapper / .el-input-number
-            登录、建题、设置、后台表单、提交弹窗语言选择
-   14       .el-select--small .el-select__wrapper
-            本站覆盖 EP 12；班级成员角色下拉
-   12       .el-input--small
-            EP 出厂未覆盖；仅 TagsPanel 标签卡改名/新增输入
-            这是界面输入类唯一的 12px 例外
-   14       .el-form-item__label
-   14       .el-checkbox__label / .el-radio__label / .el-radio-button__inner
-            角色新建弹窗权限位；登录/注册切换；建题比对方式
-   14/500   .el-tabs__item
-            比赛/考试详情“题目 / 榜单”
-   14       .el-table--small
-            本站覆盖 EP 13；提交明细、角色矩阵、题目测试点
-   14/600   .el-table th .cell
-   12       .el-table__expand-icon（EP；用户管理展开箭头）
-   14       .el-descriptions（--small 已覆盖）
-            提交详情 3 列（标签列已去 700 加粗）
-   14       .el-pagination
-            题库、提交记录、题解弹窗；当前页数字 700
-   14       .el-dropdown-menu__item
-            顶栏用户菜单、编辑器标题菜单
-   14       .el-select-dropdown__item
-            语言/角色/班级选择
-   12       .el-popper / .el-tooltip
-            EP 核心 popper 规则；状态说明、权限说明、表单帮助 tooltip
-            下拉/选择弹层内部项另为 14
-   14       .el-popover.el-popper
-            题目标签浮层（popover 覆写为 14）
-   14       .el-alert__title（无描述）
-            锁定提示、角色说明、备份离线钥匙警告等
-   16       .el-alert__title.with-description
-            文件 IO 题提示（标题 16）
-   14       .el-alert__description / 默认 slot
-            文件 IO 描述、标签树使用说明、锁定提示正文
-   14       .el-message__content
-            ElMessage 成功/警告/错误（“代码不能为空”等）
-   18       .el-dialog__title / .el-message-box__title
-            提交、题解、公式、新建用户/角色、恢复钥匙、评测详情；
-            确认/改名/删除/未保存修改等 message box
-   14       .el-dialog__body / .el-message-box__message / 按钮
-   20       .el-result__title p
-            404 大标题（注意：外层 .el-result__title 仍是 14）
-   14       .el-result__subtitle p
-   14       .el-empty__description p
-            空列表：比赛、提交记录、题解、班级作业
-   12       .el-input__count-inner
-            建题/编辑页标题 0/64 计数
-   16.8/16  .el-progress__text
-            动态内联字号（EP 公式 12 + stroke×0.4）：
-            作业页 stroke 12 → 16.8；比赛/考试详情 stroke 10 → 16
-   14       .el-upload-dragger / .zip-hint / .checker-tip
-            建题/编辑页上传区与校验器说明（自定义文字）
-   12       .el-upload__tip
-            EP 出厂；本站未使用（上传区走自定义 .zip-hint）
-   12       .el-form-item__error
-            EP 出厂；本站表单校验走 ElMessage 14，当前页面未出现
+   ── 语义字号（--soj-fs-*）────────────────────────────────
+   body 14            body/表单/按钮/菜单/表格/弹窗/代码显示/登录/设置/后台
+   nav 14             顶栏菜单项（design.md Phase 6 调 16）
+   brand 22           顶栏 SOJ（独立于 nav，不随导航菜单变）
+   tag 14             普通 .el-tag（首页技术栈/题目标签/状态标签/班级标签）
+   tag-table 13       .el-table .el-tag（题库/排名/提交/作业/角色矩阵）
+   tag-close 13.3333  可关闭标签 ×（浏览器 button 默认，已显式覆盖）
+   small 12           caret / 引用数角标 / 删除钮 / 语言徽标 / 用户表展开箭头 /
+                      建题标题计数 / 编辑器行/列按钮 / tooltip
+   input-small 12     .el-input--small（标签树编辑，界面输入唯一 12px 例外）
+   section 16         .section-title / .root-check / .add-card
+   feature-title 16.38 = calc(--soj-fs-14 * 1.17)  首页特性卡 h3（600）
+   entity-title 16.38 = calc(--soj-fs-14 * 1.17)   班级名 h3（ClassesView/ClassDetail，700）
+   card-title 14      首页班级卡 h4（700）
+   page-title 22      .big-title（题目/比赛/赛题/考试/考题）/ .countdown
+                      （design.md 目标 20，Phase 6 调）
+   hero 30            首页 hero
+   stat 32            题库统计大数字
+   emoji 36           首页 feature-icon
+   dialog-title 18    el-dialog / el-message-box 标题
+   result-title 20    404 el-result 标题内层 p
+   rich 16            .rich 正文基准（MdView + Tiptap 内容）
+   code 14            pre/code/kbd/samp、富文本块级代码
+   tooltip 12         .el-popper 内容（状态说明/权限说明/表单帮助）
+   popover 14         .el-popover.el-popper（题目标签浮层）
+   alert-title 14 / alert-title-desc 16 / alert-desc 14
+   editor-toolbar 12  Tiptap .tb-btn 文本（行+/行-/列+/列-）
+   copy 14            MdView 代码块复制按钮
 
-   ══ C. Markdown 富文本（.rich，基准 16，行内单位 em）════
-   16/400   .rich 基准；p / li / blockquote / td / a
-            使用方：MdView（题面、比赛/考试说明、班级/作业简介、
-            首页公告、题解、BackupPanel 恢复指南）；
-            Tiptap 内容区（MdEditorInner）
-   16/600   th（富文本表格表头）
-   21.6/600 h1（1.35em；富文本一级标题，当前题面未用，用户内容可用）
-   19.2/600 h2（1.2em；题面“题目描述/输入格式/输出格式/样例”）
-   17.28/600 h3（1.08em；题面“样例 1”、指南小节）
-   16/600   h4-h6（1em；富文本内小标题）
-   14.4     行内 code（0.9em；题面/公告/题解中的内联代码）
-   14       块级 code / pre（题面样例、指南代码块）
-   19.36    .katex（1.21em；题面行内/块级公式）
-   12       .md-lang-badge（有 language-* 的 MdView 代码块）
-   14       .md-copy-btn（MdView 代码块“复制”）
-   13       公式占位符（.rich .tiptap ...:empty::before）
-            当前不生效：.tiptap 自身就是 .rich（无祖先 .rich），且
-            Tiptap 数学节点始终渲染 KaTeX 包裹，永远不 :empty。
-            如需占位提示须按实际节点结构另写规则，不能只改选择器。
+   ── 语义字重（--soj-fw-*）────────────────────────────────
+   regular 400        body/UI 默认、表单标签、上传说明、EP 根字重
+   medium 500         预留（当前无 el-tabs）
+   emphasis 600       表头/区块标题/页头/导航/品牌/倒计时/统计/状态/详情小标题/
+                      分组/分数/总分/rich 标题/b,strong/后台面板小标题
+   bold 700           原生 h3/h4 班级名、分页当前页
 
-   ══ D. 编辑器 ═══════════════════════════════════════════
-   Tiptap（MdEditorInner）
-   16/400   .tiptap 内容区（与 .rich 同规则）
-   16/400   空内容 placeholder（::before）
-   12/400   .tb-btn 文字（行+/行-/列+/列-；纯图标按钮无文字）
-   20px     工具栏图标（lucide 17px）
-   14/400   标题下拉项（正文/标题 1-4）
-   16/400   compact 变体内容（题解/备份指南）
-   18/400   MdMathDialog 标题
-   14/400   MdMathDialog TeX 输入框 / 按钮
-   16.94    MdMathDialog KaTeX 预览（14 × 1.21）
-            使用方：ProblemForm 题面、NoticePanel 公告、
-            SolutionsDialog 题解、BackupPanel 指南、
-            RoundDetailView 比赛/考试说明
+   ── 不纳入 token ─────────────────────────────────────────
+   - CodeMirror 字号：组件默认 14，用户偏好 12–48（JS，不是 CSS 全局值）
+   - EP 进度百分比：EP 内联 12 + stroke×0.4（当前 16.8 / 16）
+   - 富文本相对比例：h1/h2/h3 1.35/1.2/1.08em、行内 code 0.9em、KaTeX 1.21em
+   - 图标尺寸 20/17、行高（另批）
 
-   CodeMirror（CodeEditor）
-   14/400   组件默认（CodeEditor.vue fontSize 默认 14）
-   18/400   当前 admin 实际（偏好 codeFontSize=18；
-            内容、行号、补全浮层全跟随）
-   12-48    用户可调范围（CodeWorkbench 头部数字输入）
-   14/400   CodeWorkbench 头部语言选择 / 字号输入
-            使用方：SubmitDialog 提交弹窗、CodeWorkbench 在线编程
-
-   ══ E. 易误判的例外（不要按 14 基线套）══════════════════
-   - Tooltip 12；Popover 14。
-   - Alert 无描述 14；带描述标题 16 + 描述 14。
-   - 进度百分比动态 16.8 / 16（stroke 12 / 10）。
-   - 首页 feature h3 16.38/600；班级名 h3 16.38/700；HomeView h4 班级名 14/700。
-   - 标签树 small input 12；tag 关闭钮 13.3333。
-   - 行内 code 14.4；KaTeX 19.36（公式弹窗 16.94）。
-   - 404 标题 20 在内层 p；外层容器 14。
-   - CM6 当前账号 18，默认 14，最终以用户偏好为准。
-   - 公式占位 13 规则当前不生效（详见 C）。
+   ── 实测基线（2026-10-19，线上 computed style）────────────
+   页面主档：body/UI 14、页头 22、hero 30、统计 32、emoji 36、rich 16
+   富文本：h1 21.6 / h2 19.2 / h3 17.28 / h4-h6 16、行内 code 14.4、块级 code 14、KaTeX 19.36
+   组件：tag 14 / 表格 tag 13 / tag close 13.3333 / tooltip 12 / popover 14 /
+         alert 14·16·14 / dialog 18 / result 20 / progress 16.8·16 / CM6 默认 14
    ============================================================ */
 html,
 body,
@@ -184,8 +84,58 @@ body,
      generic monospace（Windows 常解析为 Courier New） */
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
 
+  /* ---- SOJ 字号/字重 token（v0.6.3）：基础档位 → 语义角色 ----
+     改基础档位（--soj-fs-14 等）会影响所有引用它的角色；改语义 token 只影响该角色。
+     当前值 = v0.6.3 迁移基线，Phase 1–4 保持零视觉 diff；design.md 目标值在 Phase 6 调。 */
+  --soj-fs-9: 9px;
+  --soj-fs-12: 12px;
+  --soj-fs-13: 13px;
+  --soj-fs-14: 14px;
+  --soj-fs-16: 16px;
+  --soj-fs-18: 18px;
+  --soj-fs-20: 20px;
+  --soj-fs-22: 22px;
+  --soj-fs-30: 30px;
+  --soj-fs-32: 32px;
+  --soj-fs-36: 36px;
+
+  --soj-fw-regular: 400;
+  --soj-fw-medium: 500;
+  --soj-fw-emphasis: 600;
+  --soj-fw-bold: 700;
+
+  /* 语义字号 */
+  --soj-fs-body: var(--soj-fs-14);
+  --soj-fs-nav: var(--soj-fs-14);
+  --soj-fs-brand: var(--soj-fs-22);
+  --soj-fs-tag: var(--soj-fs-14);
+  --soj-fs-tag-table: var(--soj-fs-13);
+  --soj-fs-tag-close: 13.3333px;
+  --soj-fs-small: var(--soj-fs-12);
+  --soj-fs-input-small: var(--soj-fs-12);
+  --soj-fs-section: var(--soj-fs-16);
+  --soj-fs-feature-title: calc(var(--soj-fs-14) * 1.17);
+  --soj-fs-entity-title: calc(var(--soj-fs-14) * 1.17);
+  --soj-fs-card-title: var(--soj-fs-14);
+  --soj-fs-page-title: var(--soj-fs-22);
+  --soj-fs-hero: var(--soj-fs-30);
+  --soj-fs-stat: var(--soj-fs-32);
+  --soj-fs-emoji: var(--soj-fs-36);
+  --soj-fs-dialog-title: var(--soj-fs-18);
+  --soj-fs-result-title: var(--soj-fs-20);
+  --soj-fs-rich: var(--soj-fs-16);
+  --soj-fs-code: var(--soj-fs-14);
+  --soj-fs-tooltip: var(--soj-fs-12);
+  --soj-fs-popover: var(--soj-fs-14);
+  --soj-fs-alert-title: var(--soj-fs-14);
+  --soj-fs-alert-title-desc: var(--soj-fs-16);
+  --soj-fs-alert-desc: var(--soj-fs-14);
+  --soj-fs-editor-toolbar: var(--soj-fs-12);
+  --soj-fs-copy: var(--soj-fs-14);
+
   /* 组件字重 400（Ant：强调只靠 600 档与颜色） */
-  --el-font-weight-primary: 400;
+  --el-font-weight-primary: var(--soj-fw-regular);
+  --el-font-size-base: var(--soj-fs-body);
 
   /* ---- Ant 对齐：画布 / 圆角 / 边框 / 填充 ---- */
   /* 画布 Ant colorBgLayout #f5f5f5，卡片/弹窗纯白从背景浮出；组件面 --el-bg-color 不动 */
@@ -214,7 +164,7 @@ body,
 }
 
 body {
-  font-size: 14px;
+  font-size: var(--soj-fs-body);
   font-family:
     'Helvetica Neue',
     Arial,
@@ -244,7 +194,7 @@ body {
 
 /* 表内仅标签字号 13（其余表内文字维持界面基线 14；覆盖全局 .el-tag 的 14） */
 .el-table .el-tag {
-  font-size: 13px;
+  font-size: var(--soj-fs-tag-table);
 }
 
 /* 卡片/弹窗/messagebox 圆角 8（EP 自声明在组件类上，须在此覆盖） */
@@ -266,7 +216,7 @@ body {
 }
 
 .el-table th.el-table__cell > .cell {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 /* 表头竖线（Ant 标志性表头分隔）：每个表头单元格右边框，末列与滚动条占位列不带 */
@@ -276,7 +226,7 @@ body {
 
 /* 描述列表（评测详情等）Ant 化：带边框款的标签列去 EP 默认 700 加粗、底色指 #fafafa */
 .el-descriptions__label.el-descriptions__cell.is-bordered-label {
-  font-weight: 400;
+  font-weight: var(--soj-fw-regular);
   --el-descriptions-item-bordered-label-background: var(--el-fill-color-lighter);
 }
 
@@ -305,7 +255,7 @@ pre {
 /* 浏览器 UA 把 b/strong 渲染成 700，收进 600 档 */
 b,
 strong {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 /* ---- 提交状态小圆灯（CSS 圆点而非 emoji：跨平台尺寸/颜色一致）----
@@ -343,7 +293,7 @@ strong {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   font-variant-numeric: tabular-nums;
 }
 
@@ -462,25 +412,25 @@ strong {
 /* el-tag 与小号按钮字号 14（EP 默认 12 偏小）；tag 圆角 6 为组件类级覆盖 */
 .el-tag {
   --el-tag-border-radius: 6px;
-  font-size: 14px;
+  font-size: var(--soj-fs-tag);
   height: auto;
   padding: 2px 8px;
   line-height: 1.4;
 }
 
 .el-button--small {
-  font-size: 14px;
+  font-size: var(--soj-fs-body);
   height: auto;
   padding: 5px 11px;
 }
 
 /* 表格与描述列表：small 尺寸 EP 硬编码 12-14px，对齐 14 */
 .el-table--small {
-  font-size: 14px;
+  font-size: var(--soj-fs-body);
 }
 
 .el-descriptions--small .el-descriptions__body .el-descriptions__table .el-descriptions__cell {
-  font-size: 14px;
+  font-size: var(--soj-fs-body);
 }
 
 /* ---- Markdown 排版（.rich）：同挂编辑端（Tiptap 内容区，MdEditor 注入）与显示端
@@ -488,7 +438,7 @@ strong {
    v0.6 换血后无第三方编辑器样式反压，规则即唯一来源 */
 .rich {
   color: var(--el-text-color-primary);
-  font-size: 16px;
+  font-size: var(--soj-fs-rich);
   line-height: 1.7;
 }
 
@@ -499,7 +449,7 @@ strong {
 .rich h4,
 .rich h5,
 .rich h6 {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   line-height: 1.4;
   margin: 1.5em 0 0.5em;
 }
@@ -582,7 +532,7 @@ strong {
 /* 块级代码 14px（压过 Vditor 默认 85%） */
 .rich pre,
 .rich pre code {
-  font-size: 14px;
+  font-size: var(--soj-fs-code);
 }
 
 .rich pre {
@@ -602,7 +552,7 @@ strong {
 
 .rich th {
   background: var(--el-fill-color-light);
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .rich tbody tr:nth-child(2n) {
@@ -648,7 +598,7 @@ strong {
 .rich .tiptap [data-type="inline-math"]:empty::before {
   content: "公式（双击编辑 TeX）";
   color: var(--el-text-color-placeholder);
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
 }
 
 /* 表格（Tiptap 表格与转换器表格共用；查看端表头/斑马纹沿用上方 .rich 规则） */
@@ -662,7 +612,7 @@ pre,
 code,
 kbd,
 samp {
-  font-size: 14px;
+  font-size: var(--soj-fs-code);
   font-family: var(--font-mono);
 }
 
@@ -700,7 +650,7 @@ samp {
 }
 
 .detail-sub {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   margin: 14px 0 8px;
 }
 
@@ -715,5 +665,54 @@ samp {
 
 /* 小号下拉选择器（管理后台角色选择等）：字号对齐全站 14px（EP small 为 12px） */
 .el-select--small .el-select__wrapper {
-  font-size: 14px;
+  font-size: var(--soj-fs-body);
+}
+
+/* ---- EP / 浏览器默认字号 token 覆盖（v0.6.3） ----
+   EP 把部分变量声明在组件类上，:root 覆盖无效，必须落在组件类。 */
+.el-menu-item {
+  font-size: var(--soj-fs-nav);
+}
+
+.el-popper {
+  font-size: var(--soj-fs-tooltip);
+}
+
+.el-popover.el-popper {
+  font-size: var(--soj-fs-popover);
+}
+
+.el-alert {
+  --el-alert-title-font-size: var(--soj-fs-alert-title);
+  --el-alert-title-with-description-font-size: var(--soj-fs-alert-title-desc);
+  --el-alert-description-font-size: var(--soj-fs-alert-desc);
+}
+
+.el-dialog {
+  --el-dialog-title-font-size: var(--soj-fs-dialog-title);
+}
+
+.el-message-box {
+  --el-messagebox-font-size: var(--soj-fs-dialog-title);
+}
+
+.el-result__title p {
+  font-size: var(--soj-fs-result-title);
+}
+
+.el-tag__close {
+  font-size: var(--soj-fs-tag-close);
+}
+
+.el-table__expand-icon,
+.el-input__count-inner {
+  font-size: var(--soj-fs-small);
+}
+
+.el-input--small {
+  font-size: var(--soj-fs-input-small);
+}
+
+.el-pager li.is-active {
+  font-weight: var(--soj-fw-bold);
 }

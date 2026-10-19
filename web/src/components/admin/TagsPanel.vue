@@ -827,7 +827,7 @@ async function onSave() {
 <style scoped>
 .caret {
   margin-left: 4px;
-  font-size: 12px;
+  font-size: var(--soj-fs-small);
   opacity: 0.55;
 }
 
@@ -973,7 +973,7 @@ async function onSave() {
   border-radius: 8px;
   background: var(--el-color-info);
   color: var(--el-color-white);
-  font-size: 12px;
+  font-size: var(--soj-fs-small);
   text-align: center;
 }
 
@@ -997,7 +997,7 @@ async function onSave() {
   border-radius: 50%;
   background: var(--el-color-danger);
   color: var(--el-color-white);
-  font-size: 12px;
+  font-size: var(--soj-fs-small);
 }
 
 .del-x:hover {
@@ -1010,7 +1010,7 @@ async function onSave() {
   background: var(--el-bg-color);
   border: 1px dashed var(--el-border-color);
   color: var(--el-text-color-secondary);
-  font-size: 16px;
+  font-size: var(--soj-fs-section);
 }
 
 .add-card:hover {

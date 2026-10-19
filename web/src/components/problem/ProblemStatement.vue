@@ -52,8 +52,8 @@ defineProps<{
 
 /* 页头大标题 22/600：层级顶点 */
 .big-title {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: var(--soj-fs-page-title);
+  font-weight: var(--soj-fw-emphasis);
   line-height: 1.4;
 }
 

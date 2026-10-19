@@ -194,7 +194,7 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .dot {

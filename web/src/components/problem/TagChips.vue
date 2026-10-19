@@ -226,12 +226,12 @@ onBeforeUnmount(() => {
 
 .caret {
   margin-left: 4px;
-  font-size: 12px;
+  font-size: var(--soj-fs-small);
   opacity: 0.55;
 }
 
 .check {
   margin-left: 4px;
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 </style>

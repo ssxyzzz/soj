@@ -326,7 +326,7 @@ onUnmounted(stopPolling)
 }
 
 .info-stats b {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .info-tags {
@@ -356,7 +356,7 @@ onUnmounted(stopPolling)
 .show-tags {
   color: var(--el-color-primary);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--soj-fs-body);
 }
 
 .show-tags:hover {

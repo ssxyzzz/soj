@@ -304,7 +304,7 @@ function onSubmitClick() {
 <style scoped>
 /* 表单标签不加粗（Ant：标签与正文同字重 400，颜色不降档） */
 :deep(.el-form-item__label) {
-  font-weight: 400;
+  font-weight: var(--soj-fw-regular);
   color: var(--el-text-color-primary);
 }
 
@@ -358,7 +358,7 @@ function onSubmitClick() {
 }
 
 .field-label {
-  font-weight: 400;
+  font-weight: var(--soj-fw-regular);
   color: var(--el-text-color-primary);
   margin-bottom: 8px;
   display: inline-flex;
@@ -399,7 +399,7 @@ function onSubmitClick() {
 }
 
 .zip-replace-hint {
-  font-weight: 400;
+  font-weight: var(--soj-fw-regular);
 }
 
 /* label 插槽内的图标/提示与标签文字垂直居中（label 为块级布局，行内元素默认按基线对齐会偏高） */

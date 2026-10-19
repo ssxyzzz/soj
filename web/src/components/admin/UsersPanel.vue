@@ -507,7 +507,7 @@ defineExpose({ refresh: loadDefaultView })
 }
 
 .sug-username {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .sug-nickname {
@@ -520,7 +520,7 @@ defineExpose({ refresh: loadDefaultView })
   display: flex;
   align-items: center;
   gap: 4px;
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-primary);
   user-select: none;
 }
@@ -540,7 +540,7 @@ defineExpose({ refresh: loadDefaultView })
   flex: none;
   text-align: center;
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--soj-fs-small);
 }
 
 .row-hint {
@@ -565,7 +565,7 @@ defineExpose({ refresh: loadDefaultView })
 
 .perm-expand-group {
   flex: none;
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-primary);
 }
 

@@ -108,8 +108,8 @@ function onCommand(command: string) {
 
 /* 品牌字 22/600 */
 .brand {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: var(--soj-fs-brand);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-color-primary);
   cursor: pointer;
   margin-right: 16px;
@@ -164,7 +164,7 @@ function onCommand(command: string) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: var(--soj-fs-body);
   margin-right: 8px;
   transition:
     background-color var(--el-transition-duration, 0.3s),

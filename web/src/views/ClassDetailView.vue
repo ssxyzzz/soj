@@ -445,6 +445,11 @@ stripe
   flex-wrap: wrap;
 }
 
+.title-row h3 {
+  font-size: var(--soj-fs-entity-title);
+  font-weight: var(--soj-fw-bold);
+}
+
 .intro {
   margin: 10px 0 4px;
   color: var(--el-text-color-regular);

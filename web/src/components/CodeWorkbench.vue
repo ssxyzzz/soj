@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
 }
 
 .wb-title {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

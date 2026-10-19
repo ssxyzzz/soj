@@ -178,7 +178,7 @@ async function togglePin(s: SolutionItem) {
 }
 
 .sub-user {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .solution-actions {

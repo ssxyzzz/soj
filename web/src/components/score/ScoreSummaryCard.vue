@@ -141,7 +141,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 
 .total {
   color: var(--el-color-primary);
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -160,7 +160,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 .progress-text {
   flex: none;
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--soj-fs-small);
   font-variant-numeric: tabular-nums;
 }
 </style>

@@ -97,7 +97,7 @@ watch(() => props.content, render)
   top: 7px;
   left: 10px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: var(--soj-fs-small);
   line-height: 20px;
   color: var(--el-text-color-secondary);
   background: var(--el-fill-color);
@@ -111,7 +111,7 @@ watch(() => props.content, render)
   right: 6px;
   z-index: 1;
   padding: 1px 8px;
-  font-size: 14px; /* 内容区 16px 环境下显式对齐全站界面字号 */
+  font-size: var(--soj-fs-copy); /* 内容区 16px 环境下显式对齐全站界面字号 */
   line-height: 1.3;
   color: var(--el-color-primary);
   background: var(--el-color-primary-light-9);

@@ -379,8 +379,8 @@ onUnmounted(() => {
 
 /* 页头大标题标准档（22/600）：全站层级顶点 */
 .big-title {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: var(--soj-fs-page-title);
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .intro {
@@ -405,8 +405,8 @@ onUnmounted(() => {
 
 /* 倒计时大字（22/600，强调档） */
 .countdown {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: var(--soj-fs-page-title);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-color-primary);
   margin-bottom: 10px;
   text-align: center;

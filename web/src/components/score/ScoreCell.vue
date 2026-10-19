@@ -40,7 +40,7 @@ function onClick() {
   position: relative;
   display: inline-block;
   min-width: 24px;
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   line-height: 1.4;
   text-align: center;
   user-select: none;
@@ -81,8 +81,8 @@ function onClick() {
   border-radius: 7px;
   background: var(--el-color-danger);
   color: var(--el-color-white);
-  font-size: 9px;
-  font-weight: 600;
+  font-size: var(--soj-fs-9);
+  font-weight: var(--soj-fw-emphasis);
   line-height: 14px;
   text-align: center;
   pointer-events: none;

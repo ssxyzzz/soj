@@ -200,6 +200,8 @@ onMounted(load)
   margin: 0;
   cursor: pointer;
   color: var(--el-color-primary);
+  font-size: var(--soj-fs-entity-title);
+  font-weight: var(--soj-fw-bold);
 }
 
 .intro {

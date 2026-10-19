@@ -235,7 +235,7 @@ onMounted(async () => {
 
 /* 权限分类分组行 */
 .perm-group-row {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-primary);
   background: var(--el-color-primary-light-9);
   margin: -8px -16px;
@@ -251,7 +251,7 @@ onMounted(async () => {
 }
 
 .col-name {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .col-meta {
@@ -280,8 +280,8 @@ onMounted(async () => {
 
 .root-check {
   color: var(--el-color-success);
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--soj-fs-section);
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .perm-blocks {
@@ -292,7 +292,7 @@ onMounted(async () => {
 }
 
 .perm-block-title {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-primary);
   margin-bottom: 4px;
 }

@@ -327,7 +327,7 @@ onMounted(loadBackup)
 
 .key-warning {
   color: var(--el-color-danger);
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .guide-head {
@@ -338,8 +338,8 @@ onMounted(loadBackup)
 
 /* 分区标题：区块小标题标准档（16/600） */
 .section-title {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: var(--soj-fs-section);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-primary);
 }
 </style>

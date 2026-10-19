@@ -162,12 +162,12 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
 
 .name.me {
   color: var(--el-color-primary);
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .total {
   color: var(--el-color-primary);
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   font-variant-numeric: tabular-nums;
 }
 </style>

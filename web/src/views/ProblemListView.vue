@@ -230,8 +230,8 @@ stripe
 
 /* 统计大数字（32/600，强调档） */
 .stat-big {
-  font-size: 32px;
-  font-weight: 600;
+  font-size: var(--soj-fs-stat);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-color-primary);
   line-height: 1.2;
 }

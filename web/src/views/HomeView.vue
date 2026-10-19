@@ -115,8 +115,8 @@ onMounted(async () => {
 /* hero 标题 30/600（强调档最高级） */
 .title {
   margin: 0 0 8px;
-  font-size: 30px;
-  font-weight: 600;
+  font-size: var(--soj-fs-hero);
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .subtitle {
@@ -148,12 +148,13 @@ onMounted(async () => {
 }
 
 .feature-icon {
-  font-size: 36px;
+  font-size: var(--soj-fs-emoji);
 }
 
 .feature h3 {
   margin: 8px 0;
-  font-weight: 600;
+  font-size: var(--soj-fs-feature-title);
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .feature p {
@@ -180,6 +181,8 @@ onMounted(async () => {
 .class-name {
   margin: 0 0 6px;
   color: var(--el-color-primary);
+  font-size: var(--soj-fs-card-title);
+  font-weight: var(--soj-fw-bold);
 }
 
 .class-intro {

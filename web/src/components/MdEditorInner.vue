@@ -340,7 +340,7 @@ watch(
   border-radius: var(--el-border-radius-small);
   background: transparent;
   color: var(--el-text-color-regular);
-  font-size: 12px;
+  font-size: var(--soj-fs-editor-toolbar);
   cursor: pointer;
 }
 

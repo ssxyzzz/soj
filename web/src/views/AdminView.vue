@@ -151,7 +151,7 @@ async function switchSection(target: typeof section.value) {
 }
 
 .nav-title {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-primary);
 }
 

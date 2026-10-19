@@ -260,7 +260,7 @@ onUnmounted(() => {
 }
 
 .switch-btn {
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .sa-back {
