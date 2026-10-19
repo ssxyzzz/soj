@@ -212,6 +212,8 @@ export const assignmentApi = {
   setProblems: (id: number, pids: number[]) =>
     put<{ count: number }>(`/assignments/${id}/problems`, { pids }),
   progress: (id: number) => get<ProgressRow[]>(`/assignments/${id}/progress`),
+  userSubmissions: (id: number, pid: number, uid: number) =>
+    get<{ list: Submission[] }>(`/assignments/${id}/problems/${pid}/submissions`, { uid }),
 }
 
 export const adminApi = {

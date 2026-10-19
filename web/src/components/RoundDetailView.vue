@@ -12,9 +12,13 @@ import { downloadCsv } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
-import SubStatus from '@/components/SubStatus.vue'
+import { buildRoundBoard } from '@/components/score/adapters'
+import ScoreBoardDialog from '@/components/score/ScoreBoardDialog.vue'
+import ScoreSummaryCard from '@/components/score/ScoreSummaryCard.vue'
+import type { ScoreBoardView } from '@/components/score/types'
+import UserSubmissionsDialog from '@/components/score/UserSubmissionsDialog.vue'
 import { useUserStore } from '@/stores/user'
-import { fmtDate, fmtMem } from '@/utils/format'
+import { fmtDate } from '@/utils/format'
 import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
 import type { ContestDetail, LeaderRow, Submission } from '@/types'
 
@@ -30,15 +34,26 @@ const roundBase = computed(() => `/${props.kind}s`)
 
 const round = ref<ContestDetail | null>(null)
 const loading = ref(true)
-const tab = ref('problems')
 const leaders = ref<LeaderRow[]>([])
 const leadersLoading = ref(false)
 const myUid = ref<number | null>(null)
+const showScoreBoard = ref(false)
 
 // 榜单单元格点看用户提交明细：组织者本人 ∨「查看用户提交明细」权限位
 const canInspectSubs = computed(
   () => !!round.value?.is_organizer || userStore.can('submission.view.user'),
 )
+const scoreBoard = computed<ScoreBoardView | null>(() => {
+  if (!round.value) return null
+  return buildRoundBoard(props.kind, round.value, leaders.value, canInspectSubs.value)
+})
+const scoreTitle = computed(() => (round.value ? `成绩表 · ${round.value.title}` : '成绩表'))
+const scoreEmptyText = computed(() => {
+  if (!userStore.token) return '登录后查看成绩'
+  if (round.value?.status === 'scheduled') return `${name.value}开始前不显示成绩`
+  if (round.value?.status === 'running') return `OI 赛制：${name.value}进行中不显示成绩`
+  return '暂无成绩'
+})
 const showUserSubs = ref(false)
 const userSubsLoading = ref(false)
 const userSubs = ref<Submission[]>([])
@@ -54,6 +69,10 @@ async function openUserSubs(uid: number, uname: string, pid: number, ptitle: str
   } finally {
     userSubsLoading.value = false
   }
+}
+
+function inspectCell(payload: { uid: number; name: string; pid: number; title: string }) {
+  openUserSubs(payload.uid, payload.name, payload.pid, payload.title)
 }
 
 const fileIOSaving = ref(false)
@@ -116,7 +135,7 @@ function fmtDur(ms: number): string {
 async function load() {
   try {
     round.value = await api.value.detail(Number(route.params.id))
-    if (boardVisible.value) loadLeaders()
+    if (boardVisible.value && userStore.token) loadLeaders()
   } catch {
     // 加载失败回退：比赛回赛事列表；考试回班级列表（考试路由不在主导航）
     router.replace(props.kind === 'exam' ? '/classes' : '/contests')
@@ -126,6 +145,10 @@ async function load() {
 }
 
 async function loadLeaders() {
+  if (!userStore.token) {
+    leaders.value = []
+    return
+  }
   leadersLoading.value = true
   try {
     leaders.value = await api.value.leaderboard(Number(route.params.id))
@@ -149,12 +172,7 @@ async function exportCsv() {
   }
 }
 
-// 右列成绩摘要：榜单可见时取自己那一行
-const mySummary = computed(() => {
-  if (myUid.value == null) return null
-  return leaders.value.find((r) => r.uid === myUid.value) ?? null
-})
-
+// 右列成绩摘要已迁到 ScoreSummaryCard（统一成绩表 §2.4）
 function openEditIntro() {
   editIntro.value = round.value?.intro_html ?? round.value?.intro ?? ''
   showEditIntro.value = true
@@ -244,83 +262,26 @@ onUnmounted(() => {
         </el-card>
 
         <el-card class="block">
-          <el-tabs v-model="tab">
-            <el-tab-pane label="题目" name="problems">
-              <el-table stripe v-if="round.problems" :data="round.problems">
-                <el-table-column prop="id" label="ID" width="100" />
-                <el-table-column label="题目">
-                  <template #default="{ row }">
-                    <el-link
-                      type="primary"
-                      @click="router.push(`${roundBase}/${round!.id}/problems/${row.id}`)"
-                    >
-                      {{ row.title }}
-                    </el-link>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="score" label="满分" width="100" />
-              </el-table>
-              <el-alert
-                v-else
-                :title="round.status === 'scheduled' ? `${name}开始前题目隐藏，开始后可见` : '仅本班成员可见题目'"
-                type="info"
-                :closable="false"
-              />
-            </el-tab-pane>
-            <el-tab-pane label="榜单" name="board">
-              <el-button v-if="boardVisible" size="small" @click="loadLeaders">刷新榜单</el-button>
-              <el-button v-if="round.is_organizer" size="small" :loading="exporting" @click="exportCsv">
-                导出 CSV
-              </el-button>
-              <el-alert
-                v-if="round.status === 'running' && !round.is_organizer"
-                :title="`OI 赛制：${name}进行中不显示榜单与判题结果`"
-                type="info"
-                :closable="false"
-                class="mt8"
-              />
-              <el-table stripe v-if="leaders.length" :data="leaders" class="mt8">
-                <el-table-column prop="rank" label="排名" width="70" fixed />
-                <el-table-column prop="username" label="用户名" min-width="130" fixed />
-                <el-table-column prop="nickname" label="昵称" min-width="110" />
-                <el-table-column
-                  v-for="cp in round.problems"
-                  :key="cp.id"
-                  min-width="150"
-                  align="center"
+          <el-table stripe v-if="round.problems" :data="round.problems">
+            <el-table-column prop="id" label="ID" width="100" />
+            <el-table-column label="题目">
+              <template #default="{ row }">
+                <el-link
+                  type="primary"
+                  @click="router.push(`${roundBase}/${round!.id}/problems/${row.id}`)"
                 >
-                  <template #header>
-                    <el-link type="primary" @click="router.push(`${roundBase}/${round!.id}/problems/${cp.id}`)">
-                      {{ cp.title }}
-                    </el-link>
-                  </template>
-                  <template #default="{ row }">
-                    <template v-for="cell in row.problems" :key="cell.pid">
-                      <span v-if="cell.pid === cp.id">
-                        {{ cell.score }} 分
-                        <el-link
-                          v-if="cell.tries && canInspectSubs"
-                          type="primary"
-                          class="cell-tries"
-                          @click="openUserSubs(row.uid, row.username, cp.id, cp.title)"
-                        >
-                          / {{ cell.tries }} 次
-                        </el-link>
-                        <span v-else-if="cell.tries"> / {{ cell.tries }} 次</span>
-                      </span>
-                    </template>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="total" label="总分" width="90" fixed />
-                <el-table-column label="最后得分提交" width="190">
-                  <template #default="{ row }">
-                    {{ row.last_scoring_at ? new Date(row.last_scoring_at).toLocaleString('zh-CN', { hour12: false }) : '-' }}
-                  </template>
-                </el-table-column>
-              </el-table>
-              <el-empty v-else-if="!leadersLoading" description="暂无榜单数据" :image-size="60" />
-            </el-tab-pane>
-          </el-tabs>
+                  {{ row.title }}
+                </el-link>
+              </template>
+            </el-table-column>
+            <el-table-column prop="score" label="满分" width="100" />
+          </el-table>
+          <el-alert
+            v-else
+            :title="round.status === 'scheduled' ? `${name}开始前题目隐藏，开始后可见` : '仅本班成员可见题目'"
+            type="info"
+            :closable="false"
+          />
         </el-card>
 
       <template #aside>
@@ -352,11 +313,17 @@ onUnmounted(() => {
           <div class="dim center">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</div>
         </el-card>
 
-        <el-card v-if="mySummary" class="aside-card">
-          <template #header><span>我的成绩</span></template>
-          <div class="stat-line"><span>总分</span><b>{{ mySummary.total }}</b></div>
-          <div class="stat-line"><span>排名</span><b>第 {{ mySummary.rank }} 名</b></div>
-        </el-card>
+        <ScoreSummaryCard
+          class="aside-card"
+          :board="scoreBoard"
+          :loading="leadersLoading"
+          :visible="boardVisible && !!userStore.token"
+          :empty-text="scoreEmptyText"
+          :my-uid="myUid"
+          :can-refresh="boardVisible && !!userStore.token"
+          @open="showScoreBoard = true"
+          @refresh="loadLeaders"
+        />
 
         <el-card v-if="round.is_organizer || round.deletable" class="aside-card">
           <template #header><span>管理</span></template>
@@ -380,53 +347,25 @@ onUnmounted(() => {
       </template>
     </el-dialog>
 
-    <!-- 榜单单元格点看的用户提交明细（含代码展开） -->
-    <el-dialog v-model="showUserSubs" :title="`提交明细 · ${userSubsTitle}`" width="1020" top="4vh">
-      <el-table stripe v-loading="userSubsLoading" :data="userSubs" border>
-        <el-table-column type="expand">
-          <template #default="{ row }">
-            <div class="user-subs-detail">
-              <pre v-if="row.code" class="mono sub-code">{{ row.code }}</pre>
-              <el-table stripe v-if="row.detail?.length || row.error_info" :data="[...(row.detail ?? []), ...(row.error_info ? [{ msg: row.error_info }] : [])]" size="small" border>
-                <el-table-column prop="index" label="测试点" width="90" />
-                <el-table-column label="结果">
-                  <template #default="{ row: c }">
-                    <SubStatus v-if="c.status" :status="c.status" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="明细" min-width="150">
-                  <template #default="{ row: c }">
-                    <span v-if="c.msg" class="case-err">{{ c.msg }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="耗时" width="120">
-                  <template #default="{ row: c }">{{ c.time_ms ? `${c.time_ms} ms` : '' }}</template>
-                </el-table-column>
-                <el-table-column label="内存" width="120">
-                  <template #default="{ row: c }">{{ c.memory_kb ? fmtMem(c.memory_kb) : '' }}</template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="140">
-          <template #default="{ row }">
-            <SubStatus :status="row.status" :score="row.score" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="language" label="语言" width="100" />
-        <el-table-column label="总耗时" width="100">
-          <template #default="{ row }">{{ row.time_ms }} ms</template>
-        </el-table-column>
-        <el-table-column label="总内存" width="110">
-          <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
-        </el-table-column>
-        <el-table-column label="提交时间">
-          <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="!userSubsLoading && !userSubs.length" description="该用户在此题没有提交" :image-size="48" />
-    </el-dialog>
+    <ScoreBoardDialog
+      v-model="showScoreBoard"
+      :board="scoreBoard"
+      :title="scoreTitle"
+      :loading="leadersLoading"
+      :can-export="!!round?.is_organizer"
+      :exporting="exporting"
+      :my-uid="myUid"
+      @refresh="loadLeaders"
+      @export="exportCsv"
+      @inspect="inspectCell"
+    />
+
+    <UserSubmissionsDialog
+      v-model="showUserSubs"
+      :title="`提交明细 · ${userSubsTitle}`"
+      :loading="userSubsLoading"
+      :list="userSubs"
+    />
   </div>
 </template>
 
@@ -476,24 +415,6 @@ onUnmounted(() => {
 .center {
   text-align: center;
   margin-top: 6px;
-}
-
-.stat-line {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 0;
-}
-
-.cell-tries {
-  vertical-align: baseline;
-}
-
-.user-subs-detail {
-  padding: 8px 20px 16px;
-}
-
-.user-subs-detail .sub-code {
-  margin-bottom: 12px;
 }
 
 .scene-row {

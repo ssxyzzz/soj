@@ -185,6 +185,7 @@ export interface ProgressCell {
   pid: number
   tries: number
   best: number
+  errors: number
   solved: boolean
 }
 
@@ -194,6 +195,8 @@ export interface ProgressRow {
   nickname: string
   attempted: number
   solved: number
+  total: number
+  rank: number
   problems: ProgressCell[]
 }
 
@@ -363,6 +366,7 @@ export interface LeaderCell {
   pid: number
   score: number
   tries: number
+  errors: number
 }
 
 export interface LeaderRow {

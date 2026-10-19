@@ -112,6 +112,7 @@ func (r *Repo) SetAssignmentProblems(ctx context.Context, id int64, pids []int64
 type ProgressCell struct {
 	Tries   int
 	Best    int
+	Errors  int // 未满分提交次数（角标口径）
 	Solved  bool
 	Attempt bool
 }
@@ -124,6 +125,8 @@ type ProgressRow struct {
 	Cells    map[int64]*ProgressCell
 	Attempt  int // 做过题数
 	Solved   int // 通过题数
+	Total    int // 各题最高分之和
+	Rank     int // 总分降序 → 通过题数降序 → UID 升序
 }
 
 // AssignmentProgress 老师视角的作业完成情况：
@@ -143,16 +146,17 @@ func (r *Repo) AssignmentProgress(ctx context.Context, a *Assignment, memberUIDs
 
 	cursor, err := r.Submissions.Find(ctx,
 		bson.M{"pid": bson.M{"$in": pids}, "uid": bson.M{"$in": uids}, "published": true},
-		options.Find().SetProjection(bson.M{"uid": 1, "pid": 1, "score": 1}))
+		options.Find().SetProjection(bson.M{"uid": 1, "pid": 1, "score": 1, "status": 1}))
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close(ctx)
 
 	var subs []struct {
-		UID   int64 `bson:"uid"`
-		PID   int64 `bson:"pid"`
-		Score int   `bson:"score"`
+		UID    int64  `bson:"uid"`
+		PID    int64  `bson:"pid"`
+		Score  int    `bson:"score"`
+		Status string `bson:"status"`
 	}
 	if err := cursor.All(ctx, &subs); err != nil {
 		return nil, err
@@ -196,9 +200,14 @@ func (r *Repo) AssignmentProgress(ctx context.Context, a *Assignment, memberUIDs
 		if s.Score >= 100 {
 			cell.Solved = true
 		}
+		// 未满分提交次数（角标口径）：排队/判题中不计。
+		if s.Status != StatusPending && s.Status != StatusJudging && s.Score < 100 {
+			cell.Errors++
+		}
 	}
 	for _, row := range rows {
 		for _, cell := range row.Cells {
+			row.Total += cell.Best
 			if cell.Attempt {
 				row.Attempt++
 			}
@@ -207,12 +216,18 @@ func (r *Repo) AssignmentProgress(ctx context.Context, a *Assignment, memberUIDs
 			}
 		}
 	}
-	// 做题数多的排前
+	// 统一成绩表排名：总分降序 → 通过题数降序 → UID 升序
 	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Total != rows[j].Total {
+			return rows[i].Total > rows[j].Total
+		}
 		if rows[i].Solved != rows[j].Solved {
 			return rows[i].Solved > rows[j].Solved
 		}
 		return rows[i].UID < rows[j].UID
 	})
+	for i, row := range rows {
+		row.Rank = i + 1
+	}
 	return rows, nil
 }

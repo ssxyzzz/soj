@@ -36,7 +36,7 @@ type Contest struct {
 	HiddenUntil time.Time        `bson:"hiddenUntil"` // 零值 = 无赛后隐藏期
 	Problems    []ContestProblem `bson:"problems"`
 	CreatedBy   int64            `bson:"createdBy"`
-	Published   bool             `bson:"published"` // 隐藏期结束，提交/榜单已并入公开态
+	Published   bool             `bson:"published"`        // 隐藏期结束，提交/榜单已并入公开态
 	FileIO      bool             `bson:"fileIo,omitempty"` // 本场启用文件 IO：场内所有题按各题文件名对以文件读写方式判题（v0.5.2-3）
 	CreatedAt   time.Time        `bson:"createdAt"`
 }
@@ -249,10 +249,11 @@ func (r *Repo) PublishDueRounds(ctx context.Context, now time.Time) (int, error)
 	return published, nil
 }
 
-// LeaderCell 榜单单元（某人在某题的最好成绩与提交次数）。
+// LeaderCell 榜单单元（某人在某题的最好成绩、提交次数与未满分提交次数）。
 type LeaderCell struct {
-	Score int
-	Tries int
+	Score  int
+	Tries  int
+	Errors int
 }
 
 // LeaderRow 榜单一行。LastScoring 为最后一次得分提交时间（并列排名依据：早者靠前）。
@@ -306,13 +307,31 @@ func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, rou
 	return list, nil
 }
 
+// UserProblemSubmissions 指定用户在某题的全部公开提交（含代码与测试点明细）。
+// 作业提交明细用：与 AssignmentProgress 的 published=true 口径一致，不按比赛/考试轮次过滤。
+func (r *Repo) UserProblemSubmissions(ctx context.Context, uid, pid int64) ([]*Submission, error) {
+	filter := bson.M{"uid": uid, "pid": pid, "published": true}
+	cursor, err := r.Submissions.Find(ctx, filter,
+		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	list := make([]*Submission, 0)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // RoundLeaderboard 计算比赛/考试榜单。
 // 排名规则：总分降序 → 最后得分提交时间早者靠前 → 并列。
-func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64) ([]*LeaderRow, error) {
+// fullScores 为每题满分（pid → score），用于统计未满分提交次数（errors）。
+func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64, fullScores map[int64]int) ([]*LeaderRow, error) {
 	cursor, err := r.Submissions.Find(ctx,
 		bson.M{roundsIDField(kind): roundID},
 		options.Find().SetProjection(bson.M{
-			"uid": 1, "uname": 1, "pid": 1, "score": 1, "judgedAt": 1,
+			"uid": 1, "uname": 1, "pid": 1, "score": 1, "status": 1, "judgedAt": 1,
 		}))
 	if err != nil {
 		return nil, err
@@ -324,6 +343,7 @@ func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64)
 		Username string     `bson:"uname"`
 		PID      int64      `bson:"pid"`
 		Score    int        `bson:"score"`
+		Status   string     `bson:"status"`
 		JudgedAt *time.Time `bson:"judgedAt"`
 	}
 	if err := cursor.All(ctx, &subs); err != nil {
@@ -343,6 +363,14 @@ func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64)
 			row.Problems[s.PID] = cell
 		}
 		cell.Tries++
+		full := fullScores[s.PID]
+		if full <= 0 {
+			full = 100
+		}
+		// 未满分提交次数（角标口径）：排队/判题中不计，避免把未出分提交算成错误。
+		if s.Status != StatusPending && s.Status != StatusJudging && s.Score < full {
+			cell.Errors++
+		}
 		if s.Score > cell.Score {
 			cell.Score = s.Score
 		}

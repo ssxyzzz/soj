@@ -3,13 +3,16 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { assignmentApi, authApi, contestApi, problemApi } from '@/api'
+import { assignmentApi, authApi, problemApi } from '@/api'
 import { downloadCsv } from '@/api/download'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
-import SubStatus from '@/components/SubStatus.vue'
+import { buildAssignmentBoard } from '@/components/score/adapters'
+import ScoreBoardDialog from '@/components/score/ScoreBoardDialog.vue'
+import ScoreSummaryCard from '@/components/score/ScoreSummaryCard.vue'
+import type { ScoreBoardView } from '@/components/score/types'
+import UserSubmissionsDialog from '@/components/score/UserSubmissionsDialog.vue'
 import { useUserStore } from '@/stores/user'
-import { fmtDate, fmtMem } from '@/utils/format'
 import type { AssignmentDetail, AssignmentProblem, ProgressRow, Submission } from '@/types'
 
 const route = useRoute()
@@ -30,18 +33,23 @@ const problemOptions = ref<{ id: number; title: string }[]>([])
 const dragIndex = ref<number | null>(null)
 
 const myUid = ref<number | null>(null)
+const showScoreBoard = ref(false)
 
-const myProgress = computed(() => {
-  if (myUid.value == null) return null
-  return progress.value.find((r) => r.uid === myUid.value) ?? null
-})
+// 完成情况单元格点看用户提交明细：老师（作业可管理）∨「查看用户提交明细」权限位
+const canInspectSubs = computed(
+  () => !!assignment.value?.manageable || userStore.can('submission.view.user'),
+)
 
-const myPct = computed(() => {
-  if (!assignment.value || !myProgress.value) return 0
-  const total = assignment.value.problems.length
-  if (!total) return 0
-  return Math.round(((myProgress.value.solved ?? 0) / total) * 100)
+const scoreBoard = computed<ScoreBoardView | null>(() => {
+  if (!assignment.value) return null
+  return buildAssignmentBoard(
+    assignment.value,
+    progress.value,
+    canInspectSubs.value,
+    assignment.value.manageable,
+  )
 })
+const scoreTitle = computed(() => (assignment.value ? `成绩表 · ${assignment.value.title}` : '成绩表'))
 
 async function load() {
   loading.value = true
@@ -78,30 +86,26 @@ async function exportCsv() {
   }
 }
 
-function cellOf(row: ProgressRow, pid: number) {
-  return row.problems.find((c) => c.pid === pid) ?? { pid, tries: 0, best: 0, solved: false }
-}
-
-// 完成情况单元格点看用户提交明细：老师（作业可管理）∨「查看用户提交明细」权限位
-const canInspectSubs = computed(
-  () => !!assignment.value?.manageable || userStore.can('submission.view.user'),
-)
 const showUserSubs = ref(false)
 const userSubsLoading = ref(false)
 const userSubs = ref<Submission[]>([])
 const userSubsTitle = ref('')
 
-async function openUserSubs(uid: number, uname: string, ap: AssignmentProblem) {
-  if (!ap.contest_id) return
+async function openUserSubs(uid: number, uname: string, pid: number, ptitle: string) {
   showUserSubs.value = true
   userSubsLoading.value = true
-  userSubsTitle.value = `${uname} · ${ap.title}`
+  userSubsTitle.value = `${uname} · ${ptitle}`
   try {
-    const r = await contestApi.userSubmissions(ap.contest_id, ap.id, uid)
+    if (!assignment.value) return
+    const r = await assignmentApi.userSubmissions(assignment.value.id, pid, uid)
     userSubs.value = r.list
   } finally {
     userSubsLoading.value = false
   }
+}
+
+function inspectCell(payload: { uid: number; name: string; pid: number; title: string }) {
+  openUserSubs(payload.uid, payload.name, payload.pid, payload.title)
 }
 
 function problemRoute(row: { id: number; contest_id?: number; exam_id?: number }) {
@@ -194,7 +198,6 @@ onMounted(() => {
   if (userStore.token) {
     authApi.me().then((me) => {
       myUid.value = me.id
-      loadProgress()
     }).catch(() => {})
   }
   load()
@@ -205,25 +208,13 @@ onMounted(() => {
 <template>
   <div v-loading="loading">
     <PageShell v-if="assignment">
-        <el-card class="mb16">
+        <el-card class="mb16" body-style="padding: 0">
           <template #header>
             <div class="head">
               <span>{{ assignment.title }}</span>
               <el-link type="primary" @click="router.push(`/classes/${assignment.class_id}`)">返回班级</el-link>
             </div>
           </template>
-          <template v-if="myProgress">
-            <div class="progress-line">
-              <span>我的进度：已完成 {{ myProgress.solved }} / {{ assignment.problems.length }} 题</span>
-              <span class="dim">做题 {{ myProgress.attempted }} 题</span>
-            </div>
-            <el-progress
-              :percentage="myPct"
-              :status="myPct === 100 ? 'success' : undefined"
-              :stroke-width="12"
-            />
-          </template>
-          <div v-else class="dim">{{ userStore.token ? '暂无你的做题记录' : '登录后可查看自己的完成进度' }}</div>
         </el-card>
 
         <el-card v-if="assignment.intro_html || assignment.intro" class="mb16">
@@ -255,52 +246,19 @@ onMounted(() => {
           <el-empty v-if="!assignment.problems.length" description="作业里还没有题目" :image-size="60" />
         </el-card>
 
-        <el-card v-if="assignment.manageable" class="mt16">
-          <template #header>
-            <div class="head">
-              <span>完成情况（{{ progress.length }} 名学生）</span>
-              <span>
-                <el-button size="small" :loading="progressLoading" @click="loadProgress">刷新</el-button>
-                <el-button size="small" :loading="exporting" @click="exportCsv">导出 CSV</el-button>
-              </span>
-            </div>
-          </template>
-          <el-table stripe v-loading="progressLoading" :data="progress">
-            <el-table-column prop="username" label="用户名" min-width="140" />
-            <el-table-column prop="nickname" label="昵称" min-width="120" />
-            <el-table-column
-              v-for="ap in assignment!.problems"
-              :key="ap.id"
-              :label="'P' + ap.id"
-              width="110"
-              align="center"
-            >
-              <template #default="{ row }">
-                <el-link
-                  v-if="canInspectSubs && cellOf(row as ProgressRow, ap.id).tries > 0"
-                  class="cell-link"
-                  @click="openUserSubs((row as ProgressRow).uid, (row as ProgressRow).username, ap)"
-                >
-                  <el-tag v-if="cellOf(row as ProgressRow, ap.id).solved" size="small" type="success">通过</el-tag>
-                  <el-tag v-else size="small" type="warning">
-                    {{ cellOf(row as ProgressRow, ap.id).best }} 分 / {{ cellOf(row as ProgressRow, ap.id).tries }} 次
-                  </el-tag>
-                </el-link>
-                <el-tag v-else-if="cellOf(row as ProgressRow, ap.id).solved" size="small" type="success">通过</el-tag>
-                <el-tag v-else-if="cellOf(row as ProgressRow, ap.id).tries > 0" size="small" type="warning">
-                  {{ cellOf(row as ProgressRow, ap.id).best }} 分 / {{ cellOf(row as ProgressRow, ap.id).tries }} 次
-                </el-tag>
-                <el-tag v-else size="small" type="info">未做</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="进度" width="120">
-              <template #default="{ row }">{{ row.solved }} / {{ assignment!.problems.length }}</template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!progress.length" description="班里还没有学生" :image-size="60" />
-        </el-card>
-
       <template #aside>
+        <ScoreSummaryCard
+          class="aside-card"
+          :board="scoreBoard"
+          :loading="progressLoading"
+          :visible="!!userStore.token"
+          empty-text="登录后查看成绩"
+          :my-uid="myUid"
+          :can-refresh="!!userStore.token"
+          @open="showScoreBoard = true"
+          @refresh="loadProgress"
+        />
+
         <el-card v-if="assignment.manageable" class="aside-card">
           <template #header><span>管理</span></template>
           <div class="entry-actions">
@@ -347,74 +305,33 @@ onMounted(() => {
       </template>
     </el-dialog>
 
-    <!-- 完成情况单元格点看的用户提交明细（含代码展开） -->
-    <el-dialog v-model="showUserSubs" :title="`提交明细 · ${userSubsTitle}`" width="1020" top="4vh">
-      <el-table stripe v-loading="userSubsLoading" :data="userSubs" border>
-        <el-table-column type="expand">
-          <template #default="{ row }">
-            <div class="user-subs-detail">
-              <pre v-if="row.code" class="mono sub-code">{{ row.code }}</pre>
-              <el-table stripe v-if="row.detail?.length || row.error_info" :data="[...(row.detail ?? []), ...(row.error_info ? [{ msg: row.error_info }] : [])]" size="small" border>
-                <el-table-column prop="index" label="测试点" width="90" />
-                <el-table-column label="结果">
-                  <template #default="{ row: c }">
-                    <SubStatus v-if="c.status" :status="c.status" />
-                  </template>
-                </el-table-column>
-                <el-table-column label="明细" min-width="150">
-                  <template #default="{ row: c }">
-                    <span v-if="c.msg" class="case-err">{{ c.msg }}</span>
-                  </template>
-                </el-table-column>
-                <el-table-column label="耗时" width="120">
-                  <template #default="{ row: c }">{{ c.time_ms ? `${c.time_ms} ms` : '' }}</template>
-                </el-table-column>
-                <el-table-column label="内存" width="120">
-                  <template #default="{ row: c }">{{ c.memory_kb ? fmtMem(c.memory_kb) : '' }}</template>
-                </el-table-column>
-              </el-table>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="140">
-          <template #default="{ row }">
-            <SubStatus :status="row.status" :score="row.score" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="language" label="语言" width="100" />
-        <el-table-column label="总耗时" width="100">
-          <template #default="{ row }">{{ row.time_ms }} ms</template>
-        </el-table-column>
-        <el-table-column label="总内存" width="110">
-          <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
-        </el-table-column>
-        <el-table-column label="提交时间">
-          <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
-        </el-table-column>
-      </el-table>
-      <el-empty v-if="!userSubsLoading && !userSubs.length" description="该学生在此题没有提交" :image-size="48" />
-    </el-dialog>
+    <ScoreBoardDialog
+      v-model="showScoreBoard"
+      :board="scoreBoard"
+      :title="scoreTitle"
+      :loading="progressLoading"
+      :can-export="!!assignment?.manageable"
+      :exporting="exporting"
+      :my-uid="myUid"
+      @refresh="loadProgress"
+      @export="exportCsv"
+      @inspect="inspectCell"
+    />
+
+    <UserSubmissionsDialog
+      v-model="showUserSubs"
+      :title="`提交明细 · ${userSubsTitle}`"
+      :loading="userSubsLoading"
+      :list="userSubs"
+      empty-text="该学生在此题没有提交"
+    />
   </div>
 </template>
 
 <style scoped>
-.cell-link {
-  vertical-align: baseline;
-}
-
 /* 卡片纵向间距 16px（编辑器上方） */
 .mb16 {
   margin-bottom: 16px;
-}
-
-.mt16 {
-  margin-top: 16px;
-}
-
-.progress-line {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
 }
 
 .intro {

@@ -171,8 +171,8 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 	resp := gin.H{
 		"id":            ct.ID,
 		"title":         ct.Title,
-		"intro":         ct.Intro,     // 原 md 说明（v0.6 起冻结为回退源）
-		"intro_html":    introHTML,    // 富文本说明（v0.6）
+		"intro":         ct.Intro,  // 原 md 说明（v0.6 起冻结为回退源）
+		"intro_html":    introHTML, // 富文本说明（v0.6）
 		"class_id":      ct.ClassID,
 		"status":        status,
 		"start":         ct.Start,
@@ -545,6 +545,19 @@ func (h *Handlers) ExamUserSubmissions(c *gin.Context) { h.roundUserSubmissions(
 
 // ---------- 共享榜单 ----------
 
+// roundFullScores 每题满分（pid → score）；未配置/非正数按 100 兜底（与 ProblemScore 口径一致）。
+func roundFullScores(ct *repo.Contest) map[int64]int {
+	out := make(map[int64]int, len(ct.Problems))
+	for _, cp := range ct.Problems {
+		if cp.Score > 0 {
+			out[cp.PID] = cp.Score
+		} else {
+			out[cp.PID] = 100
+		}
+	}
+	return out
+}
+
 func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 	uid, _, role, logged := currentUser(c)
 	id, okID := parseID(c, "id")
@@ -578,7 +591,7 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 	entry, cached := h.leaderCache[cacheKey]
 	h.leaderMu.Unlock()
 	if !cached || (!ct.Published && time.Since(entry.at) > 30*time.Second) {
-		rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID)
+		rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID, roundFullScores(ct))
 		if err != nil {
 			fail(c, http.StatusInternalServerError, "计算榜单失败")
 			return
@@ -589,10 +602,10 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 			for _, cp := range ct.Problems {
 				cell := r.Problems[cp.PID]
 				if cell == nil {
-					probs = append(probs, gin.H{"pid": cp.PID, "score": 0, "tries": 0})
+					probs = append(probs, gin.H{"pid": cp.PID, "score": 0, "tries": 0, "errors": 0})
 					continue
 				}
-				probs = append(probs, gin.H{"pid": cp.PID, "score": cell.Score, "tries": cell.Tries})
+				probs = append(probs, gin.H{"pid": cp.PID, "score": cell.Score, "tries": cell.Tries, "errors": cell.Errors})
 			}
 			item := gin.H{
 				"rank":     i + 1,
@@ -646,7 +659,7 @@ func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
 		fail(c, http.StatusForbidden, "仅组织者可导出成绩")
 		return
 	}
-	rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID)
+	rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID, roundFullScores(ct))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "计算榜单失败")
 		return

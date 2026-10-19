@@ -326,22 +326,102 @@ func (h *Handlers) AssignmentProgress(c *gin.Context) {
 		for _, pid := range a.Problems {
 			cell := r.Cells[pid]
 			if cell == nil {
-				probs = append(probs, gin.H{"pid": pid, "tries": 0, "best": 0, "solved": false})
+				probs = append(probs, gin.H{"pid": pid, "tries": 0, "best": 0, "errors": 0, "solved": false})
 				continue
 			}
-			probs = append(probs, gin.H{"pid": pid, "tries": cell.Tries, "best": cell.Best, "solved": cell.Solved})
+			probs = append(probs, gin.H{
+				"pid": pid, "tries": cell.Tries, "best": cell.Best,
+				"errors": cell.Errors, "solved": cell.Solved,
+			})
 		}
 		items = append(items, gin.H{
 			"uid": r.UID, "username": r.Username, "nickname": r.Nickname,
-			"attempted": r.Attempt, "solved": r.Solved, "problems": probs,
+			"attempted": r.Attempt, "solved": r.Solved,
+			"total": r.Total, "rank": r.Rank, "problems": probs,
 		})
 	}
 	ok(c, items)
 }
 
-// AssignmentExport 作业成绩导出（班级管理员/root，v0.5.6）：
-// 列 = 用户名/真实姓名（持 user.realname.view 才含）/各题最高分/总分（最高分合计）/通过题数/做过题数，
-// 行序 = 班级成员清单序（与进度表一致；作业无竞技排名，不设排名列）。
+// AssignmentUserSubmissions 查看指定用户在某作业某题的全部公开提交（含代码与测试点明细）。
+// 门槛：班级管理员/root ∨「查看用户提交明细」权限位；题目可为普通题或比赛/考试来源，
+// 统计口径与 AssignmentProgress 一致（published=true，不按轮次过滤）。
+func (h *Handlers) AssignmentUserSubmissions(c *gin.Context) {
+	uid, _, role, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	pid, okPID := parseID(c, "pid")
+	if !okPID {
+		return
+	}
+	targetUID := int64(atoiDefault(c.Query("uid"), 0))
+	if targetUID <= 0 {
+		fail(c, http.StatusBadRequest, "缺少 uid 参数")
+		return
+	}
+	ctx := c.Request.Context()
+	a, err := h.repo.GetAssignment(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "作业不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取作业失败")
+		return
+	}
+	if !h.assignmentAccessible(ctx, a.ClassID, uid, role, logged) {
+		fail(c, http.StatusForbidden, "加入班级后才能查看")
+		return
+	}
+	cl, cerr := h.repo.GetClass(ctx, a.ClassID)
+	if cerr != nil {
+		fail(c, http.StatusInternalServerError, "读取班级失败")
+		return
+	}
+	if !h.classManageable(c, cl) && !hasPerm(c, repo.PermSubmissionViewUser) {
+		fail(c, http.StatusForbidden, "需要「查看用户提交明细」权限或为班级管理员")
+		return
+	}
+	inAssignment := false
+	for _, p := range a.Problems {
+		if p == pid {
+			inAssignment = true
+			break
+		}
+	}
+	if !inAssignment {
+		fail(c, http.StatusNotFound, "题目不在作业中")
+		return
+	}
+	// 只允许查看本班成员；root 例外（榜单/成绩表管理员视角）
+	if targetUID != uid && role != repo.RoleRoot {
+		member, _ := h.repo.IsMember(ctx, a.ClassID, targetUID)
+		if !member {
+			fail(c, http.StatusForbidden, "该用户不在班级中")
+			return
+		}
+	}
+	subs, err := h.repo.UserProblemSubmissions(ctx, targetUID, pid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取提交失败")
+		return
+	}
+	items := make([]gin.H, 0, len(subs))
+	for _, s := range subs {
+		items = append(items, submissionJSON(s, true))
+	}
+	ok(c, gin.H{"list": items})
+}
+
+// AssignmentExport 作业成绩导出（班级管理员/root，v0.5.6；v0.6.2 起含排名）：
+// 列 = 排名/用户名/真实姓名（持 user.realname.view 才含）/各题最高分/总分（最高分合计）/通过题数/做过题数，
+// 行序 = 统一成绩表排名（总分降序 → 通过题数降序 → UID 升序）。
 func (h *Handlers) AssignmentExport(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -385,7 +465,7 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 			return
 		}
 	}
-	header := []string{"用户名"}
+	header := []string{"排名", "用户名"}
 	if wantRealName {
 		header = append(header, "真实姓名")
 	}
@@ -403,7 +483,7 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 	header = append(header, "总分", "通过题数", "做过题数")
 	out := [][]string{header}
 	for _, r := range rows {
-		row := []string{r.Username}
+		row := []string{strconv.Itoa(r.Rank), r.Username}
 		if wantRealName {
 			if u := users[r.UID]; u != nil {
 				row = append(row, u.RealName)
@@ -411,16 +491,14 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 				row = append(row, "")
 			}
 		}
-		total := 0
 		for _, pid := range a.Problems {
 			best := 0
 			if cell := r.Cells[pid]; cell != nil {
 				best = cell.Best
 			}
 			row = append(row, strconv.Itoa(best))
-			total += best
 		}
-		row = append(row, strconv.Itoa(total), strconv.Itoa(r.Solved), strconv.Itoa(r.Attempt))
+		row = append(row, strconv.Itoa(r.Total), strconv.Itoa(r.Solved), strconv.Itoa(r.Attempt))
 		out = append(out, row)
 	}
 	serveCSV(c, fmt.Sprintf("%s_%s_%s.csv", csvSafeName(cl.Name), csvSafeName(a.Title), time.Now().Format("2006-01-02")), out)
