@@ -1,7 +1,7 @@
 package server
 
-// 个人设置（v0.4.8）：本人自助字段（性别/学校/年级/QQ）+ 偏好（默认语言/代码模板/MD 编辑模式）。
-// 真实姓名仅管理员经 PATCH /admin/users/:id 修改，本人只读；所有字段仅 /me/profile
+// 个人设置（v0.4.8）：本人自助字段（昵称/性别/学校/年级/QQ）+ 偏好（默认语言/代码模板）。
+// 昵称修改受 user.nickname.edit 权限位控制（默认角色默认开启）；其余字段仅 /me/profile
 // 与管理员用户列表返回，不进任何公开响应（userJSON 保持不动）。
 
 import (
@@ -28,8 +28,9 @@ func trimTo(s string, max int) string {
 	return string(r)
 }
 
-// profileJSON 本人视角的个人信息 + 偏好。
-func profileJSON(u *repo.User) gin.H {
+// profileJSON 本人视角的个人信息 + 偏好；canEditNickname 由当前生效权限位现算，
+// 前端据此决定昵称输入框可用状态（不依赖登录时缓存的旧权限）。
+func profileJSON(u *repo.User, canEditNickname bool) gin.H {
 	prefs := u.Prefs
 	if prefs == nil {
 		prefs = &repo.UserPrefs{}
@@ -38,12 +39,13 @@ func profileJSON(u *repo.User) gin.H {
 		prefs.CodeTemplates = map[string]string{}
 	}
 	return gin.H{
-		"real_name": u.RealName,
-		"gender":    u.Gender,
-		"school":    u.School,
-		"grade":     u.Grade,
-		"qq":        u.QQ,
-		"prefs":     prefs,
+		"nickname":          u.Nickname,
+		"can_edit_nickname": canEditNickname,
+		"gender":            u.Gender,
+		"school":            u.School,
+		"grade":             u.Grade,
+		"qq":                u.QQ,
+		"prefs":             prefs,
 	}
 }
 
@@ -63,7 +65,7 @@ func (h *Handlers) GetMyProfile(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取失败")
 		return
 	}
-	ok(c, profileJSON(u))
+	ok(c, profileJSON(u, hasPerm(c, repo.PermUserNicknameEdit)))
 }
 
 // UpdateMyProfile 更新本人自助字段与偏好（指针语义：出现才改，显式空串=清空）。
@@ -74,11 +76,12 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Gender *string `json:"gender"`
-		School *string `json:"school"`
-		Grade  *string `json:"grade"`
-		QQ     *string `json:"qq"`
-		Prefs  *struct {
+		Nickname *string `json:"nickname"`
+		Gender   *string `json:"gender"`
+		School   *string `json:"school"`
+		Grade    *string `json:"grade"`
+		QQ       *string `json:"qq"`
+		Prefs    *struct {
 			DefaultLang   *string            `json:"defaultLang"`
 			CodeTemplates *map[string]string `json:"codeTemplates"`
 			Autocomplete  *bool              `json:"autocomplete"`
@@ -91,6 +94,18 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		return
 	}
 	set := bson.M{}
+	if req.Nickname != nil {
+		if !hasPerm(c, repo.PermUserNicknameEdit) {
+			fail(c, http.StatusForbidden, "当前角色不允许修改昵称")
+			return
+		}
+		nickname := trimTo(*req.Nickname, 32)
+		if nickname == "" {
+			fail(c, http.StatusBadRequest, "昵称不能为空")
+			return
+		}
+		set["nickname"] = nickname
+	}
 	bindStr := func(p *string, key string, max int) {
 		if p != nil {
 			set[key] = trimTo(*p, max)
@@ -177,5 +192,5 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取失败")
 		return
 	}
-	ok(c, profileJSON(u))
+	ok(c, profileJSON(u, hasPerm(c, repo.PermUserNicknameEdit)))
 }

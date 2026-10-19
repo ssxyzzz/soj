@@ -227,7 +227,6 @@ export interface AdminUser {
   username: string
   nickname: string
   role: string
-  real_name?: string // 真实姓名：仅管理员后台可见
 }
 
 // ---------- 个人设置（v0.4.8） ----------
@@ -243,7 +242,8 @@ export interface UserPrefs {
 
 // 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）
 export interface UserProfile {
-  real_name: string
+  nickname: string
+  can_edit_nickname: boolean // 当前角色是否可自助改昵称（后端按生效权限位现算）
   gender: string
   school: string
   grade: string

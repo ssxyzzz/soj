@@ -7,14 +7,15 @@ import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { autocompleteAvailable, languageOptions, mergedPrefs } from '@/utils/code'
 
-// 个人设置（v0.4.8）：本人自助字段（性别/学校/年级/QQ）+ 偏好（默认语言/代码模板）。
-// 真实姓名只读展示——仅管理员后台可改（班级名单对号用）。
+// 个人设置（v0.4.8）：本人自助字段（昵称/性别/学校/年级/QQ）+ 偏好（默认语言/代码模板）。
+// 昵称是否可改由后端按 user.nickname.edit 权限位现算（can_edit_nickname），默认角色默认开启。
 const userStore = useUserStore()
 const loading = ref(false)
 const savingProfile = ref(false)
 const savingPrefs = ref(false)
 
-const realName = ref('')
+const nickname = ref('')
+const canEditNickname = ref(false)
 
 // '' 表示未填写（后端显式空串=清空）
 const profileForm = reactive({ gender: '', school: '', grade: '', qq: '' })
@@ -32,7 +33,8 @@ async function load() {
   loading.value = true
   try {
     const p = await authApi.getProfile()
-    realName.value = p.real_name ?? ''
+    nickname.value = p.nickname ?? ''
+    canEditNickname.value = p.can_edit_nickname
     profileForm.gender = p.gender ?? ''
     profileForm.school = p.school ?? ''
     profileForm.grade = p.grade ?? ''
@@ -46,14 +48,21 @@ async function load() {
 }
 
 async function saveProfile() {
+  if (canEditNickname.value && !nickname.value.trim()) {
+    ElMessage.warning('昵称不能为空')
+    return
+  }
   savingProfile.value = true
   try {
-    await authApi.updateProfile({
+    const p = await authApi.updateProfile({
+      ...(canEditNickname.value ? { nickname: nickname.value.trim() } : {}),
       gender: profileForm.gender,
       school: profileForm.school,
       grade: profileForm.grade,
       qq: profileForm.qq,
     })
+    nickname.value = p.nickname ?? nickname.value
+    if (p.nickname) userStore.setNickname(p.nickname) // 顶栏即时更新
     ElMessage.success('个人信息已保存')
   } finally {
     savingProfile.value = false
@@ -86,8 +95,16 @@ onMounted(load)
     <el-card shadow="never">
       <template #header><span>个人信息</span></template>
       <el-form label-position="left" label-width="120px" style="max-width: 560px">
-        <el-form-item label="真实姓名">
-          <el-input v-model="realName" disabled placeholder="仅管理员可修改，用于班级名单对号" />
+        <el-form-item label="昵称">
+          <div class="nickname-field">
+            <el-input
+              v-model="nickname"
+              :disabled="!canEditNickname"
+              maxlength="32"
+              placeholder="用于榜单、题解等公开页面展示"
+            />
+            <span v-if="!canEditNickname" class="dim">当前角色不允许自行修改昵称，请联系管理员</span>
+          </div>
         </el-form-item>
         <el-form-item label="性别">
           <el-select v-model="profileForm.gender" clearable placeholder="未填写" style="width: 160px">
@@ -155,7 +172,7 @@ onMounted(load)
       <el-card shadow="never">
         <template #header><span>说明</span></template>
         <div class="tips">
-          <p>真实姓名仅管理员后台可修改，用于班级名单对号；性别 / 学校 / 年级 / QQ 仅自己可见。</p>
+          <p>昵称会显示在榜单、题解等公开页面；性别 / 学校 / 年级 / QQ 仅自己可见。</p>
           <p>默认语言与代码模板会在打开提交弹窗、在线编程时自动预填；切换语言带出对应模板。</p>
         </div>
       </el-card>
@@ -169,6 +186,13 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.nickname-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
 }
 
 .ac-row {

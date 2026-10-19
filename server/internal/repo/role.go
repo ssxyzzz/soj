@@ -18,15 +18,15 @@ type Role struct {
 }
 
 // builtinRoles 内置角色：初始权限精确复刻 v0.4.6 行为（v0.5.2-1 起 admin 增题解管理，
-// v0.5.2-2 起 admin 增查看用户提交明细），此后 root 的每次调整都是显式决定。
-// 存量库由 solutionManageV1 / submissionViewUserV1 迁移补发新位。
+// v0.5.2-2 起 admin 增查看用户提交明细，v0.6.x 起 default/admin 增本人昵称修改）。
+// 存量库由 solutionManageV1 / submissionViewUserV1 / nicknameEditV1 迁移补发新位。
 var builtinRoles = []Role{
-	{ID: RoleDefault, Name: "普通用户", Perms: []string{}, Builtin: true},
+	{ID: RoleDefault, Name: "普通用户", Perms: []string{PermUserNicknameEdit}, Builtin: true},
 	{ID: RoleAdmin, Name: "管理员", Perms: []string{
 		PermProblemViewAll, PermProblemCreate, PermProblemEditOwn,
 		PermClassCreate, PermClassViewAll,
 		PermSubmissionViewAll, PermSubmissionViewUser, PermSubmissionRateExempt,
-		PermSolutionManage,
+		PermSolutionManage, PermUserNicknameEdit,
 	}, Builtin: true},
 	{ID: RoleRoot, Name: "超级管理员", Perms: []string{PermAll}, Builtin: true},
 }

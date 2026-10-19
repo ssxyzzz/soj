@@ -222,6 +222,24 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		}
 		log.Printf("[boot] admin 角色已补发查看用户提交明细权限位（submission.view.user）")
 	}
+	if !flagDone("nicknameEditV1") {
+		// v0.6.x：真名下线的同时开放本人昵称修改。旧「查看真实姓名」权限位已从目录删除，
+		// 这里顺手清掉角色文档里的残留（EffectivePerms 也会过滤，双保险）。
+		if _, err := r.Roles.UpdateMany(ctx,
+			bson.M{},
+			bson.M{"$pull": bson.M{"perms": "user.realname.view"}}); err != nil {
+			return err
+		}
+		if _, err := r.Roles.UpdateMany(ctx,
+			bson.M{"_id": bson.M{"$in": []string{RoleDefault, RoleAdmin}}},
+			bson.M{"$addToSet": bson.M{"perms": PermUserNicknameEdit}}); err != nil {
+			return err
+		}
+		if err := setFlag("nicknameEditV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 已补发昵称修改权限位（user.nickname.edit），真实姓名权限位已清理")
+	}
 	return nil
 }
 

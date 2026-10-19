@@ -420,7 +420,7 @@ func (h *Handlers) AssignmentUserSubmissions(c *gin.Context) {
 }
 
 // AssignmentExport 作业成绩导出（班级管理员/root，v0.5.6；v0.6.2 起含排名）：
-// 列 = 排名/用户名/真实姓名（持 user.realname.view 才含）/各题最高分/总分（最高分合计）/通过题数/做过题数，
+// 列 = 排名/昵称/各题最高分/总分（最高分合计）/通过题数/做过题数，昵称为空回退用户名；
 // 行序 = 统一成绩表排名（总分降序 → 通过题数降序 → UID 升序）。
 func (h *Handlers) AssignmentExport(c *gin.Context) {
 	id, okID := parseID(c, "id")
@@ -456,19 +456,8 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "统计失败")
 		return
 	}
-	// 真实姓名列（v0.5.6 拍板）：仅持 user.realname.view 的导出方可见（部署者自建教务角色授权）
-	wantRealName := hasPerm(c, repo.PermUserRealNameView)
-	users := map[int64]*repo.User{}
-	if wantRealName {
-		if users, err = h.repo.GetUsersByIDs(ctx, uids); err != nil {
-			fail(c, http.StatusInternalServerError, "读取用户失败")
-			return
-		}
-	}
-	header := []string{"排名", "用户名"}
-	if wantRealName {
-		header = append(header, "真实姓名")
-	}
+	// 展示名统一用昵称（空则回退用户名），不再读取真实姓名
+	header := []string{"排名", "昵称"}
 	for _, pid := range a.Problems {
 		title := ""
 		if p, err := h.repo.GetProblem(ctx, pid); err == nil {
@@ -483,14 +472,11 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 	header = append(header, "总分", "通过题数", "做过题数")
 	out := [][]string{header}
 	for _, r := range rows {
-		row := []string{strconv.Itoa(r.Rank), r.Username}
-		if wantRealName {
-			if u := users[r.UID]; u != nil {
-				row = append(row, u.RealName)
-			} else {
-				row = append(row, "")
-			}
+		name := r.Nickname
+		if name == "" {
+			name = r.Username
 		}
+		row := []string{strconv.Itoa(r.Rank), name}
 		for _, pid := range a.Problems {
 			best := 0
 			if cell := r.Cells[pid]; cell != nil {

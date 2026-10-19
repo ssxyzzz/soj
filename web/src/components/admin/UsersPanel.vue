@@ -172,12 +172,12 @@ const tableRows = computed<UserRow[]>(() => {
   return rows
 })
 
-// 分组/提示行跨列：展开列（第 0 列）不渲染，ID 列起跨满其余 6 列——
+// 分组/提示行跨列：展开列（第 0 列）不渲染，ID 列起跨满其余 5 列——
 // 分组标题因此有真实单元格可落（旧实现把标题放在展开槽里，不展开就永远不渲染 = 空白条）
 function userSpanMethod({ row, columnIndex }: { row: UserRow; columnIndex: number }) {
   if (row.type !== 'user') {
     if (columnIndex === 0) return { rowspan: 0, colspan: 0 }
-    if (columnIndex === 1) return { rowspan: 1, colspan: 6 }
+    if (columnIndex === 1) return { rowspan: 1, colspan: 5 }
     return { rowspan: 0, colspan: 0 }
   }
   return { rowspan: 1, colspan: 1 }
@@ -215,21 +215,25 @@ async function changeRole(row: AdminUser, role: string) {
   await refreshAfterMutation(row.id, { role })
 }
 
-// ---- 重置弹窗：真名 / 密码 / 确认密码（用户名是身份标识，后端不支持改，只读展示）----
+// ---- 编辑弹窗：昵称 / 密码 / 确认密码（用户名是身份标识，后端不支持改，只读展示）----
 const showEdit = ref(false)
 const editSaving = ref(false)
-const editForm = reactive({ id: 0, username: '', real_name: '', password: '', confirm: '' })
+const editForm = reactive({ id: 0, username: '', nickname: '', password: '', confirm: '' })
 
 function openEdit(row: AdminUser) {
   editForm.id = row.id
   editForm.username = row.username
-  editForm.real_name = row.real_name ?? ''
+  editForm.nickname = row.nickname ?? ''
   editForm.password = ''
   editForm.confirm = ''
   showEdit.value = true
 }
 
 async function submitEdit() {
+  if (!editForm.nickname.trim()) {
+    ElMessage.warning('昵称不能为空')
+    return
+  }
   if (editForm.password) {
     if (editForm.password.length < 6 || editForm.password.length > 64) {
       ElMessage.warning('密码长度需在 6-64 之间')
@@ -252,12 +256,12 @@ async function submitEdit() {
   editSaving.value = true
   try {
     await adminApi.updateUser(editForm.id, {
-      real_name: editForm.real_name,
+      nickname: editForm.nickname.trim(),
       ...(editForm.password ? { password: editForm.password } : {}),
     })
     ElMessage.success('用户信息已修改')
     showEdit.value = false
-    await refreshAfterMutation(editForm.id, { real_name: editForm.real_name })
+    await refreshAfterMutation(editForm.id, { nickname: editForm.nickname.trim() })
   } finally {
     editSaving.value = false
   }
@@ -371,11 +375,6 @@ defineExpose({ refresh: loadDefaultView })
       <el-table-column label="昵称" min-width="160">
         <template #default="{ row }">{{ row.type === 'user' ? row.nickname : '' }}</template>
       </el-table-column>
-      <el-table-column label="真实姓名" min-width="110">
-        <template #default="{ row }">
-          <span v-if="row.type === 'user'">{{ row.real_name || '—' }}</span>
-        </template>
-      </el-table-column>
       <el-table-column label="角色" width="170">
         <template #default="{ row }">
           <el-tooltip
@@ -401,7 +400,7 @@ defineExpose({ refresh: loadDefaultView })
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="重置" width="90">
+      <el-table-column label="编辑" width="90">
         <template #default="{ row }">
           <el-button
             v-if="row.type === 'user'"
@@ -410,7 +409,7 @@ defineExpose({ refresh: loadDefaultView })
             type="warning"
             @click="openEdit(row as AdminUser)"
           >
-            重置
+            编辑
           </el-button>
         </template>
       </el-table-column>
@@ -460,13 +459,13 @@ defineExpose({ refresh: loadDefaultView })
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showEdit" :title="`重置 · ${editForm.username}`" width="520">
+    <el-dialog v-model="showEdit" :title="`编辑 · ${editForm.username}`" width="520">
       <el-form label-position="top">
         <el-form-item label="用户名">
           <el-input v-model="editForm.username" disabled />
         </el-form-item>
-        <el-form-item label="真实姓名">
-          <el-input v-model="editForm.real_name" maxlength="32" placeholder="仅管理员后台可见；留空清除" />
+        <el-form-item label="昵称">
+          <el-input v-model="editForm.nickname" maxlength="32" placeholder="用于榜单、题解等公开页面展示" />
         </el-form-item>
         <el-form-item label="新密码">
           <el-input

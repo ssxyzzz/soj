@@ -155,6 +155,14 @@ onMounted(loadBackup)
     <template #header>
       <div class="head">
         <span>数据备份</span>
+        <el-button
+          v-if="userStore.can('backup.run')"
+          type="primary"
+          :loading="backingUp"
+          @click="runBackup"
+        >
+          立即备份并下载到我的电脑
+        </el-button>
       </div>
     </template>
     <div v-loading="backupLoading">
@@ -172,19 +180,8 @@ onMounted(loadBackup)
         <span v-else class="muted">还没有备份过</span>
       </div>
       <p class="backup-desc">{{ backupModeMeta[backupStatus?.mode ?? 'uninitialized']?.desc }}</p>
-      <div class="backup-actions">
-        <el-button
-          v-if="userStore.can('backup.run')"
-          type="primary"
-          :loading="backingUp"
-          @click="runBackup"
-        >
-          立即备份并下载到我的电脑
-        </el-button>
-        <el-button
-          v-if="userStore.can('backup.keys') && backupStatus?.mode !== 'tier1'"
-          @click="enableOfflineKey"
-        >
+      <div v-if="userStore.can('backup.keys') && backupStatus?.mode !== 'tier1'" class="backup-actions">
+        <el-button @click="enableOfflineKey">
           升级为离线钥匙（更安全，推荐）
         </el-button>
       </div>

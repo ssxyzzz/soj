@@ -101,9 +101,10 @@ export const authApi = {
   register: (username: string, password: string, nickname: string) =>
     post<LoginResult>('/auth/register', { username, password, nickname }),
   me: () => get<{ id: number; username: string; nickname: string; role: string; perms: string[] }>('/me'),
-  // 个人设置（v0.4.8）：真实姓名仅管理员可改（走 adminApi.updateUser），本人自助字段 + 偏好走这里
+  // 个人设置（v0.4.8）：本人自助字段 + 偏好；昵称额外受 user.nickname.edit 权限位约束
   getProfile: () => get<UserProfile>('/me/profile'),
   updateProfile: (body: {
+    nickname?: string
     gender?: string
     school?: string
     grade?: string
@@ -226,7 +227,7 @@ export const adminApi = {
     }),
   createUser: (username: string, password: string, nickname: string, role: string) =>
     post<{ id: number }>('/admin/users', { username, password, nickname, role }),
-  updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; real_name?: string }) =>
+  updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
     get<{ rate_limit_per_minute: number; home_notice: string; home_notice_html: string; backup_guide: string; backup_guide_html: string }>('/admin/settings'),

@@ -293,6 +293,7 @@ watch(
 
 <style scoped>
 .md-editor {
+  box-sizing: border-box; /* width:100% 含边框，避免卡片体内横向溢出 2px 出滚动条 */
   width: 100%;
   border: 1px solid var(--el-border-color);
   border-radius: var(--el-border-radius-base);
@@ -405,6 +406,7 @@ watch(
 
 /* 内容内边距（排版在 main.css .rich 公共段） */
 .md-editor-content :deep(.tiptap) {
+  box-sizing: border-box; /* min-height:100% 含内边距，空内容也不撑出竖向滚动条 */
   padding: 14px 18px;
   min-height: 100%;
   outline: none;

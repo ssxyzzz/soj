@@ -180,6 +180,10 @@ body,
 /* 全站字阶：长文阅读正文 16（.rich）/ 界面与表格 14 / 代码 14 /
    区块小标题 16·600 / 页头大标题 22·600 / hero 与统计大数字 30·32·600（Ant 对齐） */
 :root {
+  /* 代码/等宽字体栈：编辑器、.mono 与富文本代码块共用，避免落到浏览器默认
+     generic monospace（Windows 常解析为 Courier New） */
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+
   /* 组件字重 400（Ant：强调只靠 600 档与颜色） */
   --el-font-weight-primary: 400;
 
@@ -284,7 +288,7 @@ body {
 }
 
 .mono {
-  font-family: 'JetBrains Mono', 'Fira Code', Consolas, 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 
 pre {
@@ -585,6 +589,9 @@ strong {
   background: var(--el-fill-color-lighter);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: var(--el-border-radius-base);
+  /* 代码块内距：vditor 退役后其 pre>code 的 0.5em 内距一并消失，缺省会让代码贴边、
+     查看端「复制」按钮溢出块外（按钮 top 6 + 高 22 > 单行块高 26） */
+  padding: 7px 10px;
 }
 
 .rich th,
@@ -650,12 +657,13 @@ strong {
   margin: 0.8em 0;
 }
 
-/* 代码显示面统一 14px（CodeMirror 编辑器有自己的字号主题，不受影响） */
+/* 代码显示面统一 14px + 显式等宽字体栈（CodeMirror 编辑器有自己的字号/字体主题，不受影响） */
 pre,
 code,
 kbd,
 samp {
   font-size: 14px;
+  font-family: var(--font-mono);
 }
 
 /* ---- 评测/提交查看通用样式（类名特化，全局共享） ----

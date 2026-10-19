@@ -52,6 +52,12 @@ export const useUserStore = defineStore('user', () => {
     prefs.value = p ?? {}
   }
 
+  // 本人改昵称后同步顶栏与本地持久化（token/权限不变，无需重新登录）
+  function setNickname(n: string) {
+    nickname.value = n
+    localStorage.setItem('soj_nickname', n)
+  }
+
   function logout() {
     token.value = ''
     uid.value = 0
@@ -66,5 +72,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('soj_perms')
   }
 
-  return { token, uid, nickname, role, perms, prefs, canAdmin, can, setLogin, setPrefs, logout }
+  return { token, uid, nickname, role, perms, prefs, canAdmin, can, setLogin, setPrefs, setNickname, logout }
 })

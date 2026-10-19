@@ -30,14 +30,15 @@ async function saveSettings() {
 
 <template>
   <el-card>
-    <template #header><span>系统设置</span></template>
+    <template #header>
+      <div class="head">
+        <span>系统设置</span>
+        <el-button type="primary" :loading="savingSettings" @click="saveSettings">保存</el-button>
+      </div>
+    </template>
     <el-form label-position="left" label-width="220px" style="max-width: 520px">
       <el-form-item label="普通用户每分钟提交上限">
         <el-input-number v-model="rateLimit" :min="1" :max="60" />
-      </el-form-item>
-      <!-- 保存行去 label 缩进（label-width 的 220px 会把无标签行顶到输入框下方偏右），与表单左缘对齐 -->
-      <el-form-item label-width="0">
-        <el-button type="primary" :loading="savingSettings" @click="saveSettings">保存</el-button>
       </el-form-item>
     </el-form>
   </el-card>

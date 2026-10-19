@@ -866,10 +866,10 @@ async function onSave() {
   gap: 8px;
 }
 
-/* 底部两行缓冲垫片：末级展开后鼠标习惯性继续下移查找，若移出容器会触发
+/* 底部一行缓冲垫片：末级展开后鼠标习惯性继续下移查找，若移出容器会触发
    mouseleave 收起——垫片在容器内且 mouseenter 取消收起计时，移动不断开 */
 .tag-board-pad {
-  height: 40px;
+  height: 20px;
 }
 
 /* 每级一行独立滚动：行内不换行，超出本行宽度即横移（无滚动条，滚轮驱动见 onWheel）；

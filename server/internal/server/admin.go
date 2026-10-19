@@ -22,9 +22,7 @@ func (h *Handlers) AdminListUsers(c *gin.Context) {
 	}
 	items := make([]gin.H, 0, len(list))
 	for _, u := range list {
-		j := userJSON(u)
-		j["real_name"] = u.RealName // 真实姓名：后台用户列表对 admin.user.manage 持有者可见（导出场景另见 user.realname.view）
-		items = append(items, j)
+		items = append(items, userJSON(u))
 	}
 	ok(c, gin.H{"list": items, "total": total})
 }
@@ -84,7 +82,6 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		Role     *string `json:"role"`
 		Password *string `json:"password"`
 		Nickname *string `json:"nickname"`
-		RealName *string `json:"real_name"` // 真实姓名：仅管理员可改（本人只读，见 /me/profile）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -106,11 +103,13 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		}
 		set["role"] = *req.Role
 	}
-	if req.Nickname != nil && *req.Nickname != "" {
-		set["nickname"] = *req.Nickname
-	}
-	if req.RealName != nil {
-		set["realName"] = trimTo(*req.RealName, 32) // 允许显式清空
+	if req.Nickname != nil {
+		nickname := trimTo(*req.Nickname, 32)
+		if nickname == "" {
+			fail(c, http.StatusBadRequest, "昵称不能为空")
+			return
+		}
+		set["nickname"] = nickname
 	}
 	if req.Password != nil {
 		if len(*req.Password) < 6 || len(*req.Password) > 64 {

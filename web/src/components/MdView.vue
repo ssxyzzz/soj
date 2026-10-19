@@ -83,6 +83,8 @@ watch(() => props.content, render)
 
 .md-view :deep(pre) {
   position: relative; /* 复制按钮与语言徽标的定位基准 */
+  /* 右侧给复制按钮留位，长代码行不钻到按钮下面 */
+  padding-right: 60px;
 }
 
 /* 语言徽标 + 让出首行空间（右上角为复制按钮，两端构成代码块顶栏） */

@@ -113,23 +113,16 @@ onMounted(load)
             <div class="name-row">
               <h3 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h3>
               <el-tag v-if="c.private" size="small" type="warning">私密</el-tag>
-              <el-tag v-if="c.joined" size="small" type="success">已加入</el-tag>
+              <div class="top-actions">
+                <el-tag v-if="c.joined" size="small" type="success">已加入</el-tag>
+                <el-button v-else size="small" type="primary" link @click="openJoin(c)">加入</el-button>
+              </div>
             </div>
             <p class="intro">{{ c.intro || '暂无简介' }}</p>
             <div class="meta">
               <el-tag size="small" type="info">{{ c.member_count }} 名成员</el-tag>
               <el-tag size="small" type="info">{{ c.assignment_count }} 个作业</el-tag>
               <span class="dim">创建于 {{ fmtDate(c.created_at) }}</span>
-              <el-button
-                v-if="!c.joined"
-                size="small"
-                type="primary"
-                link
-                class="join-btn"
-                @click="openJoin(c)"
-              >
-                加入
-              </el-button>
             </div>
           </el-card>
         </el-col>
@@ -222,7 +215,11 @@ onMounted(load)
   flex-wrap: wrap;
 }
 
-.join-btn {
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 </style>

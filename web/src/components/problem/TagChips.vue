@@ -148,7 +148,7 @@ onBeforeUnmount(() => {
 /* 底部两行缓冲垫片：末级展开后鼠标习惯性继续下移查找，若移出容器会触发
    mouseleave 收起——垫片在容器内且 mouseenter 取消收起计时，移动不断开 */
 .tag-flow-pad {
-  height: 40px;
+  height: 20px;
 }
 
 /* 顶行：搜索标签框 + 右侧插槽（已选），随内容换行 */
@@ -157,6 +157,7 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
+  margin-bottom: 12px;
 }
 
 .tag-top-right {

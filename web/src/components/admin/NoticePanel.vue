@@ -36,16 +36,12 @@ async function saveNotice() {
 
 <template>
   <el-card>
-    <template #header><span>首页公告（留空则首页不展示）</span></template>
+    <template #header>
+      <div class="head">
+        <span>首页公告（留空则首页不展示）</span>
+        <el-button type="primary" :loading="savingNotice" @click="saveNotice">保存公告</el-button>
+      </div>
+    </template>
     <MdEditor v-model="homeNotice" height="300px" />
-    <div class="notice-save">
-      <el-button type="primary" :loading="savingNotice" @click="saveNotice">保存公告</el-button>
-    </div>
   </el-card>
 </template>
-
-<style scoped>
-.notice-save {
-  margin-top: 12px;
-}
-</style>

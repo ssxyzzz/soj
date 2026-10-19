@@ -637,7 +637,7 @@ func (h *Handlers) ExamLeaderboard(c *gin.Context) { h.roundLeaderboard(c, scope
 // ---------- 成绩导出 CSV（v0.5.6 老师教学闭环） ----------
 
 // roundExport 比赛/考试成绩单导出（organizer/root）：
-// 列 = 排名/用户名/真实姓名（持 user.realname.view 才含）/各题得分/总分，行序与榜单一致；
+// 列 = 排名/昵称/各题得分/总分，行序与榜单一致；昵称为空回退用户名。
 // 直接现算榜单不走 leaderCache（导出要的是导出时刻的准确数据）。
 func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
 	uid, _, role, logged := currentUser(c)
@@ -664,23 +664,8 @@ func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
 		fail(c, http.StatusInternalServerError, "计算榜单失败")
 		return
 	}
-	// 真实姓名列（v0.5.6 拍板）：仅持 user.realname.view 的导出方可见（部署者自建教务角色授权）
-	wantRealName := hasPerm(c, repo.PermUserRealNameView)
-	users := map[int64]*repo.User{}
-	if wantRealName {
-		uids := make([]int64, 0, len(rows))
-		for _, r := range rows {
-			uids = append(uids, r.UID)
-		}
-		if users, err = h.repo.GetUsersByIDs(ctx, uids); err != nil {
-			fail(c, http.StatusInternalServerError, "读取用户失败")
-			return
-		}
-	}
-	header := []string{"排名", "用户名"}
-	if wantRealName {
-		header = append(header, "真实姓名")
-	}
+	// 展示名统一用昵称（空则回退用户名），不再读取真实姓名
+	header := []string{"排名", "昵称"}
 	for _, cp := range ct.Problems {
 		title := ""
 		if p, err := h.repo.GetProblem(ctx, cp.PID); err == nil {
@@ -694,14 +679,11 @@ func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
 	header = append(header, "总分")
 	out := [][]string{header}
 	for i, r := range rows {
-		row := []string{strconv.Itoa(i + 1), r.Username}
-		if wantRealName {
-			if u := users[r.UID]; u != nil {
-				row = append(row, u.RealName)
-			} else {
-				row = append(row, "")
-			}
+		name := r.Nickname
+		if name == "" {
+			name = r.Username
 		}
+		row := []string{strconv.Itoa(i + 1), name}
 		for _, cp := range ct.Problems {
 			score := 0
 			if cell := r.Problems[cp.PID]; cell != nil {

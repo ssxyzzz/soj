@@ -159,8 +159,8 @@ async function loadLeaders() {
   }
 }
 
-// 成绩导出 CSV（v0.5.6）：仅组织者可见；服务端现算榜单，列含排名/用户名/各题得分/总分
-//（真实姓名列由 user.realname.view 权限位决定），文件名以服务端 Content-Disposition 为准
+// 成绩导出 CSV（v0.5.6）：仅组织者可见；服务端现算榜单，列含排名/昵称/各题得分/总分，
+// 文件名以服务端 Content-Disposition 为准
 const exporting = ref(false)
 async function exportCsv() {
   if (!round.value) return
