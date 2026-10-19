@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// 用户管理面板（v0.5.4 ② 拆分自 AdminView，行为不变）：
-// 单表 + 前端分组行渲染；搜索 200ms 防抖自动匹配、点选定位；default 学生组默认不显示。
+// 用户管理面板（v0.5.4 ② 拆分自 AdminView）：
+// 按角色（权限位组合）分组展示全部用户，每组可点标题收起/展开（学生组默认收起）；
+// 搜索 200ms 防抖自动匹配、点选定位，搜索视图命中的各组自动展开。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -15,8 +16,23 @@ const keyword = ref('')
 const pinned = ref<AdminUser | null>(null)
 const loading = ref(false)
 
-// 默认视图的组：default（学生组）不显示，除非搜索命中
-const defaultViewGroups = computed(() => roleStore.roleGroups.filter((g) => g.id !== 'default'))
+// 默认视图的组：全部角色按展示顺序（root → admin → 自定义 → default），学生组放在最后
+const defaultViewGroups = computed(() => roleStore.roleGroups)
+
+// 收起的分组：学生组默认收起（人数多、低频管理），其余默认展开
+const collapsedGroups = ref<Set<string>>(new Set(['default']))
+
+// 分组收起仅在默认视图生效：搜索视图命中的各组恒展开（结果一览无遗），
+// 定位视图只有一人——两处分组头不显示折叠箭头、点击不改变收起状态
+const canToggleGroups = computed(() => !pinned.value && !keyword.value.trim())
+
+function toggleGroup(id: string) {
+  if (!canToggleGroups.value) return
+  const next = new Set(collapsedGroups.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  collapsedGroups.value = next
+}
 
 // 默认视图按组缓存（每组一次请求，整组展示）
 const defaultGroups = reactive<Record<string, { list: AdminUser[]; total: number }>>({})
@@ -100,7 +116,7 @@ function onSelect(item: Record<string, unknown>) {
 
 // ---- 单表行模型：分组行 / 提示行 / 用户行，前端渲染分组 ----
 type UserRow =
-  | { type: 'group'; key: string; label: string; meta?: string }
+  | { type: 'group'; key: string; id: string; label: string; meta?: string }
   | { type: 'hint'; key: string; label: string }
   | ({ type: 'user' } & AdminUser)
 
@@ -108,7 +124,7 @@ const tableRows = computed<UserRow[]>(() => {
   if (pinned.value) {
     const u = pinned.value
     return [
-      { type: 'group', key: `g-${u.role}`, label: `${roleStore.roleName(u.role)}（${u.role}）`, meta: '已定位' },
+      { type: 'group', key: `g-${u.role}`, id: u.role, label: `${roleStore.roleName(u.role)}（${u.role}）`, meta: '已定位' },
       { type: 'user', ...u },
     ]
   }
@@ -121,6 +137,7 @@ const tableRows = computed<UserRow[]>(() => {
       rows.push({
         type: 'group',
         key: `g-${g.id}`,
+        id: g.id,
         label: `${g.name}（${g.id}）`,
         meta: `命中 ${users.length} 人`,
       })
@@ -132,7 +149,15 @@ const tableRows = computed<UserRow[]>(() => {
   for (const g of defaultViewGroups.value) {
     const d = defaultGroups[g.id]
     if (!d) continue
-    rows.push({ type: 'group', key: `g-${g.id}`, label: `${g.name}（${g.id}）`, meta: `共 ${d.total} 人` })
+    const folded = collapsedGroups.value.has(g.id)
+    rows.push({
+      type: 'group',
+      key: `g-${g.id}`,
+      id: g.id,
+      label: `${g.name}（${g.id}）`,
+      meta: folded ? `共 ${d.total} 人 · 已收起` : `共 ${d.total} 人`,
+    })
+    if (folded) continue
     if (!d.list.length) rows.push({ type: 'hint', key: `h-${g.id}`, label: '该组暂无用户' })
     else {
       d.list.forEach((u) => rows.push({ type: 'user', ...u }))
@@ -147,9 +172,13 @@ const tableRows = computed<UserRow[]>(() => {
   return rows
 })
 
+// 分组/提示行跨列：展开列（第 0 列）不渲染，ID 列起跨满其余 6 列——
+// 分组标题因此有真实单元格可落（旧实现把标题放在展开槽里，不展开就永远不渲染 = 空白条）
 function userSpanMethod({ row, columnIndex }: { row: UserRow; columnIndex: number }) {
   if (row.type !== 'user') {
-    return columnIndex === 0 ? { rowspan: 1, colspan: 7 } : { rowspan: 0, colspan: 0 }
+    if (columnIndex === 0) return { rowspan: 0, colspan: 0 }
+    if (columnIndex === 1) return { rowspan: 1, colspan: 6 }
+    return { rowspan: 0, colspan: 0 }
   }
   return { rowspan: 1, colspan: 1 }
 }
@@ -317,16 +346,23 @@ defineExpose({ refresh: loadDefaultView })
             </template>
             <span v-else class="dim">该角色暂无权限</span>
           </div>
-          <div v-else-if="row.type === 'group'" class="row-group">
-            <span>{{ row.label }}</span>
-            <el-tag v-if="row.meta" size="small" type="info" class="ml8">{{ row.meta }}</el-tag>
-          </div>
-          <span v-else-if="row.type === 'hint'" class="row-hint">{{ row.label }}</span>
         </template>
       </el-table-column>
       <el-table-column label="ID" width="90">
         <template #default="{ row }">
-          <span v-if="row.type === 'user'">{{ row.id }}</span>
+          <div
+            v-if="row.type === 'group'"
+            class="row-group"
+            :class="{ 'is-toggleable': canToggleGroups }"
+            :title="canToggleGroups ? (collapsedGroups.has(row.id) ? '点击展开该组用户' : '点击收起该组用户') : undefined"
+            @click="toggleGroup(row.id)"
+          >
+            <span v-if="canToggleGroups" class="group-caret">{{ collapsedGroups.has(row.id) ? '▸' : '▾' }}</span>
+            <span>{{ row.label }}</span>
+            <el-tag v-if="row.meta" size="small" type="info" class="ml8">{{ row.meta }}</el-tag>
+          </div>
+          <span v-else-if="row.type === 'hint'" class="row-hint">{{ row.label }}</span>
+          <span v-else>{{ row.id }}</span>
         </template>
       </el-table-column>
       <el-table-column label="用户名" min-width="160">
@@ -484,8 +520,28 @@ defineExpose({ refresh: loadDefaultView })
 .row-group {
   display: flex;
   align-items: center;
+  gap: 4px;
   font-weight: 600;
   color: var(--el-text-color-primary);
+  user-select: none;
+}
+
+/* 仅默认视图可折叠：分组头显示手型与悬停反馈 */
+.row-group.is-toggleable {
+  cursor: pointer;
+}
+
+.row-group.is-toggleable:hover {
+  color: var(--el-color-primary);
+}
+
+/* 收起/展开指示：▾ 展开中 / ▸ 已收起 */
+.group-caret {
+  width: 14px;
+  flex: none;
+  text-align: center;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .row-hint {
