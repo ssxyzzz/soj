@@ -672,15 +672,15 @@ async function onSave() {
 
     <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
     <div class="tag-board" @click.self="exitFloating" @mouseleave="scheduleHoverClear">
-      <!-- 单一横向滚动容器：无滚动条，鼠标滚轮横移浏览当前层级 -->
-      <div class="tag-scroll" @mouseenter="cancelHoverClear" @click.self="exitFloating" @wheel="onWheel">
-        <div class="tag-canvas" @click.self="exitFloating">
+      <!-- 每级行独立横向滚动：无滚动条，滚轮只在鼠标所在行拦截+横移；各行各自记位置，到头放行 -->
+      <div class="tag-canvas" @click.self="exitFloating" @mouseenter="cancelHoverClear">
       <div
         v-for="(r, i) in rows"
         :key="i"
         class="tag-row"
         @click.self="exitFloating"
         @mouseenter="cancelHoverClear"
+        @wheel="onWheel"
       >
         <TransitionGroup name="tag">
         <div
@@ -777,7 +777,6 @@ async function onSave() {
       </div>
       <!-- 底部两行缓冲：末级展开后鼠标继续下移不出容器（进垫片取消收起计时） -->
       <div class="tag-board-pad" @mouseenter="cancelHoverClear" />
-        </div>
       </div>
     </div>
 
@@ -872,31 +871,34 @@ async function onSave() {
   height: 80px;
 }
 
+/* 每级一行独立滚动：行内不换行，超出本行宽度即横移（无滚动条，滚轮驱动见 onWheel）；
+   每行各持独立 scrollLeft——滚哪行动哪行，其余行不受影响。
+   padding/margin 成对：把裁剪盒上下各扩 6px（拖起卡片的放大与阴影不被行盒裁掉），
+   视觉行距保持 gap 的 14px */
 .tag-row {
   display: flex;
   flex-wrap: nowrap;
   gap: 8px;
   align-items: flex-start;
-}
-
-/* 单一横向滚动容器：不出滚动条——鼠标滚轮横移浏览当前层级（onWheel，与 TagChips 同款） */
-.tag-scroll {
+  width: 100%;
+  min-width: 0;
   overflow-x: auto;
-  padding-top: 8px;
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none; /* Firefox：隐藏滚动条 */
+  padding-block: 6px;
+  margin-block: -6px;
 }
 
-.tag-scroll::-webkit-scrollbar {
+.tag-row::-webkit-scrollbar {
   display: none;
 }
 
-/* 画布随最宽行伸展，垫片覆盖全部可滚区域 */
+/* 画布列布局：行宽跟随容器，不再由最宽行撑开——溢出交给各行自己 */
 .tag-canvas {
   display: flex;
   flex-direction: column;
   gap: 14px; /* 层级行距（一级/二级……之间） */
-  width: max-content;
-  min-width: 100%;
+  min-width: 0;
+  padding-top: 8px; /* 拖起卡片放大/阴影的顶部余量 */
 }
 
 /* 纵向 cell：卡片 + 空标签的 mini-add 小卡 */
@@ -910,7 +912,7 @@ async function onSave() {
 
 .tag-card {
   position: relative;
-  flex: none; /* 行内不换行模式：卡片不压缩，超出即出横向滚动条 */
+  flex: none; /* 行内不换行模式：卡片不压缩，超出即由本行横移 */
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
