@@ -172,32 +172,14 @@ const tableRows = computed<UserRow[]>(() => {
   return rows
 })
 
-// 分组/提示行跨列：展开列（第 0 列）不渲染，ID 列起跨满其余 5 列——
-// 分组标题因此有真实单元格可落（旧实现把标题放在展开槽里，不展开就永远不渲染 = 空白条）
+// 分组/提示行跨列：ID 列起跨满 4 列
 function userSpanMethod({ row, columnIndex }: { row: UserRow; columnIndex: number }) {
   if (row.type !== 'user') {
-    if (columnIndex === 0) return { rowspan: 0, colspan: 0 }
-    if (columnIndex === 1) return { rowspan: 1, colspan: 5 }
-    return { rowspan: 0, colspan: 0 }
+    return columnIndex === 0
+      ? { rowspan: 1, colspan: 4 }
+      : { rowspan: 0, colspan: 0 }
   }
   return { rowspan: 1, colspan: 1 }
-}
-
-// 展开行内容：用户所属角色的权限，按七类分组给出权限名（默认收起，点箭头展开）
-function permSummaries(roleId: string) {
-  const perms = roleStore.roles.find((r) => r.id === roleId)?.perms ?? []
-  return roleStore.permGroups
-    .map((g) => ({
-      label: g.label,
-      names: roleStore.catalog
-        .filter((p) => p.group === g.id && perms.includes(p.id))
-        .map((p) => p.label),
-    }))
-    .filter((g) => g.names.length)
-}
-
-function rowClassName({ row }: { row: UserRow }) {
-  return row.type === 'user' ? '' : 'row-noexpand' // 分组/提示行不显示展开箭头
 }
 
 // 行内操作后按当前视图刷新：定位 → 原地更新；搜索 → 重查当前页；默认 → 重拉各组
@@ -207,12 +189,6 @@ async function refreshAfterMutation(userId: number, patch?: Partial<AdminUser>) 
   }
   if (keyword.value.trim()) await runSearch(search.page)
   else await loadDefaultView()
-}
-
-async function changeRole(row: AdminUser, role: string) {
-  await adminApi.updateUser(row.id, { role })
-  ElMessage.success(`已把 ${row.username} 的角色改为 ${roleStore.roleName(role)}（${role}）`)
-  await refreshAfterMutation(row.id, { role })
 }
 
 // ---- 编辑弹窗：昵称 / 密码 / 确认密码（用户名是身份标识，后端不支持改，只读展示）----
@@ -336,22 +312,8 @@ defineExpose({ refresh: loadDefaultView })
       :data="tableRows"
       size="small"
       :span-method="userSpanMethod"
-      :row-class-name="rowClassName"
       class="user-table"
     >
-      <el-table-column type="expand">
-        <template #default="{ row }">
-          <div v-if="row.type === 'user'" class="perm-expand">
-            <template v-if="permSummaries(row.role).length">
-              <div v-for="g in permSummaries(row.role)" :key="g.label" class="perm-expand-line">
-                <span class="perm-expand-group">{{ g.label }}</span>
-                <span>{{ g.names.join('、') }}</span>
-              </div>
-            </template>
-            <span v-else class="dim">该角色暂无权限</span>
-          </div>
-        </template>
-      </el-table-column>
       <el-table-column label="ID" width="90">
         <template #default="{ row }">
           <div
@@ -374,31 +336,6 @@ defineExpose({ refresh: loadDefaultView })
       </el-table-column>
       <el-table-column label="昵称" min-width="160">
         <template #default="{ row }">{{ row.type === 'user' ? row.nickname : '' }}</template>
-      </el-table-column>
-      <el-table-column label="角色" width="170">
-        <template #default="{ row }">
-          <el-tooltip
-            v-if="row.type === 'user'"
-            :disabled="row.id !== 1"
-            content="初始管理员（ID=1）的 root 角色受保护，不可修改"
-            placement="top"
-          >
-            <el-select
-              :model-value="row.role"
-              size="small"
-              style="width: 150px"
-              :disabled="row.id === 1"
-              @change="(v: string) => changeRole(row as AdminUser, v)"
-            >
-              <el-option
-                v-for="r in roleStore.roles"
-                :key="r.id"
-                :value="r.id"
-                :label="`${r.name}（${r.id}）`"
-              />
-            </el-select>
-          </el-tooltip>
-        </template>
       </el-table-column>
       <el-table-column label="编辑" width="90">
         <template #default="{ row }">
@@ -545,28 +482,6 @@ defineExpose({ refresh: loadDefaultView })
 
 .row-hint {
   color: var(--el-text-color-secondary);
-}
-
-/* 分组/提示行不显示展开箭头（展开行只有用户行用） */
-.user-table :deep(.row-noexpand) .el-table__expand-icon {
-  display: none;
-}
-
-/* 展开行：角色权限按分组陈列 */
-.perm-expand {
-  padding: 4px 12px;
-}
-
-.perm-expand-line {
-  display: flex;
-  gap: 8px;
-  line-height: 1.9;
-}
-
-.perm-expand-group {
-  flex: none;
-  font-weight: var(--soj-fw-emphasis);
-  color: var(--el-text-color-primary);
 }
 
 .user-table :deep(.el-table__row) .row-group,
