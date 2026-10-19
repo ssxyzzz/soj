@@ -12,7 +12,7 @@ const userStore = useUserStore()
 
 const active = computed(() => route.path)
 
-// 登录态下拉取用户偏好（默认语言/模板/MD 编辑模式），供提交弹窗/在线编程/MdEditor 消费；
+// 登录态下拉取用户偏好（默认语言/模板），供提交弹窗/在线编程消费；
 // 设置页保存后同步更新 store。失败静默（未登录/过期由拦截器统一处理）。
 onMounted(() => {
   if (!userStore.token) return

@@ -640,7 +640,7 @@ async function onSave() {
         <div class="header-actions">
           <el-tag v-if="dirty" type="warning" size="small">未保存</el-tag>
           <span class="dim">{{ total }} 个标签</span>
-          <el-button @click="downloadTemplate">下载标签树模板</el-button>
+          <el-button @click="downloadTemplate">下载标签树</el-button>
           <el-button @click="pickImport">导入标签树</el-button>
           <el-button type="primary" :loading="saving" :disabled="!dirty" @click="onSave">
             保存标签树

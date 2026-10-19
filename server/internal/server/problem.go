@@ -8,11 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/repo"
+	"soj/internal/richtext"
 	"soj/internal/testdata"
 )
 
-// maxStatementSize 题面/说明类 Markdown 的体积上限。
-// Lute 在浏览器主线程渲染，巨型表格、深嵌套等病态内容会卡死页面，超限直接拒绝。
+// maxStatementSize 题面/说明类富文本的体积上限（v0.6 起直接作用 HTML 字段——HTML 与最终
+// 渲染 DOM 同量级，防病态内容卡死页面的口径不变）。超限直接拒绝。
 const maxStatementSize = 256 << 10 // 256KB
 
 func queryPage(c *gin.Context) (page, pageSize int) {
@@ -218,10 +219,15 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		})
 	}
 
+	descriptionHTML := p.ContentHTML
+	if descriptionHTML == "" {
+		descriptionHTML = richtext.MdToHTML(p.Statement) // 存量 md 题面读时计算（编辑即迁移）
+	}
 	resp := gin.H{
 		"id":                 p.ID,
 		"title":              p.Title,
-		"description":        p.Statement,
+		"description":        p.Statement,     // 原 md 题面（v0.6 起冻结为回退源）
+		"description_html":   descriptionHTML, // 富文本题面（v0.6，Tiptap schema 内 HTML）
 		"time_limit_ms":      p.TimeLimitMS,
 		"memory_limit_kb":    p.MemoryLimitKB,
 		"compare":            p.Compare,
@@ -260,20 +266,21 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	ok(c, resp)
 }
 
-// SetProblemStatement 编辑题面（Markdown）。权限同隐藏设置：root 任意题；admin 仅自己导入的题。
+// SetProblemStatement 编辑题面（v0.6 起收富文本 HTML：编辑器产出的 content_html 原样入库，
+// 原 md statement 字段保留不动；权限同隐藏设置：root 任意题；admin 仅自己导入的题）。
 func (h *Handlers) SetProblemStatement(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
 		return
 	}
 	var req struct {
-		Statement string `json:"statement" binding:"required"`
+		HTML string `json:"html" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "题面不能为空")
 		return
 	}
-	if len(req.Statement) > maxStatementSize {
+	if len(req.HTML) > maxStatementSize {
 		fail(c, http.StatusBadRequest, "题面过长（上限 256KB）")
 		return
 	}
@@ -288,7 +295,7 @@ func (h *Handlers) SetProblemStatement(c *gin.Context) {
 		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
 		return
 	}
-	if err := h.repo.SetProblemStatement(ctx, id, req.Statement); err != nil {
+	if err := h.repo.SetProblemContentHTML(ctx, id, req.HTML); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}

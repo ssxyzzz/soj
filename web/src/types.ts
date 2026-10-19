@@ -73,6 +73,7 @@ export interface ProblemDetail {
   id: number
   title: string
   description: string
+  description_html: string // 富文本题面（v0.6；存量 md 由服务端读时计算）
   time_limit_ms: number
   memory_limit_kb: number
   compare?: string
@@ -175,6 +176,7 @@ export interface AssignmentDetail {
   class_id: number
   title: string
   intro: string
+  intro_html: string
   problems: AssignmentProblem[]
   manageable: boolean
 }
@@ -207,6 +209,7 @@ export interface ClassDetail {
   id: number
   name: string
   intro: string
+  intro_html: string
   owner_id: number
   private: boolean
   created_at: string
@@ -230,7 +233,6 @@ export interface AdminUser {
 export interface UserPrefs {
   defaultLang?: string
   codeTemplates?: Record<string, string>
-  mdEditMode?: '' | 'wysiwyg' | 'ir' | 'sv'
   autocomplete?: boolean // 代码自动补全（默认开箱开启；后续按用户等级门槛放开）
   codeFont?: string // 编辑器字体：Consolas / Menlo / Monaco（默认 Consolas）
   codeFontSize?: number // 编辑器字号 px（12-48，默认 14）
@@ -253,6 +255,7 @@ export interface SolutionItem {
   uid: number
   nickname: string
   content: string
+  content_html: string
   pinned: boolean
   created_at: string
   updated_at: string
@@ -267,7 +270,7 @@ export interface BackupStatus {
   mode: 'uninitialized' | 'tier0' | 'tier1'
   last_backup_at: string | null
   last_backup_file: string | null
-  guide?: string // 备份面板使用说明（Markdown，空 = 前端内置默认）
+  guide_html?: string // 备份面板使用说明（富文本，v0.6；空 = 前端内置默认）
 }
 
 // ---------- 角色与权限位（v0.4.7） ----------
@@ -315,6 +318,7 @@ export interface ContestDetail {
   id: number
   title: string
   intro: string
+  intro_html: string
   status: 'scheduled' | 'running' | 'ended'
   start: string
   end: string

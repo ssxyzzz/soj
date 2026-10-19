@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	filippo.io/age v1.3.2
+	github.com/88250/lute v1.7.8
 	github.com/gin-gonic/gin v1.12.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	go.mongodb.org/mongo-driver/v2 v2.9.2
@@ -13,10 +14,12 @@ require (
 
 require (
 	filippo.io/hpke v0.4.0 // indirect
+	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
 	github.com/bytedance/sonic v1.15.0 // indirect
 	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
+	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
@@ -24,6 +27,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
+	github.com/gopherjs/gopherjs v1.17.2 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect

@@ -43,7 +43,6 @@ export function mergedPrefs(patch: Partial<UserPrefs>): UserPrefs {
   const p = useUserStore().prefs ?? {}
   return {
     defaultLang: p.defaultLang ?? '',
-    mdEditMode: p.mdEditMode ?? '',
     codeTemplates: p.codeTemplates ?? {},
     autocomplete: p.autocomplete ?? true,
     codeFont: p.codeFont ?? '',

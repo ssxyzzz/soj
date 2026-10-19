@@ -23,6 +23,7 @@ import (
 
 	"soj/internal/lang"
 	"soj/internal/repo"
+	"soj/internal/richtext"
 )
 
 type roundScope struct {
@@ -163,10 +164,15 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 	now := time.Now()
 	status := ct.Status(now)
 
+	introHTML := ct.IntroHTML
+	if introHTML == "" && ct.Intro != "" {
+		introHTML = richtext.MdToHTML(ct.Intro) // 存量 md 说明读时计算（编辑即迁移）
+	}
 	resp := gin.H{
 		"id":            ct.ID,
 		"title":         ct.Title,
-		"intro":         ct.Intro,
+		"intro":         ct.Intro,     // 原 md 说明（v0.6 起冻结为回退源）
+		"intro_html":    introHTML,    // 富文本说明（v0.6）
 		"class_id":      ct.ClassID,
 		"status":        status,
 		"start":         ct.Start,
@@ -285,13 +291,13 @@ func (h *Handlers) roundDelete(c *gin.Context, s roundScope) {
 
 func (h *Handlers) roundSetIntro(c *gin.Context, s roundScope) {
 	var req struct {
-		Intro string `json:"intro" binding:"required"`
+		HTML string `json:"intro_html" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, s.Name+"说明不能为空")
 		return
 	}
-	if len(req.Intro) > maxStatementSize {
+	if len(req.HTML) > maxStatementSize {
 		fail(c, http.StatusBadRequest, s.Name+"说明过长（上限 256KB）")
 		return
 	}
@@ -299,7 +305,7 @@ func (h *Handlers) roundSetIntro(c *gin.Context, s roundScope) {
 	if !okR {
 		return
 	}
-	if err := h.repo.SetRoundIntro(c.Request.Context(), s.Kind, ct.ID, req.Intro); err != nil {
+	if err := h.repo.SetRoundIntroHTML(c.Request.Context(), s.Kind, ct.ID, req.HTML); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}

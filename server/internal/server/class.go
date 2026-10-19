@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/repo"
+	"soj/internal/richtext"
 )
 
 // classManageable 判断用户能否管理某班级（建班人、班级管理员或 root）。
@@ -136,15 +137,20 @@ func (h *Handlers) GetClass(c *gin.Context) {
 	}
 	manage := h.classManageable(c, cl)
 
+	classIntroHTML := ""
+	if cl.Intro != "" {
+		classIntroHTML = richtext.MdToHTML(cl.Intro) // 班级简介读时计算（v0.6 富文本口径）
+	}
 	resp := gin.H{
-		"id":         cl.ID,
-		"name":       cl.Name,
-		"intro":      cl.Intro,
-		"owner_id":   cl.OwnerID,
-		"private":    cl.Private,
-		"created_at": cl.CreatedAt,
-		"joined":     isMember,
-		"manageable": manage,
+		"id":          cl.ID,
+		"name":        cl.Name,
+		"intro":       cl.Intro,
+		"intro_html":  classIntroHTML,
+		"owner_id":    cl.OwnerID,
+		"private":     cl.Private,
+		"created_at":  cl.CreatedAt,
+		"joined":      isMember,
+		"manageable":  manage,
 	}
 	if manage {
 		resp["invite_code"] = cl.InviteCode

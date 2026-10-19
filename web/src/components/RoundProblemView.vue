@@ -92,7 +92,7 @@ const showSolutions = ref(false)
 
 function openSolutions() {
   if (!problem.value?.can_view_solutions) {
-    ElMessage.warning('该题拿到满分后才能查看题解（老师群体不受限）')
+    ElMessage.warning('该题拿到满分后才能查看题解')
     return
   }
   showSolutions.value = true
@@ -180,7 +180,7 @@ onUnmounted(() => {
             <el-tooltip
               v-if="revealed"
               placement="top"
-              :content="problem.can_view_solutions ? '查看本题题解' : '该题拿到满分后才能查看题解（老师群体不受限）'"
+              :content="problem.can_view_solutions ? '查看本题题解' : '该题拿到满分后才能查看题解'"
             >
               <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
             </el-tooltip>

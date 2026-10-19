@@ -81,7 +81,6 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		Prefs  *struct {
 			DefaultLang   *string            `json:"defaultLang"`
 			CodeTemplates *map[string]string `json:"codeTemplates"`
-			MdEditMode    *string            `json:"mdEditMode"`
 			Autocomplete  *bool              `json:"autocomplete"`
 			CodeFont      *string            `json:"codeFont"`
 			CodeFontSize  *int               `json:"codeFontSize"`
@@ -117,16 +116,6 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 				return
 			}
 			prefs.DefaultLang = l
-		}
-		if req.Prefs.MdEditMode != nil {
-			m := trimTo(*req.Prefs.MdEditMode, 8)
-			switch m {
-			case "", "wysiwyg", "ir", "sv":
-				prefs.MdEditMode = m
-			default:
-				fail(c, http.StatusBadRequest, "MD 编辑模式需为 wysiwyg / ir / sv")
-				return
-			}
 		}
 		if req.Prefs.CodeTemplates != nil {
 			tpl := *req.Prefs.CodeTemplates

@@ -23,7 +23,7 @@ async function onSubmit(p: ProblemFormPayload) {
     if (p.compare === 'tolerant') {
       fd.append('float_tolerance', String(p.float_tolerance))
     }
-    fd.append('statement', p.statement)
+    fd.append('statement_html', p.statement)
     if (p.file_io_name) fd.append('file_io_name', p.file_io_name)
     fd.append('tag_ids', JSON.stringify(p.tag_ids))
     fd.append('zip', p.zip!)

@@ -7,7 +7,7 @@ import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { autocompleteAvailable, languageOptions, mergedPrefs } from '@/utils/code'
 
-// 个人设置（v0.4.8）：本人自助字段（性别/学校/年级/QQ）+ 偏好（默认语言/代码模板/MD 编辑模式）。
+// 个人设置（v0.4.8）：本人自助字段（性别/学校/年级/QQ）+ 偏好（默认语言/代码模板）。
 // 真实姓名只读展示——仅管理员后台可改（班级名单对号用）。
 const userStore = useUserStore()
 const loading = ref(false)
@@ -21,10 +21,9 @@ const profileForm = reactive({ gender: '', school: '', grade: '', qq: '' })
 
 const prefsForm = reactive<{
   defaultLang: string
-  mdEditMode: '' | 'wysiwyg' | 'ir' | 'sv'
   codeTemplates: Record<string, string>
   autocomplete: boolean
-}>({ defaultLang: '', mdEditMode: '', codeTemplates: {}, autocomplete: true })
+}>({ defaultLang: '', codeTemplates: {}, autocomplete: true })
 
 // 模板编辑器当前编辑的语言（按语言各存一套，切换带出对应模板）
 const tplLang = ref('cpp')
@@ -39,7 +38,6 @@ async function load() {
     profileForm.grade = p.grade ?? ''
     profileForm.qq = p.qq ?? ''
     prefsForm.defaultLang = p.prefs?.defaultLang ?? ''
-    prefsForm.mdEditMode = p.prefs?.mdEditMode ?? ''
     prefsForm.codeTemplates = { ...(p.prefs?.codeTemplates ?? {}) }
     prefsForm.autocomplete = p.prefs?.autocomplete ?? true
   } finally {
@@ -68,7 +66,6 @@ async function savePrefs() {
     // 全量合成后整体覆盖（避免清掉在线编程保存的字体/字号），先乐观更新本地再落库
     const merged = mergedPrefs({
       defaultLang: prefsForm.defaultLang,
-      mdEditMode: prefsForm.mdEditMode,
       codeTemplates: prefsForm.codeTemplates,
       autocomplete: prefsForm.autocomplete,
     })
@@ -136,13 +133,6 @@ onMounted(load)
             />
           </div>
         </el-form-item>
-        <el-form-item label="MD 编辑模式">
-          <el-select v-model="prefsForm.mdEditMode" clearable placeholder="所见即所得（默认）" style="width: 240px">
-            <el-option value="wysiwyg" label="所见即所得" />
-            <el-option value="ir" label="即时渲染" />
-            <el-option value="sv" label="分屏" />
-          </el-select>
-        </el-form-item>
         <el-form-item label="代码自动补全">
           <div class="ac-row">
             <el-switch
@@ -167,7 +157,6 @@ onMounted(load)
         <div class="tips">
           <p>真实姓名仅管理员后台可修改，用于班级名单对号；性别 / 学校 / 年级 / QQ 仅自己可见。</p>
           <p>默认语言与代码模板会在打开提交弹窗、在线编程时自动预填；切换语言带出对应模板。</p>
-          <p>MD 编辑模式决定公告 / 题面等 Markdown 编辑器的初始形态，编辑中仍可随时切换。</p>
         </div>
       </el-card>
     </template>

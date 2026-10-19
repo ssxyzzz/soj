@@ -131,7 +131,7 @@ function openWorkbenchEntry() {
 
 function openSolutions() {
   if (!problem.value?.can_view_solutions) {
-    ElMessage.warning('该题拿到满分后才能查看题解（老师群体不受限）')
+    ElMessage.warning('该题拿到满分后才能查看题解')
     return
   }
   showSolutions.value = true
@@ -143,7 +143,7 @@ function openMine() {
 
 function openOthers() {
   if (!problem.value?.can_view_others) {
-    ElMessage.warning('该题拿到满分后可查看他人的代码（老师群体不受限）')
+    ElMessage.warning('该题拿到满分后可查看他人的代码')
     return
   }
   showOthers.value = true
@@ -270,7 +270,6 @@ onUnmounted(stopPolling)
               <template #reference>
                 <span
                   class="show-tags"
-                  title="悬停或点击显示本题标签"
                   @mouseenter="openTags"
                   @mouseleave="scheduleCloseTags"
                   @click="toggleTags"

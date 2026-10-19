@@ -46,6 +46,7 @@ type Problem struct {
 	ID             int64      `bson:"_id"`
 	Title          string     `bson:"title"`
 	Statement      string     `bson:"statement"`
+	ContentHTML    string     `bson:"contentHtml,omitempty"` // 富文本题面（v0.6 换血，Tiptap schema 内的 HTML）；原 md statement 永久保留可回退
 	TimeLimitMS    int        `bson:"timeLimitMs"`
 	MemoryLimitKB  int        `bson:"memoryLimitKb"`
 	Visibility     string     `bson:"visibility"`
@@ -264,6 +265,21 @@ func (r *Repo) SetProblemStatement(ctx context.Context, pid int64, statement str
 	res, err := r.Problems.UpdateOne(ctx,
 		bson.M{"_id": pid},
 		bson.M{"$set": bson.M{"statement": statement, "updatedAt": time.Now()}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// SetProblemContentHTML 更新富文本题面（HTML，v0.6 换血）：编辑即迁移——保存写 contentHtml，
+// 原 md statement 不动（可回退、可重放转换）。
+func (r *Repo) SetProblemContentHTML(ctx context.Context, pid int64, html string) error {
+	res, err := r.Problems.UpdateOne(ctx,
+		bson.M{"_id": pid},
+		bson.M{"$set": bson.M{"contentHtml": html, "updatedAt": time.Now()}})
 	if err != nil {
 		return err
 	}

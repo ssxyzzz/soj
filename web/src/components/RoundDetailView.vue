@@ -15,7 +15,7 @@ import PageShell from '@/components/PageShell.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { useUserStore } from '@/stores/user'
 import { fmtDate, fmtMem } from '@/utils/format'
-import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
+import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
 import type { ContestDetail, LeaderRow, Submission } from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
@@ -156,7 +156,7 @@ const mySummary = computed(() => {
 })
 
 function openEditIntro() {
-  editIntro.value = round.value?.intro ?? ''
+  editIntro.value = round.value?.intro_html ?? round.value?.intro ?? ''
   showEditIntro.value = true
 }
 
@@ -166,14 +166,14 @@ async function saveIntro() {
     ElMessage.warning(`${name.value}说明不能为空`)
     return
   }
-  if (markdownBytes(editIntro.value) > MAX_MARKDOWN_BYTES) {
+  if (richtextBytes(editIntro.value) > MAX_RICHTEXT_BYTES) {
     ElMessage.error(`${name.value}说明过长（上限 256KB）`)
     return
   }
   savingIntro.value = true
   try {
     await api.value.setIntro(round.value.id, editIntro.value)
-    round.value.intro = editIntro.value
+    round.value.intro_html = editIntro.value
     ElMessage.success(`${name.value}说明已保存`)
     showEditIntro.value = false
   } finally {
@@ -234,7 +234,7 @@ onUnmounted(() => {
             :closable="false"
             class="mt8"
           />
-          <div v-if="round.intro" class="intro"><MdView :content="round.intro" /></div>
+          <div v-if="round.intro_html || round.intro" class="intro"><MdView :content="round.intro_html || round.intro" /></div>
           <div class="meta">
             <el-tag size="small" type="info">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</el-tag>
             <el-tag v-if="round.hidden_until" size="small" type="info">

@@ -12,7 +12,7 @@ import { ElMessage } from 'element-plus'
 import MdEditor from '@/components/MdEditor.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
-import { MAX_MARKDOWN_BYTES, markdownBytes } from '@/utils/vditor'
+import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
 
 export interface ProblemFormPayload {
   title: string
@@ -110,7 +110,7 @@ function payload(): ProblemFormPayload | null {
     ElMessage.warning('请填写题面')
     return null
   }
-  if (markdownBytes(form.statement) > MAX_MARKDOWN_BYTES) {
+  if (richtextBytes(form.statement) > MAX_RICHTEXT_BYTES) {
     ElMessage.error('题面过长（上限 256KB）')
     return null
   }

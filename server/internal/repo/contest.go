@@ -30,6 +30,7 @@ type Contest struct {
 	ClassID     int64            `bson:"classId"` // 恒为 0（历史字段，班级赛事已拆分为 Exam）
 	Title       string           `bson:"title"`
 	Intro       string           `bson:"intro"`
+	IntroHTML   string           `bson:"introHtml,omitempty"` // 赛事说明富文本（v0.6 换血）；原 md intro 冻结为回退源
 	Start       time.Time        `bson:"start"`
 	End         time.Time        `bson:"end"`
 	HiddenUntil time.Time        `bson:"hiddenUntil"` // 零值 = 无赛后隐藏期
@@ -125,6 +126,19 @@ func (r *Repo) DeleteRound(ctx context.Context, kind string, id int64) error {
 func (r *Repo) SetRoundIntro(ctx context.Context, kind string, id int64, intro string) error {
 	res, err := r.roundsCol(kind).UpdateOne(ctx,
 		bson.M{"_id": id}, bson.M{"$set": bson.M{"intro": intro}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// SetRoundIntroHTML 更新赛事说明富文本（v0.6 换血）：保存写 introHtml，原 md intro 不动。
+func (r *Repo) SetRoundIntroHTML(ctx context.Context, kind string, id int64, html string) error {
+	res, err := r.roundsCol(kind).UpdateOne(ctx,
+		bson.M{"_id": id}, bson.M{"$set": bson.M{"introHtml": html}})
 	if err != nil {
 		return err
 	}

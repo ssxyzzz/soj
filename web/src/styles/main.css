@@ -12,15 +12,15 @@
    emoji 图标  36  HomeView .feature-icon
    代码显示    14  pre,code,kbd,samp
    CM6 编辑器  14  CodeEditor 默认（可调 12-48）
-   ---- Markdown 富文本（vditor-reset，基准 16，行内单位 em）----
-   正文        16  .vditor-reset
+   ---- Markdown 富文本（.rich，基准 16，行内单位 em）----
+   正文        16  .rich
    h1/h2/h3    1.35/1.2/1.08em   h4-h6 1em
    行内 code  0.9em（翻倍类选择器）   块级 code 14px
    ---- EP 出厂未覆盖（如实渲染值，改则另行加覆盖）----
    tooltip/popover/alert/message/分页/上传文字 14
    确认框与弹窗标题 18（--el-font-size-large）
    404 el-result 标题 20
-   vditor 弹层 chrome：面板 14 / hint·计数·大纲 12（出厂值）
+   （vditor 弹层 chrome 段已随 v0.6 换血删除）
    ============================================================ */
 html,
 body,
@@ -30,7 +30,7 @@ body,
   min-height: 100vh;
 }
 
-/* 全站字阶：长文阅读正文 16（vditor-reset）/ 界面与表格 14 / 代码 14 /
+/* 全站字阶：长文阅读正文 16（.rich）/ 界面与表格 14 / 代码 14 /
    区块小标题 16·600 / 页头大标题 22·600 / hero 与统计大数字 30·32·600（Ant 对齐） */
 :root {
   /* 组件字重 400（Ant：强调只靠 600 档与颜色） */
@@ -332,81 +332,81 @@ strong {
   font-size: 14px;
 }
 
-/* ---- Markdown 排版：vditor-reset 同挂 Vditor 编辑内容区与静态预览（MdView），
-   一段规则约束「编辑所见」与「显示所得」；长文正文 16、标题 600、行高 1.7 ----
-   本段生效依赖 main.css 晚于 vditor 自带样式（引入顺序见 main.ts），勿改回懒加载 */
-.vditor-reset {
+/* ---- Markdown 排版（.rich）：同挂编辑端（Tiptap 内容区，MdEditor 注入）与显示端
+   （MdView 根元素），一段规则约束「编辑所见」与「显示所得」；长文正文 16、标题 600、行高 1.7 ----
+   v0.6 换血后无第三方编辑器样式反压，规则即唯一来源 */
+.rich {
   color: var(--el-text-color-primary);
   font-size: 16px;
   line-height: 1.7;
 }
 
 /* 标题梯度低于页头大标题（22/600 是题面卡层级顶点） */
-.vditor-reset h1,
-.vditor-reset h2,
-.vditor-reset h3,
-.vditor-reset h4,
-.vditor-reset h5,
-.vditor-reset h6 {
+.rich h1,
+.rich h2,
+.rich h3,
+.rich h4,
+.rich h5,
+.rich h6 {
   font-weight: 600;
   line-height: 1.4;
   margin: 1.5em 0 0.5em;
 }
 
-.vditor-reset h1 {
+.rich h1 {
   font-size: 1.35em;
 }
 
-.vditor-reset h2 {
+.rich h2 {
   font-size: 1.2em;
 }
 
-.vditor-reset h3 {
+.rich h3 {
   font-size: 1.08em;
 }
 
-.vditor-reset h4,
-.vditor-reset h5,
-.vditor-reset h6 {
+.rich h4,
+.rich h5,
+.rich h6 {
   font-size: 1em;
 }
 
-.vditor-reset p {
+.rich p {
   margin: 0.55em 0;
 }
 
-.vditor-reset ul,
-.vditor-reset ol {
+.rich ul,
+.rich ol {
   margin: 0.55em 0;
   padding-left: 1.6em;
 }
 
-.vditor-reset li {
+.rich li {
   margin: 0.2em 0;
 }
 
-.vditor-reset a {
+.rich a {
   color: var(--el-color-primary);
   text-decoration: none;
 }
 
-.vditor-reset a:hover {
+.rich a:hover {
   text-decoration: underline;
 }
 
-.vditor-reset hr {
+.rich hr {
   border: 0;
   border-top: 1px solid var(--el-border-color-lighter);
   margin: 1.6em 0;
 }
 
-.vditor-reset img {
+.rich img {
   max-width: 100%;
   border-radius: 8px;
 }
 
 /* 引用块 callout 化：浅底圆角 + 左侧主色条 */
-.vditor-reset blockquote {
+.rich blockquote {
   margin: 0.8em 0;
   padding: 10px 14px;
   background: var(--el-color-primary-light-9);
@@ -415,12 +415,12 @@ strong {
   color: var(--el-text-color-regular);
 }
 
-.vditor-reset blockquote p {
+.rich blockquote p {
   margin: 0.3em 0;
 }
 
-/* 行内 code 徽章化：类名写两遍压过 vditor 的 code:not(.hljs)... (0,3,1) 特异度 */
-.vditor-reset.vditor-reset :not(pre) > code {
+/* 行内 code 徽章化：类名写两遍保住 (0,3,1) 特异度余量（历史：压 vditor code:not(.hljs)） */
+.rich.rich :not(pre) > code {
   padding: 1px 6px;
   background: var(--el-fill-color);
   border: 1px solid var(--el-border-color-lighter);
@@ -429,85 +429,75 @@ strong {
 }
 
 /* 块级代码 14px（压过 Vditor 默认 85%） */
-.vditor-reset pre,
-.vditor-reset pre code {
+.rich pre,
+.rich pre code {
   font-size: 14px;
 }
 
-.vditor-reset pre {
+.rich pre {
   background: var(--el-fill-color-lighter);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: var(--el-border-radius-base);
 }
 
-.vditor-reset th,
-.vditor-reset td {
+.rich th,
+.rich td {
   border: 1px solid var(--el-border-color-lighter);
   padding: 6px 12px;
 }
 
-.vditor-reset th {
+.rich th {
   background: var(--el-fill-color-light);
   font-weight: 600;
 }
 
-.vditor-reset tbody tr:nth-child(2n) {
+.rich tbody tr:nth-child(2n) {
   background: var(--el-fill-color-lighter);
 }
 
-.vditor-reset > :first-child {
+.rich > :first-child {
   margin-top: 0;
 }
 
-/* 内容列限宽 860 居中：编辑端（wysiwyg 内容区 / ir 内容）与显示端（MdView，
-   其 max-width 在组件内声明）同规则——工具栏与卡片仍是全宽，只有内容列收窄 */
-.vditor-wysiwyg,
-.vditor-ir .vditor-reset {
-  max-width: 860px;
-  margin: 0 auto;
+/* 任务列表勾选框（Tiptap taskList / 转换器输出 input[disabled]） */
+.rich ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.2em;
 }
 
-/* 编辑器 chrome（Editor.js 气质）：白底工具栏、与卡片边框融合、弹层面板小圆角 */
-.vditor {
-  border-color: var(--el-border-color);
-  border-radius: var(--el-border-radius-base);
+.rich ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.5em;
 }
 
-.vditor-toolbar {
-  background: var(--el-bg-color);
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  border-radius: var(--el-border-radius-base) var(--el-border-radius-base) 0 0;
-  padding: 0 4px;
+.rich ul[data-type="taskList"] li > label {
+  margin-top: 0.28em;
+  flex: 0 0 auto;
 }
 
-.vditor-toolbar__item {
-  margin: 0 1px;
+.rich ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
 }
 
-/* vditor 全屏态自身不画背景（fixed 透明层会透出页面内容），补实底 */
-.vditor--fullscreen {
-  background: var(--el-bg-color);
+/* 块级公式居中 + 行内公式与文字基线对齐（KaTeX 输出） */
+.rich [data-type="block-math"] {
+  margin: 0.8em 0;
+  text-align: center;
+  overflow-x: auto;
 }
 
-.vditor-panel {
-  border-radius: var(--el-border-radius-base);
-  border-color: var(--el-border-color-lighter);
+/* 编辑态块级公式空节点可见可点（查看端有 KaTeX 内容撑起，编辑端空 latex 时给占位高度） */
+.rich .tiptap [data-type="block-math"]:empty::before,
+.rich .tiptap [data-type="inline-math"]:empty::before {
+  content: "公式（双击编辑 TeX）";
+  color: var(--el-text-color-placeholder);
+  font-size: 13px;
 }
 
-/* 工具栏图标：线性 stroke，压过 vditor 的 fill:currentColor; stroke-width:0 默认
-   （否则涂成实心色块）；尺寸 20px */
-.vditor-toolbar .vditor-toolbar__item svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  width: 20px;
-  height: 20px;
-}
-
-/* Lucide 铺满 24 视框视觉偏大，缩一号与 Editor.js 找平 */
-.vditor-toolbar .vditor-toolbar__item svg.tb-md-lucide {
-  width: 17px;
-  height: 17px;
+/* 表格（Tiptap 表格与转换器表格共用；查看端表头/斑马纹沿用上方 .rich 规则） */
+.rich table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
 }
 
 /* 代码显示面统一 14px（CodeMirror 编辑器有自己的字号主题，不受影响） */

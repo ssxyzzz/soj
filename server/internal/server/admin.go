@@ -8,6 +8,7 @@ import (
 
 	"soj/internal/auth"
 	"soj/internal/repo"
+	"soj/internal/richtext"
 )
 
 // ---- 管理端（root）：用户管理 ----
@@ -143,14 +144,42 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 
 // ---- 系统设置（root） ----
 
-// GetSettings 读取系统设置（root）。
+// GetSettings 读取系统设置（root）。公告/备份说明返回 md（回退源）+ html（现役）双字段。
 func (h *Handlers) GetSettings(c *gin.Context) {
 	s, err := h.repo.GetSystemSettings(c.Request.Context())
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取设置失败")
 		return
 	}
-	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute, "home_notice": s.HomeNotice, "backup_guide": s.BackupGuide})
+	ok(c, gin.H{
+		"rate_limit_per_minute": s.RateLimitPerMinute,
+		"home_notice":           s.HomeNotice,
+		"home_notice_html":      noticeHTML(s),
+		"backup_guide":          s.BackupGuide,
+		"backup_guide_html":     backupGuideHTML(s),
+	})
+}
+
+// noticeHTML 公告富文本：contentHtml 优先，存量 md 读时计算（编辑即迁移）。
+func noticeHTML(s *repo.SystemSettings) string {
+	if s.HomeNoticeHTML != "" {
+		return s.HomeNoticeHTML
+	}
+	if s.HomeNotice == "" {
+		return ""
+	}
+	return richtext.MdToHTML(s.HomeNotice)
+}
+
+// backupGuideHTML 备份说明富文本：同上；空 = 前端内置默认。
+func backupGuideHTML(s *repo.SystemSettings) string {
+	if s.BackupGuideHTML != "" {
+		return s.BackupGuideHTML
+	}
+	if s.BackupGuide == "" {
+		return ""
+	}
+	return richtext.MdToHTML(s.BackupGuide)
 }
 
 // GetNotice 首页公告（公开，首页免登录展示）。
@@ -160,15 +189,16 @@ func (h *Handlers) GetNotice(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取公告失败")
 		return
 	}
-	ok(c, gin.H{"content": s.HomeNotice})
+	ok(c, gin.H{"content": s.HomeNotice, "content_html": noticeHTML(s)})
 }
 
-// UpdateSettings 更新系统设置。
+// UpdateSettings 更新系统设置（公告/备份说明 v0.6 起收富文本 HTML，写 _html 字段；
+// 原 md 字段冻结为回退源）。
 func (h *Handlers) UpdateSettings(c *gin.Context) {
 	var req struct {
 		RateLimitPerMinute *int    `json:"rate_limit_per_minute"`
-		HomeNotice         *string `json:"home_notice"`
-		BackupGuide        *string `json:"backup_guide"`
+		HomeNoticeHTML     *string `json:"home_notice_html"`
+		BackupGuideHTML    *string `json:"backup_guide_html"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -186,23 +216,27 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.RateLimitPerMinute = *req.RateLimitPerMinute
 	}
-	if req.HomeNotice != nil {
-		if len(*req.HomeNotice) > 64<<10 {
+	if req.HomeNoticeHTML != nil {
+		if len(*req.HomeNoticeHTML) > 64<<10 {
 			fail(c, http.StatusBadRequest, "公告过长")
 			return
 		}
-		s.HomeNotice = *req.HomeNotice
+		s.HomeNoticeHTML = *req.HomeNoticeHTML
 	}
-	if req.BackupGuide != nil {
-		if len(*req.BackupGuide) > 16<<10 {
+	if req.BackupGuideHTML != nil {
+		if len(*req.BackupGuideHTML) > 16<<10 {
 			fail(c, http.StatusBadRequest, "备份使用说明过长（上限 16KB）")
 			return
 		}
-		s.BackupGuide = *req.BackupGuide
+		s.BackupGuideHTML = *req.BackupGuideHTML
 	}
 	if err := h.repo.UpdateSystemSettings(c.Request.Context(), s); err != nil {
 		fail(c, http.StatusInternalServerError, "更新失败")
 		return
 	}
-	ok(c, gin.H{"rate_limit_per_minute": s.RateLimitPerMinute, "home_notice": s.HomeNotice, "backup_guide": s.BackupGuide})
+	ok(c, gin.H{
+		"rate_limit_per_minute": s.RateLimitPerMinute,
+		"home_notice_html":      s.HomeNoticeHTML,
+		"backup_guide_html":     s.BackupGuideHTML,
+	})
 }

@@ -13,13 +13,14 @@ import (
 )
 
 type Solution struct {
-	ID        int64     `bson:"_id"`
-	PID       int64     `bson:"pid"`
-	UID       int64     `bson:"uid"`
-	Content   string    `bson:"content"`
-	Pinned    bool      `bson:"pinned,omitempty"`
-	CreatedAt time.Time `bson:"createdAt"`
-	UpdatedAt time.Time `bson:"updatedAt"`
+	ID          int64     `bson:"_id"`
+	PID         int64     `bson:"pid"`
+	UID         int64     `bson:"uid"`
+	Content     string    `bson:"content"`
+	ContentHTML string    `bson:"contentHtml,omitempty"` // 富文本（v0.6 换血）；原 md content 冻结为回退源
+	Pinned      bool      `bson:"pinned,omitempty"`
+	CreatedAt   time.Time `bson:"createdAt"`
+	UpdatedAt   time.Time `bson:"updatedAt"`
 }
 
 func (r *Repo) InsertSolution(ctx context.Context, s *Solution) error {
@@ -72,6 +73,17 @@ func (r *Repo) UpdateSolutionContent(ctx context.Context, sid int64, content str
 	res, err := r.Solutions.UpdateOne(ctx,
 		bson.M{"_id": sid},
 		bson.M{"$set": bson.M{"content": content, "updatedAt": time.Now()}})
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return err
+}
+
+// UpdateSolutionContentHTML 作者更新题解富文本（v0.6 换血）：写 contentHtml，原 md content 不动。
+func (r *Repo) UpdateSolutionContentHTML(ctx context.Context, sid int64, html string) error {
+	res, err := r.Solutions.UpdateOne(ctx,
+		bson.M{"_id": sid},
+		bson.M{"$set": bson.M{"contentHtml": html, "updatedAt": time.Now()}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
 	}

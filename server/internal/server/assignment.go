@@ -10,7 +10,16 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/repo"
+	"soj/internal/richtext"
 )
+
+// assignmentIntroHTML 作业说明富文本（v0.6 富文本口径：说明为纯文本/简单 md，读时计算）。
+func assignmentIntroHTML(intro string) string {
+	if intro == "" {
+		return ""
+	}
+	return richtext.MdToHTML(intro)
+}
 
 // assignmentAccessible 作业仅本班成员与班级管理员/root 可见。
 func (h *Handlers) assignmentAccessible(ctx context.Context, classID, uid int64, role string, logged bool) bool {
@@ -177,7 +186,8 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 	}
 	ok(c, gin.H{
 		"id": a.ID, "class_id": a.ClassID, "title": a.Title, "intro": a.Intro,
-		"problems": problems, "manageable": manage,
+		"intro_html": assignmentIntroHTML(a.Intro),
+		"problems":   problems, "manageable": manage,
 	})
 }
 

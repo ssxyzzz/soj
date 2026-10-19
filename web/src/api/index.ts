@@ -135,10 +135,10 @@ export const problemApi = {
       page,
       page_size: pageSize,
     }),
-  postSolution: (id: number, content: string) =>
-    post<{ id: number }>(`/problems/${id}/solutions`, { content }),
-  updateSolution: (id: number, sid: number, content: string) =>
-    patch<{ updated: number }>(`/problems/${id}/solutions/${sid}`, { content }),
+  postSolution: (id: number, html: string) =>
+    post<{ id: number }>(`/problems/${id}/solutions`, { content_html: html }),
+  updateSolution: (id: number, sid: number, html: string) =>
+    patch<{ updated: number }>(`/problems/${id}/solutions/${sid}`, { content_html: html }),
   deleteSolution: (id: number, sid: number) =>
     del<{ deleted: number }>(`/problems/${id}/solutions/${sid}`),
   pinSolution: (id: number, sid: number, pinned: boolean) =>
@@ -159,8 +159,8 @@ export const problemApi = {
     get<{ list: Submission[] }>(`/contests/${id}/problems/${pid}/submissions`, { uid }),
   mySubmissions: (id: number, page: number, pageSize: number) =>
     get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
-  setStatement: (id: number, statement: string) =>
-    patch<{ id: number }>(`/problems/${id}/statement`, { statement }),
+  setStatement: (id: number, html: string) =>
+    patch<{ id: number }>(`/problems/${id}/statement`, { html }),
 }
 
 // 标签树（v0.5.5）：读公开（题库/详情/表单共用），写仅 root（后端 RequireRoot）
@@ -227,9 +227,9 @@ export const adminApi = {
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; real_name?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
-    get<{ rate_limit_per_minute: number; home_notice: string; backup_guide: string }>('/admin/settings'),
-  updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string; backup_guide?: string }) =>
-    put<{ rate_limit_per_minute: number; home_notice: string; backup_guide: string }>('/admin/settings', patch),
+    get<{ rate_limit_per_minute: number; home_notice: string; home_notice_html: string; backup_guide: string; backup_guide_html: string }>('/admin/settings'),
+  updateSettings: (patch: { rate_limit_per_minute?: number; home_notice_html?: string; backup_guide_html?: string }) =>
+    put<{ rate_limit_per_minute: number; home_notice_html: string; backup_guide_html: string }>('/admin/settings', patch),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),
@@ -265,7 +265,7 @@ const roundApiOf = (kind: RoundKind) => {
   const base = `/${kind}s`
   return {
     detail: (id: number) => get<ContestDetail>(`${base}/${id}`),
-    setIntro: (id: number, intro: string) => patch<{ id: number }>(`${base}/${id}/intro`, { intro }),
+    setIntro: (id: number, html: string) => patch<{ id: number }>(`${base}/${id}/intro`, { intro_html: html }),
     remove: (id: number) => del<{ deleted: number }>(`${base}/${id}`),
     submit: (roundId: number, pid: number, language: string, code: string) =>
       post<{ id: number }>(`${base}/${roundId}/problems/${pid}/submissions`, { language, code }),
@@ -308,5 +308,5 @@ export interface CreateExamPayload {
 // ---------- 首页公告 ----------
 
 export const noticeApi = {
-  get: () => get<{ content: string }>('/notice'),
+  get: () => get<{ content: string; content_html: string }>('/notice'),
 }

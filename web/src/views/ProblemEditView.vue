@@ -39,7 +39,7 @@ onMounted(async () => {
       memory_limit_mb: Math.max(16, Math.round(p.memory_limit_kb / 1024)),
       compare: p.compare === 'tolerant' ? 'tolerant' : 'exact',
       float_tolerance: p.float_tolerance ?? 0.0001,
-      statement: p.description ?? '',
+      statement: p.description_html || (p.description ?? ''),
       file_io_name: (p.file_io_input || 'problem.in').replace(/\.in$/, ''),
       tag_ids: p.tags ? [...p.tags] : [],
     }

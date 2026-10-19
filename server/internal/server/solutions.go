@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/repo"
+	"soj/internal/richtext"
 )
 
 const maxSolutionBytes = 256 << 10
@@ -28,14 +29,19 @@ func (h *Handlers) solutionAllowed(c *gin.Context, uid, pid int64) bool {
 }
 
 func solutionJSON(s *repo.Solution, nickname string) gin.H {
+	contentHTML := s.ContentHTML
+	if contentHTML == "" {
+		contentHTML = richtext.MdToHTML(s.Content) // 存量 md 题解读时计算（编辑即迁移）
+	}
 	return gin.H{
-		"id":         s.ID,
-		"uid":        s.UID,
-		"nickname":   nickname,
-		"content":    s.Content,
-		"pinned":     s.Pinned,
-		"created_at": s.CreatedAt.Format(time.RFC3339),
-		"updated_at": s.UpdatedAt.Format(time.RFC3339),
+		"id":            s.ID,
+		"uid":           s.UID,
+		"nickname":      nickname,
+		"content":       s.Content,
+		"content_html":  contentHTML,
+		"pinned":        s.Pinned,
+		"created_at":    s.CreatedAt.Format(time.RFC3339),
+		"updated_at":    s.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
@@ -95,22 +101,22 @@ func (h *Handlers) PostSolution(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Content string `json:"content"`
+		ContentHTML string `json:"content_html"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	if len(req.Content) > maxSolutionBytes {
+	if len(req.ContentHTML) > maxSolutionBytes {
 		fail(c, http.StatusBadRequest, "题解过长（上限 256KB）")
 		return
 	}
-	if strings.TrimSpace(req.Content) == "" {
+	if strings.TrimSpace(req.ContentHTML) == "" {
 		fail(c, http.StatusBadRequest, "题解内容不能为空")
 		return
 	}
 	now := time.Now()
-	s := &repo.Solution{PID: pid, UID: uid, Content: req.Content, CreatedAt: now, UpdatedAt: now}
+	s := &repo.Solution{PID: pid, UID: uid, ContentHTML: req.ContentHTML, CreatedAt: now, UpdatedAt: now}
 	if err := h.repo.InsertSolution(c.Request.Context(), s); err != nil {
 		fail(c, http.StatusInternalServerError, "发布失败")
 		return
@@ -130,17 +136,17 @@ func (h *Handlers) UpdateSolution(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Content string `json:"content"`
+		ContentHTML string `json:"content_html"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	if len(req.Content) > maxSolutionBytes {
+	if len(req.ContentHTML) > maxSolutionBytes {
 		fail(c, http.StatusBadRequest, "题解过长（上限 256KB）")
 		return
 	}
-	if strings.TrimSpace(req.Content) == "" {
+	if strings.TrimSpace(req.ContentHTML) == "" {
 		fail(c, http.StatusBadRequest, "题解内容不能为空")
 		return
 	}
@@ -157,7 +163,7 @@ func (h *Handlers) UpdateSolution(c *gin.Context) {
 		fail(c, http.StatusForbidden, "只能编辑自己发布的题解")
 		return
 	}
-	if err := h.repo.UpdateSolutionContent(c.Request.Context(), sid, req.Content); err != nil {
+	if err := h.repo.UpdateSolutionContentHTML(c.Request.Context(), sid, req.ContentHTML); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}

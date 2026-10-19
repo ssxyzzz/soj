@@ -221,7 +221,7 @@ onMounted(() => {
             <el-tag v-if="cl.private" size="small" type="warning">私密班</el-tag>
             <el-tag v-if="cl.joined" size="small" type="success">已加入</el-tag>
           </div>
-          <div v-if="cl.intro" class="intro"><MdView :content="cl.intro" /></div>
+          <div v-if="cl.intro_html || cl.intro" class="intro"><MdView :content="cl.intro_html || cl.intro" /></div>
           <div class="meta">
             <el-tag size="small" type="info">创建于 {{ fmtDate(cl.created_at) }}</el-tag>
           </div>

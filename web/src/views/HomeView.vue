@@ -43,7 +43,7 @@ onMounted(async () => {
     // 班级加载失败不影响首页其他内容
   }
   try {
-    notice.value = (await noticeApi.get()).content
+    notice.value = (await noticeApi.get()).content_html
   } catch {
     // 公告加载失败不影响首页其他内容
   }

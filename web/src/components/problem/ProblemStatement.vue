@@ -32,7 +32,7 @@ defineProps<{
         title="本题请以文件 IO 方式提交"
         :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
       />
-      <MdView :content="problem.description" />
+      <MdView :content="problem.description_html || problem.description" />
     </div>
   </el-card>
 </template>

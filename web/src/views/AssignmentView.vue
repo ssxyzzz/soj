@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, authApi, contestApi, problemApi } from '@/api'
 import { downloadCsv } from '@/api/download'
+import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { useUserStore } from '@/stores/user'
@@ -225,8 +226,8 @@ onMounted(() => {
           <div v-else class="dim">{{ userStore.token ? '暂无你的做题记录' : '登录后可查看自己的完成进度' }}</div>
         </el-card>
 
-        <el-card v-if="assignment.intro" class="mb16">
-          <div class="intro">{{ assignment.intro }}</div>
+        <el-card v-if="assignment.intro_html || assignment.intro" class="mb16">
+          <div class="intro"><MdView :content="assignment.intro_html || assignment.intro" /></div>
         </el-card>
 
         <el-card>
