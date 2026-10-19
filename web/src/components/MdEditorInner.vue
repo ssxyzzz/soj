@@ -67,6 +67,11 @@ const editor = useEditor({
   },
 })
 
+// 调试句柄：浏览器控制台/自动化探针可用（生产保留；useEditor 挂载后才创建，须 watch 追踪）
+watch(editor, (e) => {
+  ;(window as unknown as { __mdEd?: unknown }).__mdEd = e
+})
+
 // ---------- 工具栏 ----------
 const icon = (name: string) => MD_TOOLBAR_ICONS[name] ?? ''
 
@@ -103,15 +108,17 @@ function setLink() {
 const inTable = computed(() => editor.value?.isActive('table') ?? false)
 
 // ---------- 公式 ----------
-const mathEditing = ref<{ pos: number; latex: string; block: boolean } | null>(null)
+// create 模式 = 工具栏按钮先弹层、确定后在光标处插入（官方 insertBlockMath 拒绝空 latex，
+// 不能先插空节点再编辑）；否则为双击已有节点的编辑模式（更新须传显式 pos，见 PoC 结论）。
+const mathEditing = ref<{ pos?: number; latex: string; block: boolean; create?: boolean } | null>(null)
 
 function insertInlineMath() {
-  chain().insertInlineMath({ latex: '' }).run()
+  mathEditing.value = { latex: '', block: false, create: true }
 }
 function insertBlockMath() {
-  chain().insertBlockMath({ latex: '' }).run()
+  mathEditing.value = { latex: '', block: true, create: true }
 }
-// 双击公式节点：弹层改 TeX（更新须传显式 pos——不传只作用于选区所在节点，见 PoC 结论）
+// 双击公式节点：弹层改 TeX
 function onEditorDblClick(e: MouseEvent) {
   const target = (e.target as HTMLElement)?.closest('[data-type="inline-math"],[data-type="block-math"]')
   if (!target || !editor.value) return
@@ -127,8 +134,16 @@ function onEditorDblClick(e: MouseEvent) {
 function saveMath(latex: string) {
   const m = mathEditing.value
   if (!m) return
-  if (m.block) editor.value!.commands.updateBlockMath({ pos: m.pos, latex })
-  else editor.value!.commands.updateInlineMath({ pos: m.pos, latex })
+  if (m.create) {
+    if (latex.trim()) {
+      // 弹层抢焦点先恢复选区；insertContent 为 schema 驱动的标准插入（块节点插在
+      // 文本中段时自动切段——官方 insertBlockMath 命令在行内节点后等位置会静默失败）
+      editor.value!.chain().focus().insertContent({ type: m.block ? 'blockMath' : 'inlineMath', attrs: { latex } }).run()
+    }
+  } else if (m.pos !== undefined) {
+    if (m.block) editor.value!.commands.updateBlockMath({ pos: m.pos, latex })
+    else editor.value!.commands.updateInlineMath({ pos: m.pos, latex })
+  }
   mathEditing.value = null
 }
 

@@ -868,6 +868,7 @@ async function onSave() {
 /* 单一横向滚动容器：所有层级行共用最下面一条拖动条（行内不再各自出滚动条） */
 .tag-scroll {
   overflow-x: auto;
+  padding-top: 8px;
   padding-bottom: 6px; /* 滚动条占位，不裁切标签 */
   scrollbar-width: thin; /* Firefox */
   scrollbar-color: var(--el-border-color-darker) transparent;
