@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 比赛/考试详情页共享组件（v0.5.4 合并；v0.7 按 design.md 重排；v0.7.2 副列重排）。
-// 主列：名称卡（20px + 说明）→ 提交进度卡 → 题目表（T1/状态/题目/标签/通过率）。
+// 主列：名称卡（20px + 说明）→ 题目表（T1/状态/题目/标签/通过率）。
 // 副列：管理卡（编辑/调整题目/编辑说明/重测/场景开关）→ 时间卡 → 成绩表。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -143,15 +143,7 @@ const progressPct = computed(() => {
   return Math.min(100, Math.max(0, Math.round(((now.value - start) / total) * 100)))
 })
 
-const submittedCount = computed(
-  () => (round.value?.problems ?? []).filter((p) => p.submitted).length,
-)
 const problemTotal = computed(() => round.value?.problems?.length ?? 0)
-const submitProgressPct = computed(() => {
-  const total = problemTotal.value
-  if (total <= 0) return 0
-  return Math.round((submittedCount.value / total) * 100)
-})
 
 // 成绩表可见：组织者恒可见；参与者需开启成绩表且结果已发布（关隐藏时赛中实时可见）
 const boardVisible = computed(() => {
@@ -305,16 +297,6 @@ onUnmounted(() => {
             </el-tag>
           </div>
         </div>
-      </el-card>
-
-      <!-- 时间/提交进度（v0.7.2：赛程与倒计时挪至右栏「时间」卡，主列只留提交进度） -->
-      <el-card v-if="userStore.token && round.participant && problemTotal > 0" class="block">
-        <template #header><span>提交进度</span></template>
-        <div class="submit-head">
-          <span>{{ submittedCount }} / {{ problemTotal }}</span>
-          <span class="dim">{{ submitProgressPct }}%</span>
-        </div>
-        <el-progress :percentage="submitProgressPct" :stroke-width="8" />
       </el-card>
 
       <!-- 题目表：T1 / 状态 / 题目 / 标签 / 通过率 -->
@@ -532,13 +514,6 @@ onUnmounted(() => {
 .center {
   text-align: center;
   margin-top: 6px;
-}
-
-.submit-head {
-  display: flex;
-  justify-content: space-between;
-  margin: 14px 0 6px;
-  color: var(--el-text-color-regular);
 }
 
 .scene-row {

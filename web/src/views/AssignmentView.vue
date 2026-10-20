@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 作业详情（v0.7 按 design.md 重排）：名称卡（20px + 说明）→ 提交进度 → 题目表；
+// 作业详情（v0.7 按 design.md 重排）：名称卡（20px + 说明）→ 题目表；
 // 副列管理卡 → 成绩表。题目表列：T1/状态/题目/标签/通过率。
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -68,13 +68,6 @@ const scoreBoard = computed<ScoreBoardView | null>(() => {
 const scoreTitle = computed(() => (assignment.value ? `成绩表 · ${assignment.value.title}` : '成绩表'))
 
 const problemTotal = computed(() => assignment.value?.problems?.length ?? 0)
-const submittedCount = computed(
-  () => (assignment.value?.problems ?? []).filter((p) => p.submitted).length,
-)
-const submitPct = computed(() => {
-  if (!problemTotal.value) return 0
-  return Math.round((submittedCount.value / problemTotal.value) * 100)
-})
 
 async function load() {
   loading.value = true
@@ -306,16 +299,6 @@ onMounted(() => {
         </div>
       </el-card>
 
-      <!-- 提交进度（学生视角；老师看成绩表） -->
-      <el-card v-if="!assignment.manageable" class="block">
-        <div class="progress-head">
-          <span class="progress-title">提交进度</span>
-          <span>{{ submittedCount }} / {{ problemTotal }}</span>
-        </div>
-        <el-progress :percentage="submitPct" :stroke-width="10" />
-        <div class="dim center">共 {{ problemTotal }} 道题，已提交 {{ submittedCount }} 道</div>
-      </el-card>
-
       <!-- 题目表：T1 / 状态 / 题目 / 标签 / 通过率 -->
       <el-card class="block">
         <template #header><span>作业题目（{{ problemTotal }}）</span></template>
@@ -503,22 +486,6 @@ onMounted(() => {
 
 .block {
   margin-top: 16px;
-}
-
-.progress-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.progress-title {
-  font-weight: var(--soj-fw-emphasis);
-}
-
-.center {
-  text-align: center;
-  margin-top: 6px;
 }
 
 .adjust-pick {
