@@ -251,12 +251,25 @@ func (r *Repo) RequestCancelSubmission(ctx context.Context, sid int64) (string, 
 // ErrJudging 提交正在评测中，不可重测。
 var ErrJudging = errors.New("submission is being judged")
 
+// rejudgeUpdate 重测重置的写入口径：状态回 Pending（按档位给优先级）+ 清空上一次
+// 评测结果（分数/耗时/内存/错误信息/测试点明细——重测中保留旧分会被「Judging + 旧分」
+// 展示误导，v0.7.1 验收反馈）+ 清掉旧租约痕迹。
+func rejudgeUpdate(priority int) bson.M {
+	return bson.M{
+		"$set": bson.M{
+			"status": StatusPending, "priority": priority,
+			"score": 0, "timeMs": 0, "memKb": 0, "errorInfo": "", "detail": bson.A{},
+		},
+		"$unset": bson.M{"judge": "", "claimedAt": "", "heartbeatAt": ""},
+	}
+}
+
 // RejudgeSubmission 重测：把一条非评测中的提交重置为 Pending（中优先级），交还判题线程池自动领取重评。
 // 评测中（含已请求取消、正在收尾）的提交返回 ErrJudging；不存在返回 mongo.ErrNoDocuments。
 func (r *Repo) RejudgeSubmission(ctx context.Context, id int64) error {
 	err := r.Submissions.FindOneAndUpdate(ctx,
 		bson.M{"_id": id, "status": bson.M{"$nin": bson.A{StatusPending, StatusJudging, StatusCancelRequested}}},
-		bson.M{"$set": bson.M{"status": StatusPending, "priority": PriorityMid}},
+		rejudgeUpdate(PriorityMid),
 	).Err()
 	if err == nil {
 		return nil
@@ -278,7 +291,7 @@ var inFlight = bson.A{StatusPending, StatusJudging, StatusCancelRequested}
 func (r *Repo) RejudgeProblem(ctx context.Context, pid int64) (int64, error) {
 	res, err := r.Submissions.UpdateMany(ctx,
 		bson.M{"pid": pid, "status": bson.M{"$nin": inFlight}},
-		bson.M{"$set": bson.M{"status": StatusPending, "priority": PriorityLow}})
+		rejudgeUpdate(PriorityLow))
 	if err != nil {
 		return 0, err
 	}
@@ -294,7 +307,7 @@ func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64,
 	}
 	res, err := r.Submissions.UpdateMany(ctx,
 		bson.M{field: rid, "status": bson.M{"$nin": inFlight}},
-		bson.M{"$set": bson.M{"status": StatusPending, "priority": PriorityLow}})
+		rejudgeUpdate(PriorityLow))
 	if err != nil {
 		return 0, err
 	}
