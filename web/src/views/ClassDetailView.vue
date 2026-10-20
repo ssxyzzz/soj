@@ -148,7 +148,7 @@ async function dissolve() {
   if (!cl.value || dissolving.value) return
   try {
     await ElMessageBox.confirm(
-      `确定解散班级「${cl.value.name}」吗？成员关系与班级本身将被删除，删除后不可恢复！`,
+      `确定解散班级「${cl.value.name}」吗？班内全部考试与作业将一并删除、所有成员将被移出，删除后不可恢复！`,
       '⚠️ 危险操作：确认解散',
       { type: 'error', confirmButtonText: '确认解散', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' },
     )

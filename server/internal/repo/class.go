@@ -221,21 +221,15 @@ func (r *Repo) CountOtherMembers(ctx context.Context, classID, uid int64) (int64
 		bson.M{"classId": classID, "uid": bson.M{"$ne": uid}})
 }
 
-// ErrClassNotEmpty 班级仍挂有考试/作业，需先删除再解散。
-var ErrClassNotEmpty = errors.New("class still has exams or assignments")
-
-// DeleteClass 解散班级：删除成员关系与班级文档。班级仍挂有考试或作业时拒绝
-// （返回 ErrClassNotEmpty），由调用方转成友好提示——教师先删考试/作业再解散。
+// DeleteClass 解散班级（建班人 ∨ root 由调用方校验）：级联清理——删除班内全部考试、
+// 作业与成员关系，最后删班级文档（v0.7.2 验收调整：原「仍挂考试/作业拒绝」改为自动
+// 清理，免去老师逐个删除）。提交记录不删——题目留在全局题库，学生的练习/赛事历史保留。
 func (r *Repo) DeleteClass(ctx context.Context, classID int64) error {
-	if n, err := r.db.Collection("exams").CountDocuments(ctx, bson.M{"classId": classID}); err != nil {
+	if _, err := r.db.Collection("exams").DeleteMany(ctx, bson.M{"classId": classID}); err != nil {
 		return err
-	} else if n > 0 {
-		return ErrClassNotEmpty
 	}
-	if n, err := r.db.Collection("assignments").CountDocuments(ctx, bson.M{"classId": classID}); err != nil {
+	if _, err := r.db.Collection("assignments").DeleteMany(ctx, bson.M{"classId": classID}); err != nil {
 		return err
-	} else if n > 0 {
-		return ErrClassNotEmpty
 	}
 	if _, err := r.db.Collection("classmembers").DeleteMany(ctx, bson.M{"classId": classID}); err != nil {
 		return err

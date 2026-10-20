@@ -268,7 +268,7 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 	ok(c, gin.H{"left": true})
 }
 
-// DeleteClass 解散班级（建班人 ∨ root）：班级仍挂有考试/作业时拒绝，先删再解散。
+// DeleteClass 解散班级（建班人 ∨ root）：级联删除班内全部考试、作业与成员关系。
 func (h *Handlers) DeleteClass(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -292,20 +292,15 @@ func (h *Handlers) DeleteClass(c *gin.Context) {
 		fail(c, http.StatusForbidden, "仅建班人可解散班级")
 		return
 	}
-	err = h.repo.DeleteClass(c.Request.Context(), id)
-	if errors.Is(err, repo.ErrClassNotEmpty) {
-		fail(c, http.StatusBadRequest, "班级仍有考试或作业，请先删除后再解散")
-		return
-	}
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil {
+	if err := h.repo.DeleteClass(c.Request.Context(), id); err != nil {
+		if repo.IsNotFound(err) {
+			fail(c, http.StatusNotFound, "班级不存在")
+			return
+		}
 		fail(c, http.StatusInternalServerError, "解散班级失败")
 		return
 	}
-	log.Printf("[web] 班级 #%d 已被用户 %s 解散", id, uname)
+	log.Printf("[web] 班级 #%d 已被用户 %s 解散（考试/作业/成员关系一并清理）", id, uname)
 	ok(c, gin.H{"deleted": true})
 }
 

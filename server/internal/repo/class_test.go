@@ -1,0 +1,59 @@
+package repo
+
+// 班级级联解散单测（v0.7.2 验收调整：解散自动清理考试/作业/成员）。
+// 复用 submission_test.go 的 openTestRepo（本地无 Mongo 自动 skip）。
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+)
+
+func TestDeleteClassCascade(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+	cid := int64(60)
+	mustCount := func(coll string, filter bson.M, want int64) {
+		t.Helper()
+		n, err := r.db.Collection(coll).CountDocuments(ctx, filter)
+		if err != nil {
+			t.Fatalf("count %s: %v", coll, err)
+		}
+		if n != want {
+			t.Fatalf("%s 期望 %d 条，实际 %d", coll, want, n)
+		}
+	}
+	mustInsert := func(coll string, doc bson.M) {
+		t.Helper()
+		if _, err := r.db.Collection(coll).InsertOne(ctx, doc); err != nil {
+			t.Fatalf("insert %s: %v", coll, err)
+		}
+	}
+
+	mustInsert("classes", bson.M{"_id": cid, "name": "冒烟班", "ownerId": int64(1)})
+	mustInsert("classmembers", bson.M{"classId": cid, "uid": int64(1), "role": "owner"})
+	mustInsert("classmembers", bson.M{"classId": cid, "uid": int64(2), "role": "member"})
+	mustInsert("assignments", bson.M{"_id": int64(61), "classId": cid, "title": "作业"})
+	mustInsert("exams", bson.M{"_id": int64(62), "classId": cid, "title": "考试"})
+	// 别班的资料不应被波及
+	mustInsert("assignments", bson.M{"_id": int64(63), "classId": int64(99), "title": "别班作业"})
+	mustInsert("classmembers", bson.M{"classId": int64(99), "uid": int64(3), "role": "member"})
+
+	if err := r.DeleteClass(ctx, cid); err != nil {
+		t.Fatalf("DeleteClass: %v", err)
+	}
+	mustCount("classes", bson.M{"_id": cid}, 0)
+	mustCount("classmembers", bson.M{"classId": cid}, 0)
+	mustCount("assignments", bson.M{"classId": cid}, 0)
+	mustCount("exams", bson.M{"classId": cid}, 0)
+	mustCount("assignments", bson.M{"classId": int64(99)}, 1)
+	mustCount("classmembers", bson.M{"classId": int64(99)}, 1)
+
+	// 重复解散：班级已不存在 → ErrNoDocuments
+	if err := r.DeleteClass(ctx, cid); !errors.Is(err, mongo.ErrNoDocuments) {
+		t.Fatalf("重复解散应 ErrNoDocuments，得到 %v", err)
+	}
+}
