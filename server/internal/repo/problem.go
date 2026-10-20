@@ -243,10 +243,12 @@ func (r *Repo) GetProblem(ctx context.Context, id int64) (*Problem, error) {
 
 // ListProblems 题库全量列表（v0.4 规模小，隐藏/锁题过滤与分页在 handler 按视角处理后切片）。
 func (r *Repo) ListProblems(ctx context.Context) ([]*Problem, error) {
+	// cases 元数据需随行返回（列表「无数据」标记取 len(Cases)，v0.6.1 验收反馈）——
+	// 单题几十 case 的元数据仅 KB 级，现实规模可接受；仍排除 statement 正文
 	cursor, err := r.Problems.Find(ctx, bson.M{},
 		options.Find().
 			SetProjection(bson.M{
-				"statement": 0, "cases": 0,
+				"statement": 0,
 			}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}))
 	if err != nil {

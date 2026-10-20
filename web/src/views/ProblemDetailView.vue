@@ -229,7 +229,7 @@ onUnmounted(stopPolling)
             <el-button
               v-if="canSetHidden"
               size="small"
-              :type="problem.hidden ? 'warning' : 'default'"
+              :type="problem.hidden ? 'danger' : 'default'"
               class="hidden-btn"
               @click="toggleHidden"
             >

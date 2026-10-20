@@ -22,6 +22,7 @@ export interface ProblemListItem {
   id: number
   title: string
   hidden?: boolean
+  has_cases?: boolean // 无测试数据空壳题（v0.6.1 验收反馈）：题库列表「无数据」小提示
   locked?: boolean
   contest_id?: number
   exam_id?: number

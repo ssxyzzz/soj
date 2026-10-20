@@ -100,7 +100,7 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 				continue
 			}
 		}
-		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags)}
+		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags), "has_cases": len(p.Cases) > 0}
 		if lk != nil {
 			item["locked"] = true
 			item["lock_kind"] = lk.Kind
