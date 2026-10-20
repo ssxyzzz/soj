@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, classApi, examApi, problemApi } from '@/api'
+import { dissolveClass } from '@/api/classManage'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import { fmtDate } from '@/utils/format'
+import { useUserStore } from '@/stores/user'
 import type { AssignmentListItem, ClassDetail, ClassMember } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const cl = ref<ClassDetail | null>(null)
 const loading = ref(true)
@@ -126,11 +129,40 @@ async function join() {
   }
 }
 
+const leaving = ref(false)
 async function leave() {
-  if (!cl.value) return
-  await classApi.leave(cl.value.id)
-  ElMessage.success('已退出班级')
-  await load()
+  if (!cl.value || leaving.value) return
+  leaving.value = true
+  try {
+    await classApi.leave(cl.value.id)
+    ElMessage.success('已退出班级')
+    await load()
+  } finally {
+    leaving.value = false
+  }
+}
+
+// 解散班级（v0.7.2，建班人 ∨ root）：班级仍挂有考试/作业时后端拒绝并提示
+const dissolving = ref(false)
+async function dissolve() {
+  if (!cl.value || dissolving.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定解散班级「${cl.value.name}」吗？成员关系与班级本身将被删除，删除后不可恢复！`,
+      '⚠️ 危险操作：确认解散',
+      { type: 'error', confirmButtonText: '确认解散', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' },
+    )
+  } catch {
+    return
+  }
+  dissolving.value = true
+  try {
+    await dissolveClass(cl.value.id)
+    ElMessage.success('班级已解散')
+    router.replace('/classes')
+  } finally {
+    dissolving.value = false
+  }
 }
 
 async function regenInvite() {
@@ -359,6 +391,26 @@ stripe
             <el-button plain style="width: 100%" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
             <el-button type="warning" plain style="width: 100%" @click="regenInvite">重置邀请码</el-button>
             <el-button
+              v-if="cl.leaveable"
+              :disabled="leaving"
+              type="danger"
+              plain
+              style="width: 100%"
+              title="建班人在班级没有其他成员时可退出"
+              @click="leave"
+            >
+              退出班级
+            </el-button>
+            <el-button
+              v-if="cl.owner_id === userStore.uid || userStore.role === 'root'"
+              :loading="dissolving"
+              type="danger"
+              style="width: 100%"
+              @click="dissolve"
+            >
+              解散班级
+            </el-button>
+            <el-button
               :disabled="togglingPrivate"
               type="info"
               plain
@@ -372,9 +424,12 @@ stripe
           <div class="dim tip">公开班所有人可见；私密班仅成员与 root/admin 可见</div>
         </el-card>
 
-        <el-card v-else-if="cl.joined" class="aside-card">
+        <el-card v-else-if="cl.joined && cl.leaveable" class="aside-card">
           <template #header><span>管理</span></template>
           <el-button type="danger" plain style="width: 100%" @click="leave">退出班级</el-button>
+        </el-card>
+        <el-card v-else-if="cl.joined" class="aside-card">
+          <div class="dim tip">如需退出班级，请联系老师将你移出</div>
         </el-card>
       </template>
     </PageShell>

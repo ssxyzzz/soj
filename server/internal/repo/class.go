@@ -215,6 +215,41 @@ func (r *Repo) IsMember(ctx context.Context, classID, uid int64) (bool, error) {
 	return err == nil, err
 }
 
+// CountOtherMembers 班级内除 uid 外的成员数（建班人「没人了才可退」判定用）。
+func (r *Repo) CountOtherMembers(ctx context.Context, classID, uid int64) (int64, error) {
+	return r.db.Collection("classmembers").CountDocuments(ctx,
+		bson.M{"classId": classID, "uid": bson.M{"$ne": uid}})
+}
+
+// ErrClassNotEmpty 班级仍挂有考试/作业，需先删除再解散。
+var ErrClassNotEmpty = errors.New("class still has exams or assignments")
+
+// DeleteClass 解散班级：删除成员关系与班级文档。班级仍挂有考试或作业时拒绝
+// （返回 ErrClassNotEmpty），由调用方转成友好提示——教师先删考试/作业再解散。
+func (r *Repo) DeleteClass(ctx context.Context, classID int64) error {
+	if n, err := r.db.Collection("exams").CountDocuments(ctx, bson.M{"classId": classID}); err != nil {
+		return err
+	} else if n > 0 {
+		return ErrClassNotEmpty
+	}
+	if n, err := r.db.Collection("assignments").CountDocuments(ctx, bson.M{"classId": classID}); err != nil {
+		return err
+	} else if n > 0 {
+		return ErrClassNotEmpty
+	}
+	if _, err := r.db.Collection("classmembers").DeleteMany(ctx, bson.M{"classId": classID}); err != nil {
+		return err
+	}
+	res, err := r.db.Collection("classes").DeleteOne(ctx, bson.M{"_id": classID})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
 // ClassMemberRole 用户在班级内的角色；非成员返回 ("", nil)。
 func (r *Repo) ClassMemberRole(ctx context.Context, classID, uid int64) (string, error) {
 	var m struct {

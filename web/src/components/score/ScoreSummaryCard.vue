@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { ScoreBoardView } from './types'
 
+// 前三名勋章（与排名页 RankView 同一套）
+const medals = ['🥇', '🥈', '🥉']
+
 withDefaults(
   defineProps<{
     board: ScoreBoardView | null
@@ -56,6 +59,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
     <div v-if="!visible" class="empty">{{ emptyText }}</div>
     <div v-else v-loading="loading" class="list">
       <div v-if="!board?.rows.length" class="empty">暂无成绩</div>
+      <!-- 三列（v0.7.2 定稿）：排名（前三勋章）/ 昵称 / 分数；点行查看完整成绩表 -->
       <div
         v-for="row in board?.rows ?? []"
         :key="row.uid"
@@ -63,18 +67,12 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
         :class="{ me: row.uid === myUid }"
         @click="emit('open')"
       >
-        <span class="rank">{{ row.rank ?? '—' }}</span>
+        <span class="rank">
+          <span v-if="row.rank != null && row.rank > 0 && row.rank <= 3">{{ medals[row.rank - 1] }}</span>
+          <span v-else>{{ row.rank ?? '—' }}</span>
+        </span>
         <span class="name" :title="row.name">{{ row.name }}</span>
         <span class="total">{{ row.total }}</span>
-        <span class="progress">
-          <el-progress
-            :percentage="row.progress"
-            :show-text="false"
-            :stroke-width="6"
-            :status="row.progress >= 100 ? 'success' : undefined"
-          />
-          <span class="progress-text">{{ row.solved }}/{{ row.totalProblems }}</span>
-        </span>
       </div>
     </div>
   </el-card>
@@ -106,7 +104,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 
 .row {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 38px 84px;
+  grid-template-columns: 28px minmax(0, 1fr) 44px;
   gap: 6px;
   align-items: center;
   padding: 3px 4px;
@@ -127,9 +125,8 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 }
 
 .rank {
-  color: var(--el-text-color-secondary);
+  text-align: center;
   font-variant-numeric: tabular-nums;
-  text-align: right;
 }
 
 .name {
@@ -143,23 +140,5 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
   font-weight: var(--soj-fw-emphasis);
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-
-.progress {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.progress :deep(.el-progress) {
-  flex: 1;
-  min-width: 0;
-}
-
-.progress-text {
-  flex: none;
-  color: var(--el-text-color-secondary);
-  font-size: var(--soj-fs-small);
-  font-variant-numeric: tabular-nums;
 }
 </style>

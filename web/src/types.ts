@@ -239,6 +239,7 @@ export interface ClassDetail {
   created_at: string
   joined: boolean
   manageable: boolean
+  leaveable?: boolean // 可退出班级（v0.7.2：class.leave 权限位 + 建班人空班例外，后端计算）
   invite_code?: string
   members?: ClassMember[]
 }

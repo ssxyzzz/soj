@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -157,7 +158,11 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		members, err := h.repo.ListMembers(ctx, id)
 		if err == nil {
 			list := make([]gin.H, 0, len(members))
+			others := 0
 			for _, m := range members {
+				if m.UID != cl.OwnerID {
+					others++
+				}
 				memberRole := m.Role
 				if memberRole == "" {
 					memberRole = repo.ClassRoleMember
@@ -168,7 +173,15 @@ func (h *Handlers) GetClass(c *gin.Context) {
 				})
 			}
 			resp["members"] = list
+			// 建班人的可退判定需要成员数（「没人了才可退」），恰在 manage 分支里已取到
+			if uid == cl.OwnerID {
+				resp["leaveable"] = hasPerm(c, repo.PermClassLeave) && others == 0
+			}
 		}
+	}
+	// 成员（非建班人）的可退判定：是成员 + 持 class.leave 位
+	if logged && isMember && uid != cl.OwnerID {
+		resp["leaveable"] = hasPerm(c, repo.PermClassLeave)
 	}
 	ok(c, resp)
 }
@@ -211,7 +224,57 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 	if !okID {
 		return
 	}
-	uid, _, _, okAuth := currentUser(c)
+	uid, uname, _, okAuth := currentUser(c)
+	if !okAuth {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	// v0.7.2：退出班级改为权限位管控（default 角色默认没有，由老师移出或管理员授予）
+	if !hasPerm(c, repo.PermClassLeave) {
+		fail(c, http.StatusForbidden, "没有退出班级的权限，请联系老师将你移出")
+		return
+	}
+	cl, err := h.repo.GetClass(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取班级失败")
+		return
+	}
+	// 建班人不可退，例外：班级已没有其他成员（没人了）
+	if cl.OwnerID == uid {
+		others, err := h.repo.CountOtherMembers(c.Request.Context(), id, uid)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取成员失败")
+			return
+		}
+		if others > 0 {
+			fail(c, http.StatusBadRequest, "建班人不能退出自己的班级（可解散班级，或成员全部退出后再退）")
+			return
+		}
+	}
+	err = h.repo.LeaveClass(c.Request.Context(), id, uid)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusBadRequest, "你不是该班级的成员")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "退出班级失败")
+		return
+	}
+	log.Printf("[web] 用户 %s 退出班级 #%d", uname, id)
+	ok(c, gin.H{"left": true})
+}
+
+// DeleteClass 解散班级（建班人 ∨ root）：班级仍挂有考试/作业时拒绝，先删再解散。
+func (h *Handlers) DeleteClass(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	uid, uname, role, okAuth := currentUser(c)
 	if !okAuth {
 		fail(c, http.StatusUnauthorized, "未登录")
 		return
@@ -225,15 +288,25 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取班级失败")
 		return
 	}
-	if cl.OwnerID == uid {
-		fail(c, http.StatusBadRequest, "建班人不能退出自己的班级")
+	if !(uid == cl.OwnerID || role == repo.RoleRoot) {
+		fail(c, http.StatusForbidden, "仅建班人可解散班级")
 		return
 	}
-	if err := h.repo.LeaveClass(c.Request.Context(), id, uid); err != nil {
-		fail(c, http.StatusInternalServerError, "退出班级失败")
+	err = h.repo.DeleteClass(c.Request.Context(), id)
+	if errors.Is(err, repo.ErrClassNotEmpty) {
+		fail(c, http.StatusBadRequest, "班级仍有考试或作业，请先删除后再解散")
 		return
 	}
-	ok(c, gin.H{"left": true})
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "解散班级失败")
+		return
+	}
+	log.Printf("[web] 班级 #%d 已被用户 %s 解散", id, uname)
+	ok(c, gin.H{"deleted": true})
 }
 
 func (h *Handlers) RegenInvite(c *gin.Context) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// 比赛/考试详情页共享组件（v0.5.4 合并；v0.7 按 design.md 重排）。
-// 主列：名称卡（20px + 说明）→ 时间/提交进度卡 → 题目表（T1/状态/题目/标签/通过率）。
-// 副列：管理卡（编辑比赛/考试、调整题目、文件 IO/成绩表/赛期内不可见开关）→ 成绩表。
+// 比赛/考试详情页共享组件（v0.5.4 合并；v0.7 按 design.md 重排；v0.7.2 副列重排）。
+// 主列：名称卡（20px + 说明）→ 提交进度卡 → 题目表（T1/状态/题目/标签/通过率）。
+// 副列：管理卡（编辑/调整题目/编辑说明/重测/场景开关）→ 时间卡 → 成绩表。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -107,9 +107,9 @@ async function saveFlag(patch: { scoreboard?: boolean; hide_during?: boolean }) 
 }
 
 const showEditRound = ref(false)
-const editMode = ref<'full' | 'problems'>('full')
+const editMode = ref<'full' | 'problems' | 'intro'>('full')
 
-function openEdit(mode: 'full' | 'problems') {
+function openEdit(mode: 'full' | 'problems' | 'intro') {
   editMode.value = mode
   showEditRound.value = true
 }
@@ -307,25 +307,14 @@ onUnmounted(() => {
         </div>
       </el-card>
 
-      <!-- 时间进度 + 提交进度 -->
-      <el-card class="block">
-        <div class="progress-head">
-          <span class="progress-title">{{ round.status === 'scheduled' ? '开始倒计时' : round.status === 'running' ? '剩余时间' : '赛程' }}</span>
-          <span class="countdown">{{ countdownLabel }}</span>
+      <!-- 时间/提交进度（v0.7.2：赛程与倒计时挪至右栏「时间」卡，主列只留提交进度） -->
+      <el-card v-if="userStore.token && round.participant && problemTotal > 0" class="block">
+        <template #header><span>提交进度</span></template>
+        <div class="submit-head">
+          <span>{{ submittedCount }} / {{ problemTotal }}</span>
+          <span class="dim">{{ submitProgressPct }}%</span>
         </div>
-        <el-progress
-          :percentage="progressPct"
-          :status="round.status === 'ended' ? 'success' : undefined"
-          :stroke-width="10"
-        />
-        <div class="dim center">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</div>
-        <template v-if="userStore.token && round.participant && problemTotal > 0">
-          <div class="submit-head">
-            <span>提交进度</span>
-            <span>{{ submittedCount }} / {{ problemTotal }}</span>
-          </div>
-          <el-progress :percentage="submitProgressPct" :stroke-width="8" />
-        </template>
+        <el-progress :percentage="submitProgressPct" :stroke-width="8" />
       </el-card>
 
       <!-- 题目表：T1 / 状态 / 题目 / 标签 / 通过率 -->
@@ -380,12 +369,13 @@ onUnmounted(() => {
       </el-card>
 
       <template #aside>
-        <!-- 管理卡：编辑比赛/考试（名称/时间/说明）、调整题目 → 文件 IO / 成绩表 / 赛期内不可见 -->
+        <!-- 管理卡（v0.7.2 定序）：编辑 → 调整题目 → 编辑说明 → 批量重测 → 场景开关 → 删除 -->
         <el-card v-if="round.is_organizer" class="aside-card">
           <template #header><span>管理</span></template>
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit('full')">编辑{{ name }}</el-button>
             <el-button type="success" style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
+            <el-button type="primary" plain style="width: 100%" @click="openEdit('intro')">编辑说明</el-button>
             <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">重测本场提交</el-button>
             <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">删除{{ name }}</el-button>
           </div>
@@ -417,6 +407,21 @@ onUnmounted(() => {
             文件 IO 改动只影响之后的提交。关闭「成绩表」后参与者不再看到成绩表，组织者仍可见；
             关闭「赛期内不可见」后参赛者在赛中即可看到状态、标签与通过率（成绩表按开关与发布态显示）。
           </div>
+        </el-card>
+
+        <!-- 时间卡（v0.7.2 自主列挪入）：未开赛显示距离开始，开赛显示剩余倒计时与进度 -->
+        <el-card class="aside-card">
+          <template #header><span>时间</span></template>
+          <div class="progress-head">
+            <span class="progress-title">{{ round.status === 'scheduled' ? '距开始' : round.status === 'running' ? '剩余时间' : '赛程' }}</span>
+            <span class="countdown">{{ countdownLabel }}</span>
+          </div>
+          <el-progress
+            :percentage="progressPct"
+            :status="round.status === 'ended' ? 'success' : undefined"
+            :stroke-width="10"
+          />
+          <div class="dim center">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</div>
         </el-card>
 
         <ScoreSummaryCard

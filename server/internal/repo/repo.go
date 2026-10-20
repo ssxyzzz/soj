@@ -270,6 +270,19 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		}
 		log.Printf("[boot] 比赛/考试已补默认开关（成绩表开、赛期内不可见开）")
 	}
+	if !flagDone("classLeaveV1") {
+		// v0.7.2：退出班级改为权限位（class.leave）管控，default 刻意不给；
+		// admin 角色补发该位（root 走 "*" 恒通，无需补）
+		if _, err := r.Roles.UpdateOne(ctx,
+			bson.M{"_id": RoleAdmin},
+			bson.M{"$addToSet": bson.M{"perms": PermClassLeave}}); err != nil {
+			return err
+		}
+		if err := setFlag("classLeaveV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] admin 角色已补发退出班级权限位（class.leave）")
+	}
 	return nil
 }
 

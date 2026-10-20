@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// 比赛/考试编辑弹窗（v0.7）：
-// - 完整模式 = 名称/起止时间/说明（不再含题目）；
+// 比赛/考试编辑弹窗（v0.7；v0.7.2 说明拆独立入口）：
+// - 完整模式 = 名称/起止时间（不再含题目与说明）；
+// - intro 模式 = 「编辑说明」专用（富文本单字段）；
 // - problems 模式 = 「调整题目」专用（题库选题 + 拖动排序 + 删除）。
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -15,7 +16,7 @@ const props = withDefaults(
     modelValue: boolean
     kind: RoundKind
     round: ContestDetail
-    mode?: 'full' | 'problems'
+    mode?: 'full' | 'problems' | 'intro'
   }>(),
   { mode: 'full' },
 )
@@ -27,7 +28,9 @@ const emit = defineEmits<{
 
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
 const name = computed(() => (props.kind === 'exam' ? '考试' : '比赛'))
-const titleText = computed(() => (props.mode === 'problems' ? `调整${name.value}题目` : `编辑${name.value}`))
+const titleText = computed(() =>
+  props.mode === 'problems' ? `调整${name.value}题目` : props.mode === 'intro' ? `编辑${name.value}说明` : `编辑${name.value}`,
+)
 
 const title = ref('')
 const range = ref<Date[]>([])
@@ -103,6 +106,15 @@ async function save() {
       ElMessage.warning(`${name.value}至少需要一道题目`)
       return
     }
+  } else if (props.mode === 'intro') {
+    if (!intro.value.trim()) {
+      ElMessage.warning(`${name.value}说明不能为空`)
+      return
+    }
+    if (richtextBytes(intro.value) > MAX_RICHTEXT_BYTES) {
+      ElMessage.error(`${name.value}说明过长（上限 256KB）`)
+      return
+    }
   } else {
     if (!title.value.trim()) {
       ElMessage.warning(`请填写${name.value}名称`)
@@ -112,18 +124,10 @@ async function save() {
       ElMessage.warning('请选择起止时间')
       return
     }
-    if (!intro.value.trim()) {
-      ElMessage.warning(`${name.value}说明不能为空`)
-      return
-    }
-    if (richtextBytes(intro.value) > MAX_RICHTEXT_BYTES) {
-      ElMessage.error(`${name.value}说明过长（上限 256KB）`)
-      return
-    }
   }
   const needConfirm =
     props.round.status !== 'scheduled' &&
-    (props.mode === 'problems' || timeChanged())
+    (props.mode === 'problems' || (props.mode === 'full' && timeChanged()))
   if (needConfirm) {
     try {
       await ElMessageBox.confirm(
@@ -148,12 +152,13 @@ async function save() {
     } =
       props.mode === 'problems'
         ? { problem_ids: editList.value.map((p) => p.id) }
-        : {
-            title: title.value.trim(),
-            start: new Date(range.value[0]).toISOString(),
-            end: new Date(range.value[1]).toISOString(),
-            intro_html: intro.value,
-          }
+        : props.mode === 'intro'
+          ? { intro_html: intro.value }
+          : {
+              title: title.value.trim(),
+              start: new Date(range.value[0]).toISOString(),
+              end: new Date(range.value[1]).toISOString(),
+            }
     await api.value.update(props.round.id, body)
     ElMessage.success(`${name.value}已保存`)
     emit('saved')
@@ -199,6 +204,11 @@ const listStyle = { maxHeight: '300px' }
             style="width: 100%"
           />
         </el-form-item>
+      </el-form>
+    </template>
+
+    <template v-else-if="mode === 'intro'">
+      <el-form label-position="top">
         <el-form-item :label="`${name}说明`" required>
           <MdEditor v-model="intro" height="300px" variant="compact" />
         </el-form-item>

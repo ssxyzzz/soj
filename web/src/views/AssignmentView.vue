@@ -40,11 +40,13 @@ const pickPid = ref<number | null>(null)
 const problemOptions = ref<{ id: number; title: string }[]>([])
 const dragIndex = ref<number | null>(null)
 
-// 编辑名称/说明（v0.7）
+// 编辑名称（v0.7；v0.7.2 说明拆独立「编辑说明」入口）
 const showEdit = ref(false)
 const savingEdit = ref(false)
 const editTitle = ref('')
 const editIntro = ref('')
+const showEditIntro = ref(false)
+const savingIntro = ref(false)
 
 const myUid = ref<number | null>(null)
 const showScoreBoard = ref(false)
@@ -148,11 +150,10 @@ function acceptRate(row: { submit_count?: number; accepted_count?: number }): st
   return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
 }
 
-// ---- 编辑名称/说明 ----
+// ---- 编辑名称 / 编辑说明 ----
 function openEdit() {
   if (!assignment.value) return
   editTitle.value = assignment.value.title
-  editIntro.value = assignment.value.intro_html || assignment.value.intro || ''
   showEdit.value = true
 }
 
@@ -162,21 +163,41 @@ async function saveEdit() {
     ElMessage.warning('作业名称不能为空')
     return
   }
-  if (richtextBytes(editIntro.value) > MAX_RICHTEXT_BYTES) {
-    ElMessage.error('作业说明过长（上限 256KB）')
-    return
-  }
   savingEdit.value = true
   try {
     await assignmentApi.update(assignment.value.id, {
       title: editTitle.value.trim(),
-      intro_html: editIntro.value,
     })
     ElMessage.success('作业已保存')
     showEdit.value = false
     await load()
   } finally {
     savingEdit.value = false
+  }
+}
+
+function openEditIntro() {
+  if (!assignment.value) return
+  editIntro.value = assignment.value.intro_html || assignment.value.intro || ''
+  showEditIntro.value = true
+}
+
+async function saveEditIntro() {
+  if (!assignment.value) return
+  if (richtextBytes(editIntro.value) > MAX_RICHTEXT_BYTES) {
+    ElMessage.error('作业说明过长（上限 256KB）')
+    return
+  }
+  savingIntro.value = true
+  try {
+    await assignmentApi.update(assignment.value.id, {
+      intro_html: editIntro.value,
+    })
+    ElMessage.success('作业说明已保存')
+    showEditIntro.value = false
+    await load()
+  } finally {
+    savingIntro.value = false
   }
 }
 
@@ -342,12 +363,13 @@ onMounted(() => {
       </el-card>
 
       <template #aside>
-        <!-- 管理卡 -->
+        <!-- 管理卡（v0.7.2 定序）：编辑作业 → 调整题目 → 编辑说明 → 删作业 -->
         <el-card v-if="assignment.manageable" class="aside-card">
           <template #header><span>管理</span></template>
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit">编辑作业</el-button>
             <el-button type="success" style="width: 100%" @click="openAdjust">调整题目</el-button>
+            <el-button type="primary" plain style="width: 100%" @click="openEditIntro">编辑说明</el-button>
             <el-button type="danger" style="width: 100%" @click="removeAssignment">删作业</el-button>
           </div>
         </el-card>
@@ -368,18 +390,27 @@ onMounted(() => {
       </template>
     </PageShell>
 
-    <el-dialog v-model="showEdit" title="编辑作业" width="760" top="5vh">
+    <el-dialog v-model="showEdit" title="编辑作业" width="560" top="8vh">
       <el-form label-position="top">
         <el-form-item label="作业名称" required>
           <el-input v-model="editTitle" maxlength="64" />
-        </el-form-item>
-        <el-form-item label="作业说明">
-          <MdEditor v-model="editIntro" height="340px" variant="compact" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showEdit = false">取消</el-button>
         <el-button type="primary" :loading="savingEdit" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showEditIntro" title="编辑作业说明" width="760" top="5vh">
+      <el-form label-position="top">
+        <el-form-item label="作业说明">
+          <MdEditor v-model="editIntro" height="340px" variant="compact" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEditIntro = false">取消</el-button>
+        <el-button type="primary" :loading="savingIntro" @click="saveEditIntro">保存</el-button>
       </template>
     </el-dialog>
 

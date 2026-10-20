@@ -14,6 +14,7 @@ const (
 	PermContestBankCreate    = "contest.bank.create"    // 创建主题库比赛
 	PermClassCreate          = "class.create"           // 创建班级
 	PermClassViewAll         = "class.view.all"         // 查看全部班级（含私密班详情/邀请码）
+	PermClassLeave           = "class.leave"            // 成员自行退出班级（default 默认关闭，v0.7.2）
 	PermSubmissionViewAll    = "submission.view.all"    // 提交记录总表 + 他人提交详情
 	PermSubmissionViewUser   = "submission.view.user"   // 榜单/进度表中点看指定用户在某题的提交明细（含代码）
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
@@ -64,6 +65,7 @@ var PermCatalog = []PermInfo{
 	{PermContestBankCreate, "创建主题库比赛", "发起全站比赛", "contest"},
 	{PermClassCreate, "创建班级", "建班并成为建班人", "class"},
 	{PermClassViewAll, "查看全部班级", "可见私密班级的详情、成员与邀请码", "class"},
+	{PermClassLeave, "退出班级", "成员可自行退出所在班级；关闭后只能由老师移出（default 角色默认关闭）", "class"},
 	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码", "submission"},
 	{PermSubmissionViewUser, "查看用户提交明细", "榜单/进度表中点看指定用户在某题的全部提交（含代码与测试点明细）", "submission"},
 	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},

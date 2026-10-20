@@ -18,13 +18,14 @@ type Role struct {
 }
 
 // builtinRoles 内置角色：初始权限精确复刻 v0.4.6 行为（v0.5.2-1 起 admin 增题解管理，
-// v0.5.2-2 起 admin 增查看用户提交明细，v0.6.x 起 default/admin 增本人昵称修改）。
-// 存量库由 solutionManageV1 / submissionViewUserV1 / nicknameEditV1 迁移补发新位。
+// v0.5.2-2 起 admin 增查看用户提交明细，v0.6.x 起 default/admin 增本人昵称修改，
+// v0.7.2 起 admin 增退出班级——default 刻意不给，退出班级改为权限位管控）。
+// 存量库由 solutionManageV1 / submissionViewUserV1 / nicknameEditV1 / classLeaveV1 迁移补发新位。
 var builtinRoles = []Role{
 	{ID: RoleDefault, Name: "普通用户", Perms: []string{PermUserNicknameEdit}, Builtin: true},
 	{ID: RoleAdmin, Name: "管理员", Perms: []string{
 		PermProblemViewAll, PermProblemCreate, PermProblemEditOwn,
-		PermClassCreate, PermClassViewAll,
+		PermClassCreate, PermClassViewAll, PermClassLeave,
 		PermSubmissionViewAll, PermSubmissionViewUser, PermSubmissionRateExempt,
 		PermSolutionManage, PermUserNicknameEdit,
 	}, Builtin: true},
