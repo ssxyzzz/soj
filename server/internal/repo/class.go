@@ -108,6 +108,8 @@ type ClassCard struct {
 	ID              int64     `bson:"_id"             json:"id"`
 	Name            string    `bson:"name"            json:"name"`
 	Intro           string    `bson:"intro"           json:"intro"`
+	OwnerID         int64     `bson:"ownerId"         json:"owner_id"`
+	OwnerName       string    `bson:"ownerName"       json:"owner_name"` // 建班人昵称（空则回退用户名，再空为 ""）
 	MemberCount     int64     `bson:"memberCount"     json:"member_count"`
 	AssignmentCount int64     `bson:"assignmentCount" json:"assignment_count"`
 	Private         bool      `bson:"private"         json:"private"`
@@ -130,13 +132,26 @@ func (r *Repo) ListClasses(ctx context.Context) ([]ClassCard, error) {
 			"foreignField": "classId",
 			"as":           "a",
 		}}},
+		// 建班人昵称（班级卡片「xxx的班」标记用）；昵称空回退用户名，建班人账号已删则空串
+		{{Key: "$lookup", Value: bson.M{
+			"from":         "users",
+			"localField":   "ownerId",
+			"foreignField": "_id",
+			"as":           "owner",
+		}}},
 		{{Key: "$project", Value: bson.M{
 			"name":            1,
 			"intro":           1,
+			"ownerId":         1,
 			"private":         bson.M{"$ifNull": bson.A{"$private", false}},
 			"createdAt":       1,
 			"memberCount":     bson.M{"$size": "$m"},
 			"assignmentCount": bson.M{"$size": "$a"},
+			"ownerName": bson.M{"$ifNull": bson.A{bson.M{"$cond": bson.A{
+				bson.M{"$gt": bson.A{bson.M{"$arrayElemAt": bson.A{"$owner.nickname", 0}}, ""}},
+				bson.M{"$arrayElemAt": bson.A{"$owner.nickname", 0}},
+				bson.M{"$arrayElemAt": bson.A{"$owner.uname", 0}},
+			}}, ""}},
 		}}},
 		{{Key: "$sort", Value: bson.M{"_id": 1}}},
 	}

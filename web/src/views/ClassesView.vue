@@ -114,7 +114,9 @@ onMounted(load)
               <h3 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h3>
               <el-tag v-if="c.private" size="small" type="warning">私密</el-tag>
               <div class="top-actions">
-                <el-tag v-if="c.joined" size="small" type="success">已加入</el-tag>
+                <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口 -->
+                <el-tag v-if="c.owner_id === userStore.uid" size="small" type="success">{{ c.owner_name }}的班</el-tag>
+                <el-tag v-else-if="c.joined" size="small" type="success">已加入</el-tag>
                 <el-button v-else size="small" type="primary" link @click="openJoin(c)">加入</el-button>
               </div>
             </div>

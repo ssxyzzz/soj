@@ -160,6 +160,8 @@ export interface ClassCard {
   id: number
   name: string
   intro: string
+  owner_id: number
+  owner_name: string // 建班人昵称（空回退用户名）——建班人视角卡片显示「xxx的班」
   member_count: number
   assignment_count: number
   private: boolean
