@@ -85,7 +85,9 @@ onMounted(search)
     <div class="picker-search">
       <el-input v-model="q" placeholder="搜索标题关键字或题号" clearable />
     </div>
-    <TagFilter :selected="tags" @change="(ids: number[]) => (tags = ids)" />
+    <div class="picker-tags">
+      <TagFilter :selected="tags" @change="(ids: number[]) => (tags = ids)" />
+    </div>
     <div class="picker-cols">
       <div class="picker-col">
         <div class="col-head">候选题目（点击选择）</div>
@@ -129,6 +131,33 @@ onMounted(search)
 </template>
 
 <style scoped>
+/* 定宽约束（与建题页 .tag-bar 同款解法）：标签树的每级行靠 width:100% + 自身横移实现，
+   外层必须是「钉死的宽度」——缺了它，弹窗内的 flex/grid 祖先会按内容最小宽被撑开，
+   标签行溢出弹窗边框。width/min-width/box-sizing 三件套与 ProblemForm .tag-bar 一致 */
+.picker {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.picker-tags {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: var(--el-border-radius-base);
+}
+
+.picker :deep(.tag-flow),
+.picker :deep(.tag-canvas),
+.picker :deep(.tag-row) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .picker-search {
   margin-bottom: 8px;
 }
@@ -138,6 +167,11 @@ onMounted(search)
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   margin-top: 8px;
+  min-width: 0;
+}
+
+.picker-col {
+  min-width: 0;
 }
 
 .col-head {
