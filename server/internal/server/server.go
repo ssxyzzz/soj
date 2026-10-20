@@ -69,6 +69,9 @@ func Run(ctx context.Context, deps *Deps) {
 
 		api.GET("/rank", h.Rank)
 		api.GET("/notice", h.GetNotice)
+		// 油猴脚本下载（v0.6.1 增强）：公开——浏览器直接点链接带不了 JWT，
+		// 脚本内容只有部署域名，无敏感信息
+		api.GET("/import/userscript", h.ImportUserscript)
 
 		// 比赛
 		api.GET("/contests", AuthOptional(h), h.ListContests)
