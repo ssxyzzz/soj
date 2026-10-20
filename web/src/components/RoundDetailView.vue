@@ -5,6 +5,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { QuestionFilled } from '@element-plus/icons-vue'
 
 import { authApi, contestApi, examApi, type RoundKind } from '@/api'
 import { downloadCsv } from '@/api/download'
@@ -290,9 +291,9 @@ onUnmounted(() => {
             class="mt8"
           />
           <div v-if="round.intro_html || round.intro" class="intro"><MdView :content="round.intro_html || round.intro" /></div>
-          <div class="meta">
-            <el-tag size="small" type="info">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</el-tag>
-            <el-tag v-if="round.hidden_until" size="small" type="info">
+          <!-- 起止时间在右栏「时间」卡展示，名称卡只留赛后隐藏期提示（v0.7.2 验收反馈） -->
+          <div v-if="round.hidden_until" class="meta">
+            <el-tag size="small" type="info">
               赛后隐藏至 {{ fmtDate(round.hidden_until) }}
             </el-tag>
           </div>
@@ -362,7 +363,12 @@ onUnmounted(() => {
             <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">删除{{ name }}</el-button>
           </div>
           <div class="scene-row">
-            <span>启用文件 IO</span>
+            <span class="label-with-tip">
+              启用文件 IO
+              <el-tooltip placement="top" content="文件 IO 改动只影响之后的提交">
+                <el-icon class="dim"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
             <el-switch
               :model-value="round.file_io"
               :loading="fileIOSaving"
@@ -370,7 +376,12 @@ onUnmounted(() => {
             />
           </div>
           <div class="scene-row">
-            <span>开启成绩表</span>
+            <span class="label-with-tip">
+              开启成绩表
+              <el-tooltip placement="top" content="关闭「成绩表」后参与者不再看到成绩表，组织者仍可见">
+                <el-icon class="dim"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
             <el-switch
               :model-value="round.scoreboard"
               :disabled="flagSaving"
@@ -378,16 +389,20 @@ onUnmounted(() => {
             />
           </div>
           <div class="scene-row">
-            <span>赛期内不可见</span>
+            <span class="label-with-tip">
+              赛期内不可见
+              <el-tooltip
+                placement="top"
+                content="关闭「赛期内不可见」后参赛者在赛中即可看到状态、标签与通过率（成绩表按开关与发布态显示）"
+              >
+                <el-icon class="dim"><QuestionFilled /></el-icon>
+              </el-tooltip>
+            </span>
             <el-switch
               :model-value="round.hide_during"
               :disabled="flagSaving"
               @change="(v: string | number | boolean) => saveFlag({ hide_during: !!v })"
             />
-          </div>
-          <div class="dim scene-note">
-            文件 IO 改动只影响之后的提交。关闭「成绩表」后参与者不再看到成绩表，组织者仍可见；
-            关闭「赛期内不可见」后参赛者在赛中即可看到状态、标签与通过率（成绩表按开关与发布态显示）。
           </div>
         </el-card>
 
@@ -524,8 +539,10 @@ onUnmounted(() => {
   margin-top: 10px;
 }
 
-.scene-note {
-  margin-top: 10px;
-  line-height: 1.6;
+/* 开关标签内的问号提示与文字垂直居中（label 为块级布局，行内元素默认按基线对齐会偏高） */
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 </style>

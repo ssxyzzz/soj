@@ -293,9 +293,7 @@ onMounted(() => {
             <el-tag v-if="cl.joined" size="small" type="success">已加入</el-tag>
           </div>
           <div v-if="cl.intro_html || cl.intro" class="intro"><MdView :content="cl.intro_html || cl.intro" /></div>
-          <div class="meta">
-            <el-tag size="small" type="info">创建于 {{ fmtDate(cl.created_at) }}</el-tag>
-          </div>
+          <!-- 创建时间在右栏「班级信息」卡展示，名称卡不再重复（v0.7.2 验收反馈） -->
           <div v-if="!cl.joined && !cl.manageable" class="join-bar">
             <el-input
               v-model="joinCode"
@@ -464,9 +462,6 @@ stripe
           <template #header><span>管理</span></template>
           <el-button type="danger" plain style="width: 100%" @click="leave">退出班级</el-button>
         </el-card>
-        <el-card v-else-if="cl.joined" class="aside-card">
-          <div class="dim tip">如需退出班级，请联系老师将你移出</div>
-        </el-card>
 
         <el-card class="aside-card">
           <template #header><span>班级信息</span></template>
@@ -589,12 +584,6 @@ stripe
 .intro {
   margin: 10px 0 4px;
   color: var(--el-text-color-regular);
-}
-
-.meta {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
 }
 
 .join-bar {
