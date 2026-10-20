@@ -3,13 +3,17 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { assignmentApi, classApi, examApi, problemApi } from '@/api'
-import { dissolveClass, transferClass } from '@/api/classManage'
+import { classApi, examApi } from '@/api'
+import { createAssignment as apiCreateAssignment, dissolveClass, transferClass, updateClass } from '@/api/classManage'
+import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import ProblemPicker from '@/components/ProblemPicker.vue'
+import SwitchRow from '@/components/SwitchRow.vue'
 import { fmtDate } from '@/utils/format'
+import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
 import { useUserStore } from '@/stores/user'
-import type { AssignmentListItem, ClassDetail, ClassMember } from '@/types'
+import type { AssignmentListItem, ClassDetail, ClassMember, PickedProblem } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,8 +29,7 @@ const joinCode = ref('')
 const joining = ref(false)
 const showCreateAssignment = ref(false)
 const creatingAssignment = ref(false)
-const assignmentForm = reactive({ title: '', intro: '' })
-const problemOptions = ref<{ id: number; title: string }[]>([])
+const assignmentForm = reactive({ title: '', intro: '', picked: [] as PickedProblem[] })
 const importText = ref('')
 const importing = ref(false)
 const togglingPrivate = ref(false)
@@ -41,7 +44,7 @@ const examForm = ref({
   intro: '',
   range: [] as string[],
   hiddenDays: 0,
-  selectedProblems: [] as number[],
+  picked: [] as PickedProblem[],
   fileIO: false,
   scoreboard: true,
   hideDuring: true,
@@ -68,8 +71,8 @@ async function createExam() {
     ElMessage.warning('请填写考试名称与起止时间')
     return
   }
-  if (!examForm.value.selectedProblems.length) {
-    ElMessage.warning('请至少选择一道题')
+  if (!examForm.value.picked.length) {
+    ElMessage.warning('请从选题器选择至少一道题目')
     return
   }
   creatingExam.value = true
@@ -80,7 +83,7 @@ async function createExam() {
       start: new Date(examForm.value.range[0]).toISOString(),
       end: new Date(examForm.value.range[1]).toISOString(),
       hidden_days: examForm.value.hiddenDays,
-      problem_ids: examForm.value.selectedProblems,
+      problem_ids: examForm.value.picked.map((p) => p.id),
       file_io: examForm.value.fileIO,
       scoreboard: examForm.value.scoreboard,
       hide_during: examForm.value.hideDuring,
@@ -219,11 +222,6 @@ async function togglePrivate() {
   }
 }
 
-async function loadProblemOptions() {
-  const r = await problemApi.list(1, 100)
-  problemOptions.value = r.list
-}
-
 function copyInvite() {
   if (cl.value?.invite_code) {
     navigator.clipboard?.writeText(cl.value.invite_code)
@@ -262,25 +260,59 @@ async function createAssignment() {
   }
   creatingAssignment.value = true
   try {
-    const r = await assignmentApi.create(
-      cl.value.id,
-      assignmentForm.title.trim(),
-      assignmentForm.intro.trim(),
-    )
-    ElMessage.success('作业创建成功，记得往里加题')
+    const r = await apiCreateAssignment(cl.value.id, {
+      title: assignmentForm.title.trim(),
+      intro: assignmentForm.intro.trim(),
+      problem_ids: assignmentForm.picked.map((p) => p.id),
+    })
+    ElMessage.success('作业创建成功')
     showCreateAssignment.value = false
     assignmentForm.title = ''
     assignmentForm.intro = ''
+    assignmentForm.picked = []
     router.push(`/assignments/${r.id}`)
   } finally {
     creatingAssignment.value = false
   }
 }
 
-onMounted(() => {
-  load()
-  loadProblemOptions()
-})
+// ---- 编辑班级（v0.7.3）：名称 + 富文本公告 ----
+const showEditClass = ref(false)
+const savingClass = ref(false)
+const editClassForm = reactive({ name: '', introHtml: '' })
+
+function openEditClass() {
+  if (!cl.value) return
+  editClassForm.name = cl.value.name
+  editClassForm.introHtml = cl.value.intro_html || cl.value.intro || ''
+  showEditClass.value = true
+}
+
+async function saveEditClass() {
+  if (!cl.value || savingClass.value) return
+  if (!editClassForm.name.trim()) {
+    ElMessage.warning('班级名称不能为空')
+    return
+  }
+  if (richtextBytes(editClassForm.introHtml) > MAX_RICHTEXT_BYTES) {
+    ElMessage.error('班级公告过长（上限 256KB）')
+    return
+  }
+  savingClass.value = true
+  try {
+    await updateClass(cl.value.id, {
+      name: editClassForm.name.trim(),
+      intro_html: editClassForm.introHtml,
+    })
+    ElMessage.success('班级已保存')
+    showEditClass.value = false
+    await load()
+  } finally {
+    savingClass.value = false
+  }
+}
+
+onMounted(load)
 </script>
 
 <template>
@@ -413,7 +445,8 @@ stripe
           <template #header><span>管理</span></template>
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="showCreateAssignment = true">布置作业</el-button>
-            <el-button type="success" style="width: 100%" @click="showExam = true; loadProblemOptions()">发起考试</el-button>
+            <el-button type="success" style="width: 100%" @click="showExam = true">发起考试</el-button>
+            <el-button type="primary" plain style="width: 100%" @click="openEditClass">编辑班级</el-button>
             <el-button plain style="width: 100%" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
             <el-button type="warning" plain style="width: 100%" @click="regenInvite">重置邀请码</el-button>
             <el-button
@@ -493,13 +526,16 @@ stripe
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showCreateAssignment" title="布置作业" width="560">
+    <el-dialog v-model="showCreateAssignment" title="布置作业" width="960" top="5vh">
       <el-form label-position="top">
         <el-form-item label="作业名称" required>
           <el-input v-model="assignmentForm.title" maxlength="64" placeholder="如：第三章 循环练习" />
         </el-form-item>
         <el-form-item label="作业说明">
           <el-input v-model="assignmentForm.intro" type="textarea" :rows="2" placeholder="选填" />
+        </el-form-item>
+        <el-form-item label="作业题目（可先创建后在作业页调整）">
+          <ProblemPicker v-model="assignmentForm.picked" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -508,7 +544,7 @@ stripe
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showExam" title="发起班级考试" width="560">
+    <el-dialog v-model="showExam" title="发起班级考试" width="960" top="5vh">
       <el-form label-position="top">
         <el-form-item label="考试名称" required>
           <el-input v-model="examForm.title" maxlength="64" />
@@ -528,41 +564,49 @@ stripe
         <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
           <el-input-number v-model="examForm.hiddenDays" :min="0" :max="7" />
         </el-form-item>
-        <el-form-item label="考试题目（从题库多选）" required>
-          <el-select v-model="examForm.selectedProblems" multiple filterable style="width: 100%">
-            <el-option
-              v-for="p in problemOptions"
-              :key="p.id"
-              :value="p.id"
-              :label="`#${p.id} ${p.title}`"
-            />
-          </el-select>
+        <el-form-item label="考试题目" required>
+          <ProblemPicker v-model="examForm.picked" />
         </el-form-item>
         <el-form-item>
-          <div class="fileio-switch">
-            <el-switch v-model="examForm.fileIO" />
-            <span>
-              本场启用文件 IO
-              <span class="dim">（场内所有题按各题文件名对以文件读写判题，题面下会展示文件 IO 说明；可随时开关）</span>
-            </span>
-          </div>
+          <SwitchRow
+            v-model="examForm.fileIO"
+            label="本场启用文件 IO"
+            tip="场内所有题按各题文件名对以文件读写判题，题面下会展示文件 IO 说明；创建后可在考试详情管理卡随时开关，改动只影响之后的提交"
+          />
         </el-form-item>
         <el-form-item>
-          <div class="fileio-switch">
-            <el-switch v-model="examForm.scoreboard" />
-            <span>开启成绩表 <span class="dim">（关闭后参与者看不到成绩表，组织者仍可见）</span></span>
-          </div>
+          <SwitchRow
+            v-model="examForm.scoreboard"
+            label="开启成绩表"
+            tip="关闭后参与者看不到成绩表，组织者仍可见"
+          />
         </el-form-item>
         <el-form-item>
-          <div class="fileio-switch">
-            <el-switch v-model="examForm.hideDuring" />
-            <span>赛期内对考生不可见 <span class="dim">（隐藏状态/标签/通过率）</span></span>
-          </div>
+          <SwitchRow
+            v-model="examForm.hideDuring"
+            label="赛期内对考生不可见"
+            tip="隐藏状态/标签/通过率，考中只显示「已提交」；关闭后考中即可查看结果"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showExam = false">取消</el-button>
         <el-button type="primary" :loading="creatingExam" @click="createExam">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showEditClass" title="编辑班级" width="960" top="6vh">
+      <el-form label-position="top">
+        <el-form-item label="班级名称" required>
+          <el-input v-model="editClassForm.name" maxlength="64" />
+        </el-form-item>
+        <el-form-item label="班级公告">
+          <MdEditor v-model="editClassForm.introHtml" height="150px" variant="compact" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEditClass = false">取消</el-button>
+        <el-button type="primary" :loading="savingClass" @click="saveEditClass">保存</el-button>
       </template>
     </el-dialog>
   </div>

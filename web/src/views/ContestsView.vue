@@ -5,9 +5,11 @@ import { ElMessage } from 'element-plus'
 
 import { contestApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
+import ProblemPicker from '@/components/ProblemPicker.vue'
+import SwitchRow from '@/components/SwitchRow.vue'
 import { useUserStore } from '@/stores/user'
 import { fmtDate } from '@/utils/format'
-import type { ContestListItem } from '@/types'
+import type { ContestListItem, PickedProblem } from '@/types'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -21,7 +23,7 @@ const form = ref({
   intro: '',
   range: [] as string[],
   hiddenDays: 0,
-  pids: '' as string,
+  picked: [] as PickedProblem[],
   fileIO: false,
   scoreboard: true,
   hideDuring: true,
@@ -44,12 +46,9 @@ async function create() {
     ElMessage.warning('请填写比赛名称与起止时间')
     return
   }
-  const problemIds = form.value.pids
-    .split(/[\s,，、]+/)
-    .map((s) => Number(s))
-    .filter((n) => Number.isInteger(n) && n > 0)
+  const problemIds = form.value.picked.map((p) => p.id)
   if (!problemIds.length) {
-    ElMessage.warning('请填写题目 ID（数字，可多个）')
+    ElMessage.warning('请从选题器选择至少一道题目')
     return
   }
   creating.value = true
@@ -134,7 +133,7 @@ onMounted(load)
     </template>
   </PageShell>
 
-  <el-dialog v-model="showCreate" title="创建主题库比赛" width="560">
+  <el-dialog v-model="showCreate" title="创建主题库比赛" width="960" top="5vh">
     <el-form label-position="top">
       <el-form-item label="比赛名称" required>
         <el-input v-model="form.title" maxlength="64" />
@@ -154,35 +153,29 @@ onMounted(load)
       <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
         <el-input-number v-model="form.hiddenDays" :min="0" :max="7" />
       </el-form-item>
-      <el-form-item label="题目 ID（从题库取，用空格/逗号分隔）" required>
-        <el-input v-model="form.pids" placeholder="如：3 4 5" />
+      <el-form-item label="比赛题目" required>
+        <ProblemPicker v-model="form.picked" />
       </el-form-item>
       <el-form-item>
-        <div class="fileio-switch">
-          <el-switch v-model="form.fileIO" />
-          <span>
-            本场启用文件 IO
-            <span class="dim">（场内所有题按各题文件名对以文件读写判题，题面下会展示文件 IO 说明；可随时开关）</span>
-          </span>
-        </div>
+        <SwitchRow
+          v-model="form.fileIO"
+          label="本场启用文件 IO"
+          tip="场内所有题按各题文件名对以文件读写判题，题面下会展示文件 IO 说明；创建后可在比赛详情管理卡随时开关，改动只影响之后的提交"
+        />
       </el-form-item>
       <el-form-item>
-        <div class="fileio-switch">
-          <el-switch v-model="form.scoreboard" />
-          <span>
-            开启成绩表
-            <span class="dim">（关闭后参与者看不到成绩表，组织者仍可见）</span>
-          </span>
-        </div>
+        <SwitchRow
+          v-model="form.scoreboard"
+          label="开启成绩表"
+          tip="关闭后参与者看不到成绩表，组织者仍可见"
+        />
       </el-form-item>
       <el-form-item>
-        <div class="fileio-switch">
-          <el-switch v-model="form.hideDuring" />
-          <span>
-            赛期内对参赛者不可见
-            <span class="dim">（隐藏状态/标签/通过率；关闭后赛中即可查看结果）</span>
-          </span>
-        </div>
+        <SwitchRow
+          v-model="form.hideDuring"
+          label="赛期内对参赛者不可见"
+          tip="隐藏状态/标签/通过率，赛中只显示「已提交」；关闭后赛中即可查看结果"
+        />
       </el-form-item>
     </el-form>
     <template #footer>

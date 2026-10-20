@@ -44,8 +44,9 @@ func (h *Handlers) CreateAssignment(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Title string `json:"title" binding:"required"`
-		Intro string `json:"intro"`
+		Title      string   `json:"title" binding:"required"`
+		Intro      string   `json:"intro"`
+		ProblemIDs *[]int64 `json:"problem_ids"` // v0.7.3 创建即选题（可选，对齐比赛/考试形状）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "作业名称不能为空")
@@ -65,7 +66,26 @@ func (h *Handlers) CreateAssignment(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "创建作业失败")
 		return
 	}
+	if req.ProblemIDs != nil {
+		if err := h.repo.SetAssignmentProblems(c.Request.Context(), a.ID, sanitizePids(*req.ProblemIDs)); err != nil {
+			fail(c, http.StatusInternalServerError, "作业已创建，但题目清单保存失败")
+			return
+		}
+	}
 	ok(c, gin.H{"id": a.ID, "title": a.Title})
+}
+
+// sanitizePids 题目 ID 清单去重保序、剔除非法值。
+func sanitizePids(pids []int64) []int64 {
+	out := make([]int64, 0, len(pids))
+	seen := map[int64]bool{}
+	for _, pid := range pids {
+		if pid > 0 && !seen[pid] {
+			seen[pid] = true
+			out = append(out, pid)
+		}
+	}
+	return out
 }
 
 // UpdateAssignment 编辑作业名称/说明（班级管理员/root，v0.7）。
@@ -75,8 +95,9 @@ func (h *Handlers) UpdateAssignment(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Title     *string `json:"title"`
-		IntroHTML *string `json:"intro_html"`
+		Title      *string  `json:"title"`
+		IntroHTML  *string  `json:"intro_html"`
+		ProblemIDs *[]int64 `json:"problem_ids"` // v0.7.3 对齐比赛/考试 PATCH 形状
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -112,6 +133,9 @@ func (h *Handlers) UpdateAssignment(c *gin.Context) {
 			return
 		}
 		set["introHtml"] = *req.IntroHTML
+	}
+	if req.ProblemIDs != nil {
+		set["problems"] = sanitizePids(*req.ProblemIDs)
 	}
 	if len(set) == 0 {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")

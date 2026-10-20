@@ -25,6 +25,7 @@ type Class struct {
 	ID         int64             `bson:"_id"`
 	Name       string            `bson:"name"`
 	Intro      string            `bson:"intro"`
+	IntroHTML  string            `bson:"introHtml,omitempty"` // 富文本公告（v0.7.3 起写入；原 intro 冻结为回退源）
 	OwnerID    int64             `bson:"ownerId"`
 	InviteCode string            `bson:"inviteCode"`
 	Private    bool              `bson:"private"`
@@ -207,6 +208,18 @@ func (r *Repo) JoinClass(ctx context.Context, classID, uid int64, uname, code st
 		ClassID: classID, UID: uid, Uname: uname, Role: ClassRoleMember, JoinedAt: time.Now(),
 	})
 	return err
+}
+
+// UpdateClass 更新班级字段（名称/富文本公告，v0.7.3 编辑班级）。
+func (r *Repo) UpdateClass(ctx context.Context, classID int64, set bson.M) error {
+	res, err := r.db.Collection("classes").UpdateOne(ctx, bson.M{"_id": classID}, bson.M{"$set": set})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 func (r *Repo) LeaveClass(ctx context.Context, classID, uid int64) error {

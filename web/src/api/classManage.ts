@@ -7,7 +7,7 @@ import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import type { ApiResponse } from '@/types'
 
-async function request<T>(method: 'post' | 'delete', url: string, body?: unknown): Promise<T> {
+async function request<T>(method: 'post' | 'patch' | 'delete', url: string, body?: unknown): Promise<T> {
   const token = useUserStore().token
   try {
     const r = await axios.request<ApiResponse<T>>({
@@ -39,4 +39,20 @@ export async function dissolveClass(id: number): Promise<void> {
 /** 转让班级给指定成员（uid），对方成为新建班人、原建班人降为班级管理员 */
 export async function transferClass(id: number, uid: number): Promise<void> {
   await request('post', `/classes/${id}/transfer`, { uid })
+}
+
+/** 编辑班级（v0.7.3）：名称 / 富文本公告，均可选 */
+export async function updateClass(
+  id: number,
+  body: { name?: string; intro_html?: string },
+): Promise<void> {
+  await request('patch', `/classes/${id}`, body)
+}
+
+/** 布置作业（v0.7.3 创建即选题）：可选 problem_ids 一次带题 */
+export async function createAssignment(
+  classId: number,
+  body: { title: string; intro?: string; problem_ids?: number[] },
+): Promise<{ id: number; title: string }> {
+  return request('post', `/classes/${classId}/assignments`, body)
 }

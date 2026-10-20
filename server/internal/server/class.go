@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/repo"
 	"soj/internal/richtext"
@@ -139,9 +140,9 @@ func (h *Handlers) GetClass(c *gin.Context) {
 	}
 	manage := h.classManageable(c, cl)
 
-	classIntroHTML := ""
-	if cl.Intro != "" {
-		classIntroHTML = richtext.MdToHTML(cl.Intro) // 班级简介读时计算（v0.6 富文本口径）
+	classIntroHTML := cl.IntroHTML
+	if classIntroHTML == "" && cl.Intro != "" {
+		classIntroHTML = richtext.MdToHTML(cl.Intro) // 存量 md 公告读时计算（v0.6 富文本口径）
 	}
 	resp := gin.H{
 		"id":          cl.ID,
@@ -267,6 +268,62 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 	}
 	log.Printf("[web] 用户 %s 退出班级 #%d", uname, id)
 	ok(c, gin.H{"left": true})
+}
+
+// UpdateClass 编辑班级（v0.7.3）：名称 / 富文本公告，均可选；classManageable 门槛
+// （建班人/班级管理员/root，同管理卡其它按钮）。
+func (h *Handlers) UpdateClass(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Name      *string `json:"name"`
+		IntroHTML *string `json:"intro_html"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	ctx := c.Request.Context()
+	cl, err := h.repo.GetClass(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取班级失败")
+		return
+	}
+	if !h.classManageable(c, cl) {
+		fail(c, http.StatusForbidden, "仅班级管理员可编辑班级")
+		return
+	}
+	set := bson.M{}
+	if req.Name != nil {
+		name := trimTo(*req.Name, 64)
+		if name == "" {
+			fail(c, http.StatusBadRequest, "班级名称不能为空")
+			return
+		}
+		set["name"] = name
+	}
+	if req.IntroHTML != nil {
+		if len(*req.IntroHTML) > maxStatementSize {
+			fail(c, http.StatusBadRequest, "班级公告过长（上限 256KB）")
+			return
+		}
+		set["introHtml"] = *req.IntroHTML
+	}
+	if len(set) == 0 {
+		fail(c, http.StatusBadRequest, "没有需要更新的字段")
+		return
+	}
+	if err := h.repo.UpdateClass(ctx, id, set); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"updated": id})
 }
 
 // TransferClass 转让班级（建班人 ∨ root）：指定成员成为新建班人，原建班人降为班级管理员。

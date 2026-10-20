@@ -18,6 +18,14 @@ export interface LoginResult {
   user: User
 }
 
+// 统一选题器（v0.7.3 ProblemPicker）的已选条目：带标题保序，hidden 为组织者视角
+// edit_problems 里保留的隐藏题标记（候选列表一律排除隐藏题）
+export interface PickedProblem {
+  id: number
+  title: string
+  hidden?: boolean
+}
+
 export interface ProblemListItem {
   id: number
   title: string

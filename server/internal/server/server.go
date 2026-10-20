@@ -118,6 +118,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.POST("/classes/join-by-code", h.JoinByCode)
 			authed.POST("/classes/:id/leave", h.LeaveClass)
 			authed.PATCH("/classes/:id/private", h.SetClassPrivate)
+			authed.PATCH("/classes/:id", h.UpdateClass) // 编辑班级名称/公告（v0.7.3，classManageable）
 			authed.POST("/classes/:id/transfer", h.TransferClass)   // 转让班级（v0.7.2：建班人 ∨ root）
 			authed.DELETE("/classes/:id", h.DeleteClass) // 解散班级（v0.7.2：建班人 ∨ root）
 

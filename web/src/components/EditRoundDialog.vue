@@ -6,10 +6,11 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
+import { contestApi, examApi, type RoundKind } from '@/api'
 import MdEditor from '@/components/MdEditor.vue'
+import ProblemPicker from '@/components/ProblemPicker.vue'
 import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
-import type { ContestDetail } from '@/types'
+import type { ContestDetail, PickedProblem } from '@/types'
 
 const props = withDefaults(
   defineProps<{
@@ -35,11 +36,8 @@ const titleText = computed(() =>
 const title = ref('')
 const range = ref<Date[]>([])
 const intro = ref('')
-const editList = ref<{ id: number; title: string; hidden?: boolean }[]>([])
-const pickPid = ref<number | null>(null)
-const problemOptions = ref<{ id: number; title: string }[]>([])
+const editList = ref<PickedProblem[]>([])
 const saving = ref(false)
-const dragIndex = ref<number | null>(null)
 
 function reset() {
   title.value = props.round.title
@@ -47,49 +45,6 @@ function reset() {
   intro.value = props.round.intro_html || props.round.intro || ''
   const source = props.round.edit_problems ?? props.round.problems ?? []
   editList.value = source.map((p) => ({ id: p.id, title: p.title, hidden: 'hidden' in p ? p.hidden : false }))
-  pickPid.value = null
-}
-
-async function loadOptions() {
-  try {
-    const r = await problemApi.list(1, 100)
-    problemOptions.value = r.list.filter((p) => !p.hidden).map((p) => ({ id: p.id, title: p.title }))
-  } catch {
-    problemOptions.value = []
-  }
-}
-
-function addPicked() {
-  if (!pickPid.value) {
-    ElMessage.warning('请先从题库选择题目')
-    return
-  }
-  if (editList.value.some((p) => p.id === pickPid.value)) {
-    ElMessage.warning('该题已在本场里')
-    return
-  }
-  const opt = problemOptions.value.find((p) => p.id === pickPid.value)
-  editList.value.push({ id: pickPid.value, title: opt?.title ?? `#${pickPid.value}` })
-  pickPid.value = null
-}
-
-function removeAt(i: number) {
-  editList.value.splice(i, 1)
-}
-
-function onDragStart(i: number) {
-  dragIndex.value = i
-}
-
-function onDrop(i: number) {
-  if (dragIndex.value == null || dragIndex.value === i) return
-  const [moved] = editList.value.splice(dragIndex.value, 1)
-  editList.value.splice(i, 0, moved)
-  dragIndex.value = null
-}
-
-function onDragOver(e: DragEvent) {
-  e.preventDefault()
 }
 
 // 全量编辑只有「时间」会影响赛中作答/榜单；仅改名/改说明不弹确认。
@@ -171,23 +126,18 @@ async function save() {
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) {
-      reset()
-      if (props.mode === 'problems') loadOptions()
-    }
+    if (open) reset()
   },
   { immediate: true },
 )
-
-const listStyle = { maxHeight: '300px' }
 </script>
 
 <template>
   <el-dialog
     :model-value="modelValue"
     :title="titleText"
-    width="760"
-    top="6vh"
+    width="960"
+    top="5vh"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
     <template v-if="mode === 'full'">
@@ -210,36 +160,13 @@ const listStyle = { maxHeight: '300px' }
     <template v-else-if="mode === 'intro'">
       <el-form label-position="top">
         <el-form-item :label="`${name}说明`" required>
-          <MdEditor v-model="intro" height="300px" variant="compact" />
+          <MdEditor v-model="intro" height="150px" variant="compact" />
         </el-form-item>
       </el-form>
     </template>
 
     <template v-else>
-      <div class="pick-row">
-        <el-select v-model="pickPid" filterable placeholder="从题库选择题目加入" style="flex: 1">
-          <el-option v-for="p in problemOptions" :key="p.id" :value="p.id" :label="`#${p.id} ${p.title}`" />
-        </el-select>
-        <el-button type="primary" @click="addPicked">添加</el-button>
-      </div>
-      <div class="adjust-list" :style="listStyle">
-        <div
-          v-for="(p, i) in editList"
-          :key="p.id"
-          class="adjust-row"
-          draggable="true"
-          @dragstart="onDragStart(i)"
-          @drop="onDrop(i)"
-          @dragover="onDragOver"
-        >
-          <span class="drag-handle">⠿</span>
-          <span class="adjust-order">T{{ i + 1 }}</span>
-          <span class="adjust-title">#{{ p.id }} {{ p.title }}</span>
-          <el-tag v-if="p.hidden" size="small" type="danger">隐藏</el-tag>
-          <el-button size="small" type="danger" link @click="removeAt(i)">删除</el-button>
-        </div>
-        <el-empty v-if="!editList.length" description="还没有题目，从上方题库添加" :image-size="40" />
-      </div>
+      <ProblemPicker v-model="editList" />
       <div class="dim">拖动 ⠿ 调整顺序，右侧「删除」移除；保存后一次性生效。</div>
     </template>
 
@@ -251,48 +178,10 @@ const listStyle = { maxHeight: '300px' }
 </template>
 
 <style scoped>
-.pick-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
 
-.adjust-list {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: var(--el-border-radius-base);
-  overflow: auto;
-  margin-bottom: 8px;
-}
 
-.adjust-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--el-fill-color);
-  cursor: grab;
-  background: var(--el-bg-color);
-}
 
-.adjust-row:hover {
-  background: var(--el-fill-color-light);
-}
 
-.drag-handle {
-  color: var(--el-text-color-placeholder);
-  cursor: grab;
-}
 
-.adjust-order {
-  width: 32px;
-  color: var(--el-text-color-secondary);
-}
 
-.adjust-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 </style>

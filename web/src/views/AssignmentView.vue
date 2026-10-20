@@ -5,9 +5,10 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { assignmentApi, authApi, problemApi } from '@/api'
+import { assignmentApi, authApi } from '@/api'
 import { downloadCsv } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
+import ProblemPicker from '@/components/ProblemPicker.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import FitTags from '@/components/problem/FitTags.vue'
@@ -20,7 +21,7 @@ import UserSubmissionsDialog from '@/components/score/UserSubmissionsDialog.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
 import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
-import type { AssignmentDetail, AssignmentProblem, ProgressRow, Submission } from '@/types'
+import type { AssignmentDetail, AssignmentProblem, PickedProblem, ProgressRow, Submission } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,10 +36,7 @@ const progressLoading = ref(false)
 // 右列管理卡：调整题目弹窗（题库选题 + 拖动排序 + 快速删除，一次保存）
 const showAdjust = ref(false)
 const savingOrder = ref(false)
-const editList = ref<{ id: number; title: string }[]>([])
-const pickPid = ref<number | null>(null)
-const problemOptions = ref<{ id: number; title: string }[]>([])
-const dragIndex = ref<number | null>(null)
+const editList = ref<PickedProblem[]>([])
 
 // 编辑名称（v0.7；v0.7.2 说明拆独立「编辑说明」入口）
 const showEdit = ref(false)
@@ -194,47 +192,12 @@ async function saveEditIntro() {
   }
 }
 
-// ---- 调整题目弹窗 ----
+// ---- 调整题目弹窗（v0.7.3 起用统一选题器 ProblemPicker） ----
 function openAdjust() {
   if (!assignment.value) return
   const source = assignment.value.edit_problems ?? assignment.value.problems
   editList.value = source.map((p) => ({ id: p.id, title: p.title }))
-  pickPid.value = null
   showAdjust.value = true
-}
-
-function addPicked() {
-  if (!pickPid.value) {
-    ElMessage.warning('请先从题库选择题目')
-    return
-  }
-  if (editList.value.some((p) => p.id === pickPid.value)) {
-    ElMessage.warning('该题已在作业里')
-    return
-  }
-  const opt = problemOptions.value.find((p) => p.id === pickPid.value)
-  editList.value.push({ id: pickPid.value, title: opt?.title ?? `#${pickPid.value}` })
-  pickPid.value = null
-}
-
-function removeAt(i: number) {
-  editList.value.splice(i, 1)
-}
-
-// 拖动排序：HTML5 drag & drop，拖到目标行位置
-function onDragStart(i: number) {
-  dragIndex.value = i
-}
-
-function onDrop(i: number) {
-  if (dragIndex.value == null || dragIndex.value === i) return
-  const [moved] = editList.value.splice(dragIndex.value, 1)
-  editList.value.splice(i, 0, moved)
-  dragIndex.value = null
-}
-
-function onDragOver(e: DragEvent) {
-  e.preventDefault()
 }
 
 async function saveOrder() {
@@ -266,11 +229,6 @@ async function removeAssignment() {
   router.push(`/classes/${assignment.value.class_id}`)
 }
 
-async function loadProblemOptions() {
-  const r = await problemApi.list(1, 100)
-  problemOptions.value = r.list.filter((p) => !p.hidden).map((p) => ({ id: p.id, title: p.title }))
-}
-
 onMounted(() => {
   tagStore.ensure() // 标签名映射异步就绪，题目表标签列响应式跟随
   if (userStore.token) {
@@ -279,7 +237,6 @@ onMounted(() => {
     }).catch(() => {})
   }
   load()
-  loadProblemOptions()
 })
 </script>
 
@@ -373,7 +330,7 @@ onMounted(() => {
       </template>
     </PageShell>
 
-    <el-dialog v-model="showEdit" title="编辑作业" width="560" top="8vh">
+    <el-dialog v-model="showEdit" title="编辑作业" width="960" top="8vh">
       <el-form label-position="top">
         <el-form-item label="作业名称" required>
           <el-input v-model="editTitle" maxlength="64" />
@@ -385,10 +342,10 @@ onMounted(() => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showEditIntro" title="编辑作业说明" width="760" top="5vh">
+    <el-dialog v-model="showEditIntro" title="编辑作业说明" width="960" top="5vh">
       <el-form label-position="top">
         <el-form-item label="作业说明">
-          <MdEditor v-model="editIntro" height="340px" variant="compact" />
+          <MdEditor v-model="editIntro" height="150px" variant="compact" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -397,35 +354,8 @@ onMounted(() => {
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showAdjust" title="调整作业题目" width="760" top="6vh">
-      <div class="adjust-pick">
-        <el-select v-model="pickPid" filterable placeholder="从题库选择题目加入" style="flex: 1">
-          <el-option
-            v-for="p in problemOptions"
-            :key="p.id"
-            :value="p.id"
-            :label="`#${p.id} ${p.title}`"
-          />
-        </el-select>
-        <el-button type="primary" @click="addPicked">添加</el-button>
-      </div>
-      <div class="adjust-list">
-        <div
-          v-for="(p, i) in editList"
-          :key="p.id"
-          class="adjust-row"
-          draggable="true"
-          @dragstart="onDragStart(i)"
-          @drop="onDrop(i)"
-          @dragover="onDragOver"
-        >
-          <span class="drag-handle">⠿</span>
-          <span class="adjust-order">T{{ i + 1 }}</span>
-          <span class="adjust-title">#{{ p.id }} {{ p.title }}</span>
-          <el-button size="small" type="danger" link @click="removeAt(i)">删除</el-button>
-        </div>
-        <el-empty v-if="!editList.length" description="还没有题目，从上方题库添加" :image-size="40" />
-      </div>
+    <el-dialog v-model="showAdjust" title="调整作业题目" width="960" top="5vh">
+      <ProblemPicker v-model="editList" />
       <div class="dim">拖动 ⠿ 调整顺序，右侧「删除」移除；点下方保存一次性生效</div>
       <template #footer>
         <el-button @click="showAdjust = false">取消</el-button>
@@ -488,49 +418,10 @@ onMounted(() => {
   margin-top: 16px;
 }
 
-.adjust-pick {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
 
-.adjust-list {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: var(--el-border-radius-base);
-  max-height: 320px;
-  overflow: auto;
-  margin-bottom: 8px;
-}
 
-.adjust-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--el-fill-color);
-  cursor: grab;
-  background: var(--el-bg-color);
-}
 
-.adjust-row:hover {
-  background: var(--el-fill-color-light);
-}
 
-.drag-handle {
-  color: var(--el-text-color-placeholder);
-  cursor: grab;
-}
 
-.adjust-order {
-  width: 32px;
-  color: var(--el-text-color-secondary);
-}
 
-.adjust-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 </style>
