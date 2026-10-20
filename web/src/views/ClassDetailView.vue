@@ -356,11 +356,12 @@ stripe
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="showCreateAssignment = true">布置作业</el-button>
             <el-button type="success" style="width: 100%" @click="showExam = true; loadProblemOptions()">发起考试</el-button>
-            <el-button style="width: 100%" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
-            <el-button type="warning" style="width: 100%" @click="regenInvite">重置邀请码</el-button>
+            <el-button plain style="width: 100%" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
+            <el-button type="warning" plain style="width: 100%" @click="regenInvite">重置邀请码</el-button>
             <el-button
               :disabled="togglingPrivate"
               type="info"
+              plain
               style="width: 100%"
               title="仅建班人与 root 可切换"
               @click="togglePrivate"

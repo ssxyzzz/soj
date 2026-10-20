@@ -9,6 +9,7 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
+import ImportProblemDialog, { type ImportedPayload } from '@/components/problem/ImportProblemDialog.vue'
 import MdEditor from '@/components/MdEditor.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
@@ -68,6 +69,18 @@ const tagTreeEmpty = computed(() => !tagStore.nodes.length)
 // 标签卡片流点选回调：整体替换 tag_ids（数组顺序即点选顺序）
 function onTagsChange(ids: number[]) {
   form.tag_ids = ids
+}
+
+// ---- 题面导入（v0.6.1）：URL 解析 / 剪贴板粘贴 → 预览确认 → 回填表单 ----
+const showImport = ref(false)
+
+function applyImport(p: ImportedPayload) {
+  if (p.title) form.title = p.title.slice(0, 64) // 粘贴路线可能无标题（表单已有值则不动）
+  form.statement = p.html
+  if (p.time_limit_ms) form.time_limit_ms = p.time_limit_ms
+  if (p.memory_limit_mb) form.memory_limit_mb = p.memory_limit_mb
+  showImport.value = false
+  ElMessage.success(`已回填「${p.source}」的题面${p.title ? '与标题' : ''}，请上传测试数据 zip 后提交`)
 }
 
 const fileList = ref<UploadUserFile[]>([])
@@ -162,11 +175,22 @@ function onSubmitClick() {
             </div>
             <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
           </el-form-item>
-          <el-form-item label="题面" required>
+          <el-form-item class="plain-label">
+            <template #label>
+              <span class="label-with-tip">
+                题面
+                <el-button link type="primary" size="small" @click="showImport = true">导入题面（URL / 粘贴）</el-button>
+              </span>
+            </template>
             <MdEditor v-model="form.statement" max-height="4000px" />
           </el-form-item>
         </el-card>
       </div>
+      <ImportProblemDialog
+        v-if="showImport"
+        @apply="applyImport"
+        @close="showImport = false"
+      />
 
       <div class="pf-aside">
         <el-card>

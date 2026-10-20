@@ -69,6 +69,17 @@ export interface TestCase {
   output: string
 }
 
+// 题目 URL 导入预览（v0.6.1）：服务端抓取解析 + 外链图转存后的统一中间格式
+export interface ImportPreviewResult {
+  title: string
+  html: string
+  samples: { input: string; output: string }[]
+  time_limit_ms: number
+  memory_limit_mb: number
+  source: string
+  transfer: string
+}
+
 export interface ProblemDetail {
   id: number
   title: string

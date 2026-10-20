@@ -233,6 +233,19 @@ onMounted(async () => {
   vertical-align: middle;
 }
 
+/* 勾选框放大到 16px：EP 默认 14px 不随表格字号缩放，视觉偏小；
+   16 对齐 Ant 勾选框规格，也与 root 列 ✓ 图标（--soj-fs-section）同高 */
+.perm-matrix :deep(.el-checkbox) {
+  --el-checkbox-input-width: 16px;
+  --el-checkbox-input-height: 16px;
+}
+
+/* 对勾 glyph（EP 固定 3×7px）同步放大，位置由 EP 的 translate 百分比自动居中 */
+.perm-matrix :deep(.el-checkbox__inner:after) {
+  width: 4px;
+  height: 8px;
+}
+
 /* 权限分类分组行 */
 .perm-group-row {
   font-weight: var(--soj-fw-emphasis);

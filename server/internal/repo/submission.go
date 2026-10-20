@@ -214,7 +214,9 @@ func (r *Repo) UserBestStatuses(ctx context.Context, uid int64, pids []int64) (m
 	}
 	cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
 		{"$match": bson.M{"uid": uid, "pid": bson.M{"$in": pids}, "published": true}},
-		{"$sort": bson.M{"pid": 1, "score": -1, "_id": -1}},
+		// 多键排序必须 bson.D：bson.M 是 Go map 键序随机，每次请求可能变成按 _id
+		// 取最新提交而非最高分（题库状态列偶发「不是满分」的根因）。
+		{"$sort": bson.D{{Key: "pid", Value: 1}, {Key: "score", Value: -1}, {Key: "_id", Value: -1}}},
 		{"$group": bson.M{
 			"_id":    "$pid",
 			"status": bson.M{"$first": "$status"},
@@ -329,7 +331,8 @@ func (r *Repo) RankTop(ctx context.Context, limit int) ([]RankRow, error) {
 		{{Key: "$match", Value: bson.M{"status": StatusAccepted, "published": true}}},
 		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
 		{{Key: "$group", Value: bson.M{"_id": "$_id.uid", "solved": bson.M{"$sum": 1}}}},
-		{{Key: "$sort", Value: bson.M{"solved": -1, "_id": 1}}},
+		// bson.D 保序：bson.M 键序随机会让榜单偶尔按 uid 而非解题数排序。
+		{{Key: "$sort", Value: bson.D{{Key: "solved", Value: -1}, {Key: "_id", Value: 1}}}},
 		{{Key: "$limit", Value: limit}},
 		{{Key: "$lookup", Value: bson.M{
 			"from": "users", "localField": "_id", "foreignField": "_id", "as": "u",

@@ -13,6 +13,7 @@ import type {
   ContestListItem,
   ContestMySubmission,
   ExamListItem,
+  ImportPreviewResult,
   LeaderRow,
   LoginResult,
   PermGroupInfo,
@@ -128,6 +129,10 @@ export const problemApi = {
       .then((r) => r.data.data),
   updateMeta: (id: number, body: Record<string, unknown>) =>
     patch<{ updated: number }>(`/problems/${id}/meta`, body),
+  importPreview: (url: string) =>
+    client
+      .post<ApiResponse<ImportPreviewResult>>('/import/preview', { url }, { timeout: 0 })
+      .then((r) => r.data.data),
   uploadChecker: (id: number, form: FormData) =>
     client.post(`/problems/${id}/checker`, form, { timeout: 0 }).then((r) => r.data.data),
   removeChecker: (id: number) => del<{ removed: boolean }>(`/problems/${id}/checker`),
