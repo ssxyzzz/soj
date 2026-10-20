@@ -73,7 +73,14 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
+	// 生效语义（非特权可见性过滤）与展示视角分开：view 版仅用于锁定标记字段，
+	// root/admin 的全量锁不得参与隐藏过滤
 	lockMap, err := h.loadLockMap(ctx, uid, role)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取比赛状态失败")
+		return
+	}
+	viewMap, err := h.loadLockMapView(ctx, uid, role)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取比赛状态失败")
 		return
@@ -101,15 +108,15 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 			}
 		}
 		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags), "has_cases": len(p.Cases) > 0}
-		if lk != nil {
+		if vk := viewMap[p.ID]; vk != nil {
 			item["locked"] = true
-			item["lock_kind"] = lk.Kind
-			if lk.Kind == repo.KindExam {
-				item["exam_id"] = lk.RefID
+			item["lock_kind"] = vk.Kind
+			if vk.Kind == repo.KindExam {
+				item["exam_id"] = vk.RefID
 			} else {
-				item["contest_id"] = lk.RefID
+				item["contest_id"] = vk.RefID
 			}
-			item["lock_phase"] = lk.Phase
+			item["lock_phase"] = vk.Phase
 		}
 		items = append(items, item)
 	}
@@ -186,6 +193,14 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		return
 	}
 	lk := lockMap[p.ID]
+	// 展示视角（v0.7.2 验收反馈）：root/admin 详情响应带全量锁标记（比赛中/考试中 + 赛事指引），
+	// 上面的 404 生效判定仍用原语义 lockMap
+	viewMap, err := h.loadLockMapView(ctx, uid, role)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取比赛状态失败")
+		return
+	}
+	vk := viewMap[p.ID]
 
 	// 隐藏题：v0.7 起任何非特权视角都不可见（比赛/考试中也不可见）
 	if p.Hidden && !privileged {
@@ -254,15 +269,15 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		resp["submit_count"] = int64(0)
 		resp["accepted_count"] = int64(0)
 	}
-	if lk != nil {
+	if vk != nil {
 		resp["locked"] = true
-		resp["lock_kind"] = lk.Kind
-		if lk.Kind == repo.KindExam {
-			resp["exam_id"] = lk.RefID
-			resp["exam_title"] = lk.Round.Title
+		resp["lock_kind"] = vk.Kind
+		if vk.Kind == repo.KindExam {
+			resp["exam_id"] = vk.RefID
+			resp["exam_title"] = vk.Round.Title
 		} else {
-			resp["contest_id"] = lk.RefID
-			resp["contest_title"] = lk.Round.Title
+			resp["contest_id"] = vk.RefID
+			resp["contest_title"] = vk.Round.Title
 		}
 	}
 	ok(c, resp)

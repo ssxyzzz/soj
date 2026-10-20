@@ -25,8 +25,43 @@ type contestLock struct {
 	RefID int64         // 比赛/考试 ID（前端指引跳转用）
 }
 
-// loadLockMap 当前视角下各题目的锁。未发布赛事数量小，每次请求全量评估。
+// loadLockMap 当前视角下各题目的锁（生效语义：决定锁题指引与提交限制）。
+// 未发布赛事数量小，每次请求全量评估。主题库比赛不锁 root；班级考试只锁本班成员。
 func (h *Handlers) loadLockMap(ctx context.Context, uid int64, role string) (map[int64]*contestLock, error) {
+	all, err := h.loadAllLocks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[int64]*contestLock, len(all))
+	for pid, lk := range all {
+		if lk.Bank {
+			if role == repo.RoleRoot {
+				continue // 主题库比赛对 root 不锁
+			}
+		} else {
+			if uid <= 0 {
+				continue
+			}
+			if member, _ := h.repo.IsMember(ctx, lk.Round.ClassID, uid); !member {
+				continue
+			}
+		}
+		out[pid] = lk
+	}
+	return out, nil
+}
+
+// loadLockMapView 锁信息的「展示视角」（题库列表/详情的锁定标记）：root 与内置 admin
+// 不受锁题约束（生效语义见 loadLockMap），但要能看到每道题当前的比赛中/考试中状态，
+// 因此这两类视角返回全量锁；其余视角与生效语义一致。
+func (h *Handlers) loadLockMapView(ctx context.Context, uid int64, role string) (map[int64]*contestLock, error) {
+	if role == repo.RoleRoot || role == repo.RoleAdmin {
+		return h.loadAllLocks(ctx)
+	}
+	return h.loadLockMap(ctx, uid, role)
+}
+
+func (h *Handlers) loadAllLocks(ctx context.Context) (map[int64]*contestLock, error) {
 	contests, err := h.repo.ListUnpublishedContests(ctx)
 	if err != nil {
 		return nil, err
@@ -60,20 +95,11 @@ func (h *Handlers) loadLockMap(ctx context.Context, uid int64, role string) (map
 
 	for _, ct := range contests {
 		phase := phaseOf(ct.Start, ct.End)
-		if role == repo.RoleRoot {
-			continue // 主题库比赛对 root 不锁
-		}
 		for _, cp := range ct.Problems {
 			apply(cp.PID, &contestLock{Round: ct, Phase: phase, Bank: true, Kind: repo.KindContest, RefID: ct.ID})
 		}
 	}
 	for _, e := range exams {
-		if uid <= 0 {
-			continue
-		}
-		if member, _ := h.repo.IsMember(ctx, e.ClassID, uid); !member {
-			continue
-		}
 		phase := phaseOf(e.Start, e.End)
 		for _, ep := range e.Problems {
 			apply(ep.PID, &contestLock{Round: e, Phase: phase, Bank: false, Kind: repo.KindExam, RefID: e.ID})

@@ -283,6 +283,19 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		}
 		log.Printf("[boot] admin 角色已补发退出班级权限位（class.leave）")
 	}
+	if !flagDone("adminProblemViewAllV1") {
+		// v0.7.2：存量 admin 角色补发「题库全量可见」——builtin 定义一直包含该位，
+		// 但早期创建的角色文档没有它且从未补发过（导致存量 admin 看不到隐藏题/锁定标记）
+		if _, err := r.Roles.UpdateOne(ctx,
+			bson.M{"_id": RoleAdmin},
+			bson.M{"$addToSet": bson.M{"perms": PermProblemViewAll}}); err != nil {
+			return err
+		}
+		if err := setFlag("adminProblemViewAllV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] admin 角色已补发题库全量可见权限位（problem.view.all）")
+	}
 	return nil
 }
 
