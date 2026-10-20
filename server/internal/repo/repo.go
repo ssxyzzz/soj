@@ -116,6 +116,11 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		return err
 	}
 
+	// 题目计数器对齐现存最大 _id（幂等守卫，每次启动跑：计数器落后会让建题撞 _id）
+	if err := r.syncProblemCounter(ctx); err != nil {
+		return err
+	}
+
 	// v0.7.1 队列优先级回填：存量提交补默认高档（幂等，只有升级后首次有改动）
 	if res, err := r.Submissions.UpdateMany(ctx,
 		bson.M{"priority": bson.M{"$exists": false}},
@@ -487,4 +492,37 @@ func (r *Repo) nextSeq(ctx context.Context, name string) (int64, error) {
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
 	).Decode(&doc)
 	return doc.Seq, err
+}
+
+// syncProblemCounter 启动守卫：problem 计数器 $max 到题目集合现存最大 _id。
+// 计数器一旦落后（手动修库 / 恢复旧备份），建题会取到已占用的号直接撞 _id（E11000）；
+// $max 幂等只会前进不会回退，每次启动跑一遍兜底。题目集合为空时不建计数器文档。
+func (r *Repo) syncProblemCounter(ctx context.Context) error {
+	var last struct {
+		ID int64 `bson:"_id"`
+	}
+	err := r.Problems.FindOne(ctx, bson.M{},
+		options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}}),
+	).Decode(&last)
+	if IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var before struct {
+		Seq int64 `bson:"seq"`
+	}
+	err = r.Counters.FindOneAndUpdate(ctx,
+		bson.M{"_id": "problem"},
+		bson.M{"$max": bson.M{"seq": last.ID}},
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before),
+	).Decode(&before)
+	if IsNotFound(err) {
+		err = nil // 计数器文档缺失视为 0，本次 $max 已把它拉齐
+	}
+	if err == nil && before.Seq < last.ID {
+		log.Printf("[boot] problem 计数器已从 %d 对齐到最大题目 _id %d", before.Seq, last.ID)
+	}
+	return err
 }

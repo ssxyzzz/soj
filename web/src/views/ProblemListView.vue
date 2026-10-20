@@ -145,7 +145,7 @@ stripe
               <span class="title">{{ row.title }}</span>
               <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏</el-tag>
               <el-tag v-if="row.has_cases === false" size="small" type="warning" class="ml8">无数据</el-tag>
-              <el-tag v-if="row.locked" size="small" type="warning" class="ml8">
+              <el-tag v-if="row.locked" size="small" type="success" class="ml8">
                 {{ row.lock_kind === 'exam' ? '考试中' : '比赛中' }}
               </el-tag>
             </template>

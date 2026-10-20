@@ -267,7 +267,7 @@ onUnmounted(stopPolling)
           <template #header><span>管理</span></template>
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
-            <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题提交</el-button>
+            <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
           </div>
         </el-card>
 

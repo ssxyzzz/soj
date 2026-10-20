@@ -65,6 +65,8 @@ const tagStore = useTagTreeStore()
 tagStore.ensure()
 // 空树时展示「管理员尚未配置标签树」占位
 const tagTreeEmpty = computed(() => !tagStore.nodes.length)
+// 标签必填（建题同标题必填口径）；空树无从选择不拦截，编辑存量无标签题也不强制补挂
+const tagsRequired = computed(() => props.mode === 'create' && !tagTreeEmpty.value)
 
 // 标签卡片流点选回调：整体替换 tag_ids（数组顺序即点选顺序）
 function onTagsChange(ids: number[]) {
@@ -119,6 +121,10 @@ function payload(): ProblemFormPayload | null {
     ElMessage.warning('请填写标题')
     return null
   }
+  if (tagsRequired.value && form.tag_ids.length === 0) {
+    ElMessage.warning('请至少选择一个标签')
+    return null
+  }
   if (!form.statement.trim()) {
     ElMessage.warning('请填写题面')
     return null
@@ -160,7 +166,7 @@ function onSubmitClick() {
           <el-form-item label="标题" required>
             <el-input v-model="form.title" maxlength="64" show-word-limit placeholder="64 字符以内" />
           </el-form-item>
-          <el-form-item class="plain-label">
+          <el-form-item class="plain-label" :required="tagsRequired">
             <template #label>
               <span class="label-with-tip">
                 标签
