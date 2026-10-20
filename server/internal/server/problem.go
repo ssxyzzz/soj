@@ -207,8 +207,9 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}
-	// 赛前 / 隐藏期：对受影响视角不可见
-	if lk != nil && lk.Phase != "running" {
+	// 赛前 / 隐藏期：对受影响视角不可见；持 problem.view.all 者（admin/root）可见——
+	// 「题库全量可见（隐藏/锁定题）」权限位的既定语义，做题页不被弹走、仅展示锁标记与指引
+	if lk != nil && lk.Phase != "running" && !privileged {
 		fail(c, http.StatusNotFound, "该题已被比赛锁定，暂不可见")
 		return
 	}

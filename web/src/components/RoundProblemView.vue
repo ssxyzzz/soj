@@ -11,16 +11,19 @@ import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import PageShell from '@/components/PageShell.vue'
+import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
 import { fmtDate, isQueueStatus, statusDesc } from '@/utils/format'
+import { useUserStore } from '@/stores/user'
 import type { ContestDetail, ContestMySubmission, ProblemDetail } from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
 
 const route = useRoute()
 const router = useRouter()
+const userStore = useUserStore()
 
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
 const name = computed(() => (props.kind === 'exam' ? '考试' : '比赛'))
@@ -34,8 +37,11 @@ const revealed = ref(false)
 
 const showSubmit = ref(false)
 const showWorkbench = ref(false)
+const showOthers = ref(false)
 const submitting = ref(false)
 const expandedMine = ref<number[]>([])
+// 所有代码入口：题库全量可见人群（admin/root）在赛事做题页也可查看，普通参与者维持无此入口
+const canViewOthers = computed(() => userStore.can('problem.view.all'))
 
 const roundId = computed(() => Number(route.params.id))
 const pid = computed(() => Number(route.params.pid))
@@ -194,14 +200,11 @@ onUnmounted(() => {
               <el-button type="success" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showWorkbench = true">
                 在线编程
               </el-button>
+              <el-button type="warning" plain style="width: 100%" @click="openSolutions">
+                题解
+              </el-button>
             </el-tooltip>
-            <el-tooltip
-              v-if="revealed"
-              placement="top"
-              :content="problem.can_view_solutions ? '查看本题题解' : '该题拿到满分后才能查看题解'"
-            >
-              <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
-            </el-tooltip>
+            <el-button v-if="canViewOthers" plain style="width: 100%" @click="showOthers = true">所有代码</el-button>
             <div v-if="!running" class="dim center">{{ name }}未在进行中</div>
           </div>
         </el-card>
@@ -254,6 +257,7 @@ onUnmounted(() => {
       />
 
       <SolutionsDialog v-model="showSolutions" :problem-id="pid" />
+      <AllCodesDialog v-if="problem" v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
     </template>
   </div>
 </template>
