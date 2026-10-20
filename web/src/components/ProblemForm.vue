@@ -155,6 +155,12 @@ function onSubmitClick() {
     <div class="pf-layout">
       <div class="pf-main">
         <el-card>
+          <div class="import-row">
+            <el-button type="primary" plain size="small" @click="showImport = true">
+              导入题面（粘贴 / URL / 脚本）
+            </el-button>
+            <span class="dim">从洛谷、Codeforces、Hydro 等站点快速复制题面与标题</span>
+          </div>
           <el-form-item label="标题" required>
             <el-input v-model="form.title" maxlength="64" show-word-limit placeholder="64 字符以内" />
           </el-form-item>
@@ -175,13 +181,7 @@ function onSubmitClick() {
             </div>
             <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
           </el-form-item>
-          <el-form-item class="plain-label">
-            <template #label>
-              <span class="label-with-tip">
-                题面
-                <el-button link type="primary" size="small" @click="showImport = true">导入题面（URL / 粘贴）</el-button>
-              </span>
-            </template>
+          <el-form-item label="题面" required>
             <MdEditor v-model="form.statement" max-height="4000px" />
           </el-form-item>
         </el-card>
@@ -344,6 +344,14 @@ function onSubmitClick() {
 .pf-main {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* 表单顶部导入入口行 */
+.import-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
 }
 
 .pf-aside {

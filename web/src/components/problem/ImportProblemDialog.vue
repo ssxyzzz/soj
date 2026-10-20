@@ -23,7 +23,7 @@ export interface ImportedPayload {
 
 const emit = defineEmits<{ apply: [p: ImportedPayload]; close: [] }>()
 
-const tab = ref<'url' | 'paste' | 'script'>('url')
+const tab = ref<'url' | 'paste' | 'script'>('paste')
 const url = ref('')
 const importing = ref(false)
 const preview = ref<ImportPreviewResult | null>(null)
@@ -33,7 +33,7 @@ const pasteTitle = ref('') // 粘贴页面的 <h1>（源站题名），作为标
 const previewTitle = computed(() => preview.value?.title ?? pasteTitle.value)
 const previewHTML = computed(() => preview.value?.html ?? pasteHTML.value)
 const canApply = computed(() => !!previewHTML.value.trim())
-// 油猴脚本下载：相对路径自动跟随当前部署域名，服务端按请求 Host 烘焙进脚本
+// 脚本导入下载：相对路径自动跟随当前部署域名，服务端按请求 Host 烘焙进脚本
 const scriptURL = '/api/import/userscript'
 
 // ---- URL 导入 ----
@@ -124,6 +124,17 @@ function close() {
 <template>
   <el-dialog :model-value="true" title="导入题目" width="860" top="4vh" @close="close">
     <el-tabs v-model="tab">
+      <el-tab-pane label="粘贴导入" name="paste">
+        <div
+          class="paste-zone"
+          contenteditable="true"
+          data-ph="到源站打开题目页面，全选（Ctrl+A）复制后，在此处粘贴（Ctrl+V）"
+          @paste="onPaste"
+        />
+        <p class="dim tip">
+          富文本粘贴自动清洗（公式经 KaTeX/MathJax 源码无损还原）；任何站点可用，含登录墙内页面。
+        </p>
+      </el-tab-pane>
       <el-tab-pane label="URL 导入" name="url">
         <div class="url-row">
           <el-input
@@ -138,30 +149,19 @@ function close() {
           服务端抓取并解析标题 / 题面 / 样例 / 时空限制，外链图片自动转存本站；测试数据 zip 仍需自行上传。
         </p>
       </el-tab-pane>
-      <el-tab-pane label="粘贴导入" name="paste">
-        <div
-          class="paste-zone"
-          contenteditable="true"
-          data-ph="到源站打开题目页面，全选（Ctrl+A）复制后，在此处粘贴（Ctrl+V）"
-          @paste="onPaste"
-        />
-        <p class="dim tip">
-          富文本粘贴自动清洗（公式经 KaTeX/MathJax 源码无损还原）；任何站点可用，含登录墙内页面。
-        </p>
-      </el-tab-pane>
-      <el-tab-pane label="油猴脚本" name="script">
+      <el-tab-pane label="脚本导入" name="script">
         <el-alert type="success" :closable="false" class="us-alert">
           <p>推荐给经常导入的老师：在自己浏览器里一键复制题面——带真实登录态与浏览器指纹，<b>洛谷等登录墙/反爬站点零封号风险</b>（这就是正常浏览行为，不经过本站服务器）。</p>
         </el-alert>
         <el-steps :active="4" align-center class="us-steps" finish-status="success">
-          <el-step title="装扩展" description="浏览器安装 Tampermonkey（油猴）扩展" />
-          <el-step title="装脚本" description="点下方按钮下载，油猴自动弹出安装页，点安装" />
-          <el-step title="复制题面" description="打开源站题目页 → 点浏览器油猴图标 → 「复制题面到 SOJ 剪贴板」" />
+          <el-step title="装扩展" description="浏览器安装篡改猴（Tampermonkey）扩展，Edge/Chrome 商店搜「篡改猴」" />
+          <el-step title="装脚本" description="点下方按钮下载，篡改猴自动弹出安装页，点安装" />
+          <el-step title="复制题面" description="打开源站题目页 → 点浏览器篡改猴图标 → 「复制题面到 SOJ 剪贴板」" />
           <el-step title="回站粘贴" description="回到本弹窗「粘贴导入」→ Ctrl+V → 预览回填" />
         </el-steps>
         <div class="us-actions">
-          <a :href="scriptURL"><el-button type="primary">下载油猴脚本（本站地址已内置）</el-button></a>
-          <span class="dim">文件名 soj-import.user.js，Tampermonkey 会自动识别并弹出安装</span>
+          <a :href="scriptURL"><el-button type="primary">下载导入脚本（本站地址已内置）</el-button></a>
+          <span class="dim">文件名 soj-import.user.js，篡改猴会自动识别并弹出安装页</span>
         </div>
         <el-collapse class="us-faq">
           <el-collapse-item title="脚本会抓取整页吗？会不会把导航栏也带进来？">
@@ -171,7 +171,7 @@ function close() {
             图片地址复制时自动转为绝对地址（外链保留，预览可见；如需入站可后续在编辑器里手动上传替换）。公式经 KaTeX/MathJax 源码无损还原，回填后仍是可编辑公式。
           </el-collapse-item>
           <el-collapse-item title="和 URL 导入有什么区别？">
-            URL 导入由本站服务器抓取，快且自动转存图片，但受限于目标站的反爬与登录墙（洛谷、hydro.ac 不可用）；油猴脚本在你自己的浏览器里工作，任何站点、任何登录态都可用，两者互补。
+            URL 导入由本站服务器抓取，快且自动转存图片，但受限于目标站的反爬与登录墙（洛谷、hydro.ac 不可用）；脚本导入在你自己的浏览器里工作，任何站点、任何登录态都可用，两者互补。
           </el-collapse-item>
           <el-collapse-item title="安全吗？">
             脚本只在本地做「选中题面 → 复制到剪贴板」一件事，不发起任何网络请求、不上传任何数据；下载后可用文本编辑器查看全部代码。本站地址已内置在脚本里，无需配置。
@@ -212,7 +212,7 @@ function close() {
   gap: 8px;
 }
 
-/* 油猴脚本 tab */
+/* 脚本导入 tab */
 .us-alert {
   margin-bottom: 12px;
 }

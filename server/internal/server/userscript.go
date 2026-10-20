@@ -1,6 +1,6 @@
 package server
 
-// 油猴脚本生成（v0.6.1 增强，plan.md §3 备忘项提前落地）：
+// 导入脚本（篡改猴/Tampermonkey 用户脚本）生成（v0.6.1 增强，plan.md §3 备忘项提前落地）：
 // GET /api/import/userscript 返回 UserScript 文本，部署域名在下载时按请求 Host
 // 烘焙进脚本（零配置）。脚本本体零清洗零上传：只在源站页面把题面富文本（图片绝对化）
 // 复制进剪贴板，用户回 SOJ「粘贴导入」走既有清洗管道（KaTeX/MathJax → data-latex
@@ -17,7 +17,7 @@ const userscriptTmpl = `// ==UserScript==
 // @name         SOJ 题面复制（%s）
 // @namespace    soj-import
 // @version      1.0.0
-// @description  在任意 OJ 题目页，通过油猴菜单「复制题面到 SOJ 剪贴板」，回 SOJ 建题/编辑页的「粘贴导入」即可回填题面。仅在本浏览器内复制，不产生任何自动化请求。
+// @description  在任意 OJ 题目页，通过篡改猴（Tampermonkey）扩展菜单「复制题面到 SOJ 剪贴板」，回 SOJ 建题/编辑页的「粘贴导入」即可回填题面。仅在本浏览器内复制，不产生任何自动化请求。
 // @match        *://*/*
 // @exclude      %s/*
 // @grant        GM_setClipboard
@@ -88,12 +88,12 @@ const userscriptTmpl = `// ==UserScript==
         toast('题面已复制，回 SOJ「粘贴导入」即可', true);
       }, function () {
         GM_setClipboard(html, 'html');
-        toast('题面已复制（油猴通道）', true);
+        toast('题面已复制（扩展通道）', true);
       });
       return;
     }
     GM_setClipboard(html, 'html');
-    toast('题面已复制（油猴通道）', true);
+    toast('题面已复制（扩展通道）', true);
   }
 
   GM_registerMenuCommand('复制题面到 SOJ 剪贴板', function () {
