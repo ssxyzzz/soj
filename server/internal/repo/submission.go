@@ -12,15 +12,32 @@ import (
 
 // 判题状态（submissions.status 存储这些字符串）
 const (
-	StatusPending      = "Pending"
-	StatusJudging      = "Judging"
-	StatusAccepted     = "Accepted"
-	StatusWrongAnswer  = "Wrong Answer"
-	StatusCompileError = "Compile Error"
-	StatusTLE          = "Time Limit Exceeded"
-	StatusMLE          = "Memory Limit Exceeded"
-	StatusRE           = "Runtime Error"
-	StatusSystemError  = "System Error"
+	StatusPending         = "Pending"
+	StatusJudging         = "Judging"
+	StatusCancelRequested = "CancelRequested" // 取消评测两阶段协议的中间态：判题循环见标记即停
+	StatusCancelled       = "Cancelled"       // 取消评测终态：得分 0，不加分不进榜
+	StatusAccepted        = "Accepted"
+	StatusWrongAnswer     = "Wrong Answer"
+	StatusCompileError    = "Compile Error"
+	StatusTLE             = "Time Limit Exceeded"
+	StatusMLE             = "Memory Limit Exceeded"
+	StatusRE              = "Runtime Error"
+	StatusSystemError     = "System Error"
+)
+
+// 队列优先级三档（v0.7.1 内置不对外暴露）：学生新提交 > 单条重测 > 批量重测。
+const (
+	PriorityHigh = 10 // 学生新提交
+	PriorityMid  = 5  // 单条重测
+	PriorityLow  = 1  // 批量重测（按题/按赛）
+)
+
+// 租约参数：判题循环每 5s 心跳一次，Web 进程每 30s 扫描，
+// Judging 且心跳超过 120s 视为判题器失联，回收重排队。
+const (
+	HeartbeatInterval  = 5 * time.Second
+	LeaseStaleAfter    = 120 * time.Second
+	ReclaimScanEvery   = 30 * time.Second
 )
 
 // CaseResult 单个测试点结果（状态缩写: AC/WA/TLE/MLE/RE/OLE/SE）。
@@ -53,6 +70,8 @@ type Submission struct {
 	Detail       []*CaseResult `bson:"detail,omitempty"`
 	Judge        string        `bson:"judge,omitempty"`
 	ClaimedAt    time.Time     `bson:"claimedAt,omitempty"`
+	HeartbeatAt  *time.Time    `bson:"heartbeatAt,omitempty"` // 租约心跳（v0.7.1）：判题中周期刷新，超时由回收者重排队
+	Priority     int           `bson:"priority"`              // 队列优先级：领取按其降序（v0.7.1）
 	CreatedAt    time.Time     `bson:"createdAt"`
 	JudgedAt     *time.Time    `bson:"judgedAt,omitempty"`
 }
@@ -67,7 +86,7 @@ func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p 
 		"_id": sid, "uid": uid, "uname": uname,
 		"pid": p.ID, "ptitle": p.Title,
 		"lang": lang, "code": code, "status": StatusPending,
-		"score": 0, "timeMs": 0, "memKb": 0, "createdAt": time.Now(),
+		"score": 0, "timeMs": 0, "memKb": 0, "priority": PriorityHigh, "createdAt": time.Now(),
 	}
 	switch {
 	case contest != nil:
@@ -90,14 +109,17 @@ func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p 
 
 // ClaimSubmission 原子领取一条待判提交：Pending -> Judging。
 // 数据库原子性保证多个判题线程/进程不会领到同一份提交（见 DEVELOPMENT.md 判题调度）。
+// 领取按优先级降序（学生新提交 > 单条重测 > 批量重测），同档按先来先服务。
 // 无待判任务时返回 (nil, nil)。
 func (r *Repo) ClaimSubmission(ctx context.Context, judgeName string) (*Submission, error) {
+	now := time.Now()
 	var s Submission
 	err := r.Submissions.FindOneAndUpdate(ctx,
 		bson.M{"status": StatusPending},
-		bson.M{"$set": bson.M{"status": StatusJudging, "judge": judgeName, "claimedAt": time.Now()}},
+		bson.M{"$set": bson.M{"status": StatusJudging, "judge": judgeName, "claimedAt": now, "heartbeatAt": now}},
 		options.FindOneAndUpdate().
-			SetSort(bson.D{{Key: "_id", Value: 1}}).
+			// bson.D 保序：多键排序必须显式有序（bson.M 键序随机）
+			SetSort(bson.D{{Key: "priority", Value: -1}, {Key: "_id", Value: 1}}).
 			SetReturnDocument(options.After),
 	).Decode(&s)
 	if IsNotFound(err) {
@@ -109,8 +131,12 @@ func (r *Repo) ClaimSubmission(ctx context.Context, judgeName string) (*Submissi
 	return &s, nil
 }
 
-// FinishSubmission 回写最终结果。
-func (r *Repo) FinishSubmission(ctx context.Context, sid int64, status string, timeMS, memKB, score int, errorInfo string, detail []*CaseResult) error {
+// ErrLeaseLost 租约已失效（提交被回收者重排队或已转入取消流程），当前判题器的回写被拒。
+var ErrLeaseLost = errors.New("submission lease lost")
+
+// FinishSubmission 回写最终结果（v0.7.1 起带租约条件：judge 必须仍是本判题器）。
+// 提交被回收者重排队（或已被他人重新领取）后，旧判题器的迟到回写直接失效，防双判。
+func (r *Repo) FinishSubmission(ctx context.Context, sid int64, judgeName, status string, timeMS, memKB, score int, errorInfo string, detail []*CaseResult) error {
 	now := time.Now()
 	set := bson.M{
 		"status": status, "timeMs": timeMS, "memKb": memKB,
@@ -124,19 +150,113 @@ func (r *Repo) FinishSubmission(ctx context.Context, sid int64, status string, t
 	if detail != nil {
 		set["detail"] = detail
 	}
-	_, err := r.Submissions.UpdateOne(ctx, bson.M{"_id": sid}, bson.M{"$set": set})
+	res, err := r.Submissions.UpdateOne(ctx,
+		bson.M{"_id": sid, "judge": judgeName}, bson.M{"$set": set})
+	if err == nil && res.MatchedCount == 0 {
+		return ErrLeaseLost
+	}
 	return err
+}
+
+// HeartbeatSubmission 刷新判题租约心跳；仅当提交仍由该判题器持有时生效。
+func (r *Repo) HeartbeatSubmission(ctx context.Context, sid int64, judgeName string) error {
+	_, err := r.Submissions.UpdateOne(ctx,
+		bson.M{"_id": sid, "status": StatusJudging, "judge": judgeName},
+		bson.M{"$set": bson.M{"heartbeatAt": time.Now()}})
+	return err
+}
+
+// SubmissionLease 查询提交当前状态与租约归属（判题循环在测试点之间做取消/回收检查）：
+// held = judge 字段仍是本判题器（false 表示租约已被回收者收走，应放弃本次判题）。
+func (r *Repo) SubmissionLease(ctx context.Context, sid int64, judgeName string) (status string, held bool, err error) {
+	var row struct {
+		Status string `bson:"status"`
+		Judge  string `bson:"judge"`
+	}
+	if err := r.Submissions.FindOne(ctx, bson.M{"_id": sid},
+		options.FindOne().SetProjection(bson.M{"status": 1, "judge": 1})).Decode(&row); err != nil {
+		return "", false, err
+	}
+	return row.Status, row.Judge == judgeName, nil
+}
+
+// ReclaimExpiredLeases 回收心跳超时的租约（Web 进程周期调用）：
+//   - Judging 失联 -> 重置 Pending 重新排队（重置 judge/claimedAt/heartbeatAt）；
+//   - CancelRequested 失联 -> 直接终态 Cancelled（用户已要求取消，不重排队）。
+func (r *Repo) ReclaimExpiredLeases(ctx context.Context, staleBefore time.Time) (requeued, cancelled int64, err error) {
+	stale := bson.M{"$or": bson.A{
+		bson.M{"heartbeatAt": bson.M{"$lt": staleBefore}},
+		bson.M{"heartbeatAt": bson.M{"$exists": false}}, // 升级前的存量 Judging（Bootstrap 已兜底重排队）
+	}}
+	unset := bson.M{"judge": "", "claimedAt": "", "heartbeatAt": ""}
+	res, err := r.Submissions.UpdateMany(ctx,
+		bson.M{"status": StatusCancelRequested, "$or": stale["$or"]},
+		bson.M{"$set": bson.M{
+			"status": StatusCancelled, "score": 0, "errorInfo": "已取消评测（判题器失联，由系统回收）",
+			"judgedAt": time.Now(),
+		}, "$unset": unset})
+	if err != nil {
+		return 0, 0, err
+	}
+	cancelled = res.ModifiedCount
+	res, err = r.Submissions.UpdateMany(ctx,
+		bson.M{"status": StatusJudging, "$or": stale["$or"]},
+		bson.M{"$set": bson.M{"status": StatusPending}, "$unset": unset})
+	if err != nil {
+		return 0, cancelled, err
+	}
+	return res.ModifiedCount, cancelled, nil
+}
+
+// ErrNotCancellable 提交已出结果（终态），无法取消。
+var ErrNotCancellable = errors.New("submission is not cancellable")
+
+// RequestCancelSubmission 取消评测两阶段协议（本人 ∨ submission.view.all）：
+//   - Pending：直接终态 Cancelled（清掉上一轮遗留的耗时/明细）；
+//   - Judging / CancelRequested：置 CancelRequested，判题循环在测试点之间见标记即停
+//     并写终态 Cancelled；若判题器失联则由回收者兜底置 Cancelled。
+//
+// 返回提交进入的状态（StatusCancelled / StatusCancelRequested）。
+func (r *Repo) RequestCancelSubmission(ctx context.Context, sid int64) (string, error) {
+	err := r.Submissions.FindOneAndUpdate(ctx,
+		bson.M{"_id": sid, "status": StatusPending},
+		bson.M{"$set": bson.M{
+			"status": StatusCancelled, "score": 0, "timeMs": 0, "memKb": 0,
+			"errorInfo": "已取消评测", "judgedAt": time.Now(),
+		}, "$unset": bson.M{"detail": "", "judge": "", "claimedAt": "", "heartbeatAt": ""}},
+	).Err()
+	if err == nil {
+		return StatusCancelled, nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return "", err
+	}
+	err = r.Submissions.FindOneAndUpdate(ctx,
+		bson.M{"_id": sid, "status": bson.M{"$in": bson.A{StatusJudging, StatusCancelRequested}}},
+		bson.M{"$set": bson.M{"status": StatusCancelRequested}},
+	).Err()
+	if err == nil {
+		return StatusCancelRequested, nil
+	}
+	if !errors.Is(err, mongo.ErrNoDocuments) {
+		return "", err
+	}
+	// 非队列态：区分「已出结果」与「不存在」
+	if r.Submissions.FindOne(ctx, bson.M{"_id": sid}).Err() == nil {
+		return "", ErrNotCancellable
+	}
+	return "", mongo.ErrNoDocuments
 }
 
 // ErrJudging 提交正在评测中，不可重测。
 var ErrJudging = errors.New("submission is being judged")
 
-// RejudgeSubmission 重测：把一条非评测中的提交重置为 Pending，交还判题线程池自动领取重评。
-// 评测中的提交返回 ErrJudging；不存在返回 mongo.ErrNoDocuments。
+// RejudgeSubmission 重测：把一条非评测中的提交重置为 Pending（中优先级），交还判题线程池自动领取重评。
+// 评测中（含已请求取消、正在收尾）的提交返回 ErrJudging；不存在返回 mongo.ErrNoDocuments。
 func (r *Repo) RejudgeSubmission(ctx context.Context, id int64) error {
 	err := r.Submissions.FindOneAndUpdate(ctx,
-		bson.M{"_id": id, "status": bson.M{"$nin": bson.A{StatusPending, StatusJudging}}},
-		bson.M{"$set": bson.M{"status": StatusPending}},
+		bson.M{"_id": id, "status": bson.M{"$nin": bson.A{StatusPending, StatusJudging, StatusCancelRequested}}},
+		bson.M{"$set": bson.M{"status": StatusPending, "priority": PriorityMid}},
 	).Err()
 	if err == nil {
 		return nil
@@ -148,6 +268,37 @@ func (r *Repo) RejudgeSubmission(ctx context.Context, id int64) error {
 		}
 	}
 	return err
+}
+
+// inFlight 队列态全集：批量重测只重置已出结果的提交，避免与在途评测打架。
+var inFlight = bson.A{StatusPending, StatusJudging, StatusCancelRequested}
+
+// RejudgeProblem 按题批量重测（低优先级）：本题全部已出结果的提交重置 Pending，
+// 只在判题空闲容量里消化，不挤占学生新提交。返回重置条数。
+func (r *Repo) RejudgeProblem(ctx context.Context, pid int64) (int64, error) {
+	res, err := r.Submissions.UpdateMany(ctx,
+		bson.M{"pid": pid, "status": bson.M{"$nin": inFlight}},
+		bson.M{"$set": bson.M{"status": StatusPending, "priority": PriorityLow}})
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
+// RejudgeRound 按赛批量重测（低优先级）：一场比赛/考试的全部提交重置 Pending。
+// kind 取 KindContest / KindExam。返回重置条数。
+func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64, error) {
+	field := "contestId"
+	if kind == KindExam {
+		field = "examId"
+	}
+	res, err := r.Submissions.UpdateMany(ctx,
+		bson.M{field: rid, "status": bson.M{"$nin": inFlight}},
+		bson.M{"$set": bson.M{"status": StatusPending, "priority": PriorityLow}})
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
 }
 
 func (r *Repo) GetSubmission(ctx context.Context, id int64) (*Submission, error) {

@@ -40,7 +40,40 @@ type Judger struct {
 	Repo     *repo.Repo
 	Sandbox  *sandbox.Client
 	Provider testdata.Provider
-	Name     string // 判题进程标识，写入提交便于排查
+	Name     string  // 判题进程标识，写入提交便于排查
+	Waker    *Waker  // 提交即时唤醒（v0.7.1）：Web 进程入队后非阻塞通知，空闲 worker 近零延迟领取
+}
+
+// Waker 提交入队的即时唤醒信号（Web+判题同进程部署形态下的近零延迟领取；
+// --judge-only 多进程形态收不到信号，判题循环仍靠 1s 轮询兜底）。
+type Waker struct{ ch chan struct{} }
+
+// NewWaker 建 n 容量的信号通道（n = worker 数即可：忙时丢弃、空闲必有接盘者）。
+func NewWaker(n int) *Waker {
+	if n < 1 {
+		n = 1
+	}
+	return &Waker{ch: make(chan struct{}, n)}
+}
+
+// Notify 非阻塞发信号：通道满（所有 worker 都被占满/已被唤醒）直接丢弃，
+// worker 空闲后本就会领取任务，不丢单。
+func (w *Waker) Notify() {
+	if w == nil {
+		return
+	}
+	select {
+	case w.ch <- struct{}{}:
+	default:
+	}
+}
+
+// C 返回信号通道；nil Waker 返回 nil（select 恒阻塞，等效关闭该分支）。
+func (w *Waker) C() <-chan struct{} {
+	if w == nil {
+		return nil
+	}
+	return w.ch
 }
 
 // Pool 启动 workers 个判题循环，直到 ctx 取消。
@@ -68,32 +101,96 @@ func (j *Judger) loop(ctx context.Context, worker int) {
 			continue
 		}
 		if sub == nil {
-			sleepCtx(ctx, pollInterval)
+			// 空闲：等唤醒信号（同进程 Web 入队即醒）或 1s 轮询兜底
+			select {
+			case <-ctx.Done():
+				return
+			case <-j.Waker.C():
+			case <-time.After(pollInterval):
+			}
 			continue
 		}
 		j.runOneSafely(ctx, sub)
 	}
 }
 
+// statusLeaseLost 内部哨兵：租约已被回收者收走（或提交已转入取消流程），
+// 本次判题结果弃写——runOneSafely 见此值直接跳过回写。
+const statusLeaseLost = "(lease lost)"
+
 // runOneSafely 单份提交的判题互相隔离：任何 panic 只影响当前提交。
+// 全程持有租约心跳（LeaseStaleAfter 内不刷新即会被 Web 进程回收重排队）。
 func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
+	stopHB := make(chan struct{})
+	go j.heartbeatLoop(ctx, sub, stopHB)
 	defer func() {
+		close(stopHB)
 		if r := recover(); r != nil {
 			log.Printf("[judge] 提交 #%d 判题 panic: %v", sub.ID, r)
-			_ = j.Repo.FinishSubmission(ctx, sub.ID, repo.StatusSystemError, 0, 0, 0,
+			_ = j.Repo.FinishSubmission(ctx, sub.ID, sub.Judge, repo.StatusSystemError, 0, 0, 0,
 				"判题器内部错误", nil)
 		}
 	}()
 
 	log.Printf("[judge] 开始判题 #%d uid=%d pid=%d lang=%s", sub.ID, sub.UID, sub.ProblemID, sub.Language)
 	status, timeMS, memKB, score, info, detail := j.evaluate(ctx, sub)
-	if err := j.Repo.FinishSubmission(ctx, sub.ID, status, timeMS, memKB, score, info, detail); err != nil {
-		log.Printf("[judge] 回写提交 #%d 结果失败: %v", sub.ID, err)
+	if status == statusLeaseLost {
+		log.Printf("[judge] 提交 #%d 租约已失效，弃写结果", sub.ID)
+		return
+	}
+	if err := j.Repo.FinishSubmission(ctx, sub.ID, sub.Judge, status, timeMS, memKB, score, info, detail); err != nil {
+		if errors.Is(err, repo.ErrLeaseLost) {
+			log.Printf("[judge] 提交 #%d 回写被拒（租约已转移/回收），弃写", sub.ID)
+		} else {
+			log.Printf("[judge] 回写提交 #%d 结果失败: %v", sub.ID, err)
+		}
+		return
 	}
 	log.Printf("[judge] 提交 #%d => %s (%dms / %dKB / %d分)", sub.ID, status, timeMS, memKB, score)
 }
 
+// heartbeatLoop 判题租约心跳：每 HeartbeatInterval 刷一次 heartbeatAt，
+// 覆盖编译与单个长测试点等「点间空隙」之外的时段。stop 关闭即退出。
+func (j *Judger) heartbeatLoop(ctx context.Context, sub *repo.Submission, stop chan struct{}) {
+	t := time.NewTicker(repo.HeartbeatInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			hctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			if err := j.Repo.HeartbeatSubmission(hctx, sub.ID, sub.Judge); err != nil {
+				log.Printf("[judge] 提交 #%d 心跳失败: %v", sub.ID, err)
+			}
+			cancel()
+		}
+	}
+}
+
+// checkStop 测试点之间的取消/租约检查。返回 cancelRequested 表示用户已请求取消
+// （调用方停止评测并写终态 Cancelled）；leaseLost 表示租约已被回收者收走（弃写）。
+// 查询失败时保守继续评测（不因瞬时抖动误杀）。
+func (j *Judger) checkStop(ctx context.Context, sub *repo.Submission) (cancelRequested, leaseLost bool) {
+	status, held, err := j.Repo.SubmissionLease(ctx, sub.ID, sub.Judge)
+	if err != nil {
+		return false, false
+	}
+	if !held {
+		return false, true
+	}
+	return status == repo.StatusCancelRequested, false
+}
+
+// cancelledResult 取消时的回写内容：已跑测试点的耗时/内存如实保留，得分 0。
+func cancelledResult(st *evalState) (string, int, int, int, string, []*repo.CaseResult) {
+	return repo.StatusCancelled, st.sumTimeMS, st.sumMemKB, 0, "已取消评测", st.detail
+}
+
 // evaluate 完整评测一份提交，按题目配置选择计分方式。
+// 每个测试点之间检查取消请求与租约：取消即停（终态 Cancelled），租约丢失弃写。
 func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	language, ok := lang.Languages[sub.Language]
 	if !ok {
@@ -105,6 +202,11 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 	}
 	if len(problem.Cases) == 0 {
 		return repo.StatusSystemError, 0, 0, 0, "题目没有测试数据", nil
+	}
+	if cancelReq, lost := j.checkStop(ctx, sub); lost {
+		return statusLeaseLost, 0, 0, 0, "", nil
+	} else if cancelReq {
+		return repo.StatusCancelled, 0, 0, 0, "已取消评测", nil
 	}
 
 	var fileID string
@@ -118,6 +220,12 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 		}
 		fileID = id
 		defer j.releaseBinary(fileID)
+		// 编译可能耗时数十秒，编译完再查一次取消/租约
+		if cancelReq, lost := j.checkStop(ctx, sub); lost {
+			return statusLeaseLost, 0, 0, 0, "", nil
+		} else if cancelReq {
+			return repo.StatusCancelled, 0, 0, 0, "已取消评测", nil
+		}
 	}
 
 	cmp := newOutputComparer(problem)
@@ -140,9 +248,9 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 	}
 
 	if len(problem.Subtasks) > 0 {
-		return j.evaluateSubtasks(ctx, language, fileID, sub.Code, problem, cmp, chk, fio)
+		return j.evaluateSubtasks(ctx, sub, language, fileID, sub.Code, problem, cmp, chk, fio)
 	}
-	return j.evaluatePoints(ctx, language, fileID, sub.Code, problem, cmp, chk, fio)
+	return j.evaluatePoints(ctx, sub, language, fileID, sub.Code, problem, cmp, chk, fio)
 }
 
 // evalState 评测过程中的累计状态。提交级耗时/内存为各测试点之**和**（总耗时/总内存）。
@@ -310,12 +418,19 @@ func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.R
 
 // evaluatePoints 单点等分模式：每点 100/n 分。超时（TLE）只判失当前点、继续评测后续点
 // （得分=通过点数×100/n，首个 TLE 点作为整卷状态）；其余失败维持首个失败即终止的历史行为。
-func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	st := &evalState{}
 	n := len(problem.Cases)
 	passed := 0
 	tleIdx := 0 // 首个超时点（1 基，0 = 无）
 	for i, tc := range problem.Cases {
+		// 每个测试点之间检查取消/租约：取消即停（已跑点如实入明细，得分 0）；
+		// 放在点前而非点后——最后一个测点跑完的完整结果不被迟到取消回滚
+		if cancelReq, lost := j.checkStop(ctx, sub); lost {
+			return statusLeaseLost, 0, 0, 0, "", nil
+		} else if cancelReq {
+			return cancelledResult(st)
+		}
 		res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 		if err != nil {
 			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(i, n),
@@ -353,7 +468,7 @@ func (j *Judger) evaluatePoints(ctx context.Context, language *lang.Language, fi
 
 // evaluateSubtasks 子任务模式：组内测试点全过才得该组分；组内失败跳过该组剩余点继续下一组。
 // 总分 100 判 Accepted；否则以第一个失败点的状态作为整份提交状态（保留部分分）。
-func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	byIndex := map[int]repo.CaseMeta{}
 	for _, tc := range problem.Cases {
 		byIndex[tc.Index] = tc
@@ -369,6 +484,12 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, language *lang.Language, 
 			if !ok {
 				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					"子任务配置引用了不存在的测试点", st.detail
+			}
+			// 每个测试点之间检查取消/租约（同单点模式：点前检查，末点结果不回滚）
+			if cancelReq, lost := j.checkStop(ctx, sub); lost {
+				return statusLeaseLost, 0, 0, 0, "", nil
+			} else if cancelReq {
+				return cancelledResult(st)
 			}
 			res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 			if err != nil {

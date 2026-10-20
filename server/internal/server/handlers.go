@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/config"
+	"soj/internal/judge"
 	"soj/internal/repo"
 	"soj/internal/sandbox"
 	"soj/internal/testdata"
@@ -26,12 +27,20 @@ type Handlers struct {
 	repo    *repo.Repo
 	sandbox *sandbox.Client
 	store   testdata.Provider // 测试数据读取（题目样例展示用）
+	waker   *judge.Waker      // 提交即时唤醒（v0.7.1）：判题同进程时空闲 worker 近零延迟领取
 	rank    *rankCache
 	limiter *rateLimiter
 	idents  *identCache
 
 	leaderMu    sync.Mutex
 	leaderCache map[string]leaderEntry
+}
+
+// wakeJudge 提交/重测入队后唤醒判题 worker（多进程部署收不到，靠 1s 轮询兜底）。
+func (h *Handlers) wakeJudge() {
+	if h.waker != nil {
+		h.waker.Notify()
+	}
 }
 
 // 统一响应格式: 成功 {"code":0,"data":...}，失败 {"code":1,"message":"..."}

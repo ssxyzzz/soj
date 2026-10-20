@@ -8,6 +8,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { authApi, contestApi, examApi, type RoundKind } from '@/api'
 import { downloadCsv } from '@/api/download'
+import { judgeQueueApi } from '@/api/judgeQueue'
 import EditRoundDialog from '@/components/EditRoundDialog.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -234,6 +235,29 @@ async function remove() {
   router.push(props.kind === 'exam' ? `/classes/${round.value.class_id}` : '/contests')
 }
 
+// 批量重测（v0.7.1）：本场全部已出结果的提交低优先级重排队，不挤占学生新提交
+const rejudgeAllRunning = ref(false)
+async function rejudgeAll() {
+  const r = round.value
+  if (!r || rejudgeAllRunning.value) return
+  try {
+    await ElMessageBox.confirm(
+      `将把本场${name.value}所有已出结果的提交重新评测（低优先级，不影响学生新提交的评测顺序），确定？`,
+      '批量重测',
+      { type: 'warning', confirmButtonText: '批量重测', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  rejudgeAllRunning.value = true
+  try {
+    const res = await judgeQueueApi.rejudgeRound(props.kind, r.id)
+    ElMessage.success(res.count > 0 ? `已加入重测队列：${res.count} 条` : '本场没有可重测的提交')
+  } finally {
+    rejudgeAllRunning.value = false
+  }
+}
+
 onMounted(() => {
   tagStore.ensure() // 标签名映射异步就绪，题目表标签列响应式跟随
   if (userStore.token) {
@@ -362,6 +386,7 @@ onUnmounted(() => {
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit('full')">编辑{{ name }}</el-button>
             <el-button type="success" style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
+            <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">重测本场提交</el-button>
             <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">删除{{ name }}</el-button>
           </div>
           <div class="scene-row">

@@ -12,6 +12,8 @@ export interface StatusStyle {
 const statusMap: Record<string, StatusStyle> = {
   Pending: { label: '排队中', type: 'info', dot: 'gray', abbr: 'Pending' },
   Judging: { label: '判题中', type: 'warning', dot: 'blue', abbr: 'Judging' },
+  CancelRequested: { label: '取消中', type: 'warning', dot: 'blue', abbr: 'Cancel' },
+  Cancelled: { label: '已取消', type: 'info', dot: 'gray', abbr: 'Cancelled' },
   Accepted: { label: '通过', type: 'success', dot: 'green', abbr: 'AC' },
   'Wrong Answer': { label: '答案错误', type: 'danger', dot: 'red', abbr: 'WA' },
   'Compile Error': { label: '编译错误', type: 'danger', dot: 'gray', abbr: 'CE' },
@@ -39,6 +41,8 @@ export interface StatusDoc {
 const statusDocMap: Record<string, StatusDoc> = {
   Pending: { meaning: '排队中，等待评测' },
   Judging: { meaning: '正在评测' },
+  CancelRequested: { meaning: '已请求取消，评测将在当前测试点结束后停止' },
+  Cancelled: { meaning: '提交已被取消，得分 0，不参与计分' },
   Accepted: { meaning: '通过，拿到满分' },
   'Wrong Answer': {
     meaning: '答案错误',
@@ -73,6 +77,12 @@ const statusDocMap: Record<string, StatusDoc> = {
 // 取某状态的悬停说明；未知状态返回 undefined（标签按原文展示）。
 export function statusDesc(status: string): StatusDoc | undefined {
   return statusDocMap[status]
+}
+
+// 队列态（未出结果）：排队/评测中/已请求取消。轮询「判题完成」的统一判据，
+// 误把 CancelRequested 当终态会在取消收尾期间提前停止轮询。
+export function isQueueStatus(status?: string): boolean {
+  return status === 'Pending' || status === 'Judging' || status === 'CancelRequested'
 }
 
 export function statusStyle(status: string): StatusStyle {

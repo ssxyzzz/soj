@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/config"
+	"soj/internal/judge"
 	"soj/internal/repo"
 	"soj/internal/sandbox"
 )
@@ -21,6 +22,7 @@ type Deps struct {
 	Cfg     *config.Config
 	Repo    *repo.Repo
 	Sandbox *sandbox.Client
+	Waker   *judge.Waker // 提交入队即时唤醒判题 worker（判题同进程时非空）
 }
 
 // Run 启动 HTTP 服务（阻塞直至 ctx 取消或监听失败）。
@@ -34,6 +36,7 @@ func Run(ctx context.Context, deps *Deps) {
 		cfg:         cfg,
 		repo:        deps.Repo,
 		sandbox:     deps.Sandbox,
+		waker:       deps.Waker,
 		rank:        newRankCache(deps.Repo),
 		limiter:     newRateLimiter(),
 		idents:      newIdentCache(),
@@ -66,6 +69,8 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/submissions", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.ListSubmissions)
 		api.GET("/submissions/:id", AuthOptional(h), h.GetSubmission)
 		api.POST("/submissions/:id/rejudge", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.RejudgeSubmission)
+		// 取消评测（v0.7.1）：本人 ∨ submission.view.all（handler 内校验）
+		api.POST("/submissions/:id/cancel", AuthRequired(h), h.CancelSubmission)
 
 		api.GET("/rank", h.Rank)
 		api.GET("/notice", h.GetNotice)
@@ -95,6 +100,8 @@ func Run(ctx context.Context, deps *Deps) {
 			// 题目 URL 导入预览（v0.6.1）：建题/编辑页弹窗回填题面（不落库，zip 仍由老师上传）
 			authed.POST("/import/preview", RequirePermAny(repo.PermProblemCreate, repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ImportPreview)
 			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
+			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
+			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)
 			authed.POST("/problems/:id/testdata", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ReplaceProblemTestdata)
 			authed.POST("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateChecker)
 			authed.DELETE("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveChecker)
@@ -153,8 +160,11 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
 			authed.GET("/exams/:id/export", h.ExamExport) // 成绩导出 CSV（v0.5.6）
-			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
-			authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
+				authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
+				authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
+				// 按赛批量重测（v0.7.1）：组织者才可（handler 内校验）
+				authed.POST("/contests/:id/rejudge-all", h.RejudgeContest)
+				authed.POST("/exams/:id/rejudge-all", h.RejudgeExam)
 
 			// 题目编辑：edit.all 或 edit.own（属主校验在 handler 内）
 			authed.PATCH("/problems/:id/hidden", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemHidden)

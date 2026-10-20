@@ -77,6 +77,8 @@ func (r *Repo) Ping(ctx context.Context) error { return r.cli.Ping(ctx, nil) }
 func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	_, err := r.Submissions.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "_id", Value: 1}}},
+		// v0.7.1 队列领取排序：优先级降序 + 先来先服务（批量重测不挤占学生新提交）
+		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "priority", Value: -1}, {Key: "_id", Value: 1}}},
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "contestId", Value: 1}, {Key: "uid", Value: 1}}},
@@ -114,10 +116,18 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		return err
 	}
 
+	// v0.7.1 队列优先级回填：存量提交补默认高档（幂等，只有升级后首次有改动）
+	if res, err := r.Submissions.UpdateMany(ctx,
+		bson.M{"priority": bson.M{"$exists": false}},
+		bson.M{"$set": bson.M{"priority": PriorityHigh}}); err == nil && res.ModifiedCount > 0 {
+		log.Printf("[boot] 已为 %d 条存量提交补队列优先级默认值", res.ModifiedCount)
+	}
+
 	// 遗留的 Judging（进程被杀时没判完）重新排队
 	res, err := r.Submissions.UpdateMany(ctx,
 		bson.M{"status": "Judging"},
-		bson.M{"$set": bson.M{"status": "Pending"}, "$unset": bson.M{"judge": "", "claimedAt": ""}})
+		bson.M{"$set": bson.M{"status": "Pending"},
+			"$unset": bson.M{"judge": "", "claimedAt": "", "heartbeatAt": ""}})
 	if err == nil && res.ModifiedCount > 0 {
 		log.Printf("[boot] 已把 %d 条遗留 Judging 提交重新排队", res.ModifiedCount)
 	}

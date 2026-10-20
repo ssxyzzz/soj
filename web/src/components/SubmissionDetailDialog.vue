@@ -3,12 +3,14 @@
 // 数据来源二选一：submissionId（按需拉取 /submissions/:id，可见性由后端判定）或
 // submission（列表已带代码与明细时直接传入，避免多余请求）。
 // 教师级权限（submission.view.all）可重测：重置 Pending 交还判题池，轮询至终态。
+// v0.7.1：队列态（排队/评测/取消中）可取消评测——本人 ∨ submission.view.all。
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { submissionApi } from '@/api'
+import { judgeQueueApi } from '@/api/judgeQueue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, isQueueStatus, statusDesc } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
 import type { Submission } from '@/types'
 
@@ -27,14 +29,22 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 const userStore = useUserStore()
 const loading = ref(false)
 const detail = ref<Submission | null>(null)
-const polled = ref<Submission | null>(null) // 重测轮询拿到的最新数据（优先于传入的列表快照）
+const polled = ref<Submission | null>(null) // 重测/取消轮询拿到的最新数据（优先于传入的列表快照）
 const rejudging = ref(false)
+const cancelling = ref(false)
 let pollToken = 0
 
 const sub = computed<Submission | null>(() => polled.value ?? props.submission ?? detail.value)
 const heading = computed(() => props.title || (sub.value ? `评测详情 #${sub.value.id}` : '评测详情'))
 const canRejudge = computed(() => userStore.can('submission.view.all'))
-const judging = computed(() => sub.value?.status === 'Pending' || sub.value?.status === 'Judging')
+const judging = computed(() => isQueueStatus(sub.value?.status))
+// 取消评测：仅队列态（排队/评测/取消中）且 本人 ∨ 查看全部提交
+const canCancel = computed(
+  () =>
+    judging.value &&
+    !!sub.value &&
+    (sub.value.user_id === userStore.uid || userStore.can('submission.view.all')),
+)
 // 测试点按题目数据顺序展示（防后端返回顺序波动）；系统级错误（沙箱失败等）并入表尾明细行
 const sortedDetail = computed(() => {
   const rows = [...(sub.value?.detail ?? [])].sort((a, b) => a.index - b.index)
@@ -65,24 +75,51 @@ async function onRejudge() {
   try {
     await submissionApi.rejudge(id)
     ElMessage.success(`#${id} 已加入重测队列`)
-    pollUntilDone(id)
+    pollUntilDone(id, `#${id} 重测完成`)
   } finally {
     rejudging.value = false
   }
 }
 
-// 重测轮询：1.2s 一次拉详情，到终态停并提示
-function pollUntilDone(id: number) {
+async function onCancel() {
+  const s = sub.value
+  if (!s || cancelling.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定取消评测 #${s.id} 吗？取消后本次评测作废（得分 0），不可恢复。`,
+      '取消评测',
+      { type: 'warning', confirmButtonText: '取消评测', cancelButtonText: '再等等' },
+    )
+  } catch {
+    return
+  }
+  cancelling.value = true
+  try {
+    const r = await judgeQueueApi.cancel(s.id)
+    if (r.status === 'Cancelled') {
+      ElMessage.success(`#${s.id} 已取消`)
+      pollUntilDone(s.id, `#${s.id} 已取消`)
+    } else {
+      ElMessage.success(`#${s.id} 将在当前测试点结束后停止评测`)
+      pollUntilDone(s.id, `#${s.id} 已取消`)
+    }
+  } finally {
+    cancelling.value = false
+  }
+}
+
+// 轮询：1.2s 一次拉详情，到终态停并提示（重测/取消共用）
+function pollUntilDone(id: number, doneMsg: string) {
   const token = ++pollToken
   const tick = async () => {
     if (token !== pollToken || !props.modelValue) return
     try {
       const s = await submissionApi.get(id)
       polled.value = s
-      if (s.status === 'Pending' || s.status === 'Judging') {
+      if (isQueueStatus(s.status)) {
         window.setTimeout(tick, 1200)
       } else {
-        ElMessage.success(`#${id} 重测完成`)
+        ElMessage.success(doneMsg)
       }
     } catch {
       // 拉取失败已由拦截器提示，停止本轮轮询
@@ -133,6 +170,17 @@ watch(
               @click="onRejudge"
             >
               {{ judging ? '评测中' : '重测' }}
+            </el-button>
+            <el-button
+              v-if="canCancel"
+              link
+              type="danger"
+              size="small"
+              class="ml8"
+              :loading="cancelling"
+              @click="onCancel"
+            >
+              取消评测
             </el-button>
           </el-descriptions-item>
           <el-descriptions-item label="语言">{{ sub.language }}</el-descriptions-item>

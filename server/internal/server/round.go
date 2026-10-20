@@ -591,7 +591,28 @@ func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {
 		fail(c, http.StatusInternalServerError, "创建提交失败")
 		return
 	}
+	h.wakeJudge() // 即时唤醒空闲 worker（多进程部署靠 1s 轮询兜底）
 	ok(c, gin.H{"id": sid})
+}
+
+// RejudgeContest / RejudgeExam 按赛批量重测（v0.7.1，组织者）：本场全部已出结果的
+// 提交低优先级重排队，不挤占学生新提交。
+func (h *Handlers) RejudgeContest(c *gin.Context) { h.roundRejudgeAll(c, scopeContest) }
+
+func (h *Handlers) RejudgeExam(c *gin.Context) { h.roundRejudgeAll(c, scopeExam) }
+
+func (h *Handlers) roundRejudgeAll(c *gin.Context, s roundScope) {
+	ct, okR := h.roundOrganizerOnly(c, s)
+	if !okR {
+		return
+	}
+	n, err := h.repo.RejudgeRound(c.Request.Context(), s.Kind, ct.ID)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "批量重测失败")
+		return
+	}
+	h.wakeJudge()
+	ok(c, gin.H{"count": n})
 }
 
 // SubmitToContest 比赛页提交入口（赛时唯一接受该题提交的通道）。

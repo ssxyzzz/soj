@@ -3,9 +3,10 @@
 // 题解、我的提交、所有代码三个弹窗拆至 components/problem/*（自治拉数据）；编辑题目为独立路由页。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { problemApi, submissionApi } from '@/api'
+import { judgeQueueApi } from '@/api/judgeQueue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
@@ -15,7 +16,7 @@ import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
-import { statusStyle } from '@/utils/format'
+import { isQueueStatus, statusStyle } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
 
 const route = useRoute()
@@ -47,6 +48,29 @@ const lockRoute = computed(() => {
 const lockWhat = computed(() => (problem.value?.lock_kind === 'exam' ? '考试' : '比赛'))
 const canSetHidden = computed(() => !!problem.value?.can_set_hidden)
 const submitDisabled = computed(() => !userStore.token || lockedRunning.value || problem.value?.has_cases === false)
+
+// 批量重测（v0.7.1）：本题全部已出结果的提交低优先级重排队，不挤占学生新提交
+const rejudgeAllRunning = ref(false)
+async function rejudgeAll() {
+  const p = problem.value
+  if (!p || rejudgeAllRunning.value) return
+  try {
+    await ElMessageBox.confirm(
+      `将把本题所有已出结果的提交重新评测（低优先级，不影响学生新提交的评测顺序），确定？`,
+      '批量重测',
+      { type: 'warning', confirmButtonText: '批量重测', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  rejudgeAllRunning.value = true
+  try {
+    const r = await judgeQueueApi.rejudgeProblem(p.id)
+    ElMessage.success(r.count > 0 ? `已加入重测队列：${r.count} 条` : '本题没有可重测的提交')
+  } finally {
+    rejudgeAllRunning.value = false
+  }
+}
 const submitDisabledReason = computed(() => {
   if (problem.value?.has_cases === false) return '本题暂无数据，无法评测。请联系管理员上传数据'
   if (lockedRunning.value) return `${lockWhat.value}期间请从${lockWhat.value}页面提交`
@@ -172,7 +196,7 @@ function startPolling(id: number) {
   timer = setInterval(async () => {
     try {
       const s = await submissionApi.get(id)
-      if (s.status !== 'Pending' && s.status !== 'Judging') {
+      if (!isQueueStatus(s.status)) {
         stopPolling()
         mineDialogRef.value?.refresh()
         const st = statusStyle(s.status)
@@ -241,7 +265,10 @@ onUnmounted(stopPolling)
         <template #aside>
         <el-card v-if="problem.can_edit_statement" class="aside-card">
           <template #header><span>管理</span></template>
-          <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
+          <div class="entry-actions">
+            <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
+            <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题提交</el-button>
+          </div>
         </el-card>
 
         <el-card class="aside-card">

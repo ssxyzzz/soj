@@ -99,8 +99,11 @@ func main() {
 		}
 	}()
 
+	// 提交入队即时唤醒（v0.7.1）：Web+判题同进程时提交/重测后空闲 worker 近零延迟领取
+	waker := judge.NewWaker(cfg.JudgeWorkers)
+
 	// 判题线程池
-	jd := &judge.Judger{Repo: r, Sandbox: sb, Provider: store, Name: hostname()}
+	jd := &judge.Judger{Repo: r, Sandbox: sb, Provider: store, Name: hostname(), Waker: waker}
 	jd.Pool(ctx, cfg.JudgeWorkers)
 
 	if *judgeOnly {
@@ -108,7 +111,31 @@ func main() {
 		<-ctx.Done()
 		return
 	}
-	server.Run(ctx, &server.Deps{Cfg: cfg, Repo: r, Sandbox: sb})
+
+	// 判题租约回收者（v0.7.1，Web 进程内每 30s 一扫）：心跳超时的 Judging 重排队
+	// （卡死提交不再需要重启进程自愈）、失联的取消请求直接终态 Cancelled。
+	go func() {
+		ticker := time.NewTicker(repo.ReclaimScanEvery)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				requeued, cancelled, err := r.ReclaimExpiredLeases(ctx, time.Now().Add(-repo.LeaseStaleAfter))
+				if err != nil {
+					log.Printf("[judge] 租约回收失败: %v", err)
+					continue
+				}
+				if requeued+cancelled > 0 {
+					log.Printf("[judge] 租约回收：重排队 %d 条，转取消 %d 条", requeued, cancelled)
+					waker.Notify()
+				}
+			}
+		}
+	}()
+
+	server.Run(ctx, &server.Deps{Cfg: cfg, Repo: r, Sandbox: sb, Waker: waker})
 }
 
 func hostname() string {

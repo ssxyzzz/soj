@@ -106,6 +106,7 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "创建提交失败")
 		return
 	}
+	h.wakeJudge() // 即时唤醒空闲 worker（多进程部署靠 1s 轮询兜底）
 	log.Printf("[web] 用户 %s 提交 #%d (题目 %d, %s)", uname, id, req.ProblemID, req.Language)
 	ok(c, gin.H{"id": id})
 }
@@ -306,5 +307,79 @@ func (h *Handlers) RejudgeSubmission(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "重测失败")
 		return
 	}
+	h.wakeJudge()
 	ok(c, gin.H{"id": id})
+}
+
+// CancelSubmission 取消评测（v0.7.1 两阶段协议）：本人 ∨ submission.view.all。
+// Pending 直接终态 Cancelled；Judging 置 CancelRequested，判题循环在测试点之间停止。
+// 已出结果的提交返回 409。
+func (h *Handlers) CancelSubmission(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	ctx := c.Request.Context()
+	s, err := h.repo.GetSubmission(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "提交不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取提交失败")
+		return
+	}
+	if uid != s.UID && !hasPerm(c, repo.PermSubmissionViewAll) {
+		fail(c, http.StatusForbidden, "只能取消自己的提交")
+		return
+	}
+	status, err := h.repo.RequestCancelSubmission(ctx, id)
+	if errors.Is(err, repo.ErrNotCancellable) {
+		fail(c, http.StatusConflict, "该提交已出结果，无需取消")
+		return
+	}
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "提交不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "取消失败")
+		return
+	}
+	ok(c, gin.H{"id": id, "status": status})
+}
+
+// RejudgeProblem 按题批量重测（v0.7.1）：本题全部已出结果的提交低优先级重排队，
+// 只在判题空闲容量里消化。权限 = 题目可编辑（edit.all ∨ edit.own+属主）。
+func (h *Handlers) RejudgeProblem(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	ctx := c.Request.Context()
+	p, err := h.repo.GetProblem(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
+		return
+	}
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "无权管理该题目")
+		return
+	}
+	n, err := h.repo.RejudgeProblem(ctx, id)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "批量重测失败")
+		return
+	}
+	h.wakeJudge()
+	ok(c, gin.H{"count": n})
 }

@@ -14,7 +14,7 @@ import PageShell from '@/components/PageShell.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import { fmtDate, statusDesc } from '@/utils/format'
+import { fmtDate, isQueueStatus, statusDesc } from '@/utils/format'
 import type { ContestDetail, ContestMySubmission, ProblemDetail } from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
@@ -120,7 +120,7 @@ function pollRevealed(sid: number) {
   pollTimer = setInterval(async () => {
     await loadMine()
     const s = mine.value.find((x) => x.id === sid)
-    if (s && s.status && s.status !== 'Pending' && s.status !== 'Judging') {
+    if (s && s.status && !isQueueStatus(s.status)) {
       if (pollTimer) clearInterval(pollTimer)
     }
   }, 1500)

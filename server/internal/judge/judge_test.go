@@ -7,6 +7,34 @@ import (
 	"soj/internal/repo"
 )
 
+func TestWaker(t *testing.T) {
+	w := NewWaker(1)
+	w.Notify()
+	w.Notify() // 容量 1：满即丢弃
+	if len(w.C()) != 1 {
+		t.Fatalf("容量 1 的通道至多缓存 1 个信号，实际 %d", len(w.C()))
+	}
+	select {
+	case <-w.C():
+	default:
+		t.Fatal("应有信号可读")
+	}
+	// nil Waker：Notify 不 panic、C() 返回 nil（select 恒阻塞分支）
+	var nilW *Waker
+	nilW.Notify()
+	if nilW.C() != nil {
+		t.Fatal("nil Waker 的 C() 应返回 nil")
+	}
+	// select 含 nil 通道分支不阻塞其它分支
+	ch := make(chan struct{}, 1)
+	ch <- struct{}{}
+	select {
+	case <-nilW.C():
+		t.Fatal("nil 通道不应就绪")
+	case <-ch:
+	}
+}
+
 func TestNormalizeOutput(t *testing.T) {
 	got := normalizeOutput("1 2  \r\n3\n\n\n")
 	want := "1 2\n3"
