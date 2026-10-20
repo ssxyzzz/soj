@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, classApi, examApi, problemApi } from '@/api'
-import { dissolveClass } from '@/api/classManage'
+import { dissolveClass, transferClass } from '@/api/classManage'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import { fmtDate } from '@/utils/format'
@@ -139,6 +139,41 @@ async function leave() {
     await load()
   } finally {
     leaving.value = false
+  }
+}
+
+// 转让班级（v0.7.2，建班人 ∨ root）：从成员中选受让人，二次确认后换主；
+// 受让人成为新建班人，原建班人降为班级管理员
+const showTransfer = ref(false)
+const transferring = ref(false)
+const transferUid = ref<number | null>(null)
+const transferCandidates = computed(() =>
+  (cl.value?.members ?? []).filter((m) => !m.is_owner),
+)
+function openTransfer() {
+  transferUid.value = null
+  showTransfer.value = true
+}
+async function doTransfer() {
+  if (!cl.value || !transferUid.value || transferring.value) return
+  const target = transferCandidates.value.find((m) => m.uid === transferUid.value)
+  try {
+    await ElMessageBox.confirm(
+      `确定把班级「${cl.value.name}」转让给「${target?.username ?? '#' + transferUid.value}」吗？转让后对方将成为建班人，你将变为班级管理员。`,
+      '转让班级',
+      { type: 'warning', confirmButtonText: '确认转让', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  transferring.value = true
+  try {
+    await transferClass(cl.value.id, transferUid.value)
+    ElMessage.success('班级已转让')
+    showTransfer.value = false
+    await load()
+  } finally {
+    transferring.value = false
   }
 }
 
@@ -375,14 +410,7 @@ stripe
         </el-card>
 
       <template #aside>
-        <el-card class="aside-card">
-          <template #header><span>班级信息</span></template>
-          <div class="info-line"><span>成员</span><b>{{ cl.members?.length ?? '—' }}</b></div>
-          <div class="info-line"><span>作业</span><b>{{ assignmentsVisible ? assignments.length : '—' }}</b></div>
-          <div class="info-line"><span>考试</span><b>{{ examsVisible ? exams.length : '—' }}</b></div>
-          <div class="info-line"><span>创建时间</span><b class="small">{{ fmtDate(cl.created_at) }}</b></div>
-        </el-card>
-
+        <!-- 管理卡在信息卡上方（v0.7.2 验收调整）；按钮收尾定序：转让 → 解散 → 退出 -->
         <el-card v-if="cl.manageable" class="aside-card">
           <template #header><span>管理</span></template>
           <div class="entry-actions">
@@ -391,15 +419,22 @@ stripe
             <el-button plain style="width: 100%" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
             <el-button type="warning" plain style="width: 100%" @click="regenInvite">重置邀请码</el-button>
             <el-button
-              v-if="cl.leaveable"
-              :disabled="leaving"
-              type="danger"
+              :disabled="togglingPrivate"
+              type="info"
               plain
               style="width: 100%"
-              title="建班人在班级没有其他成员时可退出"
-              @click="leave"
+              title="仅建班人与 root 可切换"
+              @click="togglePrivate"
             >
-              退出班级
+              {{ cl.private ? '切换为公开班' : '切换为私密班' }}
+            </el-button>
+            <el-button
+              v-if="cl.owner_id === userStore.uid || userStore.role === 'root'"
+              type="warning"
+              style="width: 100%"
+              @click="openTransfer"
+            >
+              转让班级
             </el-button>
             <el-button
               v-if="cl.owner_id === userStore.uid || userStore.role === 'root'"
@@ -411,14 +446,15 @@ stripe
               解散班级
             </el-button>
             <el-button
-              :disabled="togglingPrivate"
-              type="info"
+              v-if="cl.leaveable"
+              :disabled="leaving"
+              type="danger"
               plain
               style="width: 100%"
-              title="仅建班人与 root 可切换"
-              @click="togglePrivate"
+              title="建班人在班级没有其他成员时可退出"
+              @click="leave"
             >
-              {{ cl.private ? '切换为公开班' : '切换为私密班' }}
+              退出班级
             </el-button>
           </div>
           <div class="dim tip">公开班所有人可见；私密班仅成员与 root/admin 可见</div>
@@ -431,8 +467,36 @@ stripe
         <el-card v-else-if="cl.joined" class="aside-card">
           <div class="dim tip">如需退出班级，请联系老师将你移出</div>
         </el-card>
+
+        <el-card class="aside-card">
+          <template #header><span>班级信息</span></template>
+          <div class="info-line"><span>成员</span><b>{{ cl.members?.length ?? '—' }}</b></div>
+          <div class="info-line"><span>作业</span><b>{{ assignmentsVisible ? assignments.length : '—' }}</b></div>
+          <div class="info-line"><span>考试</span><b>{{ examsVisible ? exams.length : '—' }}</b></div>
+          <div class="info-line"><span>创建时间</span><b class="small">{{ fmtDate(cl.created_at) }}</b></div>
+        </el-card>
       </template>
     </PageShell>
+
+    <el-dialog v-model="showTransfer" title="转让班级" width="480">
+      <el-form label-position="top">
+        <el-form-item label="选择新建班人（仅限班级成员）" required>
+          <el-select v-model="transferUid" filterable placeholder="从成员中选择受让人" style="width: 100%">
+            <el-option
+              v-for="m in transferCandidates"
+              :key="m.uid"
+              :value="m.uid"
+              :label="`#${m.uid} ${m.username}`"
+            />
+          </el-select>
+        </el-form-item>
+        <div class="dim tip">转让后对方成为建班人，你将变为班级管理员；转让需二次确认。</div>
+      </el-form>
+      <template #footer>
+        <el-button @click="showTransfer = false">取消</el-button>
+        <el-button type="warning" :loading="transferring" :disabled="!transferUid" @click="doTransfer">转让</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="showCreateAssignment" title="布置作业" width="560">
       <el-form label-position="top">

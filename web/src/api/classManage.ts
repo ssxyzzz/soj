@@ -1,4 +1,4 @@
-// 班级管理扩展 API（v0.7.2）：解散班级。
+// 班级管理扩展 API（v0.7.2）：解散班级 / 转让班级。
 // 独立模块的原因同 judgeQueue.ts / download.ts：api/index.ts 被安全钩子的既有行误报拦截不可写；
 // 这里自带最小拦截层（同源鉴权头 + ApiResponse 解包 + 错误提示）。
 import axios from 'axios'
@@ -7,18 +7,22 @@ import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import type { ApiResponse } from '@/types'
 
-export async function dissolveClass(id: number): Promise<void> {
+async function request<T>(method: 'post' | 'delete', url: string, body?: unknown): Promise<T> {
   const token = useUserStore().token
   try {
-    const r = await axios.delete<ApiResponse<{ deleted: boolean }>>(`/api/classes/${id}`, {
+    const r = await axios.request<ApiResponse<T>>({
+      method,
+      url: '/api' + url,
+      data: body,
       timeout: 20000,
       headers: token ? { Authorization: 'Bearer ' + token } : {},
     })
     const b = r.data
     if (b && typeof b.code === 'number' && b.code !== 0) {
-      ElMessage.error(b.message || '解散失败')
+      ElMessage.error(b.message || '请求失败')
       throw new Error(b.message)
     }
+    return b.data
   } catch (e) {
     const err = e as { response?: { data?: { message?: string } }; message?: string }
     if (err.response) {
@@ -26,4 +30,13 @@ export async function dissolveClass(id: number): Promise<void> {
     }
     throw e
   }
+}
+
+export async function dissolveClass(id: number): Promise<void> {
+  await request('delete', `/classes/${id}`)
+}
+
+/** 转让班级给指定成员（uid），对方成为新建班人、原建班人降为班级管理员 */
+export async function transferClass(id: number, uid: number): Promise<void> {
+  await request('post', `/classes/${id}/transfer`, { uid })
 }

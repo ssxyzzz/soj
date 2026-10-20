@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -266,6 +267,60 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 	}
 	log.Printf("[web] 用户 %s 退出班级 #%d", uname, id)
 	ok(c, gin.H{"left": true})
+}
+
+// TransferClass 转让班级（建班人 ∨ root）：指定成员成为新建班人，原建班人降为班级管理员。
+func (h *Handlers) TransferClass(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	uid, uname, role, okAuth := currentUser(c)
+	if !okAuth {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	cl, err := h.repo.GetClass(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取班级失败")
+		return
+	}
+	if !(uid == cl.OwnerID || role == repo.RoleRoot) {
+		fail(c, http.StatusForbidden, "仅建班人可转让班级")
+		return
+	}
+	var req struct {
+		UID int64 `json:"uid" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.UID <= 0 {
+		fail(c, http.StatusBadRequest, "请选择受让人")
+		return
+	}
+	if req.UID == uid {
+		fail(c, http.StatusBadRequest, "不能转让给自己")
+		return
+	}
+	if err := h.repo.TransferClass(c.Request.Context(), id, uid, req.UID); errors.Is(err, repo.ErrNotMember) {
+		fail(c, http.StatusBadRequest, "对方不是班级成员，请先将其加入班级")
+		return
+	} else if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "转让失败")
+		return
+	}
+	target, terr := h.repo.GetUserByID(c.Request.Context(), req.UID)
+	tname := fmt.Sprintf("#%d", req.UID)
+	if terr == nil {
+		tname = target.Username
+	}
+	log.Printf("[web] 班级 #%d 已由用户 %s 转让给 %s", id, uname, tname)
+	ok(c, gin.H{"transferred": true})
 }
 
 // DeleteClass 解散班级（建班人 ∨ root）：级联删除班内全部考试、作业与成员关系。

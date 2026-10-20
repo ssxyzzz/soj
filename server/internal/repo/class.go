@@ -221,6 +221,49 @@ func (r *Repo) CountOtherMembers(ctx context.Context, classID, uid int64) (int64
 		bson.M{"classId": classID, "uid": bson.M{"$ne": uid}})
 }
 
+// ErrNotMember 目标用户不是班级成员，无法受让。
+var ErrNotMember = errors.New("transfer target is not a class member")
+
+// TransferClass 转让班级（建班人 ∨ root 由调用方校验）：toUID 必须已是成员，
+// 受让后成为新建班人（classmembers 角色 owner），原建班人降为班级管理员（保留管理权）。
+func (r *Repo) TransferClass(ctx context.Context, classID, fromUID, toUID int64) error {
+	// 先验班级存在（班级删除时成员一并清空，先查成员会把「班级不存在」误报成非成员）
+	if err := r.db.Collection("classes").FindOne(ctx,
+		bson.M{"_id": classID}, options.FindOne().SetProjection(bson.M{"_id": 1})).Err(); err != nil {
+		return err
+	}
+	err := r.db.Collection("classmembers").FindOne(ctx,
+		bson.M{"classId": classID, "uid": toUID},
+		options.FindOne().SetProjection(bson.M{"_id": 1})).Err()
+	if IsNotFound(err) {
+		return ErrNotMember
+	}
+	if err != nil {
+		return err
+	}
+	// 角色先换（受让者 owner、原主 admin），班级文档换主放最后作为提交点；
+	// 中途失败重试即可（各步幂等）
+	if _, err := r.db.Collection("classmembers").UpdateOne(ctx,
+		bson.M{"classId": classID, "uid": toUID},
+		bson.M{"$set": bson.M{"role": ClassRoleOwner}}); err != nil {
+		return err
+	}
+	if _, err := r.db.Collection("classmembers").UpdateOne(ctx,
+		bson.M{"classId": classID, "uid": fromUID},
+		bson.M{"$set": bson.M{"role": ClassRoleAdmin}}); err != nil {
+		return err
+	}
+	res, err := r.db.Collection("classes").UpdateOne(ctx,
+		bson.M{"_id": classID}, bson.M{"$set": bson.M{"ownerId": toUID}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
 // DeleteClass 解散班级（建班人 ∨ root 由调用方校验）：级联清理——删除班内全部考试、
 // 作业与成员关系，最后删班级文档（v0.7.2 验收调整：原「仍挂考试/作业拒绝」改为自动
 // 清理，免去老师逐个删除）。提交记录不删——题目留在全局题库，学生的练习/赛事历史保留。

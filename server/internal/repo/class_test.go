@@ -57,3 +57,76 @@ func TestDeleteClassCascade(t *testing.T) {
 		t.Fatalf("重复解散应 ErrNoDocuments，得到 %v", err)
 	}
 }
+
+func TestTransferClass(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+	cid := int64(70)
+	setup := func(docs ...bson.M) {
+		t.Helper()
+		for _, d := range docs {
+			if _, err := r.db.Collection("classes").InsertOne(ctx, d); err != nil {
+				t.Fatalf("insert: %v", err)
+			}
+		}
+	}
+	member := func(cid, uid int64, role string) {
+		t.Helper()
+		if _, err := r.db.Collection("classmembers").InsertOne(ctx,
+			bson.M{"classId": cid, "uid": uid, "role": role}); err != nil {
+			t.Fatalf("insert member: %v", err)
+		}
+	}
+	roleOf := func(cid, uid int64) string {
+		t.Helper()
+		var row struct {
+			Role string `bson:"role"`
+		}
+		if err := r.db.Collection("classmembers").FindOne(ctx,
+			bson.M{"classId": cid, "uid": uid}).Decode(&row); err != nil {
+			t.Fatalf("member %d: %v", uid, err)
+		}
+		return row.Role
+	}
+	ownerOf := func(cid int64) int64 {
+		t.Helper()
+		var row struct {
+			OwnerID int64 `bson:"ownerId"`
+		}
+		if err := r.db.Collection("classes").FindOne(ctx, bson.M{"_id": cid}).Decode(&row); err != nil {
+			t.Fatalf("class: %v", err)
+		}
+		return row.OwnerID
+	}
+
+	t.Run("换主与角色互换", func(t *testing.T) {
+		setup(bson.M{"_id": cid, "name": "转让班", "ownerId": int64(1)})
+		member(cid, 1, "owner")
+		member(cid, 2, "member")
+		member(cid, 3, "admin")
+		if err := r.TransferClass(ctx, cid, 1, 2); err != nil {
+			t.Fatalf("TransferClass: %v", err)
+		}
+		if ownerOf(cid) != 2 {
+			t.Fatalf("新建班人应为 uid=2，实际 %d", ownerOf(cid))
+		}
+		if roleOf(cid, 2) != ClassRoleOwner {
+			t.Fatalf("受让人角色应为 owner，实际 %q", roleOf(cid, 2))
+		}
+		if roleOf(cid, 1) != ClassRoleAdmin {
+			t.Fatalf("原建班人应降为 admin，实际 %q", roleOf(cid, 1))
+		}
+	})
+
+	t.Run("非成员拒", func(t *testing.T) {
+		if err := r.TransferClass(ctx, cid, 2, 999); !errors.Is(err, ErrNotMember) {
+			t.Fatalf("非成员受让应 ErrNotMember，得到 %v", err)
+		}
+	})
+
+	t.Run("班级不存在", func(t *testing.T) {
+		if err := r.TransferClass(ctx, 999, 1, 2); !errors.Is(err, mongo.ErrNoDocuments) {
+			t.Fatalf("班级不存在应 ErrNoDocuments，得到 %v", err)
+		}
+	})
+}
