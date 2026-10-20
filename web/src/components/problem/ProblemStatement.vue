@@ -32,6 +32,16 @@ defineProps<{
         title="本题请以文件 IO 方式提交"
         :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
       />
+      <!-- 无测试数据空壳题（v0.6.1 验收反馈）：提示样式与文件 IO 提示同款，分角色文案 -->
+      <el-alert
+        v-if="problem.has_cases === false"
+        type="warning"
+        :closable="false"
+        class="fileio-alert"
+        show-icon
+        :title="problem.can_edit_statement ? '本题暂无测试数据，暂不可提交' : '本题暂无测试数据，无法评测。请联系管理员上传数据'"
+        :description="problem.can_edit_statement ? '请到「编辑题目」页上传测试数据 zip（整包替换），上传后题目即可正常提交评测。' : undefined"
+      />
       <MdView :content="problem.description_html || problem.description" />
     </div>
   </el-card>

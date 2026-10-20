@@ -20,6 +20,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -89,8 +90,60 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		}
 	}
 	zips := form.File["zip"]
-	if len(zips) != 1 {
-		fail(c, http.StatusBadRequest, "请上传一个测试数据 zip（含 cases/<N>/in|ans 结构）")
+	if len(zips) > 1 {
+		fail(c, http.StatusBadRequest, "请上传一个测试数据 zip（含 cases/<N>/in|ans 结构）；也可以不上传直接创建（暂无数据的题目）")
+		return
+	}
+
+	// 无数据建题（v0.6.1 验收反馈）：zip 可缺省——直接创建空壳题（cases 为空），
+	// 题面/限制/标签照常入库；提交入口在本端点与判题侧都会拒绝无数据题，
+	// 测试数据后续在编辑页整包上传补齐。
+	if len(zips) == 0 {
+		p := &repo.Problem{
+			Title: title, TimeLimitMS: timeLimit, MemoryLimitKB: memLimit,
+			Compare: compare, FloatTolerance: tol, ContentHTML: statementHTML,
+			Cases: []repo.CaseMeta{}, CreatedBy: uid, CreatedAt: time.Now(),
+		}
+		if len(tagIDs) > 0 {
+			if err := h.repo.ValidateTagRefs(c.Request.Context(), tagIDs); err != nil {
+				fail(c, http.StatusBadRequest, err.Error())
+				return
+			}
+			p.Tags = tagIDs
+		}
+		if err := h.repo.CreateProblemShell(c.Request.Context(), p); err != nil {
+			fail(c, http.StatusInternalServerError, "建题失败："+err.Error())
+			return
+		}
+		set := bson.M{}
+		if len(form.File["checker"]) == 1 && p.CheckerFile == "" {
+			if cf, err := form.File["checker"][0].Open(); err == nil {
+				data, err := io.ReadAll(cf)
+				cf.Close()
+				name := form.File["checker"][0].Filename
+				if err == nil && len(data) <= 256<<10 && strings.HasSuffix(strings.ToLower(name), ".cpp") {
+					if err := h.store.WriteFile(p.ID, "checker.cpp", data); err == nil {
+						set["checkerFile"] = "checker.cpp"
+						set["checkerSha"] = fmt.Sprintf("%x", sha256.Sum256(data))
+					}
+				}
+			}
+		}
+		if name := strings.TrimSpace(formValue(form, "file_io_name")); name != "" {
+			if strings.ContainsAny(name, "/\\ \t.") || len(name) > 64 {
+				fail(c, http.StatusBadRequest, "文件名仅支持字母/数字/下划线/连字符（不含扩展名）")
+				return
+			}
+			set["fileIoInput"] = name + ".in"
+			set["fileIoOutput"] = name + ".out"
+		}
+		if len(set) > 0 {
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), p.ID, set); err != nil {
+				fail(c, http.StatusInternalServerError, "建题成功但写入配置失败")
+				return
+			}
+		}
+		ok(c, gin.H{"id": p.ID})
 		return
 	}
 

@@ -581,6 +581,11 @@ func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {
 	} else {
 		ctArg = ct
 	}
+	// 无测试数据的空壳题（v0.6.1 验收反馈）：与前端禁提交同一文案
+	if len(p.Cases) == 0 {
+		fail(c, http.StatusBadRequest, "本题暂无数据，无法评测。请联系管理员上传数据")
+		return
+	}
 	sid, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, ctArg, eArg)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "创建提交失败")

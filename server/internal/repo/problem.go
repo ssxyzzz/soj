@@ -220,6 +220,19 @@ func (r *Repo) UpsertProblem(ctx context.Context, p *Problem) error {
 	return err
 }
 
+// CreateProblemShell 无测试数据建壳题（v0.6.1 验收反馈：zip 可缺省直接创建题面）：
+// 取号插入 problem 文档（Cases 空），测试数据后续在编辑页整包上传补齐。
+func (r *Repo) CreateProblemShell(ctx context.Context, p *Problem) error {
+	id, err := r.nextSeq(ctx, "problem")
+	if err != nil {
+		return err
+	}
+	p.ID = id
+	p.CreatedAt = time.Now()
+	_, err = r.Problems.InsertOne(ctx, p)
+	return err
+}
+
 func (r *Repo) GetProblem(ctx context.Context, id int64) (*Problem, error) {
 	var p Problem
 	if err := r.Problems.FindOne(ctx, bson.M{"_id": id}).Decode(&p); err != nil {

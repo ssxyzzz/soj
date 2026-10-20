@@ -46,8 +46,9 @@ const lockRoute = computed(() => {
 })
 const lockWhat = computed(() => (problem.value?.lock_kind === 'exam' ? '考试' : '比赛'))
 const canSetHidden = computed(() => !!problem.value?.can_set_hidden)
-const submitDisabled = computed(() => !userStore.token || lockedRunning.value)
+const submitDisabled = computed(() => !userStore.token || lockedRunning.value || problem.value?.has_cases === false)
 const submitDisabledReason = computed(() => {
+  if (problem.value?.has_cases === false) return '本题暂无数据，无法评测。请联系管理员上传数据'
   if (lockedRunning.value) return `${lockWhat.value}期间请从${lockWhat.value}页面提交`
   if (!userStore.token) return '请先登录'
   return ''

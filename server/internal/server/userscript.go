@@ -17,7 +17,7 @@ const userscriptTmpl = `// ==UserScript==
 // @name         SOJ 题面复制（%s）
 // @namespace    soj-import
 // @version      1.0.0
-// @description  在任意 OJ 题目页，通过篡改猴（Tampermonkey）扩展菜单「复制题面到 SOJ 剪贴板」，回 SOJ 建题/编辑页的「粘贴导入」即可回填题面。仅在本浏览器内复制，不产生任何自动化请求。
+// @description  油猴脚本（篡改猴 / Tampermonkey）：在任意 OJ 题目页，通过扩展菜单「复制题面到 SOJ 剪贴板」，回 SOJ 建题/编辑页的「粘贴导入」即可回填题面。仅在本浏览器内复制，不产生任何自动化请求。
 // @match        *://*/*
 // @exclude      %s/*
 // @grant        GM_setClipboard

@@ -234,6 +234,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"compare":            p.Compare,
 		"float_tolerance":    p.FloatTolerance,
 		"has_checker":        p.CheckerFile != "",
+		"has_cases":          len(p.Cases) > 0, // 无测试数据空壳题（v0.6.1 验收反馈）：前端禁提交+详情提示
 		"samples":            sampleItems,
 		"has_subtasks":       len(p.Subtasks) > 0,
 		"hidden":             p.Hidden,

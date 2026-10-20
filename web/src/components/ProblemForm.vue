@@ -127,11 +127,7 @@ function payload(): ProblemFormPayload | null {
     ElMessage.error('题面过长（上限 256KB）')
     return null
   }
-  const zip = zipFile()
-  if (props.mode === 'create' && !zip) {
-    ElMessage.warning('请上传测试数据 zip（cases/<N>/in|ans 结构）')
-    return null
-  }
+  const zip = zipFile() // 可选：不传则创建暂无数据的题目（详情页提示 + 禁提交），数据后续编辑页补齐
   return {
     ...form,
     title: form.title.trim(),
@@ -205,13 +201,15 @@ function onSubmitClick() {
 
         <el-card>
           <template #header><span>其他信息</span></template>
-          <el-form-item :required="mode === 'create'">
+          <el-form-item>
             <template #label>
               <span class="label-with-tip">
-                测试数据 zip
+                测试数据 zip（可选）
                 <el-tooltip
                   placement="top"
-                  content="留空保留现有数据；选择新 zip 将整包替换（旧数据不保留）"
+                  :content="mode === 'create'
+                    ? '不上传则创建暂无数据的题目：题面立即可用、暂不可提交，数据可后续在编辑页整包上传；选择 zip 将随建题一并导入'
+                    : '留空保留现有数据；选择新 zip 将整包替换（旧数据不保留）'"
                 >
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
@@ -228,7 +226,7 @@ function onSubmitClick() {
               :on-remove="onZipRemove"
             >
               <div class="zip-hint">
-                <p>{{ mode === 'create' ? '拖入 zip 或点击选择' : '拖入新 zip 整包替换，留空则不修改' }}</p>
+                <p>{{ mode === 'create' ? '拖入 zip 或点击选择（可跳过，后续在编辑页上传）' : '拖入新 zip 整包替换，留空则不修改' }}</p>
                 <p class="dim">结构：test1.in、test1.ans/out</p>
               </div>
             </el-upload>
@@ -351,7 +349,7 @@ function onSubmitClick() {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 4px;
+  margin: 2px 0 18px;
 }
 
 .pf-aside {

@@ -177,12 +177,24 @@ onUnmounted(() => {
       <template #aside>
         <el-card class="aside-card">
           <div class="entry-actions">
-            <el-button type="primary" plain style="width: 100%" :disabled="!running" @click="showSubmit = true">
-              提交
-            </el-button>
-            <el-button type="success" plain style="width: 100%" :disabled="!running" @click="showWorkbench = true">
-              在线编程
-            </el-button>
+            <el-tooltip
+              :disabled="problem?.has_cases !== false"
+              content="本题暂无数据，无法评测。请联系管理员上传数据"
+              placement="top"
+            >
+              <el-button type="primary" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showSubmit = true">
+                提交
+              </el-button>
+            </el-tooltip>
+            <el-tooltip
+              :disabled="problem?.has_cases !== false"
+              content="本题暂无数据，无法评测。请联系管理员上传数据"
+              placement="top"
+            >
+              <el-button type="success" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showWorkbench = true">
+                在线编程
+              </el-button>
+            </el-tooltip>
             <el-tooltip
               v-if="revealed"
               placement="top"

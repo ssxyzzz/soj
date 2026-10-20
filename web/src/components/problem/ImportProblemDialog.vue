@@ -151,17 +151,17 @@ function close() {
       </el-tab-pane>
       <el-tab-pane label="脚本导入" name="script">
         <el-alert type="success" :closable="false" class="us-alert">
-          <p>推荐给经常导入的老师：在自己浏览器里一键复制题面——带真实登录态与浏览器指纹，<b>洛谷等登录墙/反爬站点零封号风险</b>（这就是正常浏览行为，不经过本站服务器）。</p>
+          <p>油猴脚本（篡改猴 / Tampermonkey）：推荐给经常导入的老师——在自己浏览器里一键复制题面，带真实登录态与浏览器指纹，<b>洛谷等登录墙/反爬站点零封号风险</b>（这就是正常浏览行为，不经过本站服务器）。</p>
         </el-alert>
         <el-steps :active="4" align-center class="us-steps" finish-status="success">
-          <el-step title="装扩展" description="浏览器安装篡改猴（Tampermonkey）扩展，Edge/Chrome 商店搜「篡改猴」" />
+          <el-step title="装扩展" description="安装油猴类扩展：篡改猴（Tampermonkey），Edge/Chrome 商店搜「篡改猴」" />
           <el-step title="装脚本" description="点下方按钮下载，篡改猴自动弹出安装页，点安装" />
           <el-step title="复制题面" description="打开源站题目页 → 点浏览器篡改猴图标 → 「复制题面到 SOJ 剪贴板」" />
           <el-step title="回站粘贴" description="回到本弹窗「粘贴导入」→ Ctrl+V → 预览回填" />
         </el-steps>
         <div class="us-actions">
-          <a :href="scriptURL"><el-button type="primary">下载导入脚本（本站地址已内置）</el-button></a>
-          <span class="dim">文件名 soj-import.user.js，篡改猴会自动识别并弹出安装页</span>
+          <a :href="scriptURL"><el-button type="primary">下载油猴脚本（本站地址已内置）</el-button></a>
+          <span class="dim">文件名 soj-import.user.js，篡改猴 / Tampermonkey 会自动识别并弹出安装页</span>
         </div>
         <el-collapse class="us-faq">
           <el-collapse-item title="脚本会抓取整页吗？会不会把导航栏也带进来？">

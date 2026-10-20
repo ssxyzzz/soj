@@ -90,6 +90,7 @@ export interface ProblemDetail {
   compare?: string
   float_tolerance?: number
   has_checker?: boolean
+  has_cases?: boolean // 无测试数据空壳题（v0.6.1 验收反馈）：详情提示 + 禁提交
   samples: TestCase[]
   has_subtasks?: boolean
   hidden?: boolean
