@@ -80,11 +80,15 @@ async function save() {
 }
 
 // 名称旁的预览 chip 实时反映本面板特效开关的当前状态（未保存也生效）：
-// 特效开 = 浅色 tag + 该档光晕/呼吸星（ulv-*），关 = 纯浅色无特效
+// 特效开 = 浅色 tag + 该档光晕/呼吸星（ulv-*）；关 = 与难度徽章样式完全一致（diff-*）
 function chipClass(i: number): Record<string, boolean> {
-  const fx = form.effects_enabled && form.effects_tiers[i]
-  const cls: Record<string, boolean> = { 'ulv-tag': true, [`ulv-${i + 1}`]: true }
-  if (fx) cls[`ulv-e${i + 1}`] = true
+  if (!(form.effects_enabled && form.effects_tiers[i])) {
+    const cls: Record<string, boolean> = { 'diff-tag': true, [`diff-${i + 1}`]: true }
+    const fx = ['', '', '', '', '', '', 'diff-g7', 'diff-g8', 'diff-g9', 'diff-g10'][i]
+    if (fx) cls[fx] = true
+    return cls
+  }
+  const cls: Record<string, boolean> = { 'ulv-tag': true, [`ulv-${i + 1}`]: true, [`ulv-e${i + 1}`]: true }
   return cls
 }
 

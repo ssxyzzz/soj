@@ -27,14 +27,21 @@ const text = computed(() => {
 })
 
 const cls = computed(() => {
-  if (props.kind === 'level') {
-    const arr = ['tier-badge', `tier-${props.size}`, 'ulv-tag', `ulv-${clamped.value}`]
-    if (levels.effectsOn(clamped.value)) arr.push(`ulv-e${clamped.value}`)
+  // 关特效（等级侧全局/逐级关）：等级徽章与难度徽章样式完全一致（diff-* 浅色 + 高档微特效）
+  const diffFx = ['', '', '', '', '', '', 'diff-g7', 'diff-g8', 'diff-g9', 'diff-g10'][clamped.value - 1]
+  if (props.kind === 'level' && !levels.effectsOn(clamped.value)) {
+    const arr = ['tier-badge', `tier-${props.size}`, 'diff-tag', `diff-${clamped.value}`]
+    if (diffFx) arr.push(diffFx)
     return arr
   }
+  if (props.kind === 'level') {
+    // 开特效：浅色 tag 体系（ulv-*，浓度高于难度 chip），光晕/呼吸星逐级递增，极境彩色渐变
+    const arr = ['tier-badge', `tier-${props.size}`, 'ulv-tag', `ulv-${clamped.value}`, `ulv-e${clamped.value}`]
+    return arr
+  }
+  // 难度：浅色 tag 风（与站点标签同浓度）+ 后四档渐进微特效（极境暗黑深邃）
   const arr = ['tier-badge', `tier-${props.size}`, 'diff-tag', `diff-${clamped.value}`]
-  const fx = ['', '', '', '', '', '', 'diff-g7', 'diff-g8', 'diff-g9', 'diff-g10'][clamped.value - 1]
-  if (fx) arr.push(fx)
+  if (diffFx) arr.push(diffFx)
   return arr
 })
 
