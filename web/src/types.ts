@@ -308,6 +308,7 @@ export interface ProgressRow {
   solved: number
   total: number
   rank: number
+  level?: number // 学生等级（v0.11；聚合失败省略）
   problems: ProgressCell[]
 }
 
@@ -529,5 +530,6 @@ export interface LeaderRow {
   nickname: string
   total: number
   last_scoring_at?: string
+  level?: number // 学生等级（v0.11；聚合失败省略）
   problems: LeaderCell[]
 }

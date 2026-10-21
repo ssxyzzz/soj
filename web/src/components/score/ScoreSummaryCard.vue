@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TierBadge from '@/components/TierBadge.vue'
 import type { ScoreBoardView } from './types'
 
 // 前三名勋章（与排名页 RankView 同一套）
@@ -72,6 +73,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
           <span v-else>{{ row.rank ?? '—' }}</span>
         </span>
         <span class="name" :title="row.name">{{ row.name }}</span>
+        <TierBadge v-if="row.level" :tier="row.level" kind="level" size="sm" />
         <span class="total">{{ row.total }}</span>
       </div>
     </div>

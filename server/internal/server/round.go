@@ -926,6 +926,11 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 			return
 		}
 		items := make([]gin.H, 0, len(rows))
+		uids := make([]int64, 0, len(rows))
+		for _, r := range rows {
+			uids = append(uids, r.UID)
+		}
+		levels := h.levelMapFor(c, uids) // 失败为 nil，行内省略等级
 		for i, r := range rows {
 			probs := make([]gin.H, 0, len(ct.Problems))
 			for _, cp := range ct.Problems {
@@ -943,6 +948,9 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 				"nickname": r.Nickname,
 				"total":    r.Total,
 				"problems": probs,
+			}
+			if levels != nil {
+				item["level"] = levels[r.UID]
 			}
 			if r.HasScoring {
 				item["last_scoring_at"] = r.LastScoring

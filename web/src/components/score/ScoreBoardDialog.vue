@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 
+import TierBadge from '@/components/TierBadge.vue'
+
 import ScoreCell from './ScoreCell.vue'
 import type { ScoreBoardView, ScoreCellView, ScoreProblemView, ScoreRowView } from './types'
 
@@ -90,9 +92,10 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
         <el-table-column label="排名" width="54" align="center" fixed="left">
           <template #default="{ row }">{{ row.rank ?? '—' }}</template>
         </el-table-column>
-        <el-table-column label="昵称" min-width="110" fixed="left">
+        <el-table-column label="昵称" min-width="150" fixed="left">
           <template #default="{ row }">
             <span class="name" :class="{ me: row.uid === myUid }" :title="row.name">{{ row.name }}</span>
+            <TierBadge v-if="row.level" :tier="row.level" kind="level" size="sm" class="ml8" />
           </template>
         </el-table-column>
         <el-table-column label="总分" width="64" align="center" fixed="left">

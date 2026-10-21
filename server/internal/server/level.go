@@ -99,6 +99,33 @@ var req struct {
 	ok(c, gin.H{"config": cfg})
 }
 
+// levelMapFor 批量算一组用户的等级（成绩表/榜单等列表场景用）。
+// 任一步失败返回 nil，由调用方降级省略等级字段。
+func (h *Handlers) levelMapFor(c *gin.Context, uids []int64) map[int64]int {
+	if len(uids) == 0 {
+		return map[int64]int{}
+	}
+	cfg, err := h.repo.GetLevelConfig(c.Request.Context())
+	if err != nil {
+		return nil
+	}
+	counts, err := h.repo.SolvedDifficultyCounts(c.Request.Context(), uids)
+	if err != nil {
+		return nil
+	}
+	adjs, err := h.repo.SumXpAdjust(c.Request.Context(), uids)
+	if err != nil {
+		return nil
+	}
+	out := make(map[int64]int, len(uids))
+	// 全部请求用户都给等级（无 AC 的用户 counts 缺席，按空历史 = Lv.1 起步档）
+	for _, uid := range uids {
+		lv, _, _, _, _ := repo.LevelProgress(cfg, counts[uid], adjs[uid])
+		out[uid] = lv
+	}
+	return out
+}
+
 // levelBadgeInfo 单用户等级展示信息（聚合失败时返回 nil，由调用方降级省略字段）。
 // 含经验调整合计（管理端加/减，可负）。
 func (h *Handlers) levelBadgeInfo(c *gin.Context, uid int64) gin.H {

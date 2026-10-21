@@ -478,6 +478,7 @@ func (h *Handlers) AssignmentProgress(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "统计失败")
 		return
 	}
+	levels := h.levelMapFor(c, uids) // 失败为 nil，行内省略等级
 	items := make([]gin.H, 0, len(rows))
 	for _, r := range rows {
 		probs := make([]gin.H, 0, len(a.Problems))
@@ -492,11 +493,15 @@ func (h *Handlers) AssignmentProgress(c *gin.Context) {
 				"errors": cell.Errors, "solved": cell.Solved,
 			})
 		}
-		items = append(items, gin.H{
+		item := gin.H{
 			"uid": r.UID, "username": r.Username, "nickname": r.Nickname,
 			"attempted": r.Attempt, "solved": r.Solved,
 			"total": r.Total, "rank": r.Rank, "problems": probs,
-		})
+		}
+		if levels != nil {
+			item["level"] = levels[r.UID]
+		}
+		items = append(items, item)
 	}
 	ok(c, items)
 }

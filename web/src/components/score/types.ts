@@ -23,6 +23,7 @@ export interface ScoreRowView {
   uid: number
   rank: number | null // 学生视角单人行时置 null，显示 —
   name: string // 昵称，空则用户名
+  level?: number // 学生等级 1–10（v0.11；后端聚合失败省略）
   total: number
   solved: number
   totalProblems: number
