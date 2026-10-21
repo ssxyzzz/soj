@@ -6,7 +6,7 @@ import { onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { adminApi } from '@/api'
-import { DEFAULT_LEVEL_NAMES, useLevelsStore } from '@/stores/levels'
+import { DEFAULT_LEVEL_NAMES, LEVEL_STARS, useLevelsStore } from '@/stores/levels'
 
 const levels = useLevelsStore()
 
@@ -80,10 +80,25 @@ async function save() {
 }
 
 // 名称旁的预览 chip 实时反映本面板特效开关的当前状态（未保存也生效）：
-// 特效开 = 完整特效链（tier-fx-N），关 = 静态（tier-static-N）
+// 特效开 = 浅色 tag + 该档光晕/呼吸星（ulv-*），关 = 纯浅色无特效
 function chipClass(i: number): Record<string, boolean> {
   const fx = form.effects_enabled && form.effects_tiers[i]
-  return { [`tier-bg-${i + 1}`]: true, [fx ? `tier-fx-${i + 1}` : `tier-static-${i + 1}`]: true }
+  const cls: Record<string, boolean> = { 'ulv-tag': true, [`ulv-${i + 1}`]: true }
+  if (fx) cls[`ulv-e${i + 1}`] = true
+  return cls
+}
+
+// 预览 chip 的呼吸星（与 TierBadge 同配置，随特效开关显隐）
+function chipStars(i: number): string[] {
+  if (!(form.effects_enabled && form.effects_tiers[i])) return []
+  return (LEVEL_STARS[i + 1] ?? []).map((s) => {
+    let style = `font-size:${s.s}px;animation-delay:${s.d}s;`
+    if (s.t != null) style += `top:${s.t}px;`
+    if (s.l != null) style += `left:${s.l}px;`
+    if (s.r != null) style += `right:${s.r}px;`
+    if (s.b != null) style += `bottom:${s.b}px;`
+    return style
+  })
 }
 
 // 难度名预览 chip：浅色 tag 风 + 后四档渐进微特效（与题库难度徽章同款）
@@ -105,7 +120,14 @@ function diffChipClass(i: number): Record<string, boolean> {
     <div class="section-title">等级名称（Lv.1–10，站点文案可自定义；色块即特效实时预览，随下方特效开关变化）</div>
     <div class="names-grid">
       <div v-for="(label, i) in form.names" :key="i" class="name-cell">
-        <span class="tier-chip" :class="chipClass(i)">Lv.{{ i + 1 }}</span>
+        <span class="tier-chip" :class="chipClass(i)">
+          Lv.{{ i + 1 }}<i
+            v-for="(s, j) in chipStars(i)"
+            :key="j"
+            class="lv-star"
+            :style="s"
+          >✦</i>
+        </span>
         <el-input v-model="form.names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
       </div>
     </div>
@@ -184,6 +206,7 @@ function diffChipClass(i: number): Record<string, boolean> {
 }
 
 .tier-chip {
+  position: relative;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -193,6 +216,15 @@ function diffChipClass(i: number): Record<string, boolean> {
   color: #fff;
   font-size: var(--soj-fs-small);
   font-weight: var(--soj-fw-regular); /* 徽章字重全局改常规（2026-10-22） */
+}
+
+/* 等级预览 chip（浅色 tag 族）：覆盖 chip 默认白字；极境彩色渐变回白字 */
+.tier-chip.ulv-tag {
+  color: color-mix(in srgb, var(--lc) 88%, #1f2d3d);
+}
+.tier-chip.ulv-e10 {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 /* 难度名预览 chip（浅色 tag 风）：覆盖 chip 默认白字 */
