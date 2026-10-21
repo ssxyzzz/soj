@@ -312,7 +312,7 @@ function onSubmitClick() {
 
           <!-- 客观题整卷（v0.9.3）：小题列表（增删/排序 + 每题题干/选项/答案/解析/分值） -->
           <el-form-item v-if="form.type === 'objective'" class="plain-label">
-            <ObjectiveEditor ref="objEditor" v-model="objQuestions" />
+            <ObjectiveEditor ref="objEditor" v-model="objQuestions" :pid="pid" />
           </el-form-item>
         </el-card>
       </div>

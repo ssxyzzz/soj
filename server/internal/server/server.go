@@ -151,6 +151,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/contests/:id/problems/:pid/submissions", h.ContestUserSubmissions)
 			authed.GET("/contests/:id/leaderboard", h.ContestLeaderboard)
 			authed.GET("/contests/:id/export", h.ContestExport) // 成绩导出 CSV（v0.5.6）
+			authed.GET("/contests/:id/paper", h.ContestPaper)   // 打印试卷数据（v0.10，organizer/root）
 
 			// 班级考试：发起（班级管理员）/删除/考时提交/我的提交/榜单
 			authed.POST("/classes/:id/exams", h.CreateExam)
@@ -163,6 +164,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
 			authed.GET("/exams/:id/export", h.ExamExport) // 成绩导出 CSV（v0.5.6）
+			authed.GET("/exams/:id/paper", h.ExamPaper)   // 打印试卷数据（v0.10，organizer/root）
 			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
 			authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
 			// 按赛批量重测（v0.7.1）：组织者才可（handler 内校验）
@@ -172,6 +174,10 @@ func Run(ctx context.Context, deps *Deps) {
 			// 题目编辑：edit.all 或 edit.own（属主校验在 handler 内）
 			authed.PATCH("/problems/:id/hidden", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemHidden)
 			authed.PATCH("/problems/:id/statement", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemStatement)
+			// v0.10：客观题小题 YAML 双向 + 单题/整卷学生版试卷打印
+			authed.GET("/problems/:id/objective/questions.yaml", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ExportObjectiveYAML)
+			authed.GET("/problems/:id/paper", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ProblemPaper)
+			authed.POST("/objective/questions/parse", RequirePermAny(repo.PermProblemCreate, repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ParseObjectiveYAML)
 
 			// 管理端：按权限位鉴权（可授予自定义角色）；角色管理硬编码 root 不下放
 			adminG := authed.Group("/admin")

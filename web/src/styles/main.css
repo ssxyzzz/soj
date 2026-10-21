@@ -42,7 +42,7 @@
    dialog-title 18    el-dialog / el-message-box 标题
    result-title 20    404 el-result 标题内层 p
    rich 16            Markdown 内容正文基准（Vditor .vditor-reset，MdViewInner/MdEditorInner 覆盖）
-   code 14            pre/code/kbd/samp、Markdown 块级代码
+   code 15.2          pre/code/kbd/samp、Markdown 行内/块级代码（--soj-fs-code = rich × 0.95）
    tooltip 12         .el-popper 内容（状态说明/权限说明/表单帮助）
    popover 14         .el-popover.el-popper（题目标签浮层）
    alert-title 14 / alert-title-desc 16 / alert-desc 14
@@ -57,12 +57,12 @@
    ── 不纳入 token ─────────────────────────────────────────
    - CodeMirror 字号：组件默认 14，用户偏好 12–48（JS，不是 CSS 全局值）
    - EP 进度百分比：EP 内联 12 + stroke×0.4（当前 16.8 / 16）
-   - 富文本相对比例：h1/h2/h3 1.35/1.2/1.08em、行内 code 0.9em、KaTeX 1.21em
+   - 富文本相对比例：h1/h2/h3 1.35/1.2/1.08em、行内/块级 code = --soj-fs-code（rich × 0.95）、KaTeX 1.21em
    - 图标尺寸 20/17、行高（另批）
 
    ── 实测基线（2026-10-19，线上 computed style）────────────
    页面主档：body/UI 14、页头 22、hero 30、统计 32、emoji 36、rich 16
-   富文本：h1 21.6 / h2 19.2 / h3 17.28 / h4-h6 16、行内 code 14.4、块级 code 14、KaTeX 19.36
+   富文本：h1 21.6 / h2 19.2 / h3 17.28 / h4-h6 16、行内 code 15.2、块级 code 15.2、KaTeX 19.36
    组件：tag 14 / 表格 tag 13 / tag close 13.3333 / tooltip 12 / popover 14 /
          alert 14·16·14 / dialog 18 / result 20 / progress 16.8·16 / CM6 默认 14
    ============================================================ */
@@ -121,7 +121,7 @@ body,
   --soj-fs-dialog-title: var(--soj-fs-18);
   --soj-fs-result-title: var(--soj-fs-20);
   --soj-fs-rich: var(--soj-fs-16);
-  --soj-fs-code: var(--soj-fs-14);
+  --soj-fs-code: calc(var(--soj-fs-rich) * 0.95); /* 正文 × 0.95 = 15.2，绝对长度避免 em 叠加 */
   --soj-fs-tooltip: var(--soj-fs-12);
   --soj-fs-popover: var(--soj-fs-14);
   --soj-fs-alert-title: var(--soj-fs-14);
@@ -549,11 +549,11 @@ strong {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: var(--el-border-radius-small);
   color: var(--el-text-color-primary);
-  font-size: 0.9em;
+  font-size: var(--soj-fs-code);
   font-family: var(--font-mono);
 }
 
-/* 代码块：字号固定 14（Vditor 默认 85% 相对字号），配色沿 light 主题 */
+/* 代码块：Vditor 默认 85% 相对字号，这里改用统一 code token，配色沿 light 主题 */
 .soj-md .vditor-reset pre > code {
   font-size: var(--soj-fs-code);
   font-family: var(--font-mono);
@@ -637,7 +637,8 @@ strong {
   border-color: var(--el-color-success-light-7);
 }
 
-/* 代码显示面统一 14px + 显式等宽字体栈（CodeMirror/Vditor 编辑器有自己的字号/字体主题，不受影响） */
+/* 代码显示面统一 --soj-fs-code（正文 × 0.95 ≈ 15.2px）+ 显式等宽字体栈
+   （CodeMirror/Vditor 编辑器有自己的字号/字体主题，不受影响） */
 pre,
 code,
 kbd,

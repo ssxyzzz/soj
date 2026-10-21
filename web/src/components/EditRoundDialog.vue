@@ -3,6 +3,7 @@
 // - 完整模式 = 名称/起止时间/说明/文件 IO·成绩表·赛时隐藏成绩开关，一次保存；
 // - problems 模式 = 「调整题目」专用（题库选题 + 拖动排序 + 删除）。
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { contestApi, examApi, type RoundKind } from '@/api'
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
+const router = useRouter()
 const name = computed(() => (props.kind === 'exam' ? '考试' : '比赛'))
 const titleText = computed(() => (props.mode === 'problems' ? `调整${name.value}题目` : `编辑${name.value}`))
 
@@ -57,6 +59,12 @@ function timeChanged(): boolean {
   const start = new Date(range.value[0]).getTime()
   const end = new Date(range.value[1]).getTime()
   return start !== new Date(props.round.start).getTime() || end !== new Date(props.round.end).getTime()
+}
+
+// 打印试卷入口收进编辑弹窗（v0.10 验收反馈），打印的是已保存内容
+function openPaper() {
+  const url = router.resolve(`/${props.kind}s/${props.round.id}/paper`).href
+  window.open(url, '_blank', 'noopener')
 }
 
 async function save() {
@@ -185,8 +193,25 @@ watch(
     </template>
 
     <template #footer>
-      <el-button @click="emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      <div class="dialog-footer">
+        <el-button v-if="mode === 'full'" plain @click="openPaper">打印试卷</el-button>
+        <span class="footer-spacer" />
+        <el-button @click="emit('update:modelValue', false)">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.footer-spacer {
+  flex: 1;
+}
+</style>

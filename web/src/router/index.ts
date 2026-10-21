@@ -14,6 +14,7 @@ import HomeView from '@/views/HomeView.vue'
 import AssignmentView from '@/views/AssignmentView.vue'
 import LoginView from '@/views/LoginView.vue'
 import NotFoundView from '@/views/NotFoundView.vue'
+import PaperView from '@/views/PaperView.vue'
 import ProblemDetailView from '@/views/ProblemDetailView.vue'
 import ProblemCreateView from '@/views/ProblemCreateView.vue'
 import ProblemEditView from '@/views/ProblemEditView.vue'
@@ -130,6 +131,27 @@ const router = createRouter({
       ],
     },
     { path: '/login', name: 'login', component: LoginView, meta: { title: '登录' } },
+    {
+      path: '/contests/:id/paper',
+      name: 'contest-paper',
+      component: PaperView,
+      props: { kind: 'contest' },
+      meta: { title: '打印试卷', requiresAuth: true },
+    },
+    {
+      path: '/exams/:id/paper',
+      name: 'exam-paper',
+      component: PaperView,
+      props: { kind: 'exam' },
+      meta: { title: '打印试卷', requiresAuth: true },
+    },
+    {
+      path: '/problems/:id/paper',
+      name: 'problem-paper',
+      component: PaperView,
+      props: { kind: 'problem' },
+      meta: { title: '导出试卷', requiresAuth: true },
+    },
     {
       path: '/:pathMatch(.*)*',
       name: 'not-found',

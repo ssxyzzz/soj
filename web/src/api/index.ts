@@ -15,6 +15,8 @@ import type {
   ExamListItem,
   LeaderRow,
   LoginResult,
+  ObjectiveQuestionFull,
+  PaperData,
   PermGroupInfo,
   PermInfo,
   SolutionItem,
@@ -125,12 +127,15 @@ export const problemApi = {
       ...(tags && tags.length ? { tags: tags.join(',') } : {}),
     }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
+  paper: (id: number) => get<PaperData>(`/problems/${id}/paper`),
   create: (form: FormData) =>
     client
       .post<ApiResponse<{ id: number }>>('/problems', form, { timeout: 0 })
       .then((r) => r.data.data),
   updateMeta: (id: number, body: Record<string, unknown>) =>
     patch<{ updated: number }>(`/problems/${id}/meta`, body), // 客观题编辑带 question_json（v0.9）
+  parseObjectiveYaml: (yaml: string) =>
+    post<{ questions: ObjectiveQuestionFull[] }>('/objective/questions/parse', { yaml }),
   uploadChecker: (id: number, form: FormData) =>
     client.post(`/problems/${id}/checker`, form, { timeout: 0 }).then((r) => r.data.data),
   removeChecker: (id: number) => del<{ removed: boolean }>(`/problems/${id}/checker`),
@@ -312,6 +317,7 @@ const roundApiOf = (kind: RoundKind) => {
       patch<{ file_io: boolean }>(`${base}/${roundId}/file-io`, { enabled }),
     userSubmissions: (roundId: number, pid: number, uid: number) =>
       get<{ list: Submission[] }>(`${base}/${roundId}/problems/${pid}/submissions`, { uid }),
+    paper: (roundId: number) => get<PaperData>(`${base}/${roundId}/paper`),
   }
 }
 

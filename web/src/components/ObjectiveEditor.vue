@@ -2,15 +2,19 @@
 // 客观题小题编辑器（v0.9.3）：一道客观题 = 多道小问（单选/多选/判断/填空混合）。
 // 负责小题列表的增删/移动与每题内容（题干/选项/答案/填空/解析/分值），
 // 校验（含填空占位数）后由父组件序列化为 question_json 提交。
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowDown, ArrowUp, Delete, Plus } from '@element-plus/icons-vue'
 
+import { problemApi } from '@/api'
+import { downloadFile } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
-import type { ObjectiveKind, ObjectiveQuestionDraft } from '@/types'
+import type { ObjectiveKind, ObjectiveQuestionDraft, ObjectiveQuestionFull } from '@/types'
 
-const props = defineProps<{ modelValue: ObjectiveQuestionDraft[] }>()
+const props = defineProps<{ modelValue: ObjectiveQuestionDraft[]; pid?: number }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: ObjectiveQuestionDraft[]): void }>()
+
+const yamlInput = ref<HTMLInputElement>()
 
 const kindLabel: Record<ObjectiveKind, string> = {
   single: '单选题',
@@ -33,6 +37,51 @@ function blankDraft(kind: ObjectiveKind = 'single'): ObjectiveQuestionDraft {
 
 function update(list: ObjectiveQuestionDraft[]) {
   emit('update:modelValue', list)
+}
+
+// ---- YAML 导入/导出（v0.10）----
+// 导入只解析并覆盖当前表单，仍需「确认修改」落库；导出读取已保存的小题定义。
+function pickYaml() {
+  yamlInput.value?.click()
+}
+
+function toDraft(q: ObjectiveQuestionFull): ObjectiveQuestionDraft {
+  return {
+    stem: q.stem ?? '',
+    kind: q.kind,
+    options: q.options ?? (q.kind === 'judge' ? ['对', '错'] : []),
+    answer: q.answer ?? [],
+    blanks: (q.blanks ?? []).map((b) => ({
+      accept: [...b.accept],
+      case_sensitive: !!b.case_sensitive,
+    })),
+    explanation: q.explanation ?? '',
+    score: q.score ?? 0,
+  }
+}
+
+async function onYamlFile(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > 256 << 10) {
+    ElMessage.error('YAML 超过 256KB 上限')
+    return
+  }
+  try {
+    const r = await problemApi.parseObjectiveYaml(await file.text())
+    const list = r.questions.map(toDraft)
+    update(list)
+    ElMessage.success(`已导入 ${list.length} 道小题，请确认后保存`)
+  } catch {
+    // 解析/校验错误由 axios 拦截器统一提示
+  }
+}
+
+function exportYaml() {
+  if (!props.pid) return
+  downloadFile(`/problems/${props.pid}/objective/questions.yaml`, `problem-${props.pid}-questions.yaml`)
 }
 
 // 统一经不可变更新回流（避免直接改 prop）
@@ -196,7 +245,28 @@ defineExpose({ validate, blankDraft })
   <div class="obj-editor">
     <div class="obj-editor-head">
       <span class="obj-editor-title">小题列表（共 {{ modelValue.length }} 题，分值合计 {{ scoreSum }}）</span>
-      <el-button size="small" type="primary" plain :icon="Plus" @click="add">添加小题</el-button>
+      <span class="obj-editor-actions">
+        <input
+          ref="yamlInput"
+          type="file"
+          accept=".yaml,.yml,application/x-yaml,text/yaml"
+          hidden
+          @change="onYamlFile"
+        />
+        <el-button size="small" plain title="导入 YAML：覆盖当前小题列表，导入后仍需保存" @click="pickYaml">
+          导入 YAML
+        </el-button>
+        <el-button
+          v-if="pid"
+          size="small"
+          plain
+          title="导出已保存的小题定义（含答案/解析）"
+          @click="exportYaml"
+        >
+          导出 YAML
+        </el-button>
+        <el-button size="small" type="primary" plain :icon="Plus" @click="add">添加小题</el-button>
+      </span>
     </div>
 
     <el-card v-for="(q, qi) in modelValue" :key="qi" class="obj-q" shadow="never">
@@ -340,6 +410,12 @@ defineExpose({ validate, blankDraft })
 
 .obj-editor-title {
   font-weight: var(--soj-fw-emphasis);
+}
+
+.obj-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .obj-q {

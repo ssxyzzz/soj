@@ -1,3 +1,5 @@
+#include <cstdio>
+
 int add(int a, int b);
 
 int main() {

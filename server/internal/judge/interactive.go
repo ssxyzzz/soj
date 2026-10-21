@@ -65,6 +65,23 @@ func (ir *interactorRunner) ensureCompiled(ctx context.Context) (string, error) 
 	return fileID, nil
 }
 
+// recompile 丢弃失效的编译产物缓存并重编一次（沙箱容器重建/清理后旧 fileId 不再存在）。
+func (ir *interactorRunner) recompile(ctx context.Context) (string, error) {
+	ir.p.InteractorFileID = ""
+	_ = ir.j.Repo.UpdateProblemMeta(ctx, ir.p.ID, bson.M{"interactorFileId": ""})
+	return ir.ensureCompiled(ctx)
+}
+
+// staleInteractorFile 判断沙箱错误是否指向交互器缓存产物丢失（错误里点名了当前 fileId）。
+func staleInteractorFile(err error, fileID string) bool {
+	if err == nil || fileID == "" {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, fileID) &&
+		(strings.Contains(msg, "file does not exist") || strings.Contains(msg, "file not found"))
+}
+
 // evaluateInteractive 交互题主判：逐测试点双进程管道执行。
 func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, l *lang.Language, fileID string, p *repo.Problem) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	ir := j.interactorRunnerFor(p)
@@ -140,8 +157,21 @@ func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, 
 			{In: sandbox.PipeIndex{Index: 0, Fd: 1}, Out: sandbox.PipeIndex{Index: 1, Fd: 0}}, // 交互器 stdout → 选手 stdin
 		}
 		results, err := j.Sandbox.RunPiped(ctx, []sandbox.Cmd{interCmd, userCmd}, pipes)
-		if err != nil || len(results) != 2 {
+		if err != nil && staleInteractorFile(err, irID) {
+			// 沙箱容器重建/清理会让题目元数据里的 fileId 失效：清缓存重编一次再跑，
+			// 与 checker 的 File Error 兜底同口径，避免整道交互题直接 System Error。
+			irID, err = ir.recompile(ctx)
+			if err != nil {
+				return repo.StatusSystemError, sumTime, sumMem, partialScore(passed, n), "交互器缓存失效且重编失败: " + err.Error(), detail
+			}
+			interCmd.CopyIn["main"] = sandbox.CopyFile{FileID: irID}
+			results, err = j.Sandbox.RunPiped(ctx, []sandbox.Cmd{interCmd, userCmd}, pipes)
+		}
+		if err != nil {
 			return repo.StatusSystemError, sumTime, sumMem, partialScore(passed, n), "沙箱调用失败: " + err.Error(), detail
+		}
+		if len(results) != 2 {
+			return repo.StatusSystemError, sumTime, sumMem, partialScore(passed, n), "沙箱返回结果数量异常", detail
 		}
 		irRes, userRes := &results[0], &results[1]
 		t := int(irRes.Time+userRes.Time) / int(time.Millisecond)

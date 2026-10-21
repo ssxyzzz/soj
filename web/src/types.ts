@@ -394,6 +394,34 @@ export interface ContestProblem {
   result_hidden?: boolean // 该题结果/状态/标签/通过率是否对本视角隐藏
 }
 
+// ---------- 比赛/考试打印试卷（v0.10） ----------
+
+export interface PaperQuestion {
+  kind: ObjectiveKind
+  stem: string
+  options?: string[]
+  blank_count: number
+}
+
+export interface PaperProblem {
+  id: number
+  title: string
+  type?: string // 空 = 传统题；objective = 客观题
+  description: string
+  questions?: PaperQuestion[] // 客观题公开字段（无答案/解析/分值）
+  file_io_input?: string // 比赛/考试开启文件 IO 时的英文文件名
+  file_io_output?: string
+}
+
+export interface PaperData {
+  id: number
+  title: string
+  kind: 'contest' | 'exam' | 'problem'
+  single?: boolean // 单题试卷（不显示 T1 标题行）
+  file_io?: boolean
+  problems: PaperProblem[]
+}
+
 export interface ContestDetail {
   id: number
   title: string

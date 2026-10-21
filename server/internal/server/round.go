@@ -513,6 +513,91 @@ func (h *Handlers) UpdateContest(c *gin.Context) { h.roundUpdate(c, scopeContest
 // UpdateExam 组织者编辑考试（语义同比赛）。
 func (h *Handlers) UpdateExam(c *gin.Context) { h.roundUpdate(c, scopeExam) }
 
+// paperProblemJSON 学生版单题数据：仅题面与客观题公开字段；withFileIO 时带上题目的
+// 文件 IO 英文文件名（比赛/考试开启文件 IO 后才展示）。
+func paperProblemJSON(p *repo.Problem, withFileIO bool) gin.H {
+	item := gin.H{
+		"id":          p.ID,
+		"title":       p.Title,
+		"type":        p.Type,
+		"description": p.Statement,
+	}
+	if p.IsObjective() {
+		qs := make([]gin.H, 0, len(p.Questions))
+		for _, q := range p.Questions {
+			qs = append(qs, gin.H{
+				"kind":        q.Kind,
+				"stem":        q.Stem,
+				"options":     q.Options,
+				"blank_count": len(q.Blanks),
+			})
+		}
+		item["questions"] = qs
+	}
+	if withFileIO {
+		in, out := p.FileIONames()
+		item["file_io_input"], item["file_io_output"] = in, out
+	}
+	return item
+}
+
+// ContestPaper / ExamPaper 打印数据（v0.10）：仅 organizer/root；按卷内顺序返回
+// 学生版题面与客观题公开字段（无答案/解析/分值/时空限制/标签/统计）。
+func (h *Handlers) ContestPaper(c *gin.Context) { h.roundPaper(c, scopeContest) }
+func (h *Handlers) ExamPaper(c *gin.Context)    { h.roundPaper(c, scopeExam) }
+
+func (h *Handlers) roundPaper(c *gin.Context, s roundScope) {
+	ct, okR := h.roundOrganizerOnly(c, s)
+	if !okR {
+		return
+	}
+	ctx := c.Request.Context()
+	problems := make([]gin.H, 0, len(ct.Problems))
+	for _, cp := range ct.Problems {
+		p, err := h.repo.GetProblem(ctx, cp.PID)
+		if err != nil || p.Hidden {
+			continue // 与赛事题目表同口径：已删/主题库隐藏（备题）不进入试卷
+		}
+		problems = append(problems, paperProblemJSON(p, ct.FileIO))
+	}
+	ok(c, gin.H{
+		"id":       ct.ID,
+		"title":    ct.Title,
+		"kind":     s.Kind,
+		"file_io":  ct.FileIO,
+		"problems": problems,
+	})
+}
+
+// ProblemPaper 单题学生版试卷（v0.10，仅编辑者）。
+func (h *Handlers) ProblemPaper(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	p, err := h.repo.GetProblem(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
+		return
+	}
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "需要编辑权限才能导出试卷")
+		return
+	}
+	ok(c, gin.H{
+		"id":       p.ID,
+		"title":    p.Title,
+		"kind":     "problem",
+		"single":   true,
+		"file_io":  p.FileIO,
+		"problems": []gin.H{paperProblemJSON(p, p.FileIO)},
+	})
+}
+
 // ---------- 共享提交 ----------
 
 func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {

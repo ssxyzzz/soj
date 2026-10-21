@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // 题目类型（Problem.Type；空 = 传统题，存量零迁移）
@@ -43,7 +45,23 @@ type ObjectiveQuestion struct {
 // ObjectiveBlank 填空题一空：可接受答案列表（任一命中即对）+ 大小写敏感开关。
 type ObjectiveBlank struct {
 	Accept        []string `bson:"accept"                  yaml:"accept"                  json:"accept"`
-	CaseSensitive bool     `bson:"caseSensitive,omitempty" yaml:"caseSensitive,omitempty" json:"case_sensitive,omitempty"`
+	CaseSensitive bool     `bson:"caseSensitive,omitempty" yaml:"case_sensitive,omitempty" json:"case_sensitive,omitempty"`
+}
+
+// UnmarshalYAML 兼容两种大小写开关键：新 YAML 用 case_sensitive（与 API/文档一致），
+// 旧题包里的 caseSensitive 仍可读入，避免存量问题包导入失败。
+func (b *ObjectiveBlank) UnmarshalYAML(node *yaml.Node) error {
+	var raw struct {
+		Accept        []string `yaml:"accept"`
+		CaseSensitive bool     `yaml:"case_sensitive"`
+		Legacy        bool     `yaml:"caseSensitive"`
+	}
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	b.Accept = raw.Accept
+	b.CaseSensitive = raw.CaseSensitive || raw.Legacy
+	return nil
 }
 
 // IsObjective 是否客观题（判题分派、提交校验、前端渲染都以此为开关）。

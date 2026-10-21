@@ -117,6 +117,27 @@ func AppendSamplesMd(statement string, samples []SampleIO) string {
 	return b.String()
 }
 
+// AppendSamplesMdForType 按题型追样例：交互题没有固定输出（判定权在 interactor），
+// 只展示输入并说明交互方式，避免生成空的「输出」代码块；其余题型沿用 AppendSamplesMd。
+func AppendSamplesMdForType(statement string, samples []SampleIO, typ string) string {
+	if typ != TypeInteractive {
+		return AppendSamplesMd(statement, samples)
+	}
+	if len(samples) == 0 || strings.Contains(statement, samplesMdHeading) {
+		return statement
+	}
+	var b strings.Builder
+	b.WriteString(strings.TrimRight(statement, "\n\t "))
+	b.WriteString("\n\n")
+	b.WriteString(samplesMdHeading)
+	for i, s := range samples {
+		b.WriteString(fmt.Sprintf("\n\n### 样例 %d\n\n输入：\n\n```\n%s\n```",
+			i+1, strings.TrimRight(s.Input, "\n")))
+	}
+	b.WriteString("\n\n交互题没有固定输出：程序向标准输出写猜测/询问，评测器按题面协议实时回应。")
+	return b.String()
+}
+
 // StripSamplesMd 剥离题面中的「## 样例」章节（从标题行到下一个二级标题或文末），
 // 返回不含样例章节的正文。替换测试数据后样例需按新数据重建：先剥离再重新追加。
 func StripSamplesMd(statement string) string {

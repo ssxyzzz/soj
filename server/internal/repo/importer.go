@@ -343,7 +343,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 			samples = append(samples, contents[tc.Index])
 		}
 	}
-	statement = []byte(AppendSamplesMd(string(statement), samples))
+	statement = []byte(AppendSamplesMdForType(string(statement), samples, meta.Type))
 
 	// 子任务校验：测试点必须存在、分值合计 100
 	subtasks := make([]Subtask, 0, len(meta.Subtasks))
@@ -839,7 +839,7 @@ func (im *Importer) ReplaceCases(ctx context.Context, pid int64, dir string) (*P
 			samples = append(samples, contents[tc.Index])
 		}
 	}
-	p.Statement = AppendSamplesMd(StripSamplesMd(p.Statement), samples)
+	p.Statement = AppendSamplesMdForType(StripSamplesMd(p.Statement), samples, p.Type)
 	if err := store.WriteFile(pid, "statement.md", []byte(p.Statement)); err != nil {
 		return nil, err
 	}

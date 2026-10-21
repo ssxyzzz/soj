@@ -24,7 +24,7 @@ const props = withDefaults(
     height?: string
     /** 工具栏档位：full = 文档型场景（题面/公告/赛事介绍，默认）；compact = 短内容瘦身（题解/说明，去表格/图片/全屏） */
     variant?: 'full' | 'compact'
-    /** 高度随内容自生长（v0.9.3）：短内容不留空白，超过 62vh 才在内容区滚动 */
+    /** 高度随内容自生长（v0.9.3；v0.9.5 起不设视口上限）：短内容不留空白，普通编辑随内容长高 */
     autoHeight?: boolean
   }>(),
   {
@@ -49,6 +49,8 @@ const currentTheme = ref<MdTheme>((userStore.prefs.mdTheme || 'light') as MdThem
 const lightTheme = computed(() => currentTheme.value === 'light')
 // 用户拖过 Vditor 右下角 resize 手柄后，手动尺寸优先于内容自适应
 const userSized = ref(false)
+const loading = ref(true)
+const editorError = ref('')
 
 const el = ref<HTMLDivElement>()
 let vd: Vditor | null = null
@@ -62,10 +64,10 @@ let inner = props.modelValue // 防回显循环
 let prefTimer: number | undefined
 let pendingPref: { mdEditMode?: MdEditMode; mdTheme?: MdTheme } = {}
 
-// ---- 自生长高度（v0.9.3）----
+// ---- 自生长高度（v0.9.3，v0.9.5 取消视口上限）----
 // Vditor 的 height:'auto' 只在部分模式生效（sv/ir 内容区是定高 flex + 内部滚动），
 // 这里直接量内容区各子面板的 scrollHeight，把编辑器高度设为「内容高 + 工具栏」，
-// 上限 62vh：短内容不留空白，超过视口才出滚动条。
+// 不设 62vh 上限：普通编辑也随内容长高，页面整体滚动；全屏仍由 Vditor 的 100vh 接管。
 let fitTimer: number | undefined
 
 // 现代浏览器（Chrome 123+）支持 field-sizing: content——textarea 按内容原生自撑，
@@ -105,8 +107,7 @@ function fitHeight() {
 
   // 空内容 ≈ 两行文本（textarea 行高 27 + 上下内距 20）：这是高度下限
   const minH = tbH + 74
-  const maxH = Math.max(Math.round(window.innerHeight * 0.62), minH + 40)
-  const h = Math.min(Math.max(contentH + tbH + 2, minH), maxH)
+  const h = Math.max(contentH + tbH + 2, minH)
   root.style.height = `${h}px`
 }
 
@@ -118,6 +119,44 @@ function scheduleFit() {
 
 function onWindowResize() {
   scheduleFit()
+}
+
+// Vditor 懒 chunk 在服务刚启动/版本刚切换时可能瞬时 404：重试两次，
+// 仍失败则交给 UI 提示刷新页面，避免留下一块什么都不显示的空白。
+async function loadVditor() {
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return (await import('vditor')).default
+    } catch (e) {
+      lastErr = e
+      await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)))
+    }
+  }
+  throw lastErr
+}
+
+function reloadPage() {
+  window.location.reload()
+}
+
+let bodyOverflowBeforeFullscreen = ''
+
+// 全屏按钮切 body overflow；退出时 Vditor 偶发未恢复会让整页无法滚动。
+// 捕获阶段记录进入前的值，退出后一帧兜底恢复（保留弹窗自身的 overflow:hidden）。
+function onToolbarClick(e: MouseEvent) {
+  if (!(e.target as HTMLElement | null)?.closest('[data-type="fullscreen"]')) return
+  const root = editorRoot()
+  if (!root) return
+  if (root.classList.contains('vditor--fullscreen')) {
+    window.setTimeout(() => {
+      if (!document.querySelector('.vditor--fullscreen')) {
+        document.body.style.overflow = bodyOverflowBeforeFullscreen
+      }
+    }, 0)
+  } else {
+    bodyOverflowBeforeFullscreen = document.body.style.overflow
+  }
 }
 
 // Vditor 的 resize 手柄改的是 .vditor 内联高度，而 .md-field 的 height:auto !important
@@ -187,9 +226,20 @@ function toolbar(): Array<string | Record<string, unknown>> {
 }
 
 onMounted(async () => {
-  const { default: Vditor } = await import('vditor')
+  let Vditor: Awaited<ReturnType<typeof loadVditor>>
+  try {
+    Vditor = await loadVditor()
+  } catch (e) {
+    console.error('[MdEditor] Vditor 加载失败', e)
+    editorError.value = '编辑器加载失败，可能是页面版本已更新。'
+    loading.value = false
+    return
+  }
   VditorCtor = Vditor
-  if (!el.value) return
+  if (!el.value) {
+    loading.value = false
+    return
+  }
   vd = new Vditor(el.value, {
     mode: initialMode,
     lang: 'zh_CN',
@@ -225,6 +275,8 @@ onMounted(async () => {
     },
     after: () => {
       if (!vd) return
+      loading.value = false
+      editorRoot()?.addEventListener('click', onToolbarClick, true)
       scheduleFit()
       window.addEventListener('resize', onWindowResize)
       // 模式切换（工具栏菜单或 ⌥⌘7/8/9 热键）都会重排 edit-mode 按钮的 current 类，
@@ -277,6 +329,11 @@ onBeforeUnmount(() => {
   modeObserver = null
   unbindCopy?.()
   unbindCopy = null
+  const root = editorRoot()
+  root?.removeEventListener('click', onToolbarClick, true)
+  if (root?.classList.contains('vditor--fullscreen')) {
+    document.body.style.overflow = bodyOverflowBeforeFullscreen
+  }
   vd?.destroy()
   vd = null
   // 内容主题是全局单例 <link>：编辑器用了非 light 主题时不复位，会把背后的
@@ -298,6 +355,11 @@ onBeforeUnmount(() => {
     @mousedown.capture="onEditorMouseDown"
   >
     <div ref="el"></div>
+    <div v-if="loading" class="md-editor-status">编辑器加载中…</div>
+    <div v-else-if="editorError" class="md-editor-status is-error">
+      <span>{{ editorError }}</span>
+      <button type="button" @click="reloadPage">刷新页面</button>
+    </div>
   </div>
 </template>
 
@@ -307,16 +369,12 @@ onBeforeUnmount(() => {
   width: 100%;
 }
 
-/* 自生长高度（v0.9.3）：高度由脚本按内容量出（见 fitHeight）；此处兜底防溢出视口 */
-.md-auto :deep(.vditor) {
-  max-height: 62vh;
-}
+/* 自生长高度（v0.9.3）：高度由脚本按内容量出（见 fitHeight）；v0.9.5 起不设视口上限 */
 
-/* field-sizing 原生自撑（Chrome 123+）：textarea 按内容长高，空内容约两行，
-   超过视口 62% 才在编辑区滚动。整体高度随之 auto，不再需要脚本设值。 */
+/* field-sizing 原生自撑（Chrome 123+）：textarea 按内容长高，空内容约两行。
+   不设 max-height，普通编辑状态跟内容一起长高，由页面滚动。 */
 .md-field :deep(.vditor) {
   height: auto !important;
-  max-height: 62vh;
   overflow: hidden;
 }
 
@@ -328,15 +386,13 @@ onBeforeUnmount(() => {
 .md-field :deep(textarea.vditor-sv) {
   field-sizing: content;
   min-height: 54px;
-  max-height: calc(62vh - 40px);
   overflow-y: auto;
 }
 
-/* 其余模式/分屏预览：同样在视口上限后自行滚动，否则会被 .vditor 的 overflow:hidden 裁掉 */
+/* 其余模式/分屏预览：随内容长高，不再按视口截断 */
 .md-field :deep(.vditor-preview),
 .md-field :deep(.vditor-ir),
 .md-field :deep(.vditor-wysiwyg) {
-  max-height: calc(62vh - 40px);
   overflow-y: auto;
 }
 
@@ -353,5 +409,48 @@ onBeforeUnmount(() => {
 
 .md-editor :deep(.vditor-toolbar__item) {
   font-size: var(--soj-fs-editor-toolbar, 14px);
+}
+
+/* 懒加载/加载失败提示：避免服务刚启动或版本切换时只剩一块空白 */
+.md-editor-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  color: var(--el-text-color-secondary);
+  font-size: var(--soj-fs-body, 14px);
+}
+
+.md-editor-status.is-error {
+  color: var(--el-color-danger);
+}
+
+.md-editor-status button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--el-color-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 全屏：固定 100vh，面板内部滚动 */
+.md-auto :deep(.vditor--fullscreen),
+.md-field :deep(.vditor--fullscreen) {
+  height: 100vh !important;
+  max-height: none;
+  overflow: hidden;
+}
+
+.md-field :deep(.vditor--fullscreen) textarea.vditor-sv {
+  field-sizing: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.md-field :deep(.vditor--fullscreen) .vditor-preview,
+.md-field :deep(.vditor--fullscreen) .vditor-ir,
+.md-field :deep(.vditor--fullscreen) .vditor-wysiwyg {
+  max-height: none;
 }
 </style>

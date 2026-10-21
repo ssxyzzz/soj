@@ -211,6 +211,13 @@ function stopPolling() {
   }
 }
 
+// 单题学生版试卷（v0.10）：独立打印视图，仅编辑者；无答案/解析/后台信息
+function openPaper() {
+  if (!problem.value) return
+  const url = router.resolve(`/problems/${problem.value.id}/paper`).href
+  window.open(url, '_blank', 'noopener')
+}
+
 // 隐藏开关（仅题面编辑者可见；状态 tag 已删，按钮文案即状态）
 async function toggleHidden() {
   if (!problem.value) return
@@ -264,6 +271,7 @@ onUnmounted(stopPolling)
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
             <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
+            <el-button plain style="width: 100%" @click="openPaper">导出试卷</el-button>
           </div>
         </el-card>
 
@@ -317,7 +325,7 @@ onUnmounted(stopPolling)
       :problem="problem"
       :submitting="submitting"
       :initial-code="isFunction ? funcTemplate : undefined"
-      :lang-only="isFunction ? 'cpp' : undefined"
+      :lang-only="isFunction ? 'cpp' : isInteractive ? ['cpp', 'c'] : undefined"
       @submit="handleSubmit"
     />
 
