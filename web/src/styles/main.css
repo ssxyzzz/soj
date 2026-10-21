@@ -771,8 +771,8 @@ samp {
 /* ---- 用户等级徽章浅色族（2026-10-22 v6.2 定稿）：与难度 chips 同体系的浅色 tag ----
    浓度高一档（底 30% / 边 55% / 字 88% 混深岩灰）；特效全档逐步递增：
    Lv.2–4 静态光晕（4px/18% → 6px/24% → 8px/30%）→ Lv.5–6 光晕呼吸（Lv.6 加星）→
-   Lv.7–8 强呼吸（Lv.8 星明灭放大）→ Lv.9 强呼吸 + 星 → 10 极境彩色渐变（蓝紫 300% 流动）
-   + 白字 + 白星芒 + 深处辉光呼吸。
+   Lv.7–8 强呼吸（Lv.8 星明灭放大）→ Lv.9 强呼吸 + 淡白流光 → 10 极境彩色渐变（蓝紫 300% 流动）
+   + 稍浓白流光 + 白字 + 白星芒 + 深处辉光呼吸。
    后台特效开关（全局/逐级）关闭 = 不挂 e 类与星，退纯浅色。呼吸 ≥5s，reduced-motion 退静态。 */
 .ulv-1 { --lc: #4aa27e; }
 .ulv-2 { --lc: #7d8f9b; }
@@ -798,6 +798,25 @@ samp {
 .ulv-e7,
 .ulv-e8 { animation: ulv-b2 5s ease-in-out infinite; }
 .ulv-e9 { animation: ulv-b2 5s ease-in-out infinite; }
+/* 白流光（Lv.9 淡 / Lv.10 稍浓）：光带缓慢扫过，扫光时呼吸星不受影响 */
+.ulv-e9,
+.ulv-e10 {
+  position: relative;
+  overflow: hidden;
+}
+.ulv-e9::before,
+.ulv-e10::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.25) 50%, transparent 60%);
+  transform: translateX(-130%);
+  pointer-events: none;
+  animation: ulv-sweep 6s ease-in-out infinite;
+}
+.ulv-e10::before {
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.4) 50%, transparent 60%);
+}
 /* 极境：彩色渐变（蓝紫 300% 流动）+ 白字 + 深处辉光呼吸 */
 .ulv-e10 {
   background: linear-gradient(120deg, #4192de, #7d53c9);
@@ -857,6 +876,15 @@ samp {
   }
   100% {
     background-position: 100% 50%;
+  }
+}
+@keyframes ulv-sweep {
+  0% {
+    transform: translateX(-130%);
+  }
+  55%,
+  100% {
+    transform: translateX(130%);
   }
 }
 @keyframes ulv-brd {
@@ -999,6 +1027,8 @@ samp {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .ulv-e9::before,
+  .ulv-e10::before,
   .diff-g8::after,
   .diff-g9::after,
   .diff-g10::after,
