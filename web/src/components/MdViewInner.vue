@@ -68,10 +68,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* 内容列限宽 860 居中（.vditor-reset 是 Vditor 的内容根） */
+/* 不限宽：Markdown 内容随所在卡片撑满（.vditor-reset 是 Vditor 的内容根）。
+   行宽由外层容器负责——全站两列骨架 1440 封顶，弹窗/卡片各自有边距 */
 .md-view {
-  max-width: 860px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .md-view-notice {

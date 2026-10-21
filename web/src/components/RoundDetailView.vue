@@ -421,10 +421,9 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-/* 名称卡与题面同列 860 居中，标题与说明左缘对齐 */
+/* 名称卡与题面同构：随主列撑满卡片，与下方满宽卡片左右缘对齐 */
 .round-body {
-  max-width: 860px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 /* 页面名称 20px（v0.7 design.md；token 在 v0.7 统一调整） */

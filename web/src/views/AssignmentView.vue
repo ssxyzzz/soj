@@ -368,9 +368,9 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
+/* 随主列撑满卡片，与卡片左右缘对齐 */
 .assignment-body {
-  max-width: 860px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .big-title {

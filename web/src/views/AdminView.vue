@@ -107,7 +107,7 @@ async function switchSection(target: typeof section.value) {
 
 <style scoped>
 .admin-layout {
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
   display: flex;
   gap: 24px;
@@ -117,8 +117,8 @@ async function switchSection(target: typeof section.value) {
 }
 
 .admin-nav {
-  flex: 0 0 300px;
-  width: 300px;
+  flex: 0 0 320px;
+  width: 320px;
   display: flex;
   flex-direction: column;
   gap: 12px;

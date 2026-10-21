@@ -192,6 +192,11 @@ function doSubmit() {
   margin-bottom: 12px;
 }
 
+/* 题干段落首行按中文排版缩进两格（语文式） */
+.obj-stem :deep(.vditor-reset > p) {
+  text-indent: 2em;
+}
+
 .opt-list {
   display: flex;
   flex-direction: column;

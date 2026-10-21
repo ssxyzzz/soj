@@ -120,7 +120,7 @@ onMounted(search)
             <span class="drag-handle">⠿</span>
             <span class="adjust-order">T{{ i + 1 }}</span>
             <span class="adjust-title">#{{ p.id }} {{ p.title }}</span>
-            <el-tag v-if="p.hidden" size="small" type="danger">隐藏</el-tag>
+            <el-tag v-if="p.hidden" size="small" type="danger">隐藏题</el-tag>
             <el-button size="small" type="danger" link @click="removeAt(i)">删除</el-button>
           </div>
           <el-empty v-if="!modelValue.length" description="还没有题目，从左侧候选添加" :image-size="40" />

@@ -227,9 +227,9 @@ body {
 }
 
 .page {
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
-  /* 左右不留内边距：与 PageShell（1280px 容器 + el-main 20px 内边距）左右边缘对齐 */
+  /* 左右不留内边距：与 PageShell（1440px 容器 + el-main 20px 内边距）左右边缘对齐 */
   padding: 16px 0;
 }
 

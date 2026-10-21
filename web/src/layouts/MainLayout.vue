@@ -91,13 +91,13 @@ function onCommand(command: string) {
   height: 60px;
 }
 
-/* 1320px = 1280px 内容列 + 左右各 20px 内边距；再各收 4px（padding 24）做视觉内收——
+/* 1480px = 1440px 内容列 + 左右各 20px 内边距；再各收 4px（padding 24）做视觉内收——
    卡片边框浅、有圆角阴影会视觉后退，而 SOJ 加粗蓝字和 CJK 用户名边缘更实，
    与内容列严格齐平时顶栏文字观感上会往外凸，故文字比内容列略靠内 4px。
    必须显式 border-box（默认 content-box 会让 max-width 与 padding 相加，左右各多出 20px） */
 .header-inner {
   box-sizing: border-box;
-  max-width: 1320px;
+  max-width: 1480px;
   margin: 0 auto;
   display: flex;
   align-items: center;

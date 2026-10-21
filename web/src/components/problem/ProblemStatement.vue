@@ -35,7 +35,7 @@ const kindLabel = computed(() => {
 
 <template>
   <el-card>
-    <!-- 内容列 860 居中：标题与正文同列对齐 -->
+    <!-- 题面内容撑满卡片宽度：与下方满宽卡片（作答卡等）左右缘对齐 -->
     <div class="statement">
       <div class="title-row">
         <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
@@ -89,10 +89,9 @@ const kindLabel = computed(() => {
 </template>
 
 <style scoped>
-/* 内容列 860 居中（窄容器自然退化全宽） */
+/* 不限宽：题面随主列撑满卡片（容器 1440 已封顶行宽），避免右侧大片留白 */
 .statement {
-  max-width: 860px;
-  margin: 0 auto;
+  margin: 0;
 }
 
 .title-row {

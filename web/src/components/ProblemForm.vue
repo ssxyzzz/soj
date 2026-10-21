@@ -197,7 +197,8 @@ function payload(): ProblemFormPayload | null {
     ElMessage.warning('请至少选择一个标签')
     return null
   }
-  if (!form.statement.trim()) {
+  // 客观题的题面是「整题说明（可选）」，不强制填写；必填项转由小题列表承担（下方 validate）
+  if (form.type !== 'objective' && !form.statement.trim()) {
     ElMessage.warning('请填写题面')
     return null
   }
@@ -567,9 +568,9 @@ function onSubmitClick() {
   color: var(--el-text-color-primary);
 }
 
-/* 主/右两列：结构对齐 PageShell（1280 + 右列 300）；el-form 跨列保统一校验 */
+/* 主/右两列：结构对齐 PageShell（1440 + 右列 320）；el-form 跨列保统一校验 */
 .pf-layout {
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
   display: flex;
   gap: 24px;
@@ -582,8 +583,8 @@ function onSubmitClick() {
 }
 
 .pf-aside {
-  flex: 0 0 300px;
-  width: 300px;
+  flex: 0 0 320px;
+  width: 320px;
   display: flex;
   flex-direction: column;
   gap: 16px;

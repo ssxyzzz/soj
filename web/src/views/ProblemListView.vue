@@ -14,17 +14,17 @@ import type { ProblemListItem } from '@/types'
 
 const router = useRouter()
 
-// 客观题小类徽章（v0.9）
+// 客观题小类徽章（v0.9）：带「题」字，与详情页题型标签口径一致
 function kindBadge(kind?: string) {
-  const map: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', blank: '填空' }
-  return map[kind ?? ''] ?? '客观'
+  const map: Record<string, string> = { single: '单选题', multiple: '多选题', judge: '判断题', blank: '填空题' }
+  return map[kind ?? ''] ?? '客观题'
 }
 
-// 题型徽章文案（v0.9）：客观题按小类细分；函数/交互题给固定名；传统题不显示
+// 题型徽章文案：客观题按小类细分；函数/交互题给固定名；传统题不显示
 function typeBadge(row: { type?: string; kind?: string }): string {
   if (row.type === 'objective') return kindBadge(row.kind)
-  if (row.type === 'function') return '函数'
-  if (row.type === 'interactive') return '交互'
+  if (row.type === 'function') return '函数题'
+  if (row.type === 'interactive') return '交互题'
   return ''
 }
 const userStore = useUserStore()
@@ -160,7 +160,7 @@ stripe
               <el-tag v-if="typeBadge(row)" size="small" type="info" class="ml8">
                 {{ typeBadge(row) }}
               </el-tag>
-              <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏</el-tag>
+              <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏题</el-tag>
               <!-- 客观题没有测试数据是正常形态，不提示「无数据」 -->
               <el-tag v-if="row.has_cases === false && row.type !== 'objective'" size="small" type="warning" class="ml8">无数据</el-tag>
               <el-tag v-if="row.locked" size="small" type="success" class="ml8">
@@ -202,8 +202,16 @@ stripe
       <el-card class="aside-card">
         <template #header><span>我的概览</span></template>
         <template v-if="userStore.token">
-          <div class="stat-big">{{ solvedCount ?? '—' }}</div>
-          <div class="dim">已解决题数{{ solvedRank ? ` · 当前排名第 ${solvedRank}` : '' }}</div>
+          <div class="stat-row">
+            <div class="stat">
+              <div class="stat-big">{{ solvedCount ?? '—' }}</div>
+              <div class="dim">已解决题数</div>
+            </div>
+            <div class="stat">
+              <div class="stat-big">{{ solvedRank ?? '—' }}</div>
+              <div class="dim">当前排名</div>
+            </div>
+          </div>
         </template>
         <template v-else>
           <div class="dim">登录后查看你的做题概览</div>
@@ -248,6 +256,13 @@ stripe
 }
 
 /* 统计大数字（32/600，强调档） */
+/* 两个统计（已解决题数/当前排名）并排一行，数字同规格 */
+.stat-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 40px;
+}
+
 .stat-big {
   font-size: var(--soj-fs-stat);
   font-weight: var(--soj-fw-emphasis);
