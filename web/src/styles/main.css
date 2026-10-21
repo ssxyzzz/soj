@@ -41,13 +41,11 @@
    emoji 36           首页 feature-icon
    dialog-title 18    el-dialog / el-message-box 标题
    result-title 20    404 el-result 标题内层 p
-   rich 16            .rich 正文基准（MdView + Tiptap 内容）
-   code 14            pre/code/kbd/samp、富文本块级代码
+   rich 16            Markdown 内容正文基准（Vditor .vditor-reset，MdViewInner/MdEditorInner 覆盖）
+   code 14            pre/code/kbd/samp、Markdown 块级代码
    tooltip 12         .el-popper 内容（状态说明/权限说明/表单帮助）
    popover 14         .el-popover.el-popper（题目标签浮层）
    alert-title 14 / alert-title-desc 16 / alert-desc 14
-   editor-toolbar 12  Tiptap .tb-btn 文本（行+/行-/列+/列-）
-   copy 14            MdView 代码块复制按钮
 
    ── 语义字重（--soj-fw-*）────────────────────────────────
    regular 400        body/UI 默认、表单标签、上传说明、EP 根字重
@@ -129,8 +127,7 @@ body,
   --soj-fs-alert-title: var(--soj-fs-14);
   --soj-fs-alert-title-desc: var(--soj-fs-16);
   --soj-fs-alert-desc: var(--soj-fs-14);
-  --soj-fs-editor-toolbar: var(--soj-fs-12);
-  --soj-fs-copy: var(--soj-fs-14);
+  --soj-fs-editor-toolbar: var(--soj-fs-14); /* Vditor 工具栏（vditor-toolbar__item） */
 
   /* 组件字重 400（Ant：强调只靠 600 档与颜色） */
   --el-font-weight-primary: var(--soj-fw-regular);
@@ -432,81 +429,107 @@ strong {
   font-size: var(--soj-fs-body);
 }
 
-/* ---- Markdown 排版（.rich）：同挂编辑端（Tiptap 内容区，MdEditor 注入）与显示端
-   （MdView 根元素），一段规则约束「编辑所见」与「显示所得」；长文正文 16、标题 600、行高 1.7 ----
-   v0.6 换血后无第三方编辑器样式反压，规则即唯一来源 */
-.rich {
-  color: var(--el-text-color-primary);
+/* ---- Markdown 内容排版（.soj-md .vditor-reset）：编辑端（MdEditorInner）与查看端
+   （MdViewInner）共用，恢复站内字阶——正文 16 / 行高 1.7 / 标题与强调 600。
+   字体、字号、行高、标题梯度与主题无关，始终生效；颜色类规则限定在 .md-light
+   （light 内容主题下），避免压坏 dark / wechat 等主题的自带配色。
+   注意：Vditor 的 index.css 与 content-theme CSS 是运行时加载的，靠特异度压制而非顺序 ——
+   .soj-md .vditor-reset 为 (0,2,0)，行内 code 规则为 (0,4,1)，压过主题的 (0,3,1) */
+.soj-md .vditor-reset {
+  font-family:
+    'Helvetica Neue',
+    Arial,
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
   font-size: var(--soj-fs-rich);
+  font-weight: var(--soj-fw-regular);
   line-height: 1.7;
 }
 
 /* 标题梯度低于页头大标题（20/600 是题面卡层级顶点） */
-.rich h1,
-.rich h2,
-.rich h3,
-.rich h4,
-.rich h5,
-.rich h6 {
+.soj-md .vditor-reset h1,
+.soj-md .vditor-reset h2,
+.soj-md .vditor-reset h3,
+.soj-md .vditor-reset h4,
+.soj-md .vditor-reset h5,
+.soj-md .vditor-reset h6 {
   font-weight: var(--soj-fw-emphasis);
   line-height: 1.4;
   margin: 1.5em 0 0.5em;
 }
 
-.rich h1 {
+.soj-md .vditor-reset h1 {
   font-size: 1.35em;
 }
 
-.rich h2 {
+.soj-md .vditor-reset h2 {
   font-size: 1.2em;
 }
 
-.rich h3 {
+.soj-md .vditor-reset h3 {
   font-size: 1.08em;
 }
 
-.rich h4,
-.rich h5,
-.rich h6 {
+.soj-md .vditor-reset h4,
+.soj-md .vditor-reset h5,
+.soj-md .vditor-reset h6 {
   font-size: 1em;
 }
 
-.rich p {
+/* 强调统一 600 档（浏览器默认 strong=700，与全站字重口径不一致） */
+.soj-md .vditor-reset strong,
+.soj-md .vditor-reset b {
+  font-weight: var(--soj-fw-emphasis);
+}
+
+.soj-md .vditor-reset p {
   margin: 0.55em 0;
 }
 
-.rich ul,
-.rich ol {
+.soj-md .vditor-reset ul,
+.soj-md .vditor-reset ol {
   margin: 0.55em 0;
   padding-left: 1.6em;
 }
 
-.rich li {
-  margin: 0.2em 0;
+.soj-md .vditor-reset li + li {
+  margin-top: 0.2em;
 }
 
-.rich a {
+.soj-md .vditor-reset img {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.soj-md .vditor-reset table {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+}
+
+/* ---- 颜色（light 内容主题；主题切换为 dark / wechat 等时交给 Vditor 主题） ---- */
+.soj-md.md-light .vditor-reset {
+  color: var(--el-text-color-primary);
+}
+
+.soj-md.md-light .vditor-reset a {
   color: var(--el-color-primary);
   text-decoration: none;
 }
 
-.rich a:hover {
+.soj-md.md-light .vditor-reset a:hover {
   text-decoration: underline;
 }
 
-.rich hr {
+.soj-md.md-light .vditor-reset hr {
   border: 0;
   border-top: 1px solid var(--el-border-color-lighter);
   margin: 1.6em 0;
 }
 
-.rich img {
-  max-width: 100%;
-  border-radius: 8px;
-}
-
 /* 引用块 callout 化：浅底圆角 + 左侧主色条 */
-.rich blockquote {
+.soj-md.md-light .vditor-reset blockquote {
   margin: 0.8em 0;
   padding: 10px 14px;
   background: var(--el-color-primary-light-9);
@@ -515,98 +538,106 @@ strong {
   color: var(--el-text-color-regular);
 }
 
-.rich blockquote p {
+.soj-md.md-light .vditor-reset blockquote p {
   margin: 0.3em 0;
 }
 
-/* 行内 code 徽章化：类名写两遍保住 (0,3,1) 特异度余量（历史：压 vditor code:not(.hljs)） */
-.rich.rich :not(pre) > code {
+/* 行内 code 徽章化：选择器必须与 Vditor 主题同形（两个 :not 是特异度来源） */
+.soj-md.md-light .vditor-reset code:not(.hljs):not(.highlight-chroma) {
   padding: 1px 6px;
-  background: var(--el-fill-color);
+  background-color: var(--el-fill-color);
   border: 1px solid var(--el-border-color-lighter);
   border-radius: var(--el-border-radius-small);
+  color: var(--el-text-color-primary);
   font-size: 0.9em;
+  font-family: var(--font-mono);
 }
 
-/* 块级代码 14px（压过 Vditor 默认 85%） */
-.rich pre,
-.rich pre code {
+/* 代码块：字号固定 14（Vditor 默认 85% 相对字号），配色沿 light 主题 */
+.soj-md .vditor-reset pre > code {
   font-size: var(--soj-fs-code);
+  font-family: var(--font-mono);
 }
 
-.rich pre {
-  background: var(--el-fill-color-lighter);
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: var(--el-border-radius-base);
-  /* 代码块内距：vditor 退役后其 pre>code 的 0.5em 内距一并消失，缺省会让代码贴边、
-     查看端「复制」按钮溢出块外（按钮 top 6 + 高 22 > 单行块高 26） */
-  padding: 7px 10px;
-}
-
-.rich th,
-.rich td {
+.soj-md.md-light .vditor-reset table th,
+.soj-md.md-light .vditor-reset table td {
   border: 1px solid var(--el-border-color-lighter);
   padding: 6px 12px;
 }
 
-.rich th {
+.soj-md.md-light .vditor-reset table th {
   background: var(--el-fill-color-light);
   font-weight: var(--soj-fw-emphasis);
 }
 
-.rich tbody tr:nth-child(2n) {
+.soj-md.md-light .vditor-reset table tbody tr:nth-child(2n) {
   background: var(--el-fill-color-lighter);
 }
 
-.rich > :first-child {
-  margin-top: 0;
+/* ---- 代码块复制按钮（站内自建 md-copy-btn）----
+   Vditor 自带按钮（.vditor-copy：绝对定位 + tooltip 浮框）与站内胶囊样式反复冲突，
+   整个隐藏；utils/md.ts bindCopyFeedback 在 pre 上挂自建按钮。常态淡蓝胶囊
+   （图标+「复制」），点击复制后变淡绿「已复制」+ 站内 toast，3 秒恢复。
+   code 右侧预留 64px，长代码行不钻到按钮下面 */
+.soj-md .vditor-reset pre .vditor-copy {
+  display: none !important;
 }
 
-/* 任务列表勾选框（Tiptap taskList / 转换器输出 input[disabled]） */
-.rich ul[data-type="taskList"] {
-  list-style: none;
-  padding-left: 0.2em;
+.soj-md .vditor-reset pre {
+  position: relative; /* 自建按钮的定位基准 */
 }
 
-.rich ul[data-type="taskList"] li {
-  display: flex;
-  gap: 0.5em;
+.soj-md .vditor-reset pre > code {
+  padding-right: 64px;
 }
 
-.rich ul[data-type="taskList"] li > label {
-  margin-top: 0.28em;
-  flex: 0 0 auto;
+.soj-md .vditor-reset pre .md-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  font-family: inherit;
+  font-size: var(--soj-fs-tooltip);
+  line-height: 18px;
+  border-radius: var(--el-border-radius-small);
+  cursor: pointer;
+  user-select: none;
+  /* 中性兜底（编辑器暗色内容主题下可读）；亮色主题在下方覆写为淡蓝/淡绿 */
+  color: var(--el-text-color-secondary);
+  background: rgba(127, 127, 127, 0.1);
+  border: 1px solid rgba(127, 127, 127, 0.28);
 }
 
-.rich ul[data-type="taskList"] li > div {
-  flex: 1 1 auto;
+.soj-md .vditor-reset pre .md-copy-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
 }
 
-/* 块级公式居中 + 行内公式与文字基线对齐（KaTeX 输出） */
-.rich [data-type="block-math"] {
-  margin: 0.8em 0;
-  text-align: center;
-  overflow-x: auto;
+.soj-md.md-light .vditor-reset pre .md-copy-btn {
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary-light-7);
 }
 
-/* 编辑态公式占位（当前不生效，登记表 C 段已注明）：
-   Tiptap 内容根节点本身即 .rich.tiptap，没有祖先 .rich；
-   且 Mathematics 节点始终渲染 KaTeX 包裹，不会 :empty。
-   保留规则待后续按实际节点结构重做，不能只改选择器。 */
-.rich .tiptap [data-type="block-math"]:empty::before,
-.rich .tiptap [data-type="inline-math"]:empty::before {
-  content: "公式（双击编辑 TeX）";
-  color: var(--el-text-color-placeholder);
-  font-size: var(--soj-fs-13);
+.soj-md.md-light .vditor-reset pre .md-copy-btn:hover {
+  background: var(--el-color-primary-light-8);
 }
 
-/* 表格（Tiptap 表格与转换器表格共用；查看端表头/斑马纹沿用上方 .rich 规则） */
-.rich table {
-  border-collapse: collapse;
-  margin: 0.8em 0;
+.soj-md.md-light .vditor-reset pre .md-copy-btn.md-copied,
+.soj-md.md-light .vditor-reset pre .md-copy-btn.md-copied:hover {
+  color: var(--el-color-success);
+  background: var(--el-color-success-light-9);
+  border-color: var(--el-color-success-light-7);
 }
 
-/* 代码显示面统一 14px + 显式等宽字体栈（CodeMirror 编辑器有自己的字号/字体主题，不受影响） */
+/* 代码显示面统一 14px + 显式等宽字体栈（CodeMirror/Vditor 编辑器有自己的字号/字体主题，不受影响） */
 pre,
 code,
 kbd,

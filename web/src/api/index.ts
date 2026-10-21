@@ -13,7 +13,6 @@ import type {
   ContestListItem,
   ContestMySubmission,
   ExamListItem,
-  ImportPreviewResult,
   LeaderRow,
   LoginResult,
   PermGroupInfo,
@@ -67,7 +66,10 @@ client.interceptors.response.use(
     } else {
       ElMessage.error(error.response?.data?.message || error.message || '网络错误')
     }
-    return Promise.reject(error)
+    // 与成功分支同构：把 failData 的 data 挂到 error 上（如隐藏期 404 携带的锁信息，供重定向）
+    const err = error as Error & { data?: unknown }
+    err.data = error.response?.data?.data
+    return Promise.reject(err)
   },
 )
 
@@ -129,10 +131,6 @@ export const problemApi = {
       .then((r) => r.data.data),
   updateMeta: (id: number, body: Record<string, unknown>) =>
     patch<{ updated: number }>(`/problems/${id}/meta`, body),
-  importPreview: (url: string) =>
-    client
-      .post<ApiResponse<ImportPreviewResult>>('/import/preview', { url }, { timeout: 0 })
-      .then((r) => r.data.data),
   uploadChecker: (id: number, form: FormData) =>
     client.post(`/problems/${id}/checker`, form, { timeout: 0 }).then((r) => r.data.data),
   removeChecker: (id: number) => del<{ removed: boolean }>(`/problems/${id}/checker`),
@@ -141,10 +139,10 @@ export const problemApi = {
       page,
       page_size: pageSize,
     }),
-  postSolution: (id: number, html: string) =>
-    post<{ id: number }>(`/problems/${id}/solutions`, { content_html: html }),
-  updateSolution: (id: number, sid: number, html: string) =>
-    patch<{ updated: number }>(`/problems/${id}/solutions/${sid}`, { content_html: html }),
+  postSolution: (id: number, md: string) =>
+    post<{ id: number }>(`/problems/${id}/solutions`, { content: md }),
+  updateSolution: (id: number, sid: number, md: string) =>
+    patch<{ updated: number }>(`/problems/${id}/solutions/${sid}`, { content: md }),
   deleteSolution: (id: number, sid: number) =>
     del<{ deleted: number }>(`/problems/${id}/solutions/${sid}`),
   pinSolution: (id: number, sid: number, pinned: boolean) =>
@@ -165,8 +163,8 @@ export const problemApi = {
     get<{ list: Submission[] }>(`/contests/${id}/problems/${pid}/submissions`, { uid }),
   mySubmissions: (id: number, page: number, pageSize: number) =>
     get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
-  setStatement: (id: number, html: string) =>
-    patch<{ id: number }>(`/problems/${id}/statement`, { html }),
+  setStatement: (id: number, md: string) =>
+    patch<{ id: number }>(`/problems/${id}/statement`, { md }),
 }
 
 // 标签树（v0.5.5）：读公开（题库/详情/表单共用），写仅 root（后端 RequireRoot）
@@ -214,7 +212,7 @@ export const assignmentApi = {
   create: (classId: number, title: string, intro: string) =>
     post<{ id: number; title: string }>(`/classes/${classId}/assignments`, { title, intro }),
   detail: (id: number) => get<AssignmentDetail>(`/assignments/${id}`),
-  update: (id: number, body: { title?: string; intro_html?: string }) =>
+  update: (id: number, body: { title?: string; intro?: string }) =>
     patch<{ updated: number }>(`/assignments/${id}`, body),
   remove: (id: number) => del<{ deleted: number }>(`/assignments/${id}`),
   setProblems: (id: number, pids: number[]) =>
@@ -237,9 +235,9 @@ export const adminApi = {
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
-    get<{ rate_limit_per_minute: number; home_notice: string; home_notice_html: string; backup_guide: string; backup_guide_html: string }>('/admin/settings'),
-  updateSettings: (patch: { rate_limit_per_minute?: number; home_notice_html?: string; backup_guide_html?: string }) =>
-    put<{ rate_limit_per_minute: number; home_notice_html: string; backup_guide_html: string }>('/admin/settings', patch),
+    get<{ rate_limit_per_minute: number; home_notice: string; backup_guide: string }>('/admin/settings'),
+  updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string; backup_guide?: string }) =>
+    put<{ rate_limit_per_minute: number; home_notice: string; backup_guide: string }>('/admin/settings', patch),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),
@@ -277,7 +275,7 @@ const roundApiOf = (kind: RoundKind) => {
   const base = `/${kind}s`
   return {
     detail: (id: number) => get<ContestDetail>(`${base}/${id}`),
-    update: (id: number, body: { title?: string; start?: string; end?: string; intro_html?: string; problem_ids?: number[]; scoreboard?: boolean; hide_during?: boolean }) =>
+    update: (id: number, body: { title?: string; start?: string; end?: string; intro?: string; problem_ids?: number[]; scoreboard?: boolean; hide_during?: boolean; file_io?: boolean }) =>
       patch<{ updated: number }>(`${base}/${id}`, body),
     remove: (id: number) => del<{ deleted: number }>(`${base}/${id}`),
     submit: (roundId: number, pid: number, language: string, code: string) =>
@@ -323,5 +321,5 @@ export interface CreateExamPayload {
 // ---------- 首页公告 ----------
 
 export const noticeApi = {
-  get: () => get<{ content: string; content_html: string }>('/notice'),
+  get: () => get<{ content: string }>('/notice'),
 }

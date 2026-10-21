@@ -20,7 +20,7 @@ import type { ScoreBoardView } from '@/components/score/types'
 import UserSubmissionsDialog from '@/components/score/UserSubmissionsDialog.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
-import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
+import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import type { AssignmentDetail, AssignmentProblem, PickedProblem, ProgressRow, Submission } from '@/types'
 
 const route = useRoute()
@@ -38,13 +38,11 @@ const showAdjust = ref(false)
 const savingOrder = ref(false)
 const editList = ref<PickedProblem[]>([])
 
-// 编辑名称（v0.7；v0.7.2 说明拆独立「编辑说明」入口）
+// 编辑作业（v0.7.4：名称 + 说明 + 删作业收进同一弹窗，「编辑说明」入口取消）
 const showEdit = ref(false)
 const savingEdit = ref(false)
 const editTitle = ref('')
 const editIntro = ref('')
-const showEditIntro = ref(false)
-const savingIntro = ref(false)
 
 const myUid = ref<number | null>(null)
 const showScoreBoard = ref(false)
@@ -141,10 +139,11 @@ function acceptRate(row: { submit_count?: number; accepted_count?: number }): st
   return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
 }
 
-// ---- 编辑名称 / 编辑说明 ----
+// ---- 编辑作业 / 删作业 ----
 function openEdit() {
   if (!assignment.value) return
   editTitle.value = assignment.value.title
+  editIntro.value = assignment.value.intro || ''
   showEdit.value = true
 }
 
@@ -154,41 +153,21 @@ async function saveEdit() {
     ElMessage.warning('作业名称不能为空')
     return
   }
+  if (contentBytes(editIntro.value) > MAX_CONTENT_BYTES) {
+    ElMessage.error('作业说明过长（上限 256KB）')
+    return
+  }
   savingEdit.value = true
   try {
     await assignmentApi.update(assignment.value.id, {
       title: editTitle.value.trim(),
+      intro: editIntro.value,
     })
     ElMessage.success('作业已保存')
     showEdit.value = false
     await load()
   } finally {
     savingEdit.value = false
-  }
-}
-
-function openEditIntro() {
-  if (!assignment.value) return
-  editIntro.value = assignment.value.intro_html || assignment.value.intro || ''
-  showEditIntro.value = true
-}
-
-async function saveEditIntro() {
-  if (!assignment.value) return
-  if (richtextBytes(editIntro.value) > MAX_RICHTEXT_BYTES) {
-    ElMessage.error('作业说明过长（上限 256KB）')
-    return
-  }
-  savingIntro.value = true
-  try {
-    await assignmentApi.update(assignment.value.id, {
-      intro_html: editIntro.value,
-    })
-    ElMessage.success('作业说明已保存')
-    showEditIntro.value = false
-    await load()
-  } finally {
-    savingIntro.value = false
   }
 }
 
@@ -226,6 +205,7 @@ async function removeAssignment() {
   }
   await assignmentApi.remove(assignment.value.id)
   ElMessage.success('作业已删除')
+  showEdit.value = false
   router.push(`/classes/${assignment.value.class_id}`)
 }
 
@@ -250,8 +230,8 @@ onMounted(() => {
             <span class="big-title">{{ assignment.title }}</span>
             <el-link class="back" type="primary" @click="router.push(`/classes/${assignment.class_id}`)">返回班级</el-link>
           </div>
-          <div v-if="assignment.intro_html || assignment.intro" class="intro">
-            <MdView :content="assignment.intro_html || assignment.intro" />
+          <div v-if="assignment.intro" class="intro">
+            <MdView :content="assignment.intro" />
           </div>
         </div>
       </el-card>
@@ -303,14 +283,12 @@ onMounted(() => {
       </el-card>
 
       <template #aside>
-        <!-- 管理卡（v0.7.2 定序）：编辑作业 → 调整题目 → 编辑说明 → 删作业 -->
+        <!-- 管理卡（v0.7.4 精简）：编辑说明与删作业收进编辑弹窗 -->
         <el-card v-if="assignment.manageable" class="aside-card">
           <template #header><span>管理</span></template>
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit">编辑作业</el-button>
             <el-button type="success" style="width: 100%" @click="openAdjust">调整题目</el-button>
-            <el-button type="primary" plain style="width: 100%" @click="openEditIntro">编辑说明</el-button>
-            <el-button type="danger" style="width: 100%" @click="removeAssignment">删作业</el-button>
           </div>
         </el-card>
 
@@ -330,27 +308,23 @@ onMounted(() => {
       </template>
     </PageShell>
 
-    <el-dialog v-model="showEdit" title="编辑作业" width="960" top="8vh">
+    <el-dialog v-model="showEdit" title="编辑作业" width="960" top="5vh">
       <el-form label-position="top">
         <el-form-item label="作业名称" required>
           <el-input v-model="editTitle" maxlength="64" />
         </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showEdit = false">取消</el-button>
-        <el-button type="primary" :loading="savingEdit" @click="saveEdit">保存</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="showEditIntro" title="编辑作业说明" width="960" top="5vh">
-      <el-form label-position="top">
         <el-form-item label="作业说明">
           <MdEditor v-model="editIntro" height="150px" variant="compact" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showEditIntro = false">取消</el-button>
-        <el-button type="primary" :loading="savingIntro" @click="saveEditIntro">保存</el-button>
+        <div class="edit-footer">
+          <el-button type="danger" plain @click="removeAssignment">删作业</el-button>
+          <div>
+            <el-button @click="showEdit = false">取消</el-button>
+            <el-button type="primary" :loading="savingEdit" @click="saveEdit">保存</el-button>
+          </div>
+        </div>
       </template>
     </el-dialog>
 
@@ -424,4 +398,12 @@ onMounted(() => {
 
 
 
+
+/* 编辑弹窗 footer：删作业靠左，取消/保存靠右 */
+.edit-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
 </style>

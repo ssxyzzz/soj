@@ -143,6 +143,13 @@ router.beforeEach((to) => {
   // 与请求身份同一来源（pinia store，每标签页一份内存态）：
   // 直接读共享 localStorage 会拿到其他标签页登录的账号，守卫与请求判权不一致
   const userStore = useUserStore()
+  // 游客可见面（v0.7.3）：仅首页/题库/题目详情，其余一律引到登录页（服务端接口同步收紧）
+  if (!userStore.token) {
+    const guestOpen = to.name === 'home' || to.name === 'problems' || to.name === 'problem-detail'
+    if (!guestOpen && to.name !== 'login' && to.name !== 'not-found') {
+      return { path: '/login', query: { redirect: to.fullPath } }
+    }
+  }
   if (to.meta.requiresAdmin && !userStore.canAdmin) {
     return { path: '/' }
   }

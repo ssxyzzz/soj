@@ -41,10 +41,10 @@ export async function transferClass(id: number, uid: number): Promise<void> {
   await request('post', `/classes/${id}/transfer`, { uid })
 }
 
-/** 编辑班级（v0.7.3）：名称 / 富文本公告，均可选 */
+/** 编辑班级（v0.7.3）：名称 / 公告（Markdown）；v0.7.4 起可带 private（仅建班人 ∨ root，后端校验） */
 export async function updateClass(
   id: number,
-  body: { name?: string; intro_html?: string },
+  body: { name?: string; intro?: string; private?: boolean },
 ): Promise<void> {
   await request('patch', `/classes/${id}`, body)
 }

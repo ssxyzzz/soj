@@ -24,7 +24,9 @@ const prefsForm = reactive<{
   defaultLang: string
   codeTemplates: Record<string, string>
   autocomplete: boolean
-}>({ defaultLang: '', codeTemplates: {}, autocomplete: true })
+  mdEditMode: 'wysiwyg' | 'ir' | 'sv'
+  mdTheme: 'light' | 'ant-design' | 'dark' | 'wechat'
+}>({ defaultLang: '', codeTemplates: {}, autocomplete: true, mdEditMode: 'wysiwyg', mdTheme: 'light' })
 
 // 模板编辑器当前编辑的语言（按语言各存一套，切换带出对应模板）
 const tplLang = ref('cpp')
@@ -42,6 +44,8 @@ async function load() {
     prefsForm.defaultLang = p.prefs?.defaultLang ?? ''
     prefsForm.codeTemplates = { ...(p.prefs?.codeTemplates ?? {}) }
     prefsForm.autocomplete = p.prefs?.autocomplete ?? true
+    prefsForm.mdEditMode = (p.prefs?.mdEditMode || 'wysiwyg') as typeof prefsForm.mdEditMode
+    prefsForm.mdTheme = (p.prefs?.mdTheme || 'light') as typeof prefsForm.mdTheme
   } finally {
     loading.value = false
   }
@@ -77,6 +81,8 @@ async function savePrefs() {
       defaultLang: prefsForm.defaultLang,
       codeTemplates: prefsForm.codeTemplates,
       autocomplete: prefsForm.autocomplete,
+      mdEditMode: prefsForm.mdEditMode,
+      mdTheme: prefsForm.mdTheme,
     })
     userStore.setPrefs(merged)
     const p = await authApi.updateProfile({ prefs: merged })
@@ -129,7 +135,7 @@ onMounted(load)
 
     <el-card shadow="never" style="margin-top: 16px">
       <template #header><span>偏好</span></template>
-      <el-form label-position="left" label-width="120px" style="max-width: 640px">
+      <el-form label-position="left" label-width="150px" style="max-width: 640px">
         <el-form-item label="默认语言">
           <el-select v-model="prefsForm.defaultLang" clearable placeholder="跟随系统默认（C++ 14）" style="width: 240px">
             <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
@@ -162,6 +168,27 @@ onMounted(load)
             </span>
           </div>
         </el-form-item>
+        <el-form-item label="Markdown 编辑模式">
+          <div class="pref-stack">
+            <el-radio-group v-model="prefsForm.mdEditMode">
+              <el-radio-button value="wysiwyg">所见即所得</el-radio-button>
+              <el-radio-button value="ir">即时渲染</el-radio-button>
+              <el-radio-button value="sv">分屏预览</el-radio-button>
+            </el-radio-group>
+            <span class="dim">题面 / 公告等编辑器的默认模式；编辑器工具栏也可随时切换（自动记住）</span>
+          </div>
+        </el-form-item>
+        <el-form-item label="Markdown 主题">
+          <div class="pref-stack">
+            <el-select v-model="prefsForm.mdTheme" style="width: 240px">
+              <el-option value="light" label="明亮（站内默认）" />
+              <el-option value="ant-design" label="Ant Design" />
+              <el-option value="dark" label="暗色" />
+              <el-option value="wechat" label="微信" />
+            </el-select>
+            <span class="dim">仅作用于编辑器内容区；题目展示等阅读面固定明亮主题</span>
+          </div>
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" plain :loading="savingPrefs" @click="savePrefs">保存</el-button>
         </el-form-item>
@@ -174,6 +201,7 @@ onMounted(load)
         <div class="tips">
           <p>昵称会显示在榜单、题解等公开页面；性别 / 学校 / 年级 / QQ 仅自己可见。</p>
           <p>默认语言与代码模板会在打开提交弹窗、在线编程时自动预填；切换语言带出对应模板。</p>
+          <p>Markdown 编辑模式与主题跟随账号保存，在编辑器工具栏里切换也会自动同步。</p>
         </div>
       </el-card>
     </template>
@@ -199,5 +227,14 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Markdown 编辑模式/主题行：说明文字排在控件下方整行展示，不挤压控件 */
+.pref-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
 }
 </style>

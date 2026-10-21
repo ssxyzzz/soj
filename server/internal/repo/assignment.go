@@ -16,8 +16,7 @@ type Assignment struct {
 	ID        int64     `bson:"_id"`
 	ClassID   int64     `bson:"classId"`
 	Title     string    `bson:"title"`
-	Intro     string    `bson:"intro"`
-	IntroHTML string    `bson:"introHtml,omitempty"` // 作业说明富文本（v0.7）；原 md intro 冻结为回退源
+	Intro     string    `bson:"intro"` // 作业说明（Markdown，v0.8 起单一事实源）
 	Problems  []int64   `bson:"problems"`
 	CreatedAt time.Time `bson:"createdAt"`
 }

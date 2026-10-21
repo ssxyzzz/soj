@@ -35,10 +35,10 @@ export function autocompleteOn(): boolean {
   return autocompleteAvailable() && useUserStore().prefs.autocomplete !== false
 }
 
-// ---- 偏好保存（字体/字号修复） ----
-// 后端 prefs 是整体覆盖语义：PATCH 只携带部分字段会把未携带的字段清空
-// （曾导致点字号 +/- 抹掉已存字体、设置页保存清掉字体字号）。
-// 任何保存都必须经此合成全量字段；merged 同时供调用方乐观更新本地 store。
+// ---- 偏好保存 ----
+// v0.8.1 起后端 prefs 为「在既有偏好上合并」语义：PATCH 只带本次变更的字段即可
+// （工具栏切编辑模式/主题走这条路径）。mergedPrefs 仍用于设置页整表保存与
+// 本地 store 的乐观更新，保证本地快照字段齐全。
 export function mergedPrefs(patch: Partial<UserPrefs>): UserPrefs {
   const p = useUserStore().prefs ?? {}
   return {
@@ -47,6 +47,8 @@ export function mergedPrefs(patch: Partial<UserPrefs>): UserPrefs {
     autocomplete: p.autocomplete ?? true,
     codeFont: p.codeFont ?? '',
     codeFontSize: p.codeFontSize ?? 0, // 0 = 未设置，后端按默认 14 处理
+    mdEditMode: p.mdEditMode ?? '',
+    mdTheme: p.mdTheme ?? '',
     ...patch,
   }
 }

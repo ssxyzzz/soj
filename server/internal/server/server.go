@@ -72,20 +72,18 @@ func Run(ctx context.Context, deps *Deps) {
 		// 取消评测（v0.7.1）：本人 ∨ submission.view.all（handler 内校验）
 		api.POST("/submissions/:id/cancel", AuthRequired(h), h.CancelSubmission)
 
-		api.GET("/rank", h.Rank)
+		// 游客可见面收紧（v0.7.3）：仅首页/题库/题目详情公开，其余一律登录后访问
+		api.GET("/rank", AuthRequired(h), h.Rank)
 		api.GET("/notice", h.GetNotice)
-		// 油猴脚本下载（v0.6.1 增强）：公开——浏览器直接点链接带不了 JWT，
-		// 脚本内容只有部署域名，无敏感信息
-		api.GET("/import/userscript", h.ImportUserscript)
 
-		// 比赛
-		api.GET("/contests", AuthOptional(h), h.ListContests)
-		api.GET("/contests/:id", AuthOptional(h), h.ContestDetail)
+		// 比赛（登录后可见；未开始的比赛对无「题库全量可见」者隐藏，见 ListContests/ContestDetail）
+		api.GET("/contests", AuthRequired(h), h.ListContests)
+		api.GET("/contests/:id", AuthRequired(h), h.ContestDetail)
 
-		// 班级：列表公开；详情公开（成员/邀请码按身份返回）；其余需登录
-		api.GET("/classes", AuthOptional(h), h.ListClasses)
-		api.GET("/classes/:id", AuthOptional(h), h.GetClass)
-		api.GET("/classes/:id/assignments", AuthOptional(h), h.ListClassAssignments)
+		// 班级（登录后可见；成员/邀请码等按身份返回）
+		api.GET("/classes", AuthRequired(h), h.ListClasses)
+		api.GET("/classes/:id", AuthRequired(h), h.GetClass)
+		api.GET("/classes/:id/assignments", AuthRequired(h), h.ListClassAssignments)
 
 		authed := api.Group("", AuthRequired(h))
 		{
@@ -97,8 +95,6 @@ func Run(ctx context.Context, deps *Deps) {
 
 			// 网页建题（v0.5.2-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
 			authed.POST("/problems", RequirePerm(repo.PermProblemCreate), h.CreateProblem)
-			// 题目 URL 导入预览（v0.6.1）：建题/编辑页弹窗回填题面（不落库，zip 仍由老师上传）
-			authed.POST("/import/preview", RequirePermAny(repo.PermProblemCreate, repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ImportPreview)
 			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
 			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
 			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)
@@ -118,9 +114,9 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.POST("/classes/join-by-code", h.JoinByCode)
 			authed.POST("/classes/:id/leave", h.LeaveClass)
 			authed.PATCH("/classes/:id/private", h.SetClassPrivate)
-			authed.PATCH("/classes/:id", h.UpdateClass) // 编辑班级名称/公告（v0.7.3，classManageable）
-			authed.POST("/classes/:id/transfer", h.TransferClass)   // 转让班级（v0.7.2：建班人 ∨ root）
-			authed.DELETE("/classes/:id", h.DeleteClass) // 解散班级（v0.7.2：建班人 ∨ root）
+			authed.PATCH("/classes/:id", h.UpdateClass)           // 编辑班级名称/公告（v0.7.3，classManageable）
+			authed.POST("/classes/:id/transfer", h.TransferClass) // 转让班级（v0.7.2：建班人 ∨ root）
+			authed.DELETE("/classes/:id", h.DeleteClass)          // 解散班级（v0.7.2：建班人 ∨ root）
 
 			// 班级管理：handler 内按 classManageable 校验（建班人 / 班级管理员 / root）
 			managed := authed.Group("/classes/:id")
@@ -163,11 +159,11 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
 			authed.GET("/exams/:id/export", h.ExamExport) // 成绩导出 CSV（v0.5.6）
-				authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
-				authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
-				// 按赛批量重测（v0.7.1）：组织者才可（handler 内校验）
-				authed.POST("/contests/:id/rejudge-all", h.RejudgeContest)
-				authed.POST("/exams/:id/rejudge-all", h.RejudgeExam)
+			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
+			authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
+			// 按赛批量重测（v0.7.1）：组织者才可（handler 内校验）
+			authed.POST("/contests/:id/rejudge-all", h.RejudgeContest)
+			authed.POST("/exams/:id/rejudge-all", h.RejudgeExam)
 
 			// 题目编辑：edit.all 或 edit.own（属主校验在 handler 内）
 			authed.PATCH("/problems/:id/hidden", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemHidden)

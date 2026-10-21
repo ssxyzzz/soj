@@ -4,18 +4,20 @@
 // （比赛回赛事页、考试回班级列表）——全部由 kind 派生。
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
 import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
+import { judgeQueueApi } from '@/api/judgeQueue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import PageShell from '@/components/PageShell.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
+import ProblemInfoCard from '@/components/problem/ProblemInfoCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import { fmtDate, isQueueStatus, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, isQueueStatus } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
 import type { ContestDetail, ContestMySubmission, ProblemDetail } from '@/types'
 
@@ -38,8 +40,11 @@ const revealed = ref(false)
 const showSubmit = ref(false)
 const showWorkbench = ref(false)
 const showOthers = ref(false)
+const showMine = ref(false)
 const submitting = ref(false)
-const expandedMine = ref<number[]>([])
+// 我的提交弹窗（对齐题库的弹窗形态）：列表点行 → 代码详情；隐藏期内不出分
+const mineView = ref<'list' | 'code'>('list')
+const mineDetail = ref<ContestMySubmission | null>(null)
 // 所有代码入口：题库全量可见人群（admin/root）在赛事做题页也可查看，普通参与者维持无此入口
 const canViewOthers = computed(() => userStore.can('problem.view.all'))
 
@@ -59,13 +64,41 @@ function fallbackRoute(): string {
   return props.kind === 'exam' ? '/classes' : `${roundBase.value}/${roundId.value}`
 }
 
+// 赛事优先级（v0.7.3）：考试题被主题库比赛收录（隐藏期覆盖赛前/赛中/赛后）时，
+// 一律引导进比赛做题页——行内切题/watch 重载都会经过 load()，统一在这里拦截
+function contestSupersede(): string {
+  if (props.kind !== 'exam') return ''
+  const p = problem.value
+  if (p?.locked && p.lock_kind === 'contest' && p.contest_id) {
+    return `/contests/${p.contest_id}/problems/${p.id || pid.value}`
+  }
+  return ''
+}
+
 async function load() {
   loading.value = true
   try {
     round.value = await api.value.detail(roundId.value)
     problem.value = await problemApi.detail(pid.value)
+    const toContest = contestSupersede()
+    if (toContest) {
+      router.replace(toContest)
+      return
+    }
+    // 考试彻底结束（已发布，锁已解除）：题目交还题库，学生入口回题库题目页
+    // （被比赛覆盖的情形已在上面先进比赛）；组织者留在考试上下文看本场明细
+    if (props.kind === 'exam' && round.value?.published && !round.value.is_organizer) {
+      router.replace(`/problems/${pid.value}`)
+      return
+    }
     await loadMine()
-  } catch {
+  } catch (err) {
+    // 隐藏期 404 也带锁信息（failData）：被比赛覆盖时同样引导进比赛，而不是弹回
+    const lock = (err as Error & { data?: { locked?: boolean; lock_kind?: string; contest_id?: number } })?.data
+    if (props.kind === 'exam' && lock?.locked && lock.lock_kind === 'contest' && lock.contest_id) {
+      router.replace(`/contests/${lock.contest_id}/problems/${pid.value}`)
+      return
+    }
     router.replace(fallbackRoute())
   } finally {
     loading.value = false
@@ -87,10 +120,36 @@ function goProblem(targetPid: number) {
   router.push(`${roundBase.value}/${roundId.value}/problems/${targetPid}`)
 }
 
-function toggleExpand(id: number) {
-  const i = expandedMine.value.indexOf(id)
-  if (i >= 0) expandedMine.value.splice(i, 1)
-  else expandedMine.value.push(id)
+// 递交入口（提交/在线编程）只属于进行中的比赛；参赛者在未开始/已结束的场次
+// 不再看到无效按钮（admin/root 保留，与题库详情页布局一致）
+const showSubmitWays = computed(() => running.value || canViewOthers.value)
+
+function openMineDetail(s: ContestMySubmission) {
+  if (!s.id) return
+  mineDetail.value = s
+  mineView.value = 'code'
+}
+
+// 批量重测本题（题库详情页同款，管理卡）：本题全部已出结果的提交低优先级重排队
+const rejudgeRunning = ref(false)
+async function rejudgeAll() {
+  if (!problem.value || rejudgeRunning.value) return
+  try {
+    await ElMessageBox.confirm(
+      '将把本题所有已出结果的提交重新评测（低优先级，不影响学生新提交的评测顺序），确定？',
+      '批量重测',
+      { type: 'warning', confirmButtonText: '批量重测', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  rejudgeRunning.value = true
+  try {
+    const r = await judgeQueueApi.rejudgeProblem(problem.value.id)
+    ElMessage.success(r.count > 0 ? `已加入重测队列：${r.count} 条` : '本题没有可重测的提交')
+  } finally {
+    rejudgeRunning.value = false
+  }
 }
 
 // 题解弹窗（揭榜后显示入口）：未满分时后端会拒绝，弹窗内为空并提示——
@@ -181,61 +240,45 @@ onUnmounted(() => {
 
       <ProblemStatement :problem="problem" :file-io="round.file_io" />
       <template #aside>
-        <el-card class="aside-card">
+        <!-- 管理卡（题库详情页同款）：编辑直达，免去回题库找原题 -->
+        <el-card v-if="problem.can_edit_statement" class="aside-card">
+          <template #header><span>管理</span></template>
           <div class="entry-actions">
-            <el-tooltip
-              :disabled="problem?.has_cases !== false"
-              content="本题暂无数据，无法评测。请联系管理员上传数据"
-              placement="top"
-            >
-              <el-button type="primary" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showSubmit = true">
-                提交
-              </el-button>
-            </el-tooltip>
-            <el-tooltip
-              :disabled="problem?.has_cases !== false"
-              content="本题暂无数据，无法评测。请联系管理员上传数据"
-              placement="top"
-            >
-              <el-button type="success" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showWorkbench = true">
-                在线编程
-              </el-button>
-              <el-button type="warning" plain style="width: 100%" @click="openSolutions">
-                题解
-              </el-button>
-            </el-tooltip>
-            <el-button v-if="canViewOthers" plain style="width: 100%" @click="showOthers = true">所有代码</el-button>
-            <div v-if="!running" class="dim center">{{ name }}未在进行中</div>
+            <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${pid}/edit`)">编辑题目</el-button>
+            <el-button plain style="width: 100%" :loading="rejudgeRunning" @click="rejudgeAll">批量重测本题</el-button>
           </div>
         </el-card>
 
         <el-card class="aside-card">
-          <template #header>
-            <span>我的提交（{{ mine.length }}）{{ revealed ? '' : ' · 赛时仅记录次数' }}</span>
-          </template>
-          <div v-for="s in mine" :key="s.id" class="sub-row" @click="toggleExpand(s.id)">
-            <div class="sub-line">
-              <span class="dim">#{{ s.id }}</span>
-              <template v-if="revealed && s.status">
-                <el-tooltip v-if="statusDesc(s.status)" placement="top" effect="light">
-                  <template #content>
-                    <div class="status-tip">
-                      <div>{{ statusDesc(s.status)!.meaning }}</div>
-                      <div v-if="statusDesc(s.status)!.cause">常见原因：{{ statusDesc(s.status)!.cause }}</div>
-                    </div>
-                  </template>
-                  <SubStatus :status="s.status" :score="s.score" />
-                </el-tooltip>
-                <SubStatus v-else :status="s.status" :score="s.score" />
-                <span v-if="s.time_ms != null" class="dim">{{ s.time_ms }} ms</span>
-              </template>
-              <span v-else class="dim">已记录</span>
-              <span class="dim sub-time">{{ fmtDate(s.created_at) }}</span>
-            </div>
-            <pre v-if="revealed && expandedMine.includes(s.id) && s.code" class="mono sub-code">{{ s.code }}</pre>
+          <div class="entry-actions">
+            <template v-if="showSubmitWays">
+              <el-tooltip
+                :disabled="problem?.has_cases !== false"
+                content="本题暂无数据，无法评测。请联系管理员上传数据"
+                placement="top"
+              >
+                <el-button type="primary" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showSubmit = true">
+                  提交
+                </el-button>
+              </el-tooltip>
+              <el-tooltip
+                :disabled="problem?.has_cases !== false"
+                content="本题暂无数据，无法评测。请联系管理员上传数据"
+                placement="top"
+              >
+                <el-button type="success" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showWorkbench = true">
+                  在线编程
+                </el-button>
+              </el-tooltip>
+            </template>
+            <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
+            <el-button style="width: 100%" @click="showMine = true">我的提交</el-button>
+            <el-button v-if="canViewOthers" style="width: 100%" @click="showOthers = true">所有代码</el-button>
+            <div v-if="!running" class="dim center">{{ name }}未在进行中</div>
           </div>
-          <el-empty v-if="!mine.length" description="还没有提交" :image-size="40" />
         </el-card>
+
+        <ProblemInfoCard v-if="revealed || canViewOthers" :problem="problem" />
       </template>
     </PageShell>
 
@@ -258,6 +301,48 @@ onUnmounted(() => {
 
       <SolutionsDialog v-model="showSolutions" :problem-id="pid" />
       <AllCodesDialog v-if="problem" v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
+
+      <!-- 我的提交（题库弹窗同形态）：隐藏期内不出分（状态列显示「已记录」），
+           点击行查看自己的代码；不提供判题明细入口 -->
+      <el-dialog v-model="showMine" title="我的提交" width="1020" top="4vh" @closed="mineView = 'list'">
+        <template v-if="mineView === 'list'">
+          <el-table stripe :data="mine" highlight-current-row @row-click="openMineDetail">
+            <el-table-column label="状态" width="140">
+              <template #default="{ row }">
+                <SubStatus v-if="revealed && row.status" :status="row.status" :score="row.score" />
+                <span v-else class="dim">已记录</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="language" label="语言" width="100" />
+            <el-table-column label="总耗时" width="100">
+              <template #default="{ row }">
+                {{ revealed ? `${row.time_ms ?? 0} ms` : '—' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="总内存" width="110">
+              <template #default="{ row }">
+                {{ revealed && row.memory_kb ? fmtMem(row.memory_kb) : '—' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="提交时间">
+              <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!mine.length" description="还没有提交" :image-size="48" />
+          <div v-if="mine.length && !revealed" class="dim center mine-hint">
+            隐藏期内不出分，点击行可查看自己的代码
+          </div>
+        </template>
+        <template v-else-if="mineDetail">
+          <el-button class="mb8" @click="mineView = 'list'">← 返回列表</el-button>
+          <el-descriptions :column="3" border class="detail-desc">
+            <el-descriptions-item label="语言">{{ mineDetail.language }}</el-descriptions-item>
+            <el-descriptions-item label="提交时间">{{ fmtDate(mineDetail.created_at) }}</el-descriptions-item>
+          </el-descriptions>
+          <div class="detail-sub">代码</div>
+          <pre class="mono sub-code">{{ mineDetail.code }}</pre>
+        </template>
+      </el-dialog>
     </template>
   </div>
 </template>
@@ -305,30 +390,8 @@ onUnmounted(() => {
   text-align: center;
 }
 
-.sub-row {
-  padding: 6px 4px;
-  border-bottom: 1px dashed var(--el-border-color-lighter);
-  cursor: pointer;
-}
-
-.sub-row:hover {
-  background: var(--el-fill-color-light);
-}
-
-.sub-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.sub-time {
-  margin-left: auto;
-}
-
-/* 列表行内的代码块：与上一行留间距、不继承行的手型光标（其余走全局 .sub-code/.mono） */
-.sub-row .sub-code {
-  margin-top: 6px;
-  cursor: auto;
+/* 我的提交弹窗脚注 */
+.mine-hint {
+  margin-top: 8px;
 }
 </style>

@@ -78,22 +78,10 @@ export interface TestCase {
   output: string
 }
 
-// 题目 URL 导入预览（v0.6.1）：服务端抓取解析 + 外链图转存后的统一中间格式
-export interface ImportPreviewResult {
-  title: string
-  html: string
-  samples: { input: string; output: string }[]
-  time_limit_ms: number
-  memory_limit_mb: number
-  source: string
-  transfer: string
-}
-
 export interface ProblemDetail {
   id: number
   title: string
-  description: string
-  description_html: string // 富文本题面（v0.6；存量 md 由服务端读时计算）
+  description: string // 题面（Markdown，v0.8 起单一事实源）
   time_limit_ms: number
   memory_limit_kb: number
   compare?: string
@@ -205,8 +193,7 @@ export interface AssignmentDetail {
   id: number
   class_id: number
   title: string
-  intro: string
-  intro_html: string
+  intro: string // 作业说明（Markdown，v0.8 起单一事实源）
   problems: AssignmentProblem[]
   edit_problems?: { id: number; title: string; hidden?: boolean }[] // 管理员调整题目用完整清单
   manageable: boolean
@@ -242,8 +229,7 @@ export interface ClassMember {
 export interface ClassDetail {
   id: number
   name: string
-  intro: string
-  intro_html: string
+  intro: string // 班级公告（Markdown，v0.8 起单一事实源）
   owner_id: number
   private: boolean
   created_at: string
@@ -270,6 +256,8 @@ export interface UserPrefs {
   autocomplete?: boolean // 代码自动补全（默认开箱开启；后续按用户等级门槛放开）
   codeFont?: string // 编辑器字体：Consolas / Menlo / Monaco（默认 Consolas）
   codeFontSize?: number // 编辑器字号 px（12-48，默认 14）
+  mdEditMode?: 'wysiwyg' | 'ir' | 'sv' | '' // Markdown 编辑器默认模式（空 = wysiwyg）
+  mdTheme?: 'light' | 'ant-design' | 'dark' | 'wechat' | '' // Markdown 内容主题（空 = light）
 }
 
 // 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）
@@ -289,8 +277,7 @@ export interface SolutionItem {
   id: number
   uid: number
   nickname: string
-  content: string
-  content_html: string
+  content: string // 题解正文（Markdown，v0.8 起单一事实源）
   pinned: boolean
   created_at: string
   updated_at: string
@@ -305,7 +292,7 @@ export interface BackupStatus {
   mode: 'uninitialized' | 'tier0' | 'tier1'
   last_backup_at: string | null
   last_backup_file: string | null
-  guide_html?: string // 备份面板使用说明（富文本，v0.6；空 = 前端内置默认）
+  guide?: string // 备份面板使用说明（Markdown，v0.8 起单一事实源；空 = 前端内置默认）
 }
 
 // ---------- 角色与权限位（v0.4.7） ----------
@@ -347,11 +334,12 @@ export interface ContestProblem {
   id: number
   title: string
   score: number
+  contest_id?: number // 考试题被主题库比赛收录时返回：入口引导进比赛做题页（比赛优先级）
   submitted?: boolean // 当前用户在本场次是否提交过（登录才返回）
   status?: string // 当前用户本场次最高分提交状态（结果可见时返回）
   my_score?: number
-  tags?: number[] // 标签节点 ID（结果不可见时不返回）
-  submit_count?: number // 通过率（公开态提交；结果不可见时不返回）
+  tags?: number[] // 标签节点 ID（结果隐藏时不返回）
+  submit_count?: number // 通过率（公开态提交；结果隐藏时不返回）
   accepted_count?: number
   result_hidden?: boolean // 该题结果/状态/标签/通过率是否对本视角隐藏
 }
@@ -359,8 +347,7 @@ export interface ContestProblem {
 export interface ContestDetail {
   id: number
   title: string
-  intro: string
-  intro_html: string
+  intro: string // 赛事说明（Markdown，v0.8 起单一事实源）
   status: 'scheduled' | 'running' | 'ended'
   start: string
   end: string

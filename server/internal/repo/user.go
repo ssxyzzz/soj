@@ -36,8 +36,8 @@ type UserPrefs struct {
 	Autocomplete  *bool             `bson:"autocomplete,omitempty" json:"autocomplete,omitempty"` // 代码自动补全（v0.5.3，默认开箱开启；后续按用户等级门槛放开——预留接口）
 	CodeFont      string            `bson:"codeFont,omitempty" json:"codeFont,omitempty"`         // 代码编辑器字体：Consolas / Menlo / Monaco，空为 Consolas
 	CodeFontSize  int               `bson:"codeFontSize,omitempty" json:"codeFontSize,omitempty"` // 编辑器字号 px（12-48），0 为默认 15
-	// MdEditMode 字段已随 v0.6 编辑器换血退役（富文本唯一编辑形态，无模式之分）；
-	// 存量文档中的残留键在下次整体覆盖保存时自然清除
+	MdEditMode    string            `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"`     // Markdown 编辑器默认模式：wysiwyg / ir / sv，空为 wysiwyg（v0.8.1）
+	MdTheme       string            `bson:"mdTheme,omitempty" json:"mdTheme,omitempty"`           // Markdown 内容主题：light / ant-design / dark / wechat，空为 light（v0.8.1）
 }
 
 type User struct {

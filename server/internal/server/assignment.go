@@ -11,19 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/repo"
-	"soj/internal/richtext"
 )
-
-// assignmentIntroHTML 作业说明富文本（v0.7 起写 introHtml；存量 md 读时计算回退）。
-func assignmentIntroHTML(a *repo.Assignment) string {
-	if a.IntroHTML != "" {
-		return a.IntroHTML
-	}
-	if a.Intro == "" {
-		return ""
-	}
-	return richtext.MdToHTML(a.Intro)
-}
 
 // assignmentAccessible 作业仅本班成员与班级管理员/root 可见。
 func (h *Handlers) assignmentAccessible(ctx context.Context, classID, uid int64, role string, logged bool) bool {
@@ -96,7 +84,7 @@ func (h *Handlers) UpdateAssignment(c *gin.Context) {
 	}
 	var req struct {
 		Title      *string  `json:"title"`
-		IntroHTML  *string  `json:"intro_html"`
+		Intro      *string  `json:"intro"`
 		ProblemIDs *[]int64 `json:"problem_ids"` // v0.7.3 对齐比赛/考试 PATCH 形状
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -127,12 +115,12 @@ func (h *Handlers) UpdateAssignment(c *gin.Context) {
 		}
 		set["title"] = title
 	}
-	if req.IntroHTML != nil {
-		if len(*req.IntroHTML) > maxStatementSize {
+	if req.Intro != nil {
+		if len(*req.Intro) > maxStatementSize {
 			fail(c, http.StatusBadRequest, "作业说明过长（上限 256KB）")
 			return
 		}
-		set["introHtml"] = *req.IntroHTML
+		set["intro"] = *req.Intro
 	}
 	if req.ProblemIDs != nil {
 		set["problems"] = sanitizePids(*req.ProblemIDs)
@@ -250,7 +238,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 	}
 	now := time.Now()
 	// 普通题状态按题库口径（仅公开态提交）；轮次来源题用本场次原始提交，
-	// 以便关闭「赛期内不可见」时显示实时状态。
+	// 以便关闭「赛时隐藏成绩」时显示实时状态。
 	allPids := make([]int64, 0, len(a.Problems))
 	for _, pid := range a.Problems {
 		allPids = append(allPids, pid)
@@ -343,8 +331,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 	}
 	resp := gin.H{
 		"id": a.ID, "class_id": a.ClassID, "title": a.Title, "intro": a.Intro,
-		"intro_html": assignmentIntroHTML(a),
-		"problems":   problems, "manageable": manage,
+		"problems": problems, "manageable": manage,
 	}
 	// 管理员调整题目用完整清单：含赛前/隐藏期/主题库隐藏题，避免保存时悄悄丢失。
 	if manage {

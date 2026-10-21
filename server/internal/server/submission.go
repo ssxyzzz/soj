@@ -67,7 +67,7 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 	}
 	lk := lockMap[p.ID]
 	privileged := hasPerm(c, repo.PermProblemViewAll)
-	// v0.7：主题库隐藏题任何非特权场景都不可见/不可提交（备题用）
+	// 主题库隐藏题对非特权视角一律隐藏：看不到也不可提交（备题用）
 	if p.Hidden && !privileged {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
@@ -80,7 +80,7 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		if lk.Phase == "running" {
 			fail(c, http.StatusBadRequest, "该题正在"+what+"中，请从"+what+"页面提交")
 		} else {
-			fail(c, http.StatusBadRequest, "该题已被"+what+"锁定，暂不可提交")
+			fail(c, http.StatusBadRequest, "该题处于"+what+"隐藏期，暂不能提交")
 		}
 		return
 	}

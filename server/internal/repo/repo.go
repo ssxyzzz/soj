@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"soj/internal/richtext"
 	"soj/internal/testdata"
 )
 
@@ -256,8 +257,8 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		log.Printf("[boot] 已补发昵称修改权限位（user.nickname.edit），真实姓名权限位已清理")
 	}
 	if !flagDone("roundFlagsV1") {
-		// v0.7：比赛/考试新增「开启成绩表」「赛期内不可见」两个开关。存量场次补默认值：
-		// 两者都开——成绩表保持现状可见规则，赛期内不可见保持 OI 现状。
+		// v0.7：比赛/考试新增「开启成绩表」「赛时隐藏成绩」两个开关。存量场次补默认值：
+		// 两者都开——成绩表保持现状可见规则，赛时隐藏成绩保持 OI 现状。
 		for _, col := range []*mongo.Collection{r.roundsCol(KindContest), r.roundsCol(KindExam)} {
 			if _, err := col.UpdateMany(ctx,
 				bson.M{"scoreboard": bson.M{"$exists": false}},
@@ -273,7 +274,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		if err := setFlag("roundFlagsV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 比赛/考试已补默认开关（成绩表开、赛期内不可见开）")
+		log.Printf("[boot] 比赛/考试已补默认开关（成绩表开、赛时隐藏成绩开）")
 	}
 	if !flagDone("classLeaveV1") {
 		// v0.7.2：退出班级改为权限位（class.leave）管控，default 刻意不给；
@@ -300,6 +301,93 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 			return err
 		}
 		log.Printf("[boot] admin 角色已补发题库全量可见权限位（problem.view.all）")
+	}
+	if !flagDone("contentMdV1") {
+		if err := r.migrateContentMd(ctx); err != nil {
+			return err
+		}
+		if err := setFlag("contentMdV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] HTML 富文本字段已回迁为 markdown（v0.8 编辑器换回 Vditor）")
+	}
+	return nil
+}
+
+// contentMdTargets v0.8 回迁目标：集合 → {HTML 字段, md 字段}（settings 单文档双字段单独处理）。
+var contentMdTargets = []struct{ coll, htmlField, mdField string }{
+	{"problems", "contentHtml", "statement"},
+	{"contests", "introHtml", "intro"},
+	{"exams", "introHtml", "intro"},
+	{"solutions", "contentHtml", "content"},
+	{"assignments", "introHtml", "intro"},
+	{"classes", "introHtml", "intro"},
+}
+
+// migrateContentMd v0.8 编辑器推倒重来（Vditor 回归）：存量 HTML 富文本字段一次性转回 md。
+// 「编辑即迁移」语义下 HTML 是编辑后的新内容，转换结果覆盖 md 字段后删除 HTML 字段；
+// bson.M 原始读写不经过结构体（结构体届时才删字段）。幂等：无 HTML 字段的文档天然跳过，
+// Bootstrap 在服务流量前执行，无并发写竞争。
+func (r *Repo) migrateContentMd(ctx context.Context) error {
+	convert := func(coll *mongo.Collection, htmlField, mdField string) (int, error) {
+		cursor, err := coll.Find(ctx,
+			bson.M{htmlField: bson.M{"$exists": true, "$ne": ""}},
+			options.Find().SetProjection(bson.M{"_id": 1, htmlField: 1}))
+		if err != nil {
+			return 0, err
+		}
+		var docs []bson.M
+		if err := cursor.All(ctx, &docs); err != nil {
+			return 0, err
+		}
+		for _, d := range docs {
+			html, _ := d[htmlField].(string)
+			if _, err := coll.UpdateOne(ctx,
+				bson.M{"_id": d["_id"]},
+				bson.M{
+					"$set":   bson.M{mdField: richtext.HTMLToMd(html)},
+					"$unset": bson.M{htmlField: ""},
+				}); err != nil {
+				return 0, err
+			}
+		}
+		return len(docs), nil
+	}
+
+	total := 0
+	for _, t := range contentMdTargets {
+		n, err := convert(r.db.Collection(t.coll), t.htmlField, t.mdField)
+		if err != nil {
+			return fmt.Errorf("%s.%s: %w", t.coll, t.htmlField, err)
+		}
+		total += n
+	}
+
+	// settings 单文档双字段：homeNotice / backupGuide
+	var s bson.M
+	err := r.db.Collection("settings").FindOne(ctx, bson.M{"_id": "system"}).Decode(&s)
+	if err == nil {
+		set, unset := bson.M{}, bson.M{}
+		for _, f := range []struct{ html, md string }{
+			{"homeNoticeHtml", "homeNotice"}, {"backupGuideHtml", "backupGuide"},
+		} {
+			if html, ok := s[f.html].(string); ok && html != "" {
+				set[f.md] = richtext.HTMLToMd(html)
+				unset[f.html] = ""
+				total++
+			}
+		}
+		if len(set) > 0 {
+			if _, err := r.db.Collection("settings").UpdateOne(ctx,
+				bson.M{"_id": "system"}, bson.M{"$set": set, "$unset": unset}); err != nil {
+				return err
+			}
+		}
+	} else if !IsNotFound(err) {
+		return err
+	}
+	if total > 0 {
+		log.Printf("[boot] v0.8 回迁：%d 篇 HTML 富文本已转回 markdown", total)
 	}
 	return nil
 }

@@ -108,6 +108,40 @@ func (h *Handlers) loadAllLocks(ctx context.Context) (map[int64]*contestLock, er
 	return out, nil
 }
 
+// bankContestOf 返回收录该题的主题库比赛（未发布即处于隐藏期，无则 nil）。
+// 比赛隐藏期覆盖赛前/赛中/赛后：期间该题在各处入口统一引导进比赛上下文。
+func (h *Handlers) bankContestOf(ctx context.Context, pid int64) *repo.Contest {
+	contests, err := h.repo.ListUnpublishedContests(ctx)
+	if err != nil {
+		return nil
+	}
+	for _, ct := range contests {
+		if _, ok := ct.ProblemScore(pid); ok {
+			return ct
+		}
+	}
+	return nil
+}
+
+// bankRunningContestOf 返回收录该题且正在进行中的主题库比赛（无则 nil）。
+// 比赛优先级最高：比赛进行中时该题的提交通道收归比赛，考试通道关闭。
+func (h *Handlers) bankRunningContestOf(ctx context.Context, pid int64) *repo.Contest {
+	contests, err := h.repo.ListUnpublishedContests(ctx)
+	if err != nil {
+		return nil
+	}
+	now := time.Now()
+	for _, ct := range contests {
+		if ct.Status(now) != "running" {
+			continue
+		}
+		if _, ok := ct.ProblemScore(pid); ok {
+			return ct
+		}
+	}
+	return nil
+}
+
 // ---------- 提交限速（持 rate_exempt 权限位者豁免，上限 root 后台可调） ----------
 
 type rateLimiter struct {
@@ -137,8 +171,11 @@ func (l *rateLimiter) allow(uid int64, limit int, now time.Time) bool {
 // ---------- 主题库比赛列表 ----------
 
 // ListContests 主题库比赛列表（班级赛事见 /classes/:id/exams）。
+// 需登录（游客仅首页/题库/题目详情）；未开始（隐藏期赛前段）的比赛对
+// 无「题库全量可见」且非组织者的视角不出现。
 func (h *Handlers) ListContests(c *gin.Context) {
-	uid, _, _, logged := currentUser(c)
+	uid, _, role, logged := currentUser(c)
+	privileged := hasPerm(c, repo.PermProblemViewAll)
 	list, err := h.repo.ListContests(c.Request.Context())
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取比赛失败")
@@ -147,6 +184,9 @@ func (h *Handlers) ListContests(c *gin.Context) {
 	now := time.Now()
 	items := make([]gin.H, 0, len(list))
 	for _, ct := range list {
+		if !privileged && ct.Status(now) == "scheduled" && (!logged || uid != ct.CreatedBy) && role != repo.RoleRoot {
+			continue
+		}
 		item := gin.H{
 			"id":            ct.ID,
 			"title":         ct.Title,

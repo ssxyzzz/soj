@@ -24,8 +24,7 @@ type ClassProblemRef struct {
 type Class struct {
 	ID         int64             `bson:"_id"`
 	Name       string            `bson:"name"`
-	Intro      string            `bson:"intro"`
-	IntroHTML  string            `bson:"introHtml,omitempty"` // 富文本公告（v0.7.3 起写入；原 intro 冻结为回退源）
+	Intro      string            `bson:"intro"` // 班级公告（Markdown，v0.8 起单一事实源）
 	OwnerID    int64             `bson:"ownerId"`
 	InviteCode string            `bson:"inviteCode"`
 	Private    bool              `bson:"private"`

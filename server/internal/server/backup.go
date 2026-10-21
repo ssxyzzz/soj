@@ -34,15 +34,15 @@ func (h *Handlers) BackupStatus(c *gin.Context) {
 	} else {
 		lastAt = st.LastBackupAt.Format(time.RFC3339)
 	}
-	guideHTML := ""
+	guide := ""
 	if s, err := h.repo.GetSystemSettings(c.Request.Context()); err == nil {
-		guideHTML = backupGuideHTML(s) // 富文本（v0.6）；空 = 前端内置默认
+		guide = s.BackupGuide // Markdown（v0.8 起单一事实源）；空 = 前端用内置默认
 	}
 	ok(c, gin.H{
 		"mode":             st.Mode,
 		"last_backup_at":   lastAt,
 		"last_backup_file": st.LastBackupFile,
-		"guide_html":       guideHTML,
+		"guide":            guide,
 	})
 }
 

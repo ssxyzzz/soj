@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/repo"
-	"soj/internal/richtext"
 	"soj/internal/testdata"
 )
 
@@ -51,8 +50,9 @@ func orEmptyInt64(s []int64) []int64 {
 }
 
 // ListProblems 题库列表（按视角过滤）：
-//   - 主题库隐藏题对 guest/default 不可见（v0.7 起任何场景均不可见，比赛/考试也不可见）；
-//   - 被比赛锁定（赛前/隐藏期）的题对受影响视角不可见，赛中带锁标记与指引；
+//   - 题目隐藏（hidden）对无「题库全量可见」的视角一律不出现（v0.7 起任何场景均隐藏，比赛/考试也不可见）；
+//   - 被赛事收录（隐藏期=赛前/赛中/赛后未发布）的题：非 running 阶段对受影响视角不出现，
+//     running 阶段带锁标记由前端引导进赛事做题页；
 //   - admin/root 可见全部并带标记；
 //   - tags=1,5,9 标签筛选：并集、精确匹配节点 ID（v0.5.5）。
 func (h *Handlers) ListProblems(c *gin.Context) {
@@ -101,8 +101,8 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		}
 		lk := lockMap[p.ID]
 		if !privileged {
-			// v0.7：主题库隐藏 = 任何场景都不可见（备题用，比赛/考试也不可见）；
-			// 不再沿用「主题库比赛赛中临时解锁隐藏题」的旧语义。
+			// 题目隐藏：任何场景都对无权限视角隐藏（备题用，比赛/考试题目表同理）
+			// 赛事隐藏期的非 running 阶段（赛前/赛后未发布）同理不出现，running 交给前端引导
 			if p.Hidden || (lk != nil && lk.Phase != "running") {
 				continue
 			}
@@ -202,15 +202,21 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	}
 	vk := viewMap[p.ID]
 
-	// 隐藏题：v0.7 起任何非特权视角都不可见（比赛/考试中也不可见）
+	// 隐藏题：对无「题库全量可见」的任何视角一律隐藏（比赛/考试中也不可见）
 	if p.Hidden && !privileged {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}
-	// 赛前 / 隐藏期：对受影响视角不可见；持 problem.view.all 者（admin/root）可见——
-	// 「题库全量可见（隐藏/锁定题）」权限位的既定语义，做题页不被弹走、仅展示锁标记与指引
+	// 隐藏期（赛前/赛后未发布）：对受影响视角返回 404 + 锁信息，前端凭 failData
+	// 重定向进比赛/考试做题页；持「题库全量可见」者响应 200 带锁标记，由前端同规则重定向
 	if lk != nil && lk.Phase != "running" && !privileged {
-		fail(c, http.StatusNotFound, "该题已被比赛锁定，暂不可见")
+		what := "比赛"
+		data := gin.H{"locked": true, "lock_kind": lk.Kind, "contest_id": lk.RefID}
+		if lk.Kind == repo.KindExam {
+			what = "考试"
+			data = gin.H{"locked": true, "lock_kind": lk.Kind, "exam_id": lk.RefID}
+		}
+		failData(c, http.StatusNotFound, "该题处于"+what+"隐藏期", data)
 		return
 	}
 
@@ -236,15 +242,10 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		})
 	}
 
-	descriptionHTML := p.ContentHTML
-	if descriptionHTML == "" {
-		descriptionHTML = richtext.MdToHTML(p.Statement) // 存量 md 题面读时计算（编辑即迁移）
-	}
 	resp := gin.H{
 		"id":                 p.ID,
 		"title":              p.Title,
-		"description":        p.Statement,     // 原 md 题面（v0.6 起冻结为回退源）
-		"description_html":   descriptionHTML, // 富文本题面（v0.6，Tiptap schema 内 HTML）
+		"description":        p.Statement, // 题面（Markdown，v0.8 起单一事实源）
 		"time_limit_ms":      p.TimeLimitMS,
 		"memory_limit_kb":    p.MemoryLimitKB,
 		"compare":            p.Compare,
@@ -284,21 +285,20 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	ok(c, resp)
 }
 
-// SetProblemStatement 编辑题面（v0.6 起收富文本 HTML：编辑器产出的 content_html 原样入库，
-// 原 md statement 字段保留不动；权限同隐藏设置：root 任意题；admin 仅自己导入的题）。
+// SetProblemStatement 编辑题面（Markdown；权限同隐藏设置：root 任意题；admin 仅自己导入的题）。
 func (h *Handlers) SetProblemStatement(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
 		return
 	}
 	var req struct {
-		HTML string `json:"html" binding:"required"`
+		MD string `json:"md" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "题面不能为空")
 		return
 	}
-	if len(req.HTML) > maxStatementSize {
+	if len(req.MD) > maxStatementSize {
 		fail(c, http.StatusBadRequest, "题面过长（上限 256KB）")
 		return
 	}
@@ -313,7 +313,7 @@ func (h *Handlers) SetProblemStatement(c *gin.Context) {
 		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
 		return
 	}
-	if err := h.repo.SetProblemContentHTML(ctx, id, req.HTML); err != nil {
+	if err := h.repo.SetProblemStatement(ctx, id, req.MD); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}

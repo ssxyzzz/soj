@@ -14,7 +14,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 
-	"soj/internal/richtext"
 	"soj/internal/testdata"
 )
 
@@ -551,23 +550,14 @@ func (im *Importer) ReplaceCases(ctx context.Context, pid int64, dir string) (*P
 		}
 	}
 
-	// 题面：正文保留，样例章节按新数据重建（v0.6 起格式感知——contentHtml 存在走 HTML
-	// 章节（richtext 同转换器，渲染逐字一致），否则走 md 章节；双重写时两格式都重建）
+	// 题面：正文保留，样例章节按新数据重建（md 单一格式，v0.8 起 HTML 题面已随回迁消失）
 	samples := make([]SampleIO, 0, 4)
 	for _, tc := range cases {
 		if tc.Sample {
 			samples = append(samples, contents[tc.Index])
 		}
 	}
-	if p.ContentHTML != "" {
-		rtSamples := make([]richtext.SampleIO, len(samples))
-		for i, s := range samples {
-			rtSamples[i] = richtext.SampleIO{Input: s.Input, Output: s.Output}
-		}
-		p.ContentHTML = richtext.AppendSamplesHTML(richtext.StripSamplesHTML(p.ContentHTML), rtSamples)
-	} else {
-		p.Statement = AppendSamplesMd(StripSamplesMd(p.Statement), samples)
-	}
+	p.Statement = AppendSamplesMd(StripSamplesMd(p.Statement), samples)
 	if err := store.WriteFile(pid, "statement.md", []byte(p.Statement)); err != nil {
 		return nil, err
 	}

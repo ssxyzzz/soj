@@ -45,12 +45,11 @@ func ValidCompare(c string) bool { return c == CompareExact || c == CompareToler
 type Problem struct {
 	ID             int64      `bson:"_id"`
 	Title          string     `bson:"title"`
-	Statement      string     `bson:"statement"`
-	ContentHTML    string     `bson:"contentHtml,omitempty"` // 富文本题面（v0.6 换血，Tiptap schema 内的 HTML）；原 md statement 永久保留可回退
+	Statement      string     `bson:"statement"` // 题面（Markdown，v0.8 起单一事实源；v0.6–v0.7 富文本时代的 contentHtml 已启动回迁）
 	TimeLimitMS    int        `bson:"timeLimitMs"`
 	MemoryLimitKB  int        `bson:"memoryLimitKb"`
 	Visibility     string     `bson:"visibility"`
-	Hidden         bool       `bson:"hidden"`             // 主题库隐藏：default/guest 永不可见不可交
+	Hidden         bool       `bson:"hidden"`             // 题目隐藏：无「题库全量可见」权限的视角看不到也不可交（备题用）
 	CreatedBy      int64      `bson:"createdBy"`          // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
 	Tags           []int64    `bson:"tags"`               // 标签树节点 ID（v0.5.5），名字与层级由 tags 集合的树实时解析
 	Subtasks       []Subtask  `bson:"subtasks,omitempty"` // nil = 单点等分
@@ -280,21 +279,6 @@ func (r *Repo) SetProblemStatement(ctx context.Context, pid int64, statement str
 	res, err := r.Problems.UpdateOne(ctx,
 		bson.M{"_id": pid},
 		bson.M{"$set": bson.M{"statement": statement, "updatedAt": time.Now()}})
-	if err != nil {
-		return err
-	}
-	if res.MatchedCount == 0 {
-		return mongo.ErrNoDocuments
-	}
-	return nil
-}
-
-// SetProblemContentHTML 更新富文本题面（HTML，v0.6 换血）：编辑即迁移——保存写 contentHtml，
-// 原 md statement 不动（可回退、可重放转换）。
-func (r *Repo) SetProblemContentHTML(ctx context.Context, pid int64, html string) error {
-	res, err := r.Problems.UpdateOne(ctx,
-		bson.M{"_id": pid},
-		bson.M{"$set": bson.M{"contentHtml": html, "updatedAt": time.Now()}})
 	if err != nil {
 		return err
 	}

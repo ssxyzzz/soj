@@ -29,8 +29,7 @@ type Contest struct {
 	ID          int64            `bson:"_id"`
 	ClassID     int64            `bson:"classId"` // 恒为 0（历史字段，班级赛事已拆分为 Exam）
 	Title       string           `bson:"title"`
-	Intro       string           `bson:"intro"`
-	IntroHTML   string           `bson:"introHtml,omitempty"` // 赛事说明富文本（v0.6 换血）；原 md intro 冻结为回退源
+	Intro       string           `bson:"intro"` // 赛事说明（Markdown，v0.8 起单一事实源）
 	Start       time.Time        `bson:"start"`
 	End         time.Time        `bson:"end"`
 	HiddenUntil time.Time        `bson:"hiddenUntil"` // 零值 = 无赛后隐藏期
@@ -124,19 +123,6 @@ func (r *Repo) DeleteRound(ctx context.Context, kind string, id int64) error {
 	return nil
 }
 
-// SetRoundIntro 更新比赛/考试说明（Markdown）。
-func (r *Repo) SetRoundIntro(ctx context.Context, kind string, id int64, intro string) error {
-	res, err := r.roundsCol(kind).UpdateOne(ctx,
-		bson.M{"_id": id}, bson.M{"$set": bson.M{"intro": intro}})
-	if err != nil {
-		return err
-	}
-	if res.MatchedCount == 0 {
-		return mongo.ErrNoDocuments
-	}
-	return nil
-}
-
 // SetRoundFileIO 设置「本场启用文件 IO」场景开关（创建者/root；中途可改，后续提交按新设置判题）。
 func (r *Repo) SetRoundFileIO(ctx context.Context, kind string, id int64, enabled bool) error {
 	res, err := r.roundsCol(kind).UpdateOne(ctx,
@@ -150,7 +136,7 @@ func (r *Repo) SetRoundFileIO(ctx context.Context, kind string, id int64, enable
 	return nil
 }
 
-// UpdateRoundFields 组织者编辑比赛/考试（时间、题目集合/顺序、成绩表与赛期内不可见开关）。
+// UpdateRoundFields 组织者编辑比赛/考试（时间、题目集合/顺序、成绩表与赛时隐藏成绩开关）。
 // set 的键值由 handler 校验；题目清单整体替换（评分在 handler 内按原值保留）。
 func (r *Repo) UpdateRoundFields(ctx context.Context, kind string, id int64, set bson.M) error {
 	res, err := r.roundsCol(kind).UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})

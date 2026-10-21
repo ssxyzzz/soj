@@ -12,9 +12,9 @@ import PageShell from '@/components/PageShell.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
+import ProblemInfoCard from '@/components/problem/ProblemInfoCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
-import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
 import { isQueueStatus, statusStyle } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
@@ -22,8 +22,6 @@ import type { ProblemDetail } from '@/types'
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const tagStore = useTagTreeStore()
-tagStore.ensure() // 标签名映射异步就绪，信息卡响应式跟随
 
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
@@ -38,16 +36,37 @@ const showOthers = ref(false)
 const showSolutions = ref(false)
 const mineDialogRef = ref<InstanceType<typeof MySubmissionsDialog>>()
 
-const lockedRunning = computed(() => !!problem.value?.locked)
+// 赛事隐藏期自动重定向（v0.7.3 优先级模型）：比赛收录的题一律进比赛做题页，
+// 其次考试——覆盖赛前/赛中/赛后未发布全程，admin/root 同规则（编辑入口在赛事做题页）。
+// 锁信息两个来源：详情 200 响应体（running/特权视角）、隐藏期 404 的 failData。
+function roundProblemRoute(p: { locked?: boolean; lock_kind?: string; contest_id?: number; exam_id?: number }): string {
+  if (!p?.locked) return ''
+  const pid = route.params.id
+  return p.lock_kind === 'exam' && p.exam_id
+    ? `/exams/${p.exam_id}/problems/${pid}`
+    : `/contests/${p.contest_id}/problems/${pid}`
+}
 
-const lockRoute = computed(() => {
-  const p = problem.value
-  if (!p) return ''
-  return p.lock_kind === 'exam' && p.exam_id ? `/exams/${p.exam_id}` : `/contests/${p.contest_id}`
-})
-const lockWhat = computed(() => (problem.value?.lock_kind === 'exam' ? '考试' : '比赛'))
 const canSetHidden = computed(() => !!problem.value?.can_set_hidden)
-const submitDisabled = computed(() => !userStore.token || lockedRunning.value || problem.value?.has_cases === false)
+const submitDisabled = computed(() => !userStore.token || problem.value?.has_cases === false)
+
+async function load() {
+  loading.value = true
+  try {
+    problem.value = await problemApi.detail(Number(route.params.id))
+    const redirect = roundProblemRoute(problem.value)
+    if (redirect) {
+      router.replace(redirect)
+      return
+    }
+  } catch (err) {
+    const lock = (err as Error & { data?: { locked?: boolean } })?.data
+    const redirect = lock ? roundProblemRoute(lock) : ''
+    router.replace(redirect || '/problems')
+  } finally {
+    loading.value = false
+  }
+}
 
 // 批量重测（v0.7.1）：本题全部已出结果的提交低优先级重排队，不挤占学生新提交
 const rejudgeAllRunning = ref(false)
@@ -73,68 +92,11 @@ async function rejudgeAll() {
 }
 const submitDisabledReason = computed(() => {
   if (problem.value?.has_cases === false) return '本题暂无数据，无法评测。请联系管理员上传数据'
-  if (lockedRunning.value) return `${lockWhat.value}期间请从${lockWhat.value}页面提交`
   if (!userStore.token) return '请先登录'
   return ''
 })
 
-// 题目信息卡（v0.5.5）：统计 + 标签；比赛/考试做题页（RoundProblemView）为独立视图，天然无此卡
-const tagIds = computed(() => problem.value?.tags ?? [])
-
-// 标签浮层：默认只显示「显示标签」入口。悬停即展、移开即收；点击则锁定，
-// 移开后保留 5 秒再收起（再点一次立即收起）。
-const tagsVisible = ref(false)
-const tagsLatched = ref(false)
-let tagsTimer: ReturnType<typeof setTimeout> | undefined
-
-function openTags() {
-  if (tagsTimer) {
-    clearTimeout(tagsTimer)
-    tagsTimer = undefined
-  }
-  tagsVisible.value = true
-}
-
-function scheduleCloseTags() {
-  if (tagsTimer) clearTimeout(tagsTimer)
-  if (tagsLatched.value) {
-    tagsTimer = setTimeout(() => {
-      tagsVisible.value = false
-      tagsLatched.value = false
-    }, 5000)
-  } else {
-    tagsVisible.value = false
-  }
-}
-
-function toggleTags() {
-  if (tagsLatched.value) {
-    tagsLatched.value = false
-    if (tagsTimer) clearTimeout(tagsTimer)
-    tagsVisible.value = false
-  } else {
-    tagsLatched.value = true
-    openTags()
-  }
-}
-
-const acceptRate = computed(() => {
-  const p = problem.value
-  if (!p?.submit_count) return '—'
-  const pct = ((p.accepted_count ?? 0) / p.submit_count) * 100
-  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
-})
-
-async function load() {
-  loading.value = true
-  try {
-    problem.value = await problemApi.detail(Number(route.params.id))
-  } catch {
-    router.replace('/problems')
-  } finally {
-    loading.value = false
-  }
-}
+// 题目信息卡（v0.5.5）：统计 + 标签（共享组件）；比赛/考试做题页同款
 
 function openSubmitEntry() {
   if (!userStore.token) {
@@ -215,12 +177,13 @@ function stopPolling() {
   }
 }
 
+// 隐藏开关（仅题面编辑者可见；状态 tag 已删，按钮文案即状态）
 async function toggleHidden() {
   if (!problem.value) return
   const target = !problem.value.hidden
   await problemApi.setHidden(problem.value.id, target)
   problem.value.hidden = target
-  ElMessage.success(target ? '已对学生隐藏（default 不可见不可交）' : '已恢复可见')
+  ElMessage.success(target ? '题目已隐藏，无权限的用户看不到本题' : '已取消隐藏')
 }
 
 onMounted(load)
@@ -232,32 +195,15 @@ onUnmounted(stopPolling)
   <div v-loading="loading">
     <template v-if="problem">
       <PageShell>
-        <el-alert
-          v-if="problem.locked"
-          :title="`该题正在${lockWhat}中`"
-          type="warning"
-          :closable="false"
-          class="mb8"
-        >
-          <template #default>
-            <div class="lock-bar">
-              <span>{{ lockWhat }}期间只能从{{ lockWhat }}页面提交（{{ problem.contest_title ?? problem.exam_title ?? '' }}）</span>
-              <el-button type="warning" size="small" plain @click="router.push(lockRoute)">前往{{ lockWhat }}</el-button>
-            </div>
-          </template>
-        </el-alert>
-
         <ProblemStatement :problem="problem">
           <template #extra>
-            <el-tag v-if="problem.hidden" type="danger">主题库隐藏</el-tag>
             <el-button
               v-if="canSetHidden"
               size="small"
               :type="problem.hidden ? 'danger' : 'default'"
-              class="hidden-btn"
               @click="toggleHidden"
             >
-              隐藏
+              {{ problem.hidden ? '已隐藏' : '隐藏' }}
             </el-button>
           </template>
         </ProblemStatement>
@@ -286,40 +232,7 @@ onUnmounted(stopPolling)
           </div>
         </el-card>
 
-        <el-card class="aside-card">
-          <template #header><span>题目信息</span></template>
-          <div class="info-stats">
-            <span>提交 <b>{{ problem.submit_count ?? 0 }}</b></span>
-            <span>通过 <b>{{ problem.accepted_count ?? 0 }}</b></span>
-            <span>通过率 <b>{{ acceptRate }}</b></span>
-          </div>
-          <div v-if="tagIds.length" class="info-tags">
-            <el-popover :visible="tagsVisible" placement="bottom-start" popper-class="tags-pop">
-              <template #reference>
-                <span
-                  class="show-tags"
-                  @mouseenter="openTags"
-                  @mouseleave="scheduleCloseTags"
-                  @click="toggleTags"
-                >
-                  显示标签
-                </span>
-              </template>
-              <div class="tags-pop-body" @mouseenter="openTags" @mouseleave="scheduleCloseTags">
-                <el-tag
-                  v-for="id in tagIds"
-                  :key="id"
-                  size="small"
-                  class="pop-tag"
-                  :class="`lv-${tagStore.levelOf(id)}`"
-                >
-                  {{ tagStore.nameOf(id) }}
-                </el-tag>
-              </div>
-            </el-popover>
-          </div>
-          <div v-else class="dim">暂无标签</div>
-        </el-card>
+        <ProblemInfoCard :problem="problem" />
       </template>
     </PageShell>
 
@@ -348,61 +261,7 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
-.info-stats {
-  display: flex;
-  gap: 14px;
-}
-
-.info-stats b {
-  font-weight: var(--soj-fw-emphasis);
-}
-
-.info-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.lock-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .center {
   text-align: center;
-}
-
-/* 隐藏按钮推到题面卡右上角 */
-.hidden-btn {
-  margin-left: auto;
-}
-
-/* 「显示标签」入口 */
-.show-tags {
-  color: var(--el-color-primary);
-  cursor: pointer;
-  font-size: var(--soj-fs-body);
-}
-
-.show-tags:hover {
-  text-decoration: underline;
-}
-</style>
-
-<style>
-/* 标签浮层（el-popover 挂 body，需非 scoped）：同表格标签栏的五级配色 */
-.tags-pop-body {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tags-pop-body .el-tag {
-  background: var(--lv-bg);
-  border-color: var(--lv-border);
-  color: var(--el-text-color-primary);
 }
 </style>

@@ -87,6 +87,8 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 			Autocomplete  *bool              `json:"autocomplete"`
 			CodeFont      *string            `json:"codeFont"`
 			CodeFontSize  *int               `json:"codeFontSize"`
+			MdEditMode    *string            `json:"mdEditMode"`
+			MdTheme       *string            `json:"mdTheme"`
 		} `json:"prefs"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -123,7 +125,12 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		set["qq"] = qq
 	}
 	if req.Prefs != nil {
+		// 合并语义：在既有偏好上覆盖本次出现的字段。编辑器工具栏的自动回存只带
+		// mdEditMode / mdTheme 一项，不能把默认语言、代码模板等旧偏好冲掉
 		prefs := repo.UserPrefs{}
+		if u, err := h.repo.GetUserByID(c.Request.Context(), uid); err == nil && u.Prefs != nil {
+			prefs = *u.Prefs
+		}
 		if req.Prefs.DefaultLang != nil {
 			l := trimTo(*req.Prefs.DefaultLang, 32)
 			if l != "" && !lang.Exists(l) {
@@ -172,6 +179,26 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 				return
 			}
 			prefs.CodeFontSize = n
+		}
+		if req.Prefs.MdEditMode != nil {
+			m := strings.TrimSpace(*req.Prefs.MdEditMode)
+			switch m {
+			case "", "wysiwyg", "ir", "sv":
+				prefs.MdEditMode = m
+			default:
+				fail(c, http.StatusBadRequest, "Markdown 编辑模式仅支持 wysiwyg / ir / sv")
+				return
+			}
+		}
+		if req.Prefs.MdTheme != nil {
+			t := strings.TrimSpace(*req.Prefs.MdTheme)
+			switch t {
+			case "", "light", "ant-design", "dark", "wechat":
+				prefs.MdTheme = t
+			default:
+				fail(c, http.StatusBadRequest, "Markdown 主题仅支持 light / ant-design / dark / wechat")
+				return
+			}
 		}
 		set["prefs"] = &prefs
 	}

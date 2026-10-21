@@ -15,21 +15,36 @@ import type { BackupStatus } from '@/types'
 
 const userStore = useUserStore()
 
-// 使用说明默认内容（v0.6 起为 HTML 常量；md 原文已随换血转换）：管理员可在面板里编辑
-// 并保存为站点自定义版本，清空保存即回退到这里的内容。
-const DEFAULT_BACKUP_GUIDE_HTML = [
-  '<h3>备份文件里有什么</h3>',
-  '<p>整个网站的完整快照：用户账号、题目、提交记录、班级与考试成绩、题面图片。下载到本机的和服务器自动留存的都是加密的（age 格式），没有钥匙谁也打不开。</p>',
-  '<h3>备份建议</h3>',
-  '<ul><li>点一次「立即备份」= 本机下载一份 + 服务器自动留一份；</li><li>建议每周备份一次，文件多存几处（网盘 + U 盘最稳妥）。</li></ul>',
-  '<h3>恢复</h3>',
-  '<p>网站出问题时，把备份文件放进 soj 目录，按上方命令交给会命令行的人执行。恢复会把整个网站还原到备份那一刻（覆盖现有数据，脚本会再让你确认一次）。</p>',
-  '<h3>在自己的 Windows 电脑上查看备份内容</h3>',
-  '<ol><li>下载解密小工具 age：github.com/FiloSottile/age/releases（zip 解压即用，无需安装）；</li><li>准备恢复钥匙：高安全模式＝启用时保存的 txt；普通模式＝找管理员从服务器导出；</li><li>解密并解包（PowerShell，在备份文件目录执行）：</li></ol>',
-  '<pre><code>age -d -i 恢复钥匙.txt -o backup.tar soj-backup-xxxx.v1.tar.age\ntar -xf backup.tar</code></pre>',
-  '<ol start="4"><li>图片、题目数据解开后直接看；数据库文件（mongo.archive.gz）是二进制，需要管理员恢复到站点查看，或本机起一个临时 MongoDB 后用 Compass 浏览。</li></ol>',
-  '<blockquote><p>提醒：恢复钥匙和备份文件不要放在同一台电脑、同一个网盘。</p></blockquote>',
-].join('\n')
+// 使用说明默认内容（Markdown）：管理员可在面板里编辑并保存为站点自定义版本，
+// 清空保存即回退到这里的内容。
+const DEFAULT_BACKUP_GUIDE = `## 备份文件里有什么
+
+整个网站的完整快照：用户账号、题目、提交记录、班级与考试成绩、题面图片。下载到本机的和服务器自动留存的都是加密的（age 格式），没有钥匙谁也打不开。
+
+## 备份建议
+
+- 点一次「立即备份」= 本机下载一份 + 服务器自动留一份；
+- 建议每周备份一次，文件多存几处（网盘 + U 盘最稳妥）。
+
+## 恢复
+
+网站出问题时，把备份文件放进 soj 目录，按上方命令交给会命令行的人执行。恢复会把整个网站还原到备份那一刻（覆盖现有数据，脚本会再让你确认一次）。
+
+## 在自己的 Windows 电脑上查看备份内容
+
+1. 下载解密小工具 age：github.com/FiloSottile/age/releases（zip 解压即用，无需安装）；
+2. 准备恢复钥匙：高安全模式＝启用时保存的 txt；普通模式＝找管理员从服务器导出；
+3. 解密并解包（PowerShell，在备份文件目录执行）：
+
+\`\`\`
+age -d -i 恢复钥匙.txt -o backup.tar soj-backup-xxxx.v1.tar.age
+tar -xf backup.tar
+\`\`\`
+
+4. 图片、题目数据解开后直接看；数据库文件（mongo.archive.gz）是二进制，需要管理员恢复到站点查看，或本机起一个临时 MongoDB 后用 Compass 浏览。
+
+> 提醒：恢复钥匙和备份文件不要放在同一台电脑、同一个网盘。
+`
 
 const backupStatus = ref<BackupStatus | null>(null)
 const backupLoading = ref(false)
@@ -42,7 +57,7 @@ const keySaved = ref(false)
 const backupGuide = ref('')
 const showGuideEdit = ref(false)
 const guideDraft = ref('')
-const guideHTML = computed(() => (backupGuide.value.trim() ? backupGuide.value : DEFAULT_BACKUP_GUIDE_HTML))
+const guideContent = computed(() => (backupGuide.value.trim() ? backupGuide.value : DEFAULT_BACKUP_GUIDE))
 
 const backupModeMeta: Record<string, { label: string; type: 'info' | 'warning' | 'success'; desc: string }> = {
   uninitialized: {
@@ -67,7 +82,7 @@ async function loadBackup() {
   try {
     const st = await adminApi.backupStatus()
     backupStatus.value = st
-    backupGuide.value = st.guide_html ?? ''
+    backupGuide.value = st.guide ?? ''
   } finally {
     backupLoading.value = false
   }
@@ -76,13 +91,13 @@ async function loadBackup() {
 function editGuide() {
   // 预填当前展示的内容：从未自定义时即为内置默认，可直接在默认文本上改；
   // 清空再保存仍回退到内置默认（见编辑弹窗标题提示）
-  guideDraft.value = guideHTML.value
+  guideDraft.value = guideContent.value
   showGuideEdit.value = true
 }
 
 async function saveGuide() {
   try {
-    await adminApi.updateSettings({ backup_guide_html: guideDraft.value })
+    await adminApi.updateSettings({ backup_guide: guideDraft.value })
     // 以服务端持久化结果为准回读刷新（避免本地态与实际存储 diverge 时「看似已保存」）
     await loadBackup()
     showGuideEdit.value = false
@@ -230,7 +245,7 @@ onMounted(loadBackup)
           </el-button>
         </div>
       </el-divider>
-      <MdView :content="guideHTML" class="guide-md" />
+      <MdView :content="guideContent" class="guide-md" />
     </div>
 
     <el-dialog

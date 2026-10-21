@@ -1,7 +1,7 @@
 package server
 
-// 网页建题与元数据编辑（v0.5.2-1；题面 v0.6 起为富文本 HTML，Born-HTML 直入 contentHtml）：
-//   - POST /api/problems：multipart 建题（元数据字段 + 题面 HTML + 测试数据 zip），
+// 网页建题与元数据编辑（v0.5.2-1；题面 Markdown，v0.8 起单一事实源）：
+//   - POST /api/problems：multipart 建题（元数据字段 + 题面 Markdown + 测试数据 zip），
 //     zip 只需 cases/<N>/in|ans 结构（根下平铺 N.in/N.ans 或顶层单目录包裹亦可，
 //     解压后归一/下钻），problem.yaml 由表单生成；
 //   - PATCH /api/problems/:id/meta：编辑标题/时限/内存/比对模式（problemEditable 校验）。
@@ -76,8 +76,8 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	if compare == repo.CompareTolerant {
 		tol = parsePositiveFloat(formValue(form, "float_tolerance"), repo.DefaultFloatTolerance)
 	}
-	statementHTML := formValue(form, "statement_html")
-	if len(statementHTML) > 256<<10 {
+	statement := formValue(form, "statement")
+	if len(statement) > 256<<10 {
 		fail(c, http.StatusBadRequest, "题面过长（上限 256KB）")
 		return
 	}
@@ -100,8 +100,8 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	// 测试数据后续在编辑页整包上传补齐。
 	if len(zips) == 0 {
 		p := &repo.Problem{
-			Title: title, TimeLimitMS: timeLimit, MemoryLimitKB: memLimit,
-			Compare: compare, FloatTolerance: tol, ContentHTML: statementHTML,
+			Title: title, Statement: statement, TimeLimitMS: timeLimit, MemoryLimitKB: memLimit,
+			Compare: compare, FloatTolerance: tol,
 			Cases: []repo.CaseMeta{}, CreatedBy: uid, CreatedAt: time.Now(),
 		}
 		if len(tagIDs) > 0 {
@@ -181,14 +181,17 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		return
 	}
 
-	// problem.yaml 由表单生成（zip 里若带了同名文件，以表单为准）；题面 HTML 建题后补写
-	// contentHtml（见下方 set），不再生成 statement.md——md 题面只属于 zip 导入路径
+	// problem.yaml 由表单生成（zip 里若带了同名文件，以表单为准）；表单题面（Markdown）
+	// 写进 statement.md 一起进导入管道——样例并入、数据卷归档与目录式导入同一条路
 	yamlBytes, _ := yaml.Marshal(map[string]int{
 		"timeLimitMs":   timeLimit,
 		"memoryLimitKb": memLimit,
 	})
 	setup := map[string][]byte{
 		"problem.yaml": append([]byte("title: "+quoteYaml(title)+"\n"), yamlBytes...),
+	}
+	if statement != "" {
+		setup["statement.md"] = []byte(statement)
 	}
 	for name, data := range setup {
 		if err := os.WriteFile(filepath.Join(tmpDir, name), data, 0o644); err != nil {
@@ -204,9 +207,6 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	}
 	// 比对模式：zip 内 config.yaml 已声明的以 config 为准；否则用表单值
 	set := bson.M{}
-	if statementHTML != "" {
-		set["contentHtml"] = statementHTML
-	}
 	if pr.Compare == "" {
 		set["compare"] = compare
 		if compare == repo.CompareTolerant {

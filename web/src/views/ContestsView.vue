@@ -150,7 +150,7 @@ onMounted(load)
           style="width: 100%"
         />
       </el-form-item>
-      <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
+      <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不公开）">
         <el-input-number v-model="form.hiddenDays" :min="0" :max="7" />
       </el-form-item>
       <el-form-item label="比赛题目" required>
@@ -173,7 +173,7 @@ onMounted(load)
       <el-form-item>
         <SwitchRow
           v-model="form.hideDuring"
-          label="赛期内对参赛者不可见"
+          label="赛时隐藏成绩"
           tip="隐藏状态/标签/通过率，赛中只显示「已提交」；关闭后赛中即可查看结果"
         />
       </el-form-item>

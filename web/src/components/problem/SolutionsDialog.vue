@@ -51,7 +51,7 @@ function openWriteSolution() {
 
 function openEditSolution(s: SolutionItem) {
   solutionEditing.value = s
-  solutionDraft.value = s.content_html || s.content
+  solutionDraft.value = s.content
   showSolutionEditor.value = true
 }
 
@@ -125,7 +125,7 @@ async function togglePin(s: SolutionItem) {
           </el-button>
         </span>
       </div>
-      <MdView :content="s.content_html || s.content" />
+      <MdView :content="s.content" />
     </div>
     <el-empty v-if="!solutions.length" description="还没有题解，快来发第一篇" :image-size="48" />
     <div v-if="solutionsTotal > PAGE_SIZE" class="side-pager">

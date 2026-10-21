@@ -30,14 +30,4 @@ export default [
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
-  {
-    // 富文本编辑内芯与公式弹层：v-html 是唯一渲染路径——
-    // MdEditorInner 渲染 Tiptap schema 自身产出的 HTML（编辑器内容受 schema 约束），
-    // MdMathDialog 渲染 KaTeX 输出（mathjax/katex 生成，非用户裸 HTML）；
-    // 查看端的用户内容一律走 MdView（DOMPurify 出口消毒），不在此豁免面内
-    files: ['src/components/MdEditorInner.vue', 'src/components/MdMathDialog.vue'],
-    rules: {
-      'vue/no-v-html': 'off',
-    },
-  },
 ]

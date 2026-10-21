@@ -1,7 +1,6 @@
 <script setup lang="ts">
-// 比赛/考试编辑弹窗（v0.7；v0.7.2 说明拆独立入口）：
-// - 完整模式 = 名称/起止时间（不再含题目与说明）；
-// - intro 模式 = 「编辑说明」专用（富文本单字段）；
+// 比赛/考试编辑弹窗（v0.7；v0.7.4 说明与三个场景开关并入完整模式，「编辑说明」入口取消）：
+// - 完整模式 = 名称/起止时间/说明/文件 IO·成绩表·赛时隐藏成绩开关，一次保存；
 // - problems 模式 = 「调整题目」专用（题库选题 + 拖动排序 + 删除）。
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -9,7 +8,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { contestApi, examApi, type RoundKind } from '@/api'
 import MdEditor from '@/components/MdEditor.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
-import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
+import SwitchRow from '@/components/SwitchRow.vue'
+import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import type { ContestDetail, PickedProblem } from '@/types'
 
 const props = withDefaults(
@@ -17,7 +17,7 @@ const props = withDefaults(
     modelValue: boolean
     kind: RoundKind
     round: ContestDetail
-    mode?: 'full' | 'problems' | 'intro'
+    mode?: 'full' | 'problems'
   }>(),
   { mode: 'full' },
 )
@@ -29,25 +29,29 @@ const emit = defineEmits<{
 
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
 const name = computed(() => (props.kind === 'exam' ? '考试' : '比赛'))
-const titleText = computed(() =>
-  props.mode === 'problems' ? `调整${name.value}题目` : props.mode === 'intro' ? `编辑${name.value}说明` : `编辑${name.value}`,
-)
+const titleText = computed(() => (props.mode === 'problems' ? `调整${name.value}题目` : `编辑${name.value}`))
 
 const title = ref('')
 const range = ref<Date[]>([])
 const intro = ref('')
+const fileIO = ref(false)
+const scoreboard = ref(true)
+const hideDuring = ref(true)
 const editList = ref<PickedProblem[]>([])
 const saving = ref(false)
 
 function reset() {
   title.value = props.round.title
   range.value = [new Date(props.round.start), new Date(props.round.end)]
-  intro.value = props.round.intro_html || props.round.intro || ''
+  intro.value = props.round.intro || ''
+  fileIO.value = !!props.round.file_io
+  scoreboard.value = !!props.round.scoreboard
+  hideDuring.value = !!props.round.hide_during
   const source = props.round.edit_problems ?? props.round.problems ?? []
   editList.value = source.map((p) => ({ id: p.id, title: p.title, hidden: 'hidden' in p ? p.hidden : false }))
 }
 
-// 全量编辑只有「时间」会影响赛中作答/榜单；仅改名/改说明不弹确认。
+// 全量编辑只有「时间」会影响赛中作答/榜单；改名/说明/开关不弹确认。
 function timeChanged(): boolean {
   if (range.value.length !== 2) return false
   const start = new Date(range.value[0]).getTime()
@@ -61,15 +65,6 @@ async function save() {
       ElMessage.warning(`${name.value}至少需要一道题目`)
       return
     }
-  } else if (props.mode === 'intro') {
-    if (!intro.value.trim()) {
-      ElMessage.warning(`${name.value}说明不能为空`)
-      return
-    }
-    if (richtextBytes(intro.value) > MAX_RICHTEXT_BYTES) {
-      ElMessage.error(`${name.value}说明过长（上限 256KB）`)
-      return
-    }
   } else {
     if (!title.value.trim()) {
       ElMessage.warning(`请填写${name.value}名称`)
@@ -79,10 +74,12 @@ async function save() {
       ElMessage.warning('请选择起止时间')
       return
     }
+    if (contentBytes(intro.value) > MAX_CONTENT_BYTES) {
+      ElMessage.error(`${name.value}说明过长（上限 256KB）`)
+      return
+    }
   }
-  const needConfirm =
-    props.round.status !== 'scheduled' &&
-    (props.mode === 'problems' || (props.mode === 'full' && timeChanged()))
+  const needConfirm = props.round.status !== 'scheduled' && (props.mode === 'problems' || (props.mode === 'full' && timeChanged()))
   if (needConfirm) {
     try {
       await ElMessageBox.confirm(
@@ -102,18 +99,23 @@ async function save() {
       title?: string
       start?: string
       end?: string
-      intro_html?: string
+      intro?: string
       problem_ids?: number[]
+      scoreboard?: boolean
+      hide_during?: boolean
+      file_io?: boolean
     } =
       props.mode === 'problems'
         ? { problem_ids: editList.value.map((p) => p.id) }
-        : props.mode === 'intro'
-          ? { intro_html: intro.value }
-          : {
-              title: title.value.trim(),
-              start: new Date(range.value[0]).toISOString(),
-              end: new Date(range.value[1]).toISOString(),
-            }
+        : {
+            title: title.value.trim(),
+            start: new Date(range.value[0]).toISOString(),
+            end: new Date(range.value[1]).toISOString(),
+            intro: intro.value,
+            scoreboard: scoreboard.value,
+            hide_during: hideDuring.value,
+            file_io: fileIO.value,
+          }
     await api.value.update(props.round.id, body)
     ElMessage.success(`${name.value}已保存`)
     emit('saved')
@@ -154,13 +156,25 @@ watch(
             style="width: 100%"
           />
         </el-form-item>
-      </el-form>
-    </template>
-
-    <template v-else-if="mode === 'intro'">
-      <el-form label-position="top">
-        <el-form-item :label="`${name}说明`" required>
+        <el-form-item :label="`${name}说明`">
           <MdEditor v-model="intro" height="150px" variant="compact" />
+        </el-form-item>
+        <el-form-item>
+          <SwitchRow
+            v-model="fileIO"
+            label="本场启用文件 IO"
+            tip="场内所有题按各题文件名对以文件读写判题，题面下会展示文件 IO 说明；改动只影响之后的提交"
+          />
+        </el-form-item>
+        <el-form-item>
+          <SwitchRow v-model="scoreboard" label="开启成绩表" tip="关闭后参与者看不到成绩表，组织者仍可见" />
+        </el-form-item>
+        <el-form-item>
+          <SwitchRow
+            v-model="hideDuring"
+            label="赛时隐藏成绩"
+            tip="开启后隐藏期内（赛时到成绩发布前）参赛者看不到状态、标签与通过率；关闭则赛中即可实时查看"
+          />
         </el-form-item>
       </el-form>
     </template>
@@ -176,12 +190,3 @@ watch(
     </template>
   </el-dialog>
 </template>
-
-<style scoped>
-
-
-
-
-
-
-</style>

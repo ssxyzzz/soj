@@ -9,11 +9,9 @@ import (
 
 // SystemSettings 系统设置（settings 集合，_id="system"）。
 type SystemSettings struct {
-	RateLimitPerMinute int    `bson:"rateLimitPerMinute"`        // default 角色每分钟提交上限
-	HomeNotice         string `bson:"homeNotice"`                // 首页公告（Markdown，空 = 不展示；v0.6 起冻结为回退源）
-	HomeNoticeHTML     string `bson:"homeNoticeHtml,omitempty"`  // 首页公告富文本（v0.6 换血，Tiptap schema 内 HTML）
-	BackupGuide        string `bson:"backupGuide,omitempty"`     // 备份面板使用说明（Markdown，空 = 前端内置默认；v0.6 起冻结为回退源）
-	BackupGuideHTML    string `bson:"backupGuideHtml,omitempty"` // 备份面板使用说明富文本（v0.6 换血）
+	RateLimitPerMinute int    `bson:"rateLimitPerMinute"`    // default 角色每分钟提交上限
+	HomeNotice         string `bson:"homeNotice"`            // 首页公告（Markdown，空 = 不展示）
+	BackupGuide        string `bson:"backupGuide,omitempty"` // 备份面板使用说明（Markdown，空 = 前端内置默认）
 }
 
 const DefaultRateLimitPerMinute = 3
@@ -46,9 +44,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 		bson.M{"$set": bson.M{
 			"rateLimitPerMinute": s.RateLimitPerMinute,
 			"homeNotice":         s.HomeNotice,
-			"homeNoticeHtml":     s.HomeNoticeHTML,
 			"backupGuide":        s.BackupGuide,
-			"backupGuideHtml":    s.BackupGuideHTML,
 		}},
 	)
 	return err

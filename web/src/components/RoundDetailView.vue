@@ -1,11 +1,10 @@
 <script setup lang="ts">
-// 比赛/考试详情页共享组件（v0.5.4 合并；v0.7 按 design.md 重排；v0.7.2 副列重排）。
+// 比赛/考试详情页共享组件（v0.5.4 合并；v0.7 按 design.md 重排；v0.7.2 副列重排；v0.7.4 管理卡精简）。
 // 主列：名称卡（20px + 说明）→ 题目表（T1/状态/题目/标签/通过率）。
-// 副列：管理卡（编辑/调整题目/编辑说明/重测/场景开关）→ 时间卡 → 成绩表。
+// 副列：管理卡（编辑/调整题目/重测/删除，说明与场景开关在编辑弹窗内）→ 时间卡 → 成绩表。
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { QuestionFilled } from '@element-plus/icons-vue'
 
 import { authApi, contestApi, examApi, type RoundKind } from '@/api'
 import { downloadCsv } from '@/api/download'
@@ -80,37 +79,10 @@ function inspectCell(payload: { uid: number; name: string; pid: number; title: s
   openUserSubs(payload.uid, payload.name, payload.pid, payload.title)
 }
 
-const fileIOSaving = ref(false)
-const flagSaving = ref(false)
-
-async function toggleFileIO(v: boolean) {
-  fileIOSaving.value = true
-  try {
-    await api.value.setFileIO(Number(route.params.id), v)
-    round.value!.file_io = v
-    ElMessage.success(v ? '本场已启用文件 IO，之后的提交按文件读写判题' : '本场已关闭文件 IO，之后的提交按标准输入输出判题')
-  } finally {
-    fileIOSaving.value = false
-  }
-}
-
-// v0.7 两个场景开关：保存后重载详情（题目表可见性/成绩表入口随之变化）
-async function saveFlag(patch: { scoreboard?: boolean; hide_during?: boolean }) {
-  if (!round.value) return
-  flagSaving.value = true
-  try {
-    await api.value.update(round.value.id, patch)
-    await load()
-    ElMessage.success('设置已保存')
-  } finally {
-    flagSaving.value = false
-  }
-}
-
 const showEditRound = ref(false)
-const editMode = ref<'full' | 'problems' | 'intro'>('full')
+const editMode = ref<'full' | 'problems'>('full')
 
-function openEdit(mode: 'full' | 'problems' | 'intro') {
+function openEdit(mode: 'full' | 'problems') {
   editMode.value = mode
   showEditRound.value = true
 }
@@ -147,6 +119,23 @@ const progressPct = computed(() => {
 const problemTotal = computed(() => round.value?.problems?.length ?? 0)
 
 // 成绩表可见：组织者恒可见；参与者需开启成绩表且结果已发布（关隐藏时赛中实时可见）
+// 题目行跳转（v0.7.3 优先级）：
+//   考试题被主题库比赛收录（隐藏期）→ 引导进比赛做题页；
+//   考试彻底结束（已发布，锁已解除）→ 学生入口回题库题目页，组织者留在考试上下文看本场明细；
+//   其余（考试进行中/隐藏期内）→ 考试做题页
+function problemRoute(row: { id?: number; contest_id?: number }) {
+  const pid = row?.id
+  if (!pid || !round.value) return
+  if (props.kind === 'exam' && row.contest_id) {
+    router.push(`/contests/${row.contest_id}/problems/${pid}`)
+    return
+  }
+  if (props.kind === 'exam' && round.value.published && !round.value.is_organizer) {
+    router.push(`/problems/${pid}`)
+    return
+  }
+  router.push(`${roundBase.value}/${round.value.id}/problems/${pid}`)
+}
 const boardVisible = computed(() => {
   const c = round.value
   if (!c || !userStore.token) return false
@@ -290,7 +279,7 @@ onUnmounted(() => {
             :closable="false"
             class="mt8"
           />
-          <div v-if="round.intro_html || round.intro" class="intro"><MdView :content="round.intro_html || round.intro" /></div>
+          <div v-if="round.intro" class="intro"><MdView :content="round.intro" /></div>
           <!-- 起止时间在右栏「时间」卡展示，名称卡只留赛后隐藏期提示（v0.7.2 验收反馈） -->
           <div v-if="round.hidden_until" class="meta">
             <el-tag size="small" type="info">
@@ -319,7 +308,7 @@ onUnmounted(() => {
           </el-table-column>
           <el-table-column label="题目" min-width="260">
             <template #default="{ row }">
-              <el-link type="primary" @click="router.push(`${roundBase}/${round!.id}/problems/${row.id}`)">
+              <el-link type="primary" @click="problemRoute(row)">
                 {{ row.title }}
               </el-link>
             </template>
@@ -352,57 +341,14 @@ onUnmounted(() => {
       </el-card>
 
       <template #aside>
-        <!-- 管理卡（v0.7.2 定序）：编辑 → 调整题目 → 编辑说明 → 批量重测 → 场景开关 → 删除 -->
+        <!-- 管理卡（v0.7.4 精简）：编辑说明与三个场景开关并入编辑弹窗，仅剩动作按钮 -->
         <el-card v-if="round.is_organizer" class="aside-card">
           <template #header><span>管理</span></template>
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit('full')">编辑{{ name }}</el-button>
             <el-button type="success" style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
-            <el-button type="primary" plain style="width: 100%" @click="openEdit('intro')">编辑说明</el-button>
             <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">重测本场提交</el-button>
             <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">删除{{ name }}</el-button>
-          </div>
-          <div class="scene-row">
-            <span class="label-with-tip">
-              启用文件 IO
-              <el-tooltip placement="top" content="文件 IO 改动只影响之后的提交">
-                <el-icon class="dim"><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </span>
-            <el-switch
-              :model-value="round.file_io"
-              :loading="fileIOSaving"
-              @change="(v: string | number | boolean) => toggleFileIO(!!v)"
-            />
-          </div>
-          <div class="scene-row">
-            <span class="label-with-tip">
-              开启成绩表
-              <el-tooltip placement="top" content="关闭「成绩表」后参与者不再看到成绩表，组织者仍可见">
-                <el-icon class="dim"><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </span>
-            <el-switch
-              :model-value="round.scoreboard"
-              :disabled="flagSaving"
-              @change="(v: string | number | boolean) => saveFlag({ scoreboard: !!v })"
-            />
-          </div>
-          <div class="scene-row">
-            <span class="label-with-tip">
-              赛期内不可见
-              <el-tooltip
-                placement="top"
-                content="关闭「赛期内不可见」后参赛者在赛中即可看到状态、标签与通过率（成绩表按开关与发布态显示）"
-              >
-                <el-icon class="dim"><QuestionFilled /></el-icon>
-              </el-tooltip>
-            </span>
-            <el-switch
-              :model-value="round.hide_during"
-              :disabled="flagSaving"
-              @change="(v: string | number | boolean) => saveFlag({ hide_during: !!v })"
-            />
           </div>
         </el-card>
 
@@ -529,20 +475,5 @@ onUnmounted(() => {
 .center {
   text-align: center;
   margin-top: 6px;
-}
-
-.scene-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-/* 开关标签内的问号提示与文字垂直居中（label 为块级布局，行内元素默认按基线对齐会偏高） */
-.label-with-tip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 </style>

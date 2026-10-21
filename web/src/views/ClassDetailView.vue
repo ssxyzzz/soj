@@ -11,7 +11,7 @@ import PageShell from '@/components/PageShell.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
 import { fmtDate } from '@/utils/format'
-import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
+import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import { useUserStore } from '@/stores/user'
 import type { AssignmentListItem, ClassDetail, ClassMember, PickedProblem } from '@/types'
 
@@ -32,7 +32,6 @@ const creatingAssignment = ref(false)
 const assignmentForm = reactive({ title: '', intro: '', picked: [] as PickedProblem[] })
 const importText = ref('')
 const importing = ref(false)
-const togglingPrivate = ref(false)
 
 // 发起考试
 const exams = ref<{ id: number; title: string; status: string; start: string; end: string; problem_count: number }[]>([])
@@ -145,18 +144,13 @@ async function leave() {
   }
 }
 
-// 转让班级（v0.7.2，建班人 ∨ root）：从成员中选受让人，二次确认后换主；
-// 受让人成为新建班人，原建班人降为班级管理员
-const showTransfer = ref(false)
+// 转让班级（v0.7.2，建班人 ∨ root；v0.7.4 收进编辑班级弹窗）：
+// 从成员中选受让人，二次确认后换主；受让人成为新建班人，原建班人降为班级管理员
 const transferring = ref(false)
 const transferUid = ref<number | null>(null)
 const transferCandidates = computed(() =>
   (cl.value?.members ?? []).filter((m) => !m.is_owner),
 )
-function openTransfer() {
-  transferUid.value = null
-  showTransfer.value = true
-}
 async function doTransfer() {
   if (!cl.value || !transferUid.value || transferring.value) return
   const target = transferCandidates.value.find((m) => m.uid === transferUid.value)
@@ -173,14 +167,15 @@ async function doTransfer() {
   try {
     await transferClass(cl.value.id, transferUid.value)
     ElMessage.success('班级已转让')
-    showTransfer.value = false
+    showEditClass.value = false
     await load()
   } finally {
     transferring.value = false
   }
 }
 
-// 解散班级（v0.7.2，建班人 ∨ root）：班级仍挂有考试/作业时后端拒绝并提示
+// 解散班级（v0.7.2，建班人 ∨ root；v0.7.4 收进编辑班级弹窗）：
+// 班级仍挂有考试/作业时后端拒绝并提示
 const dissolving = ref(false)
 async function dissolve() {
   if (!cl.value || dissolving.value) return
@@ -197,6 +192,7 @@ async function dissolve() {
   try {
     await dissolveClass(cl.value.id)
     ElMessage.success('班级已解散')
+    showEditClass.value = false
     router.replace('/classes')
   } finally {
     dissolving.value = false
@@ -208,18 +204,6 @@ async function regenInvite() {
   const r = await classApi.regenInvite(cl.value.id)
   if (cl.value) cl.value.invite_code = r.invite_code
   ElMessage.success('已重置邀请码')
-}
-
-async function togglePrivate() {
-  if (!cl.value) return
-  togglingPrivate.value = true
-  try {
-    const r = await classApi.setPrivate(cl.value.id, !cl.value.private)
-    cl.value.private = r.private
-    ElMessage.success(r.private ? '已设为私密班（仅成员可见）' : '已设为公开班')
-  } finally {
-    togglingPrivate.value = false
-  }
 }
 
 function copyInvite() {
@@ -276,25 +260,31 @@ async function createAssignment() {
   }
 }
 
-// ---- 编辑班级（v0.7.3）：名称 + 富文本公告 ----
+// ---- 编辑班级（v0.7.3 名称/公告；v0.7.4 私密开关 + 转让 + 解散收进同一弹窗） ----
 const showEditClass = ref(false)
 const savingClass = ref(false)
-const editClassForm = reactive({ name: '', introHtml: '' })
+const editClassForm = reactive({ name: '', intro: '', private: false })
+// 可见性/转让/解散仅建班人 ∨ root（与后端 SetClassPrivate/Transfer/Delete 同门槛）
+const isClassOwner = computed(
+  () => !!cl.value && (cl.value.owner_id === userStore.uid || userStore.role === 'root'),
+)
 
 function openEditClass() {
   if (!cl.value) return
   editClassForm.name = cl.value.name
-  editClassForm.introHtml = cl.value.intro_html || cl.value.intro || ''
+  editClassForm.intro = cl.value.intro || ''
+  editClassForm.private = !!cl.value.private
+  transferUid.value = null
   showEditClass.value = true
 }
 
 async function saveEditClass() {
-  if (!cl.value || savingClass.value) return
+  if (!cl.value) return
   if (!editClassForm.name.trim()) {
     ElMessage.warning('班级名称不能为空')
     return
   }
-  if (richtextBytes(editClassForm.introHtml) > MAX_RICHTEXT_BYTES) {
+  if (contentBytes(editClassForm.intro) > MAX_CONTENT_BYTES) {
     ElMessage.error('班级公告过长（上限 256KB）')
     return
   }
@@ -302,7 +292,8 @@ async function saveEditClass() {
   try {
     await updateClass(cl.value.id, {
       name: editClassForm.name.trim(),
-      intro_html: editClassForm.introHtml,
+      intro: editClassForm.intro,
+      private: isClassOwner.value ? editClassForm.private : undefined,
     })
     ElMessage.success('班级已保存')
     showEditClass.value = false
@@ -324,7 +315,7 @@ onMounted(load)
             <el-tag v-if="cl.private" size="small" type="warning">私密班</el-tag>
             <el-tag v-if="cl.joined" size="small" type="success">已加入</el-tag>
           </div>
-          <div v-if="cl.intro_html || cl.intro" class="intro"><MdView :content="cl.intro_html || cl.intro" /></div>
+          <div v-if="cl.intro" class="intro"><MdView :content="cl.intro" /></div>
           <!-- 创建时间在右栏「班级信息」卡展示，名称卡不再重复（v0.7.2 验收反馈） -->
           <div v-if="!cl.joined && !cl.manageable" class="join-bar">
             <el-input
@@ -440,7 +431,7 @@ stripe
         </el-card>
 
       <template #aside>
-        <!-- 管理卡在信息卡上方（v0.7.2 验收调整）；按钮收尾定序：转让 → 解散 → 退出 -->
+        <!-- 管理卡在信息卡上方（v0.7.2 验收调整）；v0.7.4 可见性/转让/解散收进编辑班级弹窗 -->
         <el-card v-if="cl.manageable" class="aside-card">
           <template #header><span>管理</span></template>
           <div class="entry-actions">
@@ -449,33 +440,6 @@ stripe
             <el-button type="primary" plain style="width: 100%" @click="openEditClass">编辑班级</el-button>
             <el-button plain style="width: 100%" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
             <el-button type="warning" plain style="width: 100%" @click="regenInvite">重置邀请码</el-button>
-            <el-button
-              :disabled="togglingPrivate"
-              type="info"
-              plain
-              style="width: 100%"
-              title="仅建班人与 root 可切换"
-              @click="togglePrivate"
-            >
-              {{ cl.private ? '切换为公开班' : '切换为私密班' }}
-            </el-button>
-            <el-button
-              v-if="cl.owner_id === userStore.uid || userStore.role === 'root'"
-              type="warning"
-              style="width: 100%"
-              @click="openTransfer"
-            >
-              转让班级
-            </el-button>
-            <el-button
-              v-if="cl.owner_id === userStore.uid || userStore.role === 'root'"
-              :loading="dissolving"
-              type="danger"
-              style="width: 100%"
-              @click="dissolve"
-            >
-              解散班级
-            </el-button>
             <el-button
               v-if="cl.leaveable"
               :disabled="leaving"
@@ -488,7 +452,6 @@ stripe
               退出班级
             </el-button>
           </div>
-          <div class="dim tip">公开班所有人可见；私密班仅成员与 root/admin 可见</div>
         </el-card>
 
         <el-card v-else-if="cl.joined && cl.leaveable" class="aside-card">
@@ -505,26 +468,6 @@ stripe
         </el-card>
       </template>
     </PageShell>
-
-    <el-dialog v-model="showTransfer" title="转让班级" width="480">
-      <el-form label-position="top">
-        <el-form-item label="选择新建班人（仅限班级成员）" required>
-          <el-select v-model="transferUid" filterable placeholder="从成员中选择受让人" style="width: 100%">
-            <el-option
-              v-for="m in transferCandidates"
-              :key="m.uid"
-              :value="m.uid"
-              :label="`#${m.uid} ${m.username}`"
-            />
-          </el-select>
-        </el-form-item>
-        <div class="dim tip">转让后对方成为建班人，你将变为班级管理员；转让需二次确认。</div>
-      </el-form>
-      <template #footer>
-        <el-button @click="showTransfer = false">取消</el-button>
-        <el-button type="warning" :loading="transferring" :disabled="!transferUid" @click="doTransfer">转让</el-button>
-      </template>
-    </el-dialog>
 
     <el-dialog v-model="showCreateAssignment" title="布置作业" width="960" top="5vh">
       <el-form label-position="top">
@@ -561,7 +504,7 @@ stripe
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不可见）">
+        <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不公开）">
           <el-input-number v-model="examForm.hiddenDays" :min="0" :max="7" />
         </el-form-item>
         <el-form-item label="考试题目" required>
@@ -584,7 +527,7 @@ stripe
         <el-form-item>
           <SwitchRow
             v-model="examForm.hideDuring"
-            label="赛期内对考生不可见"
+            label="赛时隐藏成绩"
             tip="隐藏状态/标签/通过率，考中只显示「已提交」；关闭后考中即可查看结果"
           />
         </el-form-item>
@@ -595,15 +538,61 @@ stripe
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showEditClass" title="编辑班级" width="960" top="6vh">
+    <el-dialog v-model="showEditClass" title="编辑班级" width="960" top="5vh">
       <el-form label-position="top">
         <el-form-item label="班级名称" required>
           <el-input v-model="editClassForm.name" maxlength="64" />
         </el-form-item>
         <el-form-item label="班级公告">
-          <MdEditor v-model="editClassForm.introHtml" height="150px" variant="compact" />
+          <MdEditor v-model="editClassForm.intro" height="150px" variant="compact" />
+        </el-form-item>
+        <el-form-item>
+          <SwitchRow
+            v-model="editClassForm.private"
+            :disabled="!isClassOwner"
+            label="私密班"
+            tip="公开班所有人可见；私密班仅成员与 root/admin 可见；仅建班人与 root 可切换，随保存生效"
+          />
         </el-form-item>
       </el-form>
+
+      <!-- 建班人 ∨ root：转让 / 解散收进编辑弹窗（v0.7.4），各自保留二次确认 -->
+      <template v-if="isClassOwner">
+        <el-divider />
+        <div class="danger-row">
+          <div class="danger-info">
+            <div>转让班级</div>
+            <div class="dim">选择一位成员成为新建班人，你将变为班级管理员</div>
+          </div>
+          <div class="danger-act">
+            <el-select
+              v-model="transferUid"
+              filterable
+              size="small"
+              placeholder="选择受让人"
+              style="width: 180px"
+            >
+              <el-option
+                v-for="m in transferCandidates"
+                :key="m.uid"
+                :value="m.uid"
+                :label="`#${m.uid} ${m.username}`"
+              />
+            </el-select>
+            <el-button type="warning" plain :loading="transferring" :disabled="!transferUid" @click="doTransfer">
+              转让
+            </el-button>
+          </div>
+        </div>
+        <div class="danger-row">
+          <div class="danger-info">
+            <div>解散班级</div>
+            <div class="dim">班内全部考试与作业一并删除、所有成员移出，不可恢复</div>
+          </div>
+          <el-button type="danger" plain :loading="dissolving" @click="dissolve">解散</el-button>
+        </div>
+      </template>
+
       <template #footer>
         <el-button @click="showEditClass = false">取消</el-button>
         <el-button type="primary" :loading="savingClass" @click="saveEditClass">保存</el-button>
@@ -649,6 +638,29 @@ stripe
 
 .tip {
   margin-top: 8px;
+}
+
+/* 编辑班级弹窗危险区：转让/解散行，左说明右动作 */
+.danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.danger-row + .danger-row {
+  border-top: 1px dashed var(--el-border-color-lighter);
+}
+
+.danger-info > div:first-child {
+  font-weight: var(--soj-fw-emphasis);
+}
+
+.danger-act {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .import {

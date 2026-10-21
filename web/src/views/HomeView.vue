@@ -4,9 +4,11 @@ import { useRouter } from 'vue-router'
 import MdView from '@/components/MdView.vue'
 
 import { classApi, noticeApi } from '@/api'
+import { useUserStore } from '@/stores/user'
 import type { ClassCard } from '@/types'
 
 const router = useRouter()
+const userStore = useUserStore()
 const classes = ref<ClassCard[]>([])
 const notice = ref('')
 
@@ -36,14 +38,17 @@ const features = [
 const techs = ['Vue 3', 'TypeScript', 'Vite', 'Element Plus', 'Gin', 'MongoDB', 'go-judge', 'Docker']
 
 onMounted(async () => {
-  try {
-    const list = await classApi.list()
-    classes.value = list.slice(0, 8)
-  } catch {
-    // 班级加载失败不影响首页其他内容
+  // 游客可见面收紧（v0.7.3）：班级接口需登录，游客跳过加载（班级卡片区自然隐藏）
+  if (userStore.token) {
+    try {
+      const list = await classApi.list()
+      classes.value = list.slice(0, 8)
+    } catch {
+      // 班级加载失败不影响首页其他内容
+    }
   }
   try {
-    notice.value = (await noticeApi.get()).content_html
+    notice.value = (await noticeApi.get()).content
   } catch {
     // 公告加载失败不影响首页其他内容
   }

@@ -9,11 +9,10 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
-import ImportProblemDialog, { type ImportedPayload } from '@/components/problem/ImportProblemDialog.vue'
 import MdEditor from '@/components/MdEditor.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
-import { MAX_RICHTEXT_BYTES, richtextBytes } from '@/utils/richtext'
+import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 
 export interface ProblemFormPayload {
   title: string
@@ -73,18 +72,6 @@ function onTagsChange(ids: number[]) {
   form.tag_ids = ids
 }
 
-// ---- 题面导入（v0.6.1）：URL 解析 / 剪贴板粘贴 → 预览确认 → 回填表单 ----
-const showImport = ref(false)
-
-function applyImport(p: ImportedPayload) {
-  if (p.title) form.title = p.title.slice(0, 64) // 粘贴路线可能无标题（表单已有值则不动）
-  form.statement = p.html
-  if (p.time_limit_ms) form.time_limit_ms = p.time_limit_ms
-  if (p.memory_limit_mb) form.memory_limit_mb = p.memory_limit_mb
-  showImport.value = false
-  ElMessage.success(`已回填「${p.source}」的题面${p.title ? '与标题' : ''}，请上传测试数据 zip 后提交`)
-}
-
 const fileList = ref<UploadUserFile[]>([])
 const checkerList = ref<UploadUserFile[]>([])
 
@@ -129,7 +116,7 @@ function payload(): ProblemFormPayload | null {
     ElMessage.warning('请填写题面')
     return null
   }
-  if (richtextBytes(form.statement) > MAX_RICHTEXT_BYTES) {
+  if (contentBytes(form.statement) > MAX_CONTENT_BYTES) {
     ElMessage.error('题面过长（上限 256KB）')
     return null
   }
@@ -157,12 +144,6 @@ function onSubmitClick() {
     <div class="pf-layout">
       <div class="pf-main">
         <el-card>
-          <div class="import-row">
-            <el-button type="primary" plain size="small" @click="showImport = true">
-              导入题面（粘贴 / URL / 脚本）
-            </el-button>
-            <span class="dim">从洛谷、Codeforces、Hydro 等站点快速复制题面与标题</span>
-          </div>
           <el-form-item label="标题" required>
             <el-input v-model="form.title" maxlength="64" show-word-limit placeholder="64 字符以内" />
           </el-form-item>
@@ -184,16 +165,10 @@ function onSubmitClick() {
             <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
           </el-form-item>
           <el-form-item label="题面" required>
-            <MdEditor v-model="form.statement" max-height="4000px" />
+            <MdEditor v-model="form.statement" />
           </el-form-item>
         </el-card>
       </div>
-      <ImportProblemDialog
-        v-if="showImport"
-        @apply="applyImport"
-        @close="showImport = false"
-      />
-
       <div class="pf-aside">
         <el-card>
           <template #header><span>管理</span></template>
@@ -348,14 +323,6 @@ function onSubmitClick() {
 .pf-main {
   flex: 1 1 auto;
   min-width: 0;
-}
-
-/* 表单顶部导入入口行 */
-.import-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 2px 0 18px;
 }
 
 .pf-aside {

@@ -11,7 +11,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/repo"
-	"soj/internal/richtext"
 )
 
 // classManageable 判断用户能否管理某班级（建班人、班级管理员或 root）。
@@ -140,20 +139,15 @@ func (h *Handlers) GetClass(c *gin.Context) {
 	}
 	manage := h.classManageable(c, cl)
 
-	classIntroHTML := cl.IntroHTML
-	if classIntroHTML == "" && cl.Intro != "" {
-		classIntroHTML = richtext.MdToHTML(cl.Intro) // 存量 md 公告读时计算（v0.6 富文本口径）
-	}
 	resp := gin.H{
-		"id":          cl.ID,
-		"name":        cl.Name,
-		"intro":       cl.Intro,
-		"intro_html":  classIntroHTML,
-		"owner_id":    cl.OwnerID,
-		"private":     cl.Private,
-		"created_at":  cl.CreatedAt,
-		"joined":      isMember,
-		"manageable":  manage,
+		"id":         cl.ID,
+		"name":       cl.Name,
+		"intro":      cl.Intro, // 班级公告（Markdown，v0.8 起单一事实源）
+		"owner_id":   cl.OwnerID,
+		"private":    cl.Private,
+		"created_at": cl.CreatedAt,
+		"joined":     isMember,
+		"manageable": manage,
 	}
 	if manage {
 		resp["invite_code"] = cl.InviteCode
@@ -270,7 +264,7 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 	ok(c, gin.H{"left": true})
 }
 
-// UpdateClass 编辑班级（v0.7.3）：名称 / 富文本公告，均可选；classManageable 门槛
+// UpdateClass 编辑班级（v0.7.3）：名称 / 公告，均可选；classManageable 门槛
 // （建班人/班级管理员/root，同管理卡其它按钮）。
 func (h *Handlers) UpdateClass(c *gin.Context) {
 	id, okID := parseID(c, "id")
@@ -278,8 +272,9 @@ func (h *Handlers) UpdateClass(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name      *string `json:"name"`
-		IntroHTML *string `json:"intro_html"`
+		Name    *string `json:"name"`
+		Intro   *string `json:"intro"`
+		Private *bool   `json:"private"` // v0.7.4：随编辑班级弹窗一并保存；切可见性权限更严（建班人 ∨ root）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -299,6 +294,7 @@ func (h *Handlers) UpdateClass(c *gin.Context) {
 		fail(c, http.StatusForbidden, "仅班级管理员可编辑班级")
 		return
 	}
+	uid, _, role, logged := currentUser(c)
 	set := bson.M{}
 	if req.Name != nil {
 		name := trimTo(*req.Name, 64)
@@ -308,12 +304,19 @@ func (h *Handlers) UpdateClass(c *gin.Context) {
 		}
 		set["name"] = name
 	}
-	if req.IntroHTML != nil {
-		if len(*req.IntroHTML) > maxStatementSize {
+	if req.Intro != nil {
+		if len(*req.Intro) > maxStatementSize {
 			fail(c, http.StatusBadRequest, "班级公告过长（上限 256KB）")
 			return
 		}
-		set["introHtml"] = *req.IntroHTML
+		set["intro"] = *req.Intro
+	}
+	if req.Private != nil {
+		if !logged || !(uid == cl.OwnerID || role == repo.RoleRoot) {
+			fail(c, http.StatusForbidden, "仅建班人或 root 可切换班级可见性")
+			return
+		}
+		set["private"] = *req.Private
 	}
 	if len(set) == 0 {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")

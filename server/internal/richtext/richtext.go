@@ -1,15 +1,15 @@
-// Package richtext：markdown → HTML 富文本转换（v0.6 编辑器换血，2026-10-19 定稿见 plan.md §2.2）。
+// Package richtext：HTML → markdown 转换（v0.8 编辑器推倒重来，2026-10-20 定稿）。
 //
-// 存量内容全部由 vditor（浏览器版 Lute）方言渲染，服务端换血后用同引擎 Lute（Go 版）转换，
-// 渲染结果与现状一致；本包同时服务存量「编辑即迁移」与 v0.6.1 站点导入（洛谷/Hydro/LOJ 的
-// md 题面走同一管道）。goldmark 为 Lute 维护出问题时的备选（CommonMark 语义与 Lute 有细微差异）。
+// v0.6–v0.7 富文本时代内容以 HTML 存储；v0.8 回归 markdown 单一事实源后，本包服务
+// 存量回迁：repo 启动迁移（contentMdV1）把 v0.6–v0.7 时代的 HTML 字段一次性转回 md
+// （html 覆盖 md——「编辑即迁移」语义下 html 是编辑后的新内容）。
 //
-// 数学公式契约：HTML 中以 data-type="inline-math|block-math" + data-latex（TeX 源码原文）表示——
-// 查看端 KaTeX 渲染、编辑端 Tiptap Mathematics 官方扩展（migrateMathStrings 同契约）还原为
-// 可编辑节点，导入-显示-再编辑全程无损；转换不产生任何渲染死 HTML。
+// 数学公式契约：HTML 中以 data-type="inline-math|block-math" + data-latex（TeX 源码，
+// 属性转义形态）表示——HTMLToMd 用占位符中转归一为 $…$/$$…$$，Vditor 原生编辑渲染。
 package richtext
 
 import (
+	"fmt"
 	"html"
 	"regexp"
 	"strings"
@@ -21,257 +21,83 @@ var engine = newEngine()
 
 func newEngine() *lute.Lute {
 	l := lute.New()
-	// 与 vditor 预览同一方言语义；数学走本包 convertMath 的契约转换（lute 自带
-	// InlineMath/BlockMath 渲染形态不受控，显式关闭后 $…$ 以文本形式输出再统一处理）。
+	// 与 vditor 同方言语义：表格/任务列表/删除线/自动链接在 DOM→AST 映射与 md 输出两端都要开
 	o := l.ParseOptions
 	o.GFMTable = true
 	o.GFMTaskListItem = true
 	o.GFMStrikethrough = true
 	o.GFMAutoLink = true
-	o.InlineMath = false
-	// 代码高亮关掉：vditor 现状是浏览器端 highlight.js 高亮，HTML 里存裸代码——
-	// chroma 的 class/span 会污染 Tiptap codeBlock 往返（编辑器 schema 只收纯文本）
-	l.RenderOptions.CodeSyntaxHighlight = false
 	return l
 }
 
-// MdToHTML 把 markdown 转成富文本 HTML（公式转 data-latex 契约，见包注释）。
-func MdToHTML(md string) string {
-	return ConvertMath(engine.MarkdownStr("soj", md))
-}
-
-// SampleIO 样例输入/输出文本（HTML 样例章节拼装用；与 repo.SampleIO 同构，避免反向依赖）。
-type SampleIO struct{ Input, Output string }
-
-const samplesHeadingHTML = "样例"
-
-var (
-	samplesH2Re = regexp.MustCompile(`<h2[^>]*>\s*样例\s*</h2>`)
-	nextH1H2Re  = regexp.MustCompile(`<h[12][\s>]`)
-)
-
-// StripSamplesHTML 剥离 HTML 题面中的「样例」章节（h2 样例 起到下一个一/二级标题或文末），
-// 语义与 repo.StripSamplesMd 对齐：测试数据整包替换后样例需按新数据重建。
-func StripSamplesHTML(h string) string {
-	loc := samplesH2Re.FindStringIndex(h)
-	if loc == nil {
-		return h
+// HTMLToMd 把 HTML 转成 markdown（存量回迁用）。契约公式节点先抽成占位符再走
+// lute HTML2Markdown，最后回填为 $ 文本——不能直接注入 $…$ 文本，h2m 会把正文里的 $ 转义成
+// \$（防误判公式定界符）；也不能改写成 h2m 内部的 data-content/data-tex 属性形态，那依赖
+// 引擎实现细节。占位符是纯字母数字，md 与 DOM 双向惰性，h2m 原样透传。
+func HTMLToMd(h string) string {
+	h, maths := contractToPlaceholders(h)
+	md, err := engine.HTML2Markdown(h)
+	if err != nil {
+		return h // h2m 内部是宽松 DOM 解析，err 实际不可达；兜底原样返回保数据
 	}
-	tail := nextH1H2Re.FindStringIndex(h[loc[1]:])
-	if tail == nil {
-		return strings.TrimRight(h[:loc[0]], "\n\t ")
-	}
-	// 样例章节后还有一/二级标题内容：与 md 版语义一致，保留其后的内容
-	return strings.TrimRight(h[:loc[0]], "\n\t ") + "\n" + h[loc[1]+tail[0]:]
-}
-
-// AppendSamplesHTML 把样例以「样例」章节追加到 HTML 题面末尾（经同一转换器生成，渲染与
-// md 版逐字一致）。已含样例章节或无样例时原样返回。
-func AppendSamplesHTML(h string, samples []SampleIO) string {
-	if len(samples) == 0 || samplesH2Re.MatchString(h) {
-		return h
-	}
-	var b strings.Builder
-	b.WriteString("## 样例")
-	for i, s := range samples {
-		b.WriteString("\n\n### 样例 ")
-		b.WriteString(itoa(i + 1))
-		b.WriteString("\n\n输入：\n\n```\n")
-		b.WriteString(strings.TrimRight(s.Input, "\n"))
-		b.WriteString("\n```\n\n输出：\n\n```\n")
-		b.WriteString(strings.TrimRight(s.Output, "\n"))
-		b.WriteString("\n```")
-	}
-	section := MdToHTML(b.String())
-	if strings.TrimSpace(h) == "" {
-		return section
-	}
-	return strings.TrimRight(h, "\n\t ") + "\n" + section
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
+	return strings.TrimSpace(restoreMath(md, maths))
 }
 
 var (
-	allDigitsRe  = regexp.MustCompile(`^\s*\d+\s*$`)
-	attrEscaper  = html.EscapeString
-	tagNameRe    = regexp.MustCompile(`^<\s*/?\s*([a-zA-Z][a-zA-Z0-9-]*)`)
-	voidTagRe    = regexp.MustCompile(`^<\s*(br|hr|img|input|meta|link|source|col)\b`)
-	selfCloseRe  = regexp.MustCompile(`/\s*>\s*$`)
-	commentBegin = "<!--"
+	inlineMathRe = regexp.MustCompile(`<span\b[^>]*\bdata-type="inline-math"[^>]*></span>`)
+	blockMathRe  = regexp.MustCompile(`<div\b[^>]*\bdata-type="block-math"[^>]*></div>`)
+	latexAttrRe  = regexp.MustCompile(`\bdata-latex="([^"]*)"`)
+	mathTokenFmt = "sojmathplaceholder%d" // 纯字母数字：不经 md 转义、不被 DOM 吞
 )
 
-// ConvertMath 把 HTML 文本节点里的 $…$ / $$…$$ 转成 data-latex 契约节点。
-// <pre>/<code> 内与标签内部不处理；守卫与官方 migrateMathRegex
-// （/\$(?!\d+\$)(.+?)\$(?!\d)/g）语义对齐：纯数字内容（$100$）与闭合 $ 后紧跟数字
-// （"$5 和 $10"）不视为公式——Go RE2 不支持负向前瞻，守卫在代码内实现。
-func ConvertMath(h string) string {
-	var b strings.Builder
-	i := 0
-	// codePre 栈深度：<pre> 可嵌套？HTML 里不会；<code> 出现在行内与 pre 内。计数即可。
-	codeDepth := 0
-	for i < len(h) {
-		c := h[i]
-		if c != '<' {
-			if codeDepth == 0 {
-				// 文本节点：处理到下一个 '<' 为止
-				nxt := strings.IndexByte(h[i:], '<')
-				var seg string
-				if nxt < 0 {
-					seg = h[i:]
-					i = len(h)
-				} else {
-					seg = h[i : i+nxt]
-					i += nxt
-				}
-				b.WriteString(mathifyText(seg))
-			} else {
-				b.WriteByte(c)
-				i++
-			}
-			continue
-		}
-		// 标签 / 注释 / CDATA：原样搬移
-		if strings.HasPrefix(h[i:], commentBegin) {
-			end := strings.Index(h[i+4:], "-->")
-			if end < 0 {
-				b.WriteString(h[i:])
-				break
-			}
-			b.WriteString(h[i : i+4+end+3])
-			i += 4 + end + 3
-			continue
-		}
-		// lute 默认（InlineMath 关闭时仍生效）把 $$…$$ 渲染为 <div class="language-math">TeX</div>，
-		// 统一改写为块级公式契约节点
-		if strings.HasPrefix(h[i:], `<div class="language-math">`) {
-			end := strings.Index(h[i:], "</div>")
-			if end >= 0 {
-				tex := html.UnescapeString(h[i+len(`<div class="language-math">`) : i+end])
-				b.WriteString(`<div data-type="block-math" data-latex="`)
-				b.WriteString(attrEscaper(tex))
-				b.WriteString(`"></div>`)
-				i += end + len("</div>")
-				continue
-			}
-		}
-		gt := strings.IndexByte(h[i:], '>')
-		if gt < 0 {
-			b.WriteString(h[i:])
-			break
-		}
-		tag := h[i : i+gt+1]
-		b.WriteString(tag)
-		i += gt + 1
-		m := tagNameRe.FindStringSubmatch(strings.ToLower(tag))
-		if m == nil {
-			continue
-		}
-		name := m[1]
-		switch name {
-		case "pre", "code":
-			if strings.HasPrefix(m[0], "</") {
-				if codeDepth > 0 {
-					codeDepth--
-				}
-			} else if !voidTagRe.MatchString(strings.ToLower(tag)) && !selfCloseRe.MatchString(tag) {
-				codeDepth++
-			}
-		}
-	}
-	return b.String()
+type mathPlaceholder struct {
+	latex string
+	block bool
 }
 
-func mathifyText(seg string) string {
-	if !strings.Contains(seg, "$") {
-		return seg
+// contractToPlaceholders 把契约公式节点整体替换为占位符文本：行内原地；块级包进 <p>——
+// 裸文本级的占位符与相邻 <p> 会被 h2m 挤进同一段，$$…$$ 必须自成一段才不被误判。
+func contractToPlaceholders(h string) (string, []mathPlaceholder) {
+	var maths []mathPlaceholder
+	register := func(tag string, block bool) string {
+		latex, ok := latexOf(tag)
+		if !ok {
+			return tag
+		}
+		maths = append(maths, mathPlaceholder{latex: latex, block: block})
+		tok := fmt.Sprintf(mathTokenFmt, len(maths)-1)
+		if block {
+			return "<p>" + tok + "</p>"
+		}
+		return tok
 	}
-	var b strings.Builder
-	i := 0
-	n := len(seg)
-	for i < n {
-		if seg[i] != '$' {
-			b.WriteByte(seg[i])
-			i++
-			continue
-		}
-		// 块级公式 $$…$$（可跨行）
-		if i+1 < n && seg[i+1] == '$' {
-			if end := strings.Index(seg[i+2:], "$$"); end >= 0 {
-				latex := seg[i+2 : i+2+end]
-				if strings.TrimSpace(latex) != "" {
-					b.WriteString(`<div data-type="block-math" data-latex="`)
-					b.WriteString(attrEscaper(latex))
-					b.WriteString(`"></div>`)
-					i = i + 2 + end + 2
-					continue
-				}
-			}
-			b.WriteString("$$")
-			i += 2
-			continue
-		}
-		// 行内公式 $…$（单行）
-		if end := strings.IndexByte(seg[i+1:], '$'); end >= 0 {
-			closeAbs := i + 1 + end
-			content := seg[i+1 : closeAbs]
-			afterDigit := closeAbs+1 < n && isDigit(seg[closeAbs+1])
-			if content != "" && !strings.ContainsRune(content, '\n') &&
-				!afterDigit && !allDigitsRe.MatchString(content) {
-				// 文本节点里是实体转义后的形态（&lt; 等），先还原 TeX 源码再按属性转义
-				b.WriteString(`<span data-type="inline-math" data-latex="`)
-				b.WriteString(attrEscaper(html.UnescapeString(content)))
-				b.WriteString(`"></span>`)
-				i = closeAbs + 1
-				continue
-			}
-			// 守卫失败：只消费开头的 $（"$5 和 $10" 两处都不配对）
-			b.WriteByte('$')
-			i++
-			continue
-		}
-		b.WriteByte('$')
-		i++
-	}
-	return b.String()
+	h = blockMathRe.ReplaceAllStringFunc(h, func(m string) string { return register(m, true) })
+	h = inlineMathRe.ReplaceAllStringFunc(h, func(m string) string { return register(m, false) })
+	return h, maths
 }
 
-func isDigit(c byte) bool { return c >= '0' && c <= '9' }
-
-// PlainText 提取 HTML 纯文本（标签剥离 + 实体还原），供转换质量校验（转换前后纯文本一致）。
-func PlainText(h string) string {
-	var b strings.Builder
-	i := 0
-	for i < len(h) {
-		if h[i] == '<' {
-			gt := strings.IndexByte(h[i:], '>')
-			if gt < 0 {
-				break
-			}
-			i += gt + 1
-			continue
+// restoreMath 把占位符回填为公式文本：块级 $$…$$ 自成一段，行内 $…$ 原地。
+// 两端先补 \n 再整体 Trim，覆盖占位符顶格在 md 首尾的边界形态。
+func restoreMath(md string, maths []mathPlaceholder) string {
+	md = "\n" + md + "\n"
+	for i, m := range maths {
+		tok := fmt.Sprintf(mathTokenFmt, i)
+		repl := "$" + m.latex + "$"
+		if m.block {
+			repl = "$$\n" + m.latex + "\n$$"
 		}
-		nxt := strings.IndexByte(h[i:], '<')
-		var seg string
-		if nxt < 0 {
-			seg = h[i:]
-			i = len(h)
-		} else {
-			seg = h[i : i+nxt]
-			i += nxt
-		}
-		b.WriteString(seg)
+		// 常规形态：占位符独占一行（块级 div 落在段落之间被解析成独立段落），保留原段界
+		md = strings.ReplaceAll(md, "\n"+tok+"\n", "\n"+repl+"\n")
+		md = strings.ReplaceAll(md, tok, repl) // 兜底：行内与意外形态
 	}
-	return html.UnescapeString(b.String())
+	return md
+}
+
+// latexOf 从契约节点标签里取 TeX 源码：属性形态是转义后的，先还原。
+func latexOf(tag string) (string, bool) {
+	m := latexAttrRe.FindStringSubmatch(tag)
+	if m == nil {
+		return "", false
+	}
+	return html.UnescapeString(m[1]), true
 }
