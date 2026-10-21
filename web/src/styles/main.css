@@ -751,7 +751,7 @@ samp {
 /* ---- 十阶色轴（v0.11；v2 重制 2026-10-22；v6.2 等级并入浅色 tag 体系）----
    名字定稿（两字段位，取自王者荣耀段位体系）：青铜/白银/黄金/铂金/钻石/星耀/宗师/王者/传奇/极境。
    难度徽章 = .diff-*（浅色 tag，10% 浓度）；用户等级徽章 = .ulv-*（浅色 tag，30% 浓度 +
-   光晕/呼吸星逐级递增，极境彩色渐变压轴）；SOJ 顶栏标识 = .tier-bg-10/.tier-fx-10（六色胶囊）。
+   光晕/呼吸星逐级递增，极境彩色渐变压轴）；SOJ 顶栏标识 = ulv-tag/ulv-10/ulv-e10（最高等级样式）。
    色相 token 保留全轴，动画低速低亮度，系统「减少动态效果」时整体关闭。 */
 :root {
   --soj-tier-1: #4aa27e; /* 青铜 · 铜锈绿 */
@@ -765,11 +765,8 @@ samp {
   --soj-tier-9: #e63946; /* 传奇 · 正红（渐变主色/描边/晕） */
 }
 
-/* SOJ 顶栏标识（极境胶囊）：六色 400% 流动底 */
-.tier-bg-10 {
-  background: linear-gradient(120deg, #e63946, #ee7e1f, #e9c963, #3cb371, #4a8dda, #7e3e9e);
-  background-size: 400% 100%;
-}
+/* SOJ 顶栏标识：特效开时挂 ulv-tag/ulv-10/ulv-e10（最高等级极境样式，见下方 ulv 族），
+   此处不再保留独立 tier-bg/tier-fx 样式 */
 
 /* ---- 用户等级徽章浅色族（2026-10-22 v6.2 定稿）：与难度 chips 同体系的浅色 tag ----
    浓度高一档（底 30% / 边 55% / 字 88% 混深岩灰）；特效全档逐步递增：
@@ -980,39 +977,6 @@ samp {
   }
 }
 
-/* SOJ 顶栏胶囊特效（tier-fx-10，仅顶栏标识使用）：六色流动 + 金环脉动 + 白星芒 + 白流光 */
-.tier-fx-10 {
-  position: relative;
-  overflow: hidden;
-  animation:
-    tier-flow 9s ease-in-out infinite alternate,
-    tier-hb-gold 4.8s ease-in-out infinite,
-    tier-ring2-gold 4.8s ease-out infinite;
-}
-.tier-fx-10::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.5) 50%, transparent 65%);
-  transform: translateX(-130%);
-  pointer-events: none;
-  animation: tier-sweep 3.6s ease-in-out infinite;
-}
-.tier-fx-10::after {
-  content: '✦';
-  position: absolute;
-  top: 1px;
-  right: 4px;
-  font-size: 9px;
-  line-height: 1;
-  pointer-events: none;
-  color: #fff;
-  text-shadow: 0 0 6px rgba(255, 255, 255, 0.95);
-  animation:
-    tier-twinkle 5s ease-in-out infinite,
-    tier-star-pop 5s ease-in-out infinite;
-}
-
 @keyframes tier-twinkle {
   0%,
   100% {
@@ -1022,52 +986,6 @@ samp {
   50% {
     opacity: 1;
     transform: scale(1);
-  }
-}
-@keyframes tier-sweep {
-  0% {
-    transform: translateX(-130%);
-  }
-  55%,
-  100% {
-    transform: translateX(130%);
-  }
-}
-@keyframes tier-flow {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 100% 50%;
-  }
-}
-@keyframes tier-hb-gold {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 1.5px var(--soj-tier-8),
-      0 0 14px rgba(212, 175, 55, 0.55),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4),
-      0 0 0 0 rgba(212, 175, 55, 0.4);
-  }
-  50% {
-    box-shadow:
-      0 0 0 1.5px var(--soj-tier-8),
-      0 0 14px rgba(212, 175, 55, 0.55),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4),
-      0 0 0 9px rgba(212, 175, 55, 0);
-  }
-}
-/* 追随环（outline 扩散，比 box-shadow 主环慢半拍） */
-@keyframes tier-ring2-gold {
-  0% {
-    outline: 2px solid rgba(212, 175, 55, 0.55);
-    outline-offset: 2px;
-  }
-  45%,
-  100% {
-    outline: 2px solid rgba(212, 175, 55, 0);
-    outline-offset: 12px;
   }
 }
 @keyframes tier-star-pop {
@@ -1081,7 +999,6 @@ samp {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tier-fx-10::before,
   .diff-g8::after,
   .diff-g9::after,
   .diff-g10::after,
@@ -1094,7 +1011,6 @@ samp {
   .lv-star {
     opacity: 1;
   }
-  .tier-fx-10,
   .diff-g9,
   .diff-g10,
   .ulv-e5,
@@ -1104,12 +1020,6 @@ samp {
   .ulv-e9,
   .ulv-e10 {
     animation: none;
-  }
-  .tier-fx-10 {
-    box-shadow:
-      0 0 0 1.5px var(--soj-tier-8),
-      0 0 14px rgba(212, 175, 55, 0.55),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4);
   }
   .ulv-e10 {
     background-position: 50% 50%;

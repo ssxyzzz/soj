@@ -5,7 +5,7 @@ import { UserFilled } from '@element-plus/icons-vue'
 
 import { authApi } from '@/api'
 import TierBadge from '@/components/TierBadge.vue'
-import { useLevelsStore } from '@/stores/levels'
+import { LEVEL_STARS, useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -15,10 +15,25 @@ const levels = useLevelsStore()
 
 const active = computed(() => route.path)
 
-// 左上角 SOJ 标识：特效开 = 完整极境胶囊徽章（tier-badge + tier-bg-10 + tier-fx-10 全套：
-// 胶囊底/六色流动/金环脉动/白星芒/流光）；后台等级面板特效开关（全局或 Lv.10）关闭即
-// 回落站点主色静态字
+// 左上角 SOJ 标识：特效开 = 最高等级（Lv.10 极境）样式——彩色渐变流动胶囊 + 深处辉光呼吸
+// + 四颗错拍白星芒（ulv-tag/ulv-10/ulv-e10 同体系）；后台等级面板特效开关（全局或 Lv.10）
+// 关闭即回落站点主色静态字
 const brandFx = computed(() => levels.effectsOn(10))
+
+// 极境四星（与 LEVEL_STARS[10] 同配置，随胶囊尺寸铺四角）
+const brandStars = computed(() => {
+  if (!brandFx.value) return []
+  return (
+    LEVEL_STARS[10] ?? []
+  ).map((s) => {
+    let style = `font-size:${s.s}px;animation-delay:${s.d}s;`
+    if (s.t != null) style += `top:${s.t}px;`
+    if (s.l != null) style += `left:${s.l}px;`
+    if (s.r != null) style += `right:${s.r}px;`
+    if (s.b != null) style += `bottom:${s.b}px;`
+    return style
+  })
+})
 
 // 登录态下拉取用户偏好（默认语言/模板）与等级（顶栏徽章），供提交弹窗/在线编程消费；
 // 设置页保存后同步更新 store。失败静默（未登录/过期由拦截器统一处理）。
@@ -48,7 +63,12 @@ function onCommand(command: string) {
   <el-container class="layout">
     <el-header class="header">
       <div class="header-inner">
-        <div class="brand" :class="brandFx ? ['brand', 'brand-fx', 'tier-bg-10', 'tier-fx-10'] : ['brand']" @click="router.push('/')">SOJ</div>
+        <div class="brand" :class="brandFx ? ['brand', 'brand-fx', 'ulv-tag', 'ulv-10', 'ulv-e10'] : ['brand']" @click="router.push('/')">SOJ<i
+          v-for="(s, i) in brandStars"
+          :key="i"
+          class="lv-star"
+          :style="s"
+        >✦</i></div>
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
           <el-menu-item index="/problems">题库</el-menu-item>
@@ -129,8 +149,8 @@ function onCommand(command: string) {
   letter-spacing: 2px;
 }
 
-/* SOJ 极境胶囊（特效开）：模板挂全局 tier-bg-10/tier-fx-10（六色流动/金环脉动/白星芒/流光），
-   胶囊基础形状在此补齐（tier-badge 基类是 TierBadge 组件内 scoped 样式，全局拿不到）；
+/* SOJ 极境胶囊（特效开）：模板挂全局 ulv-tag/ulv-10/ulv-e10（最高等级样式——蓝紫彩色
+   渐变流动 + 深处辉光呼吸）+ 四颗 lv-star 白星芒；胶囊基础形状在此补齐；
    特效关回落上方主色静态字 */
 .brand-fx {
   display: inline-flex;
