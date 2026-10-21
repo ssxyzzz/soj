@@ -63,12 +63,18 @@ function onCommand(command: string) {
   <el-container class="layout">
     <el-header class="header">
       <div class="header-inner">
-        <div class="brand" :class="brandFx ? ['brand', 'brand-fx', 'ulv-tag', 'ulv-10', 'ulv-e10'] : ['brand']" @click="router.push('/')">SOJ<i
-          v-for="(s, i) in brandStars"
-          :key="i"
-          class="lv-star"
-          :style="s"
-        >✦</i></div>
+        <div
+          class="brand"
+          :class="brandFx ? ['brand', 'brand-fx', 'ulv-tag', 'ulv-10', 'ulv-e10'] : ['brand']"
+          @click="router.push('/')"
+        >
+          SOJ<i
+            v-for="(s, i) in brandStars"
+            :key="i"
+            class="lv-star"
+            :style="s"
+          >✦</i>
+        </div>
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
           <el-menu-item index="/problems">题库</el-menu-item>
