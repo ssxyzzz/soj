@@ -210,6 +210,7 @@ export interface RankItem {
 // 等级配置公开视图（GET /api/levels）：徽章与进度渲染所需
 export interface LevelConfigInfo {
   names: string[] // Lv.1–10 名称文字
+  difficulty_names?: string[] // 难度 1–10 档展示名（缺省与等级名相同）
   thresholds: number[] // 达 Lv.2–10 的累计 XP（9 项）
   decay: [number, number, number] // 低 1/2/3 级题分系数（低 ≥4 级恒 0）
   effects_enabled: boolean
@@ -220,6 +221,7 @@ export interface LevelConfigInfo {
 // root 等级面板（GET/PUT /admin/levelconfig）
 export interface AdminLevelConfig {
   names: string[]
+  difficulty_names: string[]
   thresholds: number[]
   decay1: number
   decay2: number

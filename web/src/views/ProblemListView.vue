@@ -9,6 +9,7 @@ import FitTags from '@/components/problem/FitTags.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import TierBadge from '@/components/TierBadge.vue'
+import { useLevelsStore } from '@/stores/levels'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
 import type { ProblemListItem } from '@/types'
@@ -30,6 +31,8 @@ function typeBadge(row: { type?: string; kind?: string }): string {
 }
 const userStore = useUserStore()
 const tagStore = useTagTreeStore()
+const levels = useLevelsStore()
+levels.ensure() // 难度档名（筛选下拉与徽章展示）
 
 const list = ref<ProblemListItem[]>([])
 const total = ref(0)
@@ -166,7 +169,7 @@ onMounted(() => {
             style="width: 220px"
             @change="onDiffChange"
           >
-            <el-option v-for="d in 10" :key="d" :value="d" :label="`D${d}`" />
+            <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
           </el-select>
         </div>
         <el-table

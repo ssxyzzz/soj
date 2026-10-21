@@ -37,21 +37,25 @@ type LevelConfig struct {
 	Decay1     float64    `bson:"decay1" json:"decay1"`         // 低 1 级题的分系数
 	Decay2     float64    `bson:"decay2" json:"decay2"`         // 低 2 级
 	Decay3     float64    `bson:"decay3" json:"decay3"`         // 低 3 级；低 ≥4 级恒 0，不配置
+	// 题目难度名（D1–10 档的展示文字，2026-10-22 起 Difficulty 徽章/筛选/建题选择器均显示名字，
+	// 不再用「D1~D10」描述）；默认与等级名相同，root 后台独立可改。
+	DifficultyNames [10]string `bson:"difficultyNames" json:"difficulty_names"`
 	// 特效开关：等级徽章的动画/光效（难度徽章恒静态，不受此控制）。
 	// 全局关 = 部署方不想要炫酷效果；逐级关可只保留低档纯色。
 	EffectsEnabled bool     `bson:"effectsEnabled" json:"effects_enabled"`
 	EffectsTiers   [10]bool `bson:"effectsTiers" json:"effects_tiers"`
 }
 
-// DefaultLevelConfig 默认等级配置（深拷贝默认数组）。
+// DefaultLevelConfig 默认等级配置（深拷贝默认数组；难度名默认与等级名相同）。
 func DefaultLevelConfig() *LevelConfig {
 	cfg := &LevelConfig{
-		Names:          DefaultLevelNames,
-		Thresholds:     DefaultLevelThresholds,
-		Decay1:         DefaultDecay1,
-		Decay2:         DefaultDecay2,
-		Decay3:         DefaultDecay3,
-		EffectsEnabled: true,
+		Names:           DefaultLevelNames,
+		Thresholds:      DefaultLevelThresholds,
+		Decay1:          DefaultDecay1,
+		Decay2:          DefaultDecay2,
+		Decay3:          DefaultDecay3,
+		DifficultyNames: DefaultLevelNames,
+		EffectsEnabled:  true,
 	}
 	for i := range cfg.EffectsTiers {
 		cfg.EffectsTiers[i] = true
@@ -66,6 +70,12 @@ func (c *LevelConfig) Normalize() bool {
 	for i := range c.Names {
 		if len([]rune(c.Names[i])) == 0 || len([]rune(c.Names[i])) > 12 {
 			c.Names[i] = DefaultLevelNames[i]
+			ok = false
+		}
+	}
+	for i := range c.DifficultyNames {
+		if len([]rune(c.DifficultyNames[i])) == 0 || len([]rune(c.DifficultyNames[i])) > 12 {
+			c.DifficultyNames[i] = DefaultLevelNames[i]
 			ok = false
 		}
 	}
@@ -108,7 +118,7 @@ func (r *Repo) GetLevelConfig(ctx context.Context) (*LevelConfig, error) {
 	}
 	cfg := doc.LevelConfig
 	// 存量文档缺数组字段时解码为零值数组——整体兜底到默认，避免渲染出空名字
-	if len(cfg.Names) != 10 || len(cfg.Thresholds) != 9 || len(cfg.EffectsTiers) != 10 {
+	if len(cfg.Names) != 10 || len(cfg.Thresholds) != 9 || len(cfg.EffectsTiers) != 10 || len(cfg.DifficultyNames) != 10 {
 		def := DefaultLevelConfig()
 		if len(cfg.Names) != 10 {
 			cfg.Names = def.Names
@@ -118,6 +128,9 @@ func (r *Repo) GetLevelConfig(ctx context.Context) (*LevelConfig, error) {
 		}
 		if len(cfg.EffectsTiers) != 10 {
 			cfg.EffectsTiers = def.EffectsTiers
+		}
+		if len(cfg.DifficultyNames) != 10 {
+			cfg.DifficultyNames = def.DifficultyNames
 		}
 	}
 	cfg.Normalize()

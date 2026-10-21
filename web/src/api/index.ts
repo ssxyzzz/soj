@@ -281,6 +281,7 @@ export const adminApi = {
   getLevelConfig: () => get<{ config: AdminLevelConfig }>('/admin/levelconfig'),
   saveLevelConfig: (body: {
     names: string[]
+    difficulty_names: string[]
     thresholds: number[]
     decay1: number
     decay2: number

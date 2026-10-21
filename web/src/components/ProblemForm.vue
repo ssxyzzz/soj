@@ -14,6 +14,7 @@ import { downloadFile } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
 import ObjectiveEditor from '@/components/ObjectiveEditor.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
+import { useLevelsStore } from '@/stores/levels'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import { useUserStore } from '@/stores/user'
@@ -111,6 +112,9 @@ const timeLimitSec = computed({
 
 const tagStore = useTagTreeStore()
 tagStore.ensure()
+// 难度档展示名（默认与等级名相同，root 后台可改；选择器不再用 D1~D10 描述）
+const levels = useLevelsStore()
+levels.ensure()
 // 空树时展示「管理员尚未配置标签树」占位
 const tagTreeEmpty = computed(() => !tagStore.nodes.length)
 // 标签必填（建题同标题必填口径）；空树无从选择不拦截，编辑存量无标签题也不强制补挂
@@ -422,7 +426,7 @@ function onSubmitClick() {
             </template>
             <div class="difficulty-row">
               <el-select v-model="form.difficulty" class="difficulty-select">
-                <el-option v-for="d in 10" :key="d" :value="d" :label="`D${d}`" />
+                <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
               </el-select>
               <span class="dim">{{ DIFFICULTY_HINTS[form.difficulty] ?? '' }}</span>
             </div>

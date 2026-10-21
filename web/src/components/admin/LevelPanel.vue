@@ -12,6 +12,7 @@ const levels = useLevelsStore()
 
 const form = reactive({
   names: [...DEFAULT_LEVEL_NAMES],
+  difficulty_names: [...DEFAULT_LEVEL_NAMES],
   thresholds: [200, 600, 1200, 2000, 3000, 4200, 5600, 7200, 9000] as number[],
   decay1: 0.5,
   decay2: 0.2,
@@ -36,6 +37,7 @@ onMounted(async () => {
   try {
     const { config } = await adminApi.getLevelConfig()
     form.names = [...config.names]
+    form.difficulty_names = [...(config.difficulty_names?.length === 10 ? config.difficulty_names : config.names)]
     form.thresholds = [...config.thresholds]
     form.decay1 = config.decay1
     form.decay2 = config.decay2
@@ -48,8 +50,8 @@ onMounted(async () => {
 })
 
 async function save() {
-  if (form.names.some((n) => !n.trim())) {
-    ElMessage.warning('等级名称不能为空')
+  if (form.names.some((n) => !n.trim()) || form.difficulty_names.some((n) => !n.trim())) {
+    ElMessage.warning('等级名称与难度名称均不能为空')
     return
   }
   for (let i = 1; i < form.thresholds.length; i++) {
@@ -62,6 +64,7 @@ async function save() {
   try {
     await adminApi.saveLevelConfig({
       names: form.names.map((n) => n.trim()),
+      difficulty_names: form.difficulty_names.map((n) => n.trim()),
       thresholds: form.thresholds,
       decay1: form.decay1,
       decay2: form.decay2,
@@ -96,6 +99,14 @@ function thresholdLabel(i: number): string {
       <div v-for="(label, i) in form.names" :key="i" class="name-cell">
         <span class="tier-chip" :class="`tier-bg-${i + 1} tier-static-${i + 1}`">Lv.{{ i + 1 }}</span>
         <el-input v-model="form.names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
+      </div>
+    </div>
+
+    <div class="section-title">难度名称（难度 1–10 档的展示文字，默认与等级名相同、可独立修改；题库徽章/筛选与建题选择器均显示此名）</div>
+    <div class="names-grid">
+      <div v-for="(label, i) in form.difficulty_names" :key="i" class="name-cell">
+        <span class="tier-chip" :class="`tier-bg-${i + 1} tier-static-${i + 1}`">{{ i + 1 }}</span>
+        <el-input v-model="form.difficulty_names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
       </div>
     </div>
 
@@ -168,7 +179,7 @@ function thresholdLabel(i: number): string {
   border-radius: 999px;
   color: #fff;
   font-size: var(--soj-fs-small);
-  font-weight: var(--soj-fw-emphasis);
+  font-weight: var(--soj-fw-regular); /* 徽章字重全局改常规（2026-10-22） */
 }
 
 .thresholds-grid {

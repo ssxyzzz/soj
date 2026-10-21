@@ -22,7 +22,7 @@ const clamped = computed(() => Math.min(10, Math.max(1, Math.round(props.tier ||
 const text = computed(() => {
   if (props.label) return props.label
   if (props.kind === 'level') return `Lv.${clamped.value} ${levels.nameOf(clamped.value)}`
-  return `D${clamped.value}`
+  return levels.difficultyNameOf(clamped.value)
 })
 
 const cls = computed(() => {
@@ -48,7 +48,7 @@ const cls = computed(() => {
   white-space: nowrap;
   border-radius: 999px;
   color: #fff;
-  font-weight: var(--soj-fw-emphasis);
+  font-weight: var(--soj-fw-regular);
   line-height: 1;
   vertical-align: middle;
   /* 亮银/亮金等浅档渐变上保白字可读 */
