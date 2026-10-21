@@ -15,8 +15,9 @@ const levels = useLevelsStore()
 
 const active = computed(() => route.path)
 
-// 左上角 SOJ 标识挂极境（Lv.10）特效：六色流光文字 + 星芒；
-// 受后台等级面板特效开关控制（全局关或 Lv.10 逐级关即退回站点主色静态字）
+// 左上角 SOJ 标识：特效开 = 完整极境胶囊徽章（tier-badge + tier-bg-10 + tier-fx-10 全套：
+// 胶囊底/六色流动/金环脉动/白星芒/流光）；后台等级面板特效开关（全局或 Lv.10）关闭即
+// 回落站点主色静态字
 const brandFx = computed(() => levels.effectsOn(10))
 
 // 登录态下拉取用户偏好（默认语言/模板）与等级（顶栏徽章），供提交弹窗/在线编程消费；
@@ -47,7 +48,7 @@ function onCommand(command: string) {
   <el-container class="layout">
     <el-header class="header">
       <div class="header-inner">
-        <div class="brand" :class="{ 'brand-fx': brandFx }" @click="router.push('/')">SOJ<i v-if="brandFx" class="brand-star">✦</i></div>
+        <div class="brand" :class="brandFx ? ['brand', 'tier-bg-10', 'tier-fx-10'] : ['brand']" @click="router.push('/')">SOJ</div>
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
           <el-menu-item index="/problems">题库</el-menu-item>
@@ -128,37 +129,17 @@ function onCommand(command: string) {
   letter-spacing: 2px;
 }
 
-/* SOJ 极境特效（与 tier-fx-10 同一套动画）：六色流光文字 + 金色星芒；
-   后台特效开关关闭时整体不渲染，回落上方主色静态字 */
+/* SOJ 极境胶囊（特效开）：模板挂全局 tier-bg-10/tier-fx-10（六色流动/金环脉动/白星芒/流光），
+   胶囊基础形状在此补齐（tier-badge 基类是 TierBadge 组件内 scoped 样式，全局拿不到）；
+   特效关回落上方主色静态字 */
 .brand-fx {
-  background: linear-gradient(120deg, #e63946, #ee7e1f, #e9c963, #3cb371, #4a8dda, #7e3e9e);
-  background-size: 400% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: tier-flow 9s ease-in-out infinite alternate;
-}
-
-.brand-star {
-  display: inline-block;
-  font-style: normal;
-  font-size: 14px;
-  margin-left: 3px;
-  color: #d4af37;
-  text-shadow: 0 0 6px rgba(212, 175, 55, 0.75);
-  animation:
-    tier-twinkle 5s ease-in-out infinite,
-    tier-star-pop 5s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .brand-fx {
-    animation: none;
-  }
-
-  .brand-star {
-    animation: none;
-  }
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 16px;
+  border-radius: 999px;
+  color: #fff;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .menu {
