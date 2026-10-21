@@ -127,15 +127,15 @@ function onTagsChange(ids: number[]) {
 
 // 难度锚点提示（v0.11，NOI 大纲 + 教学进度定标）：选择器旁展示当前档说明
 const DIFFICULTY_HINTS: Record<number, string> = {
-  1: '语言第一步：变量/顺序/分支/循环',
-  2: '语言基础：数组/字符串/函数/结构体/简单模拟',
-  3: '入门算法起步：枚举/排序/递归递推/前缀和差分',
-  4: '入门核心：贪心/二分/DFS·BFS/简单数论（CSP-J 100~200）',
-  5: 'DP 入门/并查集/树状数组（CSP-J 200~300）',
-  6: '提高入门：图论基础/线段树/KMP/倍增（CSP-J 满分~CSP-S 前两题）',
-  7: '提高核心：树形/状压 DP、最短路进阶、网络流入门（CSP-S 中档）',
-  8: '提高后期：数据结构综合/后缀结构/网络流建模（省选边缘）',
-  9: 'NOI 级入门：省选中档、NOI 简单题',
+  1: '入门：变量/顺序/分支/循环',
+  2: '基础：数组/函数/结构体',
+  3: '算法入门：枚举/排序/递归递推',
+  4: '算法基础：贪心/二分/DFS·BFS',
+  5: 'CSP：DP入门/并查集/树状数组',
+  6: 'CSPJ+：图论基础/线段树/KMP/倍增',
+  7: 'CSPS：树形&状压DP/最短路进阶/网络流',
+  8: 'CSPS+：数据结构综合/后缀结构/建模',
+  9: 'NOIP：省选中档、NOI 简单题',
   10: 'NOI 级：NOI 难题/集训队水平',
 }
 
@@ -418,7 +418,7 @@ function onSubmitClick() {
                 难度
                 <el-tooltip
                   placement="top"
-                  content="D1~D3：入门~算法入门，D4~D5：CSP-J，D6~D7：CSP-S，D8~D9：NOIP，D10：NOI"
+                  content="D1：入门，D2：基础，D3：算法入门，D4：算法基础，D5：J组，D6：J组+，D7：S组，D8：S组+，D9：NOIP，D10：NOI"
                 >
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>

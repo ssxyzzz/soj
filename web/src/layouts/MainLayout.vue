@@ -48,7 +48,7 @@ function onCommand(command: string) {
   <el-container class="layout">
     <el-header class="header">
       <div class="header-inner">
-        <div class="brand" :class="brandFx ? ['brand', 'tier-bg-10', 'tier-fx-10'] : ['brand']" @click="router.push('/')">SOJ</div>
+        <div class="brand" :class="brandFx ? ['brand', 'brand-fx', 'tier-bg-10', 'tier-fx-10'] : ['brand']" @click="router.push('/')">SOJ</div>
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
           <el-menu-item index="/problems">题库</el-menu-item>
