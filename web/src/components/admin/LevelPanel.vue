@@ -112,8 +112,12 @@ function chipClass(i: number): Record<string, boolean> {
       </div>
     </div>
 
-    <div class="section-title">升级阈值（累计经验；默认 = 每档同难度题约 200 题；两行五列与上方名称区对应）</div>
+    <div class="section-title">升级阈值（累计经验；默认 = 每档同难度题约 200 题；两行五列与上方名称区对应，Lv.1 起步档恒为 0）</div>
     <div class="thresholds-grid">
+      <div class="threshold-cell">
+        <span class="tier-chip" :class="chipClass(0)">Lv.1</span>
+        <el-input-number :model-value="0" disabled :controls="false" style="width: 110px" />
+      </div>
       <div v-for="(t, i) in form.thresholds" :key="i" class="threshold-cell">
         <span class="tier-chip" :class="chipClass(i + 1)">Lv.{{ i + 2 }}</span>
         <el-input-number v-model="form.thresholds[i]" :min="1" :step="50" :controls="false" style="width: 110px" />
