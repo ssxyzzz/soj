@@ -79,7 +79,6 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
     </div>
   </el-card>
 </template>
-
 <style scoped>
 .head {
   display: flex;
@@ -106,7 +105,8 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 
 .row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 44px;
+  /* 四列（v0.11 等级勋章）：排名 / 昵称(可截断) / 等级徽章 / 分数 */
+  grid-template-columns: 28px minmax(0, 1fr) auto 44px;
   gap: 6px;
   align-items: center;
   padding: 3px 4px;
