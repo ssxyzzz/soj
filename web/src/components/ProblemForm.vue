@@ -418,7 +418,7 @@ function onSubmitClick() {
                 难度
                 <el-tooltip
                   placement="top"
-                  content="十档定标（NOI 大纲 + 教学进度）：D1–D3 入门级（语言基础→入门算法起步）；D4–D5 CSP-J 100~300 分两年目标带；D6 提高入门；D7–D8 提高核心到省选边缘；D9–D10 NOI 级。难度同时决定学生 AC 后获得的经验分，可后台按通过率建议后再手工微调"
+                  content="D1~D3：入门~算法入门，D4~D5：CSP-J，D6~D7：CSP-S，D8~D9：NOIP，D10：NOI"
                 >
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>

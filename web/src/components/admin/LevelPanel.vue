@@ -85,11 +85,6 @@ function chipClass(i: number): Record<string, boolean> {
   const fx = form.effects_enabled && form.effects_tiers[i]
   return { [`tier-bg-${i + 1}`]: true, [fx ? `tier-fx-${i + 1}` : `tier-static-${i + 1}`]: true }
 }
-
-// 达 Lv.L 的阈值展示辅助：Lv.2 对应 thresholds[0]
-function thresholdLabel(i: number): string {
-  return `达 Lv.${i + 2} 累计经验`
-}
 </script>
 
 <template>
@@ -117,11 +112,12 @@ function thresholdLabel(i: number): string {
       </div>
     </div>
 
-    <div class="section-title">升级阈值（累计经验；默认 = 每档同难度题约 200 题）</div>
+    <div class="section-title">升级阈值（累计经验；默认 = 每档同难度题约 200 题；两行五列与上方名称区对应）</div>
     <div class="thresholds-grid">
-      <el-form-item v-for="(t, i) in form.thresholds" :key="i" :label="thresholdLabel(i)" label-position="top">
-        <el-input-number v-model="form.thresholds[i]" :min="1" :step="50" :controls="false" style="width: 120px" />
-      </el-form-item>
+      <div v-for="(t, i) in form.thresholds" :key="i" class="threshold-cell">
+        <span class="tier-chip" :class="chipClass(i + 1)">Lv.{{ i + 2 }}</span>
+        <el-input-number v-model="form.thresholds[i]" :min="1" :step="50" :controls="false" style="width: 110px" />
+      </div>
     </div>
 
     <div class="section-title">衰减系数（打低于当前等级的题按系数折算经验；低 ≥4 级恒为 0）</div>
@@ -191,8 +187,15 @@ function thresholdLabel(i: number): string {
 
 .thresholds-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 220px));
-  gap: 4px 20px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+/* 与名称区 name-cell 同构：色块 chip（Lv.2–10）+ 输入框一行排布 */
+.threshold-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .decay-row {
