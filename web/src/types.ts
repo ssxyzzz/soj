@@ -237,6 +237,14 @@ export interface LevelBadgeInfo {
   next_xp?: number
 }
 
+// 管理端视角的用户等级信息（含经验调整合计，可负）
+export interface UserLevelInfo {
+  level: number
+  xp: number
+  next_xp?: number
+  adjust?: number
+}
+
 export interface ClassCard {
   id: number
   name: string

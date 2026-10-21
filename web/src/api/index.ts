@@ -17,6 +17,7 @@ import type {
   LevelConfigInfo,
   AdminLevelConfig,
   LoginResult,
+  UserLevelInfo,
   ObjectiveQuestionFull,
   PaperData,
   PermGroupInfo,
@@ -289,6 +290,10 @@ export const adminApi = {
     effects_enabled: boolean
     effects_tiers: boolean[]
   }) => put<{ config: AdminLevelConfig }>('/admin/levelconfig', body),
+  // 经验调整（用户管理界面，admin.user.manage 权限位）
+  getUserLevel: (id: number) => get<UserLevelInfo>(`/admin/users/${id}/level`),
+  adjustUserXp: (id: number, delta: number, reason: string) =>
+    post<UserLevelInfo>(`/admin/users/${id}/xp-adjust`, { delta, reason }),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),

@@ -6,8 +6,9 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
+import TierBadge from '@/components/TierBadge.vue'
 import { useAdminRolesStore } from '@/stores/adminRoles'
-import type { AdminUser } from '@/types'
+import type { AdminUser, UserLevelInfo } from '@/types'
 
 const roleStore = useAdminRolesStore()
 
@@ -243,6 +244,53 @@ async function submitEdit() {
   }
 }
 
+// ---- 经验调整弹窗：查看当前等级/经验，正数加、负数减（流水留审计）----
+const showXp = ref(false)
+const xpSaving = ref(false)
+const xpTarget = reactive({ id: 0, username: '' })
+const xpInfo = ref<UserLevelInfo | null>(null)
+const xpForm = reactive({ delta: 100, reason: '' })
+
+async function openXp(row: AdminUser) {
+  xpTarget.id = row.id
+  xpTarget.username = row.username
+  xpInfo.value = null
+  xpForm.delta = 100
+  xpForm.reason = ''
+  showXp.value = true
+  try {
+    xpInfo.value = await adminApi.getUserLevel(row.id)
+  } catch {
+    // 拉取失败弹窗内显示占位，仍允许提交调整
+  }
+}
+
+async function submitXp() {
+  if (!xpForm.delta) {
+    ElMessage.warning('调整经验不能为 0（正数增加、负数减少）')
+    return
+  }
+  const verb = xpForm.delta > 0 ? '增加' : '减少'
+  try {
+    await ElMessageBox.confirm(
+      `确认为用户 ${xpTarget.username} ${verb} ${Math.abs(xpForm.delta)} 经验？`,
+      '确认调整',
+      { type: 'warning', confirmButtonText: '确认调整', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  xpSaving.value = true
+  try {
+    xpInfo.value = await adminApi.adjustUserXp(xpTarget.id, xpForm.delta, xpForm.reason.trim())
+    ElMessage.success(`已为 ${xpTarget.username} ${verb} ${Math.abs(xpForm.delta)} 经验`)
+    xpForm.delta = 100
+    xpForm.reason = ''
+  } finally {
+    xpSaving.value = false
+  }
+}
+
 async function create() {
   if (!createForm.username || !createForm.password) {
     ElMessage.warning('请填写用户名和密码')
@@ -337,17 +385,12 @@ defineExpose({ refresh: loadDefaultView })
       <el-table-column label="昵称" min-width="160">
         <template #default="{ row }">{{ row.type === 'user' ? row.nickname : '' }}</template>
       </el-table-column>
-      <el-table-column label="编辑" width="90">
+      <el-table-column label="操作" width="130">
         <template #default="{ row }">
-          <el-button
-            v-if="row.type === 'user'"
-            size="small"
-            link
-            type="warning"
-            @click="openEdit(row as AdminUser)"
-          >
-            编辑
-          </el-button>
+          <template v-if="row.type === 'user'">
+            <el-button size="small" link type="warning" @click="openEdit(row as AdminUser)">编辑</el-button>
+            <el-button size="small" link type="primary" @click="openXp(row as AdminUser)">经验</el-button>
+          </template>
         </template>
       </el-table-column>
     </el-table>
@@ -419,6 +462,35 @@ defineExpose({ refresh: loadDefaultView })
       <template #footer>
         <el-button @click="showEdit = false">取消</el-button>
         <el-button type="primary" :loading="editSaving" @click="submitEdit">确认修改</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="showXp" :title="`调整经验 · ${xpTarget.username}`" width="520">
+      <div class="xp-current">
+        <template v-if="xpInfo">
+          <TierBadge :tier="xpInfo.level" kind="level" size="md" />
+          <span class="xp-nums">
+            当前经验 <b>{{ xpInfo.xp }}</b>
+            <template v-if="xpInfo.next_xp"> / 下一级 {{ xpInfo.next_xp }}</template>
+            <template v-if="xpInfo.adjust">
+              （含调整 {{ xpInfo.adjust > 0 ? '+' : '' }}{{ xpInfo.adjust }}）
+            </template>
+          </span>
+        </template>
+        <span v-else class="xp-loading">读取等级中…</span>
+      </div>
+      <el-form label-position="top">
+        <el-form-item label="调整经验" required>
+          <el-input-number v-model="xpForm.delta" :step="50" :step-strictly="false" style="width: 200px" />
+          <span class="dim" style="margin-left: 8px">正数增加、负数减少；单次 ±1000000 以内</span>
+        </el-form-item>
+        <el-form-item label="备注（可选，随调整流水留档）">
+          <el-input v-model="xpForm.reason" maxlength="100" show-word-limit placeholder="如：竞赛奖励 / 违规扣减" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showXp = false">关闭</el-button>
+        <el-button type="primary" :loading="xpSaving" @click="submitXp">确认调整</el-button>
       </template>
     </el-dialog>
   </el-card>
@@ -493,5 +565,21 @@ defineExpose({ refresh: loadDefaultView })
   display: flex;
   justify-content: flex-end;
   margin-top: 12px;
+}
+
+/* 经验调整弹窗：当前等级徽章 + 经验数字 */
+.xp-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.xp-nums b {
+  font-weight: var(--soj-fw-emphasis);
+}
+
+.xp-loading {
+  color: var(--el-text-color-secondary);
 }
 </style>

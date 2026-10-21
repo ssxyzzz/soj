@@ -208,6 +208,10 @@ func Run(ctx context.Context, deps *Deps) {
 				// 等级面板（v0.11）：名称/阈值/衰减系数/特效开关，仅 root
 				adminG.GET("/levelconfig", RequireRoot(), h.AdminGetLevelConfig)
 				adminG.PUT("/levelconfig", RequireRoot(), h.AdminUpdateLevelConfig)
+
+				// 经验调整（用户管理界面）：查等级 + 加/减经验，用户管理权限位
+				adminG.GET("/users/:id/level", RequirePerm(repo.PermAdminUserManage), h.AdminGetUserLevel)
+				adminG.POST("/users/:id/xp-adjust", RequirePerm(repo.PermAdminUserManage), h.AdminAdjustUserXp)
 			}
 		}
 	}

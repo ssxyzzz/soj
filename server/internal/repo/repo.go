@@ -102,6 +102,11 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if err != nil {
 		return err
 	}
+	// 经验调整流水（v0.11）：管理端加/减经验按 uid 聚合
+	if _, err := r.db.Collection("xpAdjust").Indexes().CreateOne(ctx,
+		mongo.IndexModel{Keys: bson.D{{Key: "uid", Value: 1}}}); err != nil {
+		return err
+	}
 
 	// 初始管理员：users 为空时创建 admin / admin123（root 角色）
 	if n, err := r.Users.CountDocuments(ctx, bson.M{}); err != nil {

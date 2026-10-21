@@ -33,35 +33,44 @@ func TestDecayFactor(t *testing.T) {
 func TestLevelProgress(t *testing.T) {
 	cfg := DefaultLevelConfig()
 	t.Run("空历史 Lv.1", func(t *testing.T) {
-		lv, xp, _, _, hasNext := LevelProgress(cfg, countsOf())
+		lv, xp, _, _, hasNext := LevelProgress(cfg, countsOf(), 0)
 		if lv != 1 || xp != 0 || !hasNext {
 			t.Fatalf("got lv=%d xp=%d hasNext=%v", lv, xp, hasNext)
 		}
 	})
 	// 200 道 D5（XP=1000）：L3 达标（≥600）、L4 差 200 → Lv.3
 	t.Run("200 道 D5 到 Lv.3", func(t *testing.T) {
-		lv, xp, cur, next, _ := LevelProgress(cfg, countsOf(5, 200))
+		lv, xp, cur, next, _ := LevelProgress(cfg, countsOf(5, 200), 0)
 		if lv != 3 || xp != 1000 || cur != 600 || next != 1200 {
 			t.Fatalf("got lv=%d xp=%d cur=%d next=%d", lv, xp, cur, next)
 		}
 	})
 	// D5 高位刷怪衰减：400 道 D1 在 Lv.2 只值 200 → 恰好 Lv.2（打太简单的题涨得慢）
 	t.Run("400 道 D1 恰到 Lv.2", func(t *testing.T) {
-		lv, _, _, _, _ := LevelProgress(cfg, countsOf(1, 400))
+		lv, _, _, _, _ := LevelProgress(cfg, countsOf(1, 400), 0)
 		if lv != 2 {
 			t.Fatalf("got lv=%d", lv)
 		}
 	})
 	// 混合：200 D5 + 600 D6 → L6 达标（500+3600=4100 ≥ 3000）、L7 不足 → Lv.6
 	t.Run("混合难度 Lv.6", func(t *testing.T) {
-		lv, _, _, _, _ := LevelProgress(cfg, countsOf(5, 200, 6, 600))
+		lv, _, _, _, _ := LevelProgress(cfg, countsOf(5, 200, 6, 600), 0)
 		if lv != 6 {
 			t.Fatalf("got lv=%d", lv)
 		}
 	})
+	// 经验调整：+600 让 200 道 D5（XP 1000）从 Lv.3 升到 Lv.4（1200）；-5000 大幅减也不低于 Lv.1
+	t.Run("经验调整升降级", func(t *testing.T) {
+		if lv, _, _, _, _ := LevelProgress(cfg, countsOf(5, 200), 600); lv != 4 {
+			t.Fatalf("+600: got lv=%d, want 4", lv)
+		}
+		if lv, xp, _, _, _ := LevelProgress(cfg, countsOf(5, 200), -5000); lv != 1 || xp != 0 {
+			t.Fatalf("-5000: got lv=%d xp=%d, want lv=1 xp=0", lv, xp)
+		}
+	})
 	// 封顶：海量 D10 到 Lv.10 且无下一级
 	t.Run("Lv.10 封顶", func(t *testing.T) {
-		lv, _, _, _, hasNext := LevelProgress(cfg, countsOf(10, 2000))
+		lv, _, _, _, hasNext := LevelProgress(cfg, countsOf(10, 2000), 0)
 		if lv != 10 || hasNext {
 			t.Fatalf("got lv=%d hasNext=%v", lv, hasNext)
 		}

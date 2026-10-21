@@ -100,6 +100,7 @@ var req struct {
 }
 
 // levelBadgeInfo 单用户等级展示信息（聚合失败时返回 nil，由调用方降级省略字段）。
+// 含经验调整合计（管理端加/减，可负）。
 func (h *Handlers) levelBadgeInfo(c *gin.Context, uid int64) gin.H {
 	cfg, err := h.repo.GetLevelConfig(c.Request.Context())
 	if err != nil {
@@ -109,8 +110,13 @@ func (h *Handlers) levelBadgeInfo(c *gin.Context, uid int64) gin.H {
 	if err != nil {
 		return nil
 	}
-	level, xp, _, nextThr, hasNext := repo.LevelProgress(cfg, counts[uid])
-	info := gin.H{"level": level, "xp": xp}
+	adjs, err := h.repo.SumXpAdjust(c.Request.Context(), []int64{uid})
+	if err != nil {
+		return nil
+	}
+	adjust := adjs[uid]
+	level, xp, _, nextThr, hasNext := repo.LevelProgress(cfg, counts[uid], adjust)
+	info := gin.H{"level": level, "xp": xp, "adjust": adjust}
 	if hasNext {
 		info["next_xp"] = nextThr
 	}
@@ -131,6 +137,81 @@ func (h *Handlers) autocompleteAllowed(c *gin.Context, uid int64) bool {
 	if err != nil {
 		return false
 	}
-	lv, _, _, _, _ := repo.LevelProgress(cfg, counts[uid])
+	adjs, err := h.repo.SumXpAdjust(c.Request.Context(), []int64{uid})
+	if err != nil {
+		return false
+	}
+	lv, _, _, _, _ := repo.LevelProgress(cfg, counts[uid], adjs[uid])
 	return lv >= s.MinAutocompleteLevel()
+}
+
+// ---- 管理端经验调整（用户管理界面，admin.user.manage 权限位） ----
+
+// AdminGetUserLevel 指定用户的当前等级信息（调整弹窗展示用）。
+func (h *Handlers) AdminGetUserLevel(c *gin.Context) {
+	uid, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	if _, err := h.repo.GetUserByID(c.Request.Context(), uid); repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "用户不存在")
+		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "读取用户失败")
+		return
+	}
+	info := h.levelBadgeInfo(c, uid)
+	if info == nil {
+		fail(c, http.StatusInternalServerError, "统计等级失败")
+		return
+	}
+	ok(c, info)
+}
+
+// AdminAdjustUserXp 给指定用户加/减经验：delta ≠ 0（正加负减，|delta| ≤ 1000000），
+// reason 可选备注（≤100 字，随流水留审计）。
+func (h *Handlers) AdminAdjustUserXp(c *gin.Context) {
+	uid, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	operatorUID, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	var req struct {
+		Delta  *int64 `json:"delta"`
+		Reason string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if req.Delta == nil || *req.Delta == 0 {
+		fail(c, http.StatusBadRequest, "调整经验不能为 0（正数增加、负数减少）")
+		return
+	}
+	if *req.Delta > 1000000 || *req.Delta < -1000000 {
+		fail(c, http.StatusBadRequest, "单次调整幅度需在 ±1000000 以内")
+		return
+	}
+	reason := trimTo(req.Reason, 100)
+	if _, err := h.repo.GetUserByID(c.Request.Context(), uid); repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "用户不存在")
+		return
+	} else if err != nil {
+		fail(c, http.StatusInternalServerError, "读取用户失败")
+		return
+	}
+	if err := h.repo.AddXpAdjust(c.Request.Context(), uid, *req.Delta, reason, operatorUID); err != nil {
+		fail(c, http.StatusInternalServerError, "调整失败")
+		return
+	}
+	info := h.levelBadgeInfo(c, uid)
+	if info == nil {
+		ok(c, gin.H{"adjusted": uid})
+		return
+	}
+	ok(c, info)
 }

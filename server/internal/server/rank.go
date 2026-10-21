@@ -42,8 +42,13 @@ func (rc *rankCache) get(ctx context.Context) []gin.H {
 			uids = append(uids, r.UID)
 		}
 		if counts, err := rc.repo.SolvedDifficultyCounts(ctx, uids); err == nil {
+			// 经验调整合计（管理端加/减）并入定级；失败按 0 处理
+			adjs, err := rc.repo.SumXpAdjust(ctx, uids)
+			if err != nil {
+				adjs = map[int64]int64{}
+			}
 			for uid, c := range counts {
-				lv, _, _, _, _ := repo.LevelProgress(cfg, c)
+				lv, _, _, _, _ := repo.LevelProgress(cfg, c, adjs[uid])
 				levels[uid] = lv
 			}
 		}

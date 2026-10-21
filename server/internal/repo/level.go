@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -164,11 +165,12 @@ func DecayFactor(cfg *LevelConfig, level, difficulty int) float64 {
 	}
 }
 
-// LevelProgress 由「各难度 AC 题数」算等级：等级 = 满足 XP(L) ≥ 阈值(L) 的最大 L。
-// XP 随假设等级单调不增（衰减变狠）、阈值严格递增，首个不满足即可停。
-// 返回 等级、该等级下的 XP、当前级阈值、下一级阈值（Lv.10 时 hasNext=false）。
-func LevelProgress(cfg *LevelConfig, counts [10]int64) (level int, xp int64, curThr, nextThr int64, hasNext bool) {
-	level, xp = 1, 0
+// LevelProgress 由「各难度 AC 题数 + 经验调整量」算等级：等级 = 满足 XP(L)+adjust ≥ 阈值(L)
+// 的最大 L。XP 随假设等级单调不增（衰减变狠）、阈值严格递增，首个不满足即可停。
+// adjust 为管理端加/减经验的合计（可负）；返回 等级、该等级下的 XP（含调整、显示钳非负）、
+// 当前级阈值、下一级阈值（Lv.10 时 hasNext=false）。
+func LevelProgress(cfg *LevelConfig, counts [10]int64, adjust int64) (level int, xp int64, curThr, nextThr int64, hasNext bool) {
+	level = 1
 	for L := 1; L <= 10; L++ {
 		var xpL int64
 		for d := 1; d <= 10; d++ {
@@ -180,11 +182,14 @@ func LevelProgress(cfg *LevelConfig, counts [10]int64) (level int, xp int64, cur
 		if L >= 2 {
 			thr = cfg.Thresholds[L-2]
 		}
-		if xpL >= thr {
-			level, xp = L, xpL
+		if xpL+adjust >= thr {
+			level, xp = L, xpL+adjust
 		} else {
 			break
 		}
+	}
+	if xp < 0 {
+		xp = 0
 	}
 	curThr = 0
 	if level >= 2 {
@@ -340,4 +345,49 @@ func (r *Repo) migrateDifficultyEstimate(ctx context.Context) error {
 	}
 	log.Printf("[migrate][difficultyV1] 已按通过率预估 %d 道存量题的难度（D10 仅手工）", changed)
 	return nil
+}
+
+// ---- 经验调整（管理端对指定用户加/减经验） ----
+// 等级是读时聚合值（AC 难度分），没有可改的存储经验——调整以流水形式落 xpAdjust
+// 集合 {uid, delta, reason, operatorUid, at}，聚合时按 uid 求和并入 LevelProgress：
+// 可加可减、天然留审计。delta 正 = 加经验，负 = 减。
+
+// AddXpAdjust 记一笔经验调整（调用方校验 delta ≠ 0 与权限）。
+func (r *Repo) AddXpAdjust(ctx context.Context, uid, delta int64, reason string, operatorUID int64) error {
+	id, err := r.nextSeq(ctx, "xpAdjust")
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Collection("xpAdjust").InsertOne(ctx, bson.M{
+		"_id": id, "uid": uid, "delta": delta,
+		"reason": reason, "operatorUid": operatorUID, "at": time.Now(),
+	})
+	return err
+}
+
+// SumXpAdjust 批量汇总若干用户的经验调整合计（uid → delta 合计，无记录 = 0）。
+func (r *Repo) SumXpAdjust(ctx context.Context, uids []int64) (map[int64]int64, error) {
+	out := make(map[int64]int64, len(uids))
+	if len(uids) == 0 {
+		return out, nil
+	}
+	cursor, err := r.db.Collection("xpAdjust").Aggregate(ctx, []bson.M{
+		{"$match": bson.M{"uid": bson.M{"$in": uids}}},
+		{"$group": bson.M{"_id": "$uid", "n": bson.M{"$sum": "$delta"}}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var row struct {
+			ID int64 `bson:"_id"`
+			N  int64 `bson:"n"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			return nil, err
+		}
+		out[row.ID] = row.N
+	}
+	return out, cursor.Err()
 }
