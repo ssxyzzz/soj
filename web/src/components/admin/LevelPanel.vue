@@ -79,6 +79,13 @@ async function save() {
   }
 }
 
+// 名称旁的预览 chip 实时反映本面板特效开关的当前状态（未保存也生效）：
+// 特效开 = 完整特效链（tier-fx-N），关 = 静态（tier-static-N）
+function chipClass(i: number): Record<string, boolean> {
+  const fx = form.effects_enabled && form.effects_tiers[i]
+  return { [`tier-bg-${i + 1}`]: true, [fx ? `tier-fx-${i + 1}` : `tier-static-${i + 1}`]: true }
+}
+
 // 达 Lv.L 的阈值展示辅助：Lv.2 对应 thresholds[0]
 function thresholdLabel(i: number): string {
   return `达 Lv.${i + 2} 累计经验`
@@ -94,10 +101,10 @@ function thresholdLabel(i: number): string {
       </div>
     </template>
 
-    <div class="section-title">等级名称（Lv.1–10，站点文案可自定义）</div>
+    <div class="section-title">等级名称（Lv.1–10，站点文案可自定义；色块即特效实时预览，随下方特效开关变化）</div>
     <div class="names-grid">
       <div v-for="(label, i) in form.names" :key="i" class="name-cell">
-        <span class="tier-chip" :class="`tier-bg-${i + 1} tier-static-${i + 1}`">Lv.{{ i + 1 }}</span>
+        <span class="tier-chip" :class="chipClass(i)">Lv.{{ i + 1 }}</span>
         <el-input v-model="form.names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
       </div>
     </div>
@@ -175,7 +182,7 @@ function thresholdLabel(i: number): string {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 999px;
   color: #fff;
   font-size: var(--soj-fs-small);
