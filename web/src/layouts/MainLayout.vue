@@ -15,6 +15,10 @@ const levels = useLevelsStore()
 
 const active = computed(() => route.path)
 
+// 左上角 SOJ 标识挂极境（Lv.10）特效：六色流光文字 + 星芒；
+// 受后台等级面板特效开关控制（全局关或 Lv.10 逐级关即退回站点主色静态字）
+const brandFx = computed(() => levels.effectsOn(10))
+
 // 登录态下拉取用户偏好（默认语言/模板）与等级（顶栏徽章），供提交弹窗/在线编程消费；
 // 设置页保存后同步更新 store。失败静默（未登录/过期由拦截器统一处理）。
 onMounted(() => {
@@ -43,7 +47,7 @@ function onCommand(command: string) {
   <el-container class="layout">
     <el-header class="header">
       <div class="header-inner">
-        <div class="brand" @click="router.push('/')">SOJ</div>
+        <div class="brand" :class="{ 'brand-fx': brandFx }" @click="router.push('/')">SOJ<i v-if="brandFx" class="brand-star">✦</i></div>
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
           <el-menu-item index="/problems">题库</el-menu-item>
@@ -122,6 +126,39 @@ function onCommand(command: string) {
   cursor: pointer;
   margin-right: 16px;
   letter-spacing: 2px;
+}
+
+/* SOJ 极境特效（与 tier-fx-10 同一套动画）：六色流光文字 + 金色星芒；
+   后台特效开关关闭时整体不渲染，回落上方主色静态字 */
+.brand-fx {
+  background: linear-gradient(120deg, #e63946, #ee7e1f, #e9c963, #3cb371, #4a8dda, #7e3e9e);
+  background-size: 400% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: tier-flow 9s ease-in-out infinite alternate;
+}
+
+.brand-star {
+  display: inline-block;
+  font-style: normal;
+  font-size: 14px;
+  margin-left: 3px;
+  color: #d4af37;
+  text-shadow: 0 0 6px rgba(212, 175, 55, 0.75);
+  animation:
+    tier-twinkle 5s ease-in-out infinite,
+    tier-star-pop 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-fx {
+    animation: none;
+  }
+
+  .brand-star {
+    animation: none;
+  }
 }
 
 .menu {

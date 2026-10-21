@@ -800,7 +800,13 @@ samp {
 /* 难度徽章静态档：低档纯色即底色；渐变档静止展示，内圈同色细边勾轮廓 */
 .tier-static-8 { box-shadow: inset 0 0 0 1px rgba(169, 123, 18, 0.55); }
 .tier-static-9 { box-shadow: inset 0 0 0 1px rgba(193, 31, 46, 0.5); }
-.tier-static-10 { box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.6); }
+/* 极境静态档（2026-10-22 定稿）：蓝紫渐变 + 金环 + 柔金晕（特效关闭时的形态） */
+.tier-static-10 {
+  background: linear-gradient(120deg, #4192de, #7d53c9);
+  box-shadow:
+    0 0 0 1.5px var(--soj-tier-8),
+    0 0 8px rgba(212, 175, 55, 0.35);
+}
 
 /* 等级特效链（第 N 档含第 N−1 档全部效果；v2 加码：星耀+缓流光、宗师+光晕呼吸、
    王者+金环脉动、传奇+双环心跳（outline 追随环）、极境+双金环/白星芒放大） */
@@ -1045,10 +1051,9 @@ samp {
       inset 0 1px 0 rgba(255, 255, 255, 0.35);
   }
   .tier-fx-10 {
-    background-position: 50% 50%;
+    background: linear-gradient(120deg, #4192de, #7d53c9);
     box-shadow:
       0 0 0 1.5px var(--soj-tier-8),
-      0 0 14px rgba(212, 175, 55, 0.55),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      0 0 8px rgba(212, 175, 55, 0.35);
   }
 }
