@@ -242,3 +242,59 @@ func TagNameLookup(nodes []TagNode) map[string]int64 {
 	walk(nodes)
 	return m
 }
+
+// ---- 默认标签树（v0.11）：全新部署空树时一次性注入（defaultTagsV1） ----
+
+// DefaultTagTreeContent 默认两级标签树（NOI 大纲知识点体系，约 50 节点）。
+// 只在树为空时注入一次，之后随 root 自由编辑；「重置为默认」按钮二期。
+var DefaultTagTreeContent = []TagNode{
+	{Name: "入门", Children: []TagNode{{Name: "顺序·分支·循环"}, {Name: "数组与字符串"}, {Name: "函数与递归"}, {Name: "结构体与 STL"}}},
+	{Name: "基础算法", Children: []TagNode{{Name: "枚举"}, {Name: "模拟"}, {Name: "排序"}, {Name: "二分与三分"}, {Name: "贪心"}, {Name: "递推"}}},
+	{Name: "搜索", Children: []TagNode{{Name: "DFS"}, {Name: "BFS"}, {Name: "剪枝"}, {Name: "记忆化搜索"}}},
+	{Name: "动态规划", Children: []TagNode{{Name: "线性 DP"}, {Name: "背包"}, {Name: "区间 DP"}, {Name: "树形 DP"}, {Name: "状压 DP"}, {Name: "数位 DP"}, {Name: "单调队列优化"}}},
+	{Name: "数据结构", Children: []TagNode{{Name: "栈与队列"}, {Name: "堆"}, {Name: "并查集"}, {Name: "树状数组"}, {Name: "线段树"}, {Name: "平衡树与 set·map"}, {Name: "哈希与 Trie"}}},
+	{Name: "图论", Children: []TagNode{{Name: "图的遍历"}, {Name: "最短路"}, {Name: "最小生成树"}, {Name: "拓扑排序"}, {Name: "二分图匹配"}, {Name: "网络流"}}},
+	{Name: "数学", Children: []TagNode{{Name: "素数与 GCD"}, {Name: "快速幂"}, {Name: "组合数学"}, {Name: "高斯消元"}, {Name: "博弈论"}}},
+	{Name: "字符串", Children: []TagNode{{Name: "KMP 与字符串匹配"}, {Name: "后缀结构"}}},
+	{Name: "高精度"},
+	{Name: "位运算"},
+	{Name: "构造"},
+	{Name: "计算几何"},
+	{Name: "交互"},
+	{Name: "杂题"},
+}
+
+// EnsureDefaultTagTree 树不存在或为空时注入默认树（节点现场取号），已有树返回 false 不动。
+func (r *Repo) EnsureDefaultTagTree(ctx context.Context) (bool, error) {
+	tree, err := r.GetTagTree(ctx)
+	if err != nil {
+		return false, err
+	}
+	if len(tree) > 0 {
+		return false, nil
+	}
+	var assign func(list []TagNode) ([]TagNode, error)
+	assign = func(list []TagNode) ([]TagNode, error) {
+		res := make([]TagNode, 0, len(list))
+		for _, n := range list {
+			id, err := r.nextSeq(ctx, "tag")
+			if err != nil {
+				return nil, err
+			}
+			ch, err := assign(n.Children)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, TagNode{ID: id, Name: n.Name, Children: ch})
+		}
+		return res, nil
+	}
+	nodes, err := assign(DefaultTagTreeContent)
+	if err != nil {
+		return false, err
+	}
+	if err := ValidateTagTreeShape(nodes); err != nil {
+		return false, err
+	}
+	return true, r.ReplaceTagTree(ctx, nodes)
+}

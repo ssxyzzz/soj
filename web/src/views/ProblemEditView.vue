@@ -21,6 +21,7 @@ const savingEdit = ref(false)
 const editInitial = ref<{
   title?: string
   type?: 'default' | 'objective' | 'function' | 'interactive'
+  difficulty?: number
   time_limit_ms?: number
   memory_limit_mb?: number
   compare?: string
@@ -55,6 +56,7 @@ onMounted(async () => {
     editInitial.value = {
       title: p.title,
       type: (p.type as 'objective' | 'function' | 'interactive' | undefined) || 'default',
+      difficulty: p.difficulty ?? 3,
       time_limit_ms: p.time_limit_ms,
       memory_limit_mb: Math.max(16, Math.round(p.memory_limit_kb / 1024)),
       compare: p.compare === 'tolerant' ? 'tolerant' : 'exact',
@@ -170,6 +172,7 @@ async function onSubmit(p: ProblemFormPayload) {
       // 客观题编辑（v0.9）：题面走 statement，题目定义/标题/标签走 meta question_json
       await problemApi.updateMeta(pid, {
         title: p.title,
+        difficulty: p.difficulty,
         tag_ids: p.tag_ids,
         questions_json: JSON.stringify(p.questions),
       })
@@ -181,6 +184,7 @@ async function onSubmit(p: ProblemFormPayload) {
       title: p.title,
       time_limit_ms: p.time_limit_ms,
       memory_limit_kb: p.memory_limit_mb * 1024,
+      difficulty: p.difficulty,
       compare: p.compare,
       file_io_name: p.file_io_name,
       tag_ids: p.tag_ids,

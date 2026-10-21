@@ -7,6 +7,7 @@ import { ref } from 'vue'
 import { ElMessageBox } from 'element-plus'
 
 import BackupPanel from '@/components/admin/BackupPanel.vue'
+import LevelPanel from '@/components/admin/LevelPanel.vue'
 import NoticePanel from '@/components/admin/NoticePanel.vue'
 import RolesPanel from '@/components/admin/RolesPanel.vue'
 import SettingsPanel from '@/components/admin/SettingsPanel.vue'
@@ -16,7 +17,7 @@ import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 
-const section = ref<'users' | 'roles' | 'tags' | 'notice' | 'settings' | 'backup'>('users')
+const section = ref<'users' | 'roles' | 'tags' | 'levels' | 'notice' | 'settings' | 'backup'>('users')
 
 // 标签树面板草稿的脏状态：切走分区前拦截确认（面板 v-if 销毁，草稿随组件丢失）
 const tagsDirty = ref(false)
@@ -68,6 +69,15 @@ async function switchSection(target: typeof section.value) {
         <span class="nav-sub">多级标签 / 卡片编辑</span>
       </div>
       <div
+        v-if="userStore.role === 'root'"
+        class="nav-item"
+        :class="{ active: section === 'levels' }"
+        @click="switchSection('levels')"
+      >
+        <span class="nav-title">等级设置</span>
+        <span class="nav-sub">名称 / 阈值 / 特效开关</span>
+      </div>
+      <div
         class="nav-item"
         :class="{ active: section === 'notice' }"
         @click="switchSection('notice')"
@@ -98,6 +108,7 @@ async function switchSection(target: typeof section.value) {
       <UsersPanel v-if="section === 'users'" />
       <RolesPanel v-else-if="section === 'roles'" />
       <TagsPanel v-else-if="section === 'tags'" @update:dirty="tagsDirty = $event" />
+      <LevelPanel v-else-if="section === 'levels'" />
       <NoticePanel v-else-if="section === 'notice'" />
       <SettingsPanel v-else-if="section === 'settings'" />
       <BackupPanel v-else-if="section === 'backup'" />

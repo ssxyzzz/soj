@@ -34,19 +34,37 @@ func (rc *rankCache) get(ctx context.Context) []gin.H {
 	if err != nil {
 		return nil // 出错时保留旧缓存不动，由调用方决定降级行为
 	}
+	// 等级（v0.11）：一次聚合批算上榜 50 人的各难度 AC 数再定级；失败降级为不带 level 字段
+	levels := map[int64]int{}
+	if cfg, err := rc.repo.GetLevelConfig(ctx); err == nil {
+		uids := make([]int64, 0, len(rows))
+		for _, r := range rows {
+			uids = append(uids, r.UID)
+		}
+		if counts, err := rc.repo.SolvedDifficultyCounts(ctx, uids); err == nil {
+			for uid, c := range counts {
+				lv, _, _, _, _ := repo.LevelProgress(cfg, c)
+				levels[uid] = lv
+			}
+		}
+	}
 	items := make([]gin.H, 0, len(rows))
 	for i, r := range rows {
 		username, nickname := r.Username, r.Nickname
 		if username == "" {
 			username, nickname = "-", "-"
 		}
-		items = append(items, gin.H{
+		item := gin.H{
 			"rank":     i + 1,
 			"user_id":  r.UID,
 			"username": username,
 			"nickname": nickname,
 			"solved":   r.Solved,
-		})
+		}
+		if lv := levels[r.UID]; lv > 0 {
+			item["level"] = lv
+		}
+		items = append(items, item)
 	}
 	rc.items, rc.at = items, time.Now()
 	return items

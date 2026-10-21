@@ -48,6 +48,7 @@ type Problem struct {
 	Statement        string              `bson:"statement"`           // 题面（Markdown，v0.8 起单一事实源；v0.6–v0.7 富文本时代的 contentHtml 已启动回迁）
 	Type             string              `bson:"type,omitempty"`      // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
 	Questions        []ObjectiveQuestion `bson:"questions,omitempty"` // 客观题小题列表（v0.9.3；单题时代的 question 由启动迁移并入）
+	Difficulty       int                 `bson:"difficulty,omitempty"` // 难度 1–10（v0.11；0 = 未设置，展示按 D3）
 	TimeLimitMS      int                 `bson:"timeLimitMs"`
 	MemoryLimitKB    int                 `bson:"memoryLimitKb"`
 	Visibility       string              `bson:"visibility"`
@@ -72,6 +73,17 @@ type Problem struct {
 	FileIOOutput     string              `bson:"fileIoOutput,omitempty"`
 	CreatedAt        time.Time           `bson:"createdAt"`
 	UpdatedAt        time.Time           `bson:"updatedAt"`
+}
+
+// ValidDifficulty 难度是否在 1–10 档内。
+func ValidDifficulty(d int) bool { return d >= 1 && d <= 10 }
+
+// EffDifficulty 生效难度：未设置/越界时按默认 D3（difficultyV1 之前的存量展示兜底）。
+func (p *Problem) EffDifficulty() int {
+	if ValidDifficulty(p.Difficulty) {
+		return p.Difficulty
+	}
+	return 3
 }
 
 // FileIONames 本题文件 IO 的文件名对：老师未显式配置时默认 problem.in / problem.out，

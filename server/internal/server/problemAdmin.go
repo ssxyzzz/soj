@@ -87,6 +87,11 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "题面过长（上限 256KB）")
 		return
 	}
+	difficulty, derr := formDifficulty(form)
+	if derr != nil {
+		fail(c, http.StatusBadRequest, derr.Error())
+		return
+	}
 	// 标签（v0.5.5）：级联选择直传节点 ID（JSON 数组字符串），存在性由 importer 校验
 	var tagIDs []int64
 	if raw := formValue(form, "tag_ids"); raw != "" {
@@ -122,7 +127,7 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	if len(zips) == 0 {
 		p := &repo.Problem{
 			Title: title, Statement: statement, TimeLimitMS: timeLimit, MemoryLimitKB: memLimit,
-			Compare: compare, FloatTolerance: tol,
+			Compare: compare, FloatTolerance: tol, Difficulty: difficulty,
 			Cases: []repo.CaseMeta{}, CreatedBy: uid, CreatedAt: time.Now(),
 		}
 		if len(tagIDs) > 0 {
@@ -221,7 +226,7 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		}
 	}
 
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return
@@ -610,6 +615,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		Title          *string  `json:"title"`
 		TimeLimitMS    *int     `json:"time_limit_ms"`
 		MemoryLimitKB  *int     `json:"memory_limit_kb"`
+		Difficulty     *int     `json:"difficulty"` // 难度 1–10（v0.11）
 		Compare        *string  `json:"compare"`
 		FloatTolerance *float64 `json:"float_tolerance"`
 		FileIOName     *string  `json:"file_io_name"`
@@ -665,6 +671,16 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				return
 			}
 		}
+		if req.Difficulty != nil {
+			if !repo.ValidDifficulty(*req.Difficulty) {
+				fail(c, http.StatusBadRequest, "难度需在 1-10 之间")
+				return
+			}
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{"difficulty": *req.Difficulty}); err != nil {
+				fail(c, http.StatusInternalServerError, "保存失败")
+				return
+			}
+		}
 		ok(c, gin.H{"updated": id})
 		return
 	}
@@ -694,6 +710,13 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			return
 		}
 		set["memoryLimitKb"] = *req.MemoryLimitKB
+	}
+	if req.Difficulty != nil {
+		if !repo.ValidDifficulty(*req.Difficulty) {
+			fail(c, http.StatusBadRequest, "难度需在 1-10 之间")
+			return
+		}
+		set["difficulty"] = *req.Difficulty
 	}
 	if req.Compare != nil {
 		if !repo.ValidCompare(*req.Compare) {
@@ -749,6 +772,15 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 }
 
 // ---- helpers ----
+
+// formDifficulty 建题表单难度（v0.11）：缺省 D3，越界报错。
+func formDifficulty(form *multipart.Form) (int, error) {
+	d := atoiDefault(formValue(form, "difficulty"), 3)
+	if !repo.ValidDifficulty(d) {
+		return 0, fmt.Errorf("难度需在 1-10 之间")
+	}
+	return d, nil
+}
 
 func formValue(form *multipart.Form, key string) string {
 	if v, ok := form.Value[key]; ok && len(v) > 0 {
@@ -984,6 +1016,11 @@ func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, t
 		return
 	}
 	defer os.RemoveAll(tmpDir)
+	difficulty, derr := formDifficulty(form)
+	if derr != nil {
+		fail(c, http.StatusBadRequest, derr.Error())
+		return
+	}
 	yb, _ := yaml.Marshal(map[string]any{"title": title, "type": repo.TypeFunction})
 	if err := os.WriteFile(filepath.Join(tmpDir, "problem.yaml"), yb, 0o644); err != nil {
 		fail(c, http.StatusInternalServerError, "写题目文件失败")
@@ -1037,7 +1074,7 @@ func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, t
 			return
 		}
 	}
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return
@@ -1054,6 +1091,11 @@ func (h *Handlers) createInteractiveProblem(c *gin.Context, form *multipart.Form
 		return
 	}
 	defer os.RemoveAll(tmpDir)
+	difficulty, derr := formDifficulty(form)
+	if derr != nil {
+		fail(c, http.StatusBadRequest, derr.Error())
+		return
+	}
 	yb, _ := yaml.Marshal(map[string]any{"title": title, "type": repo.TypeInteractive})
 	if err := os.WriteFile(filepath.Join(tmpDir, "problem.yaml"), yb, 0o644); err != nil {
 		fail(c, http.StatusInternalServerError, "写题目文件失败")
@@ -1086,7 +1128,7 @@ func (h *Handlers) createInteractiveProblem(c *gin.Context, form *multipart.Form
 			return
 		}
 	}
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return
@@ -1119,6 +1161,11 @@ func extractZipInto(fh *multipart.FileHeader, dst string) error {
 func (h *Handlers) createObjectiveProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, zips []*multipart.FileHeader) {
 	if len(zips) > 0 {
 		fail(c, http.StatusBadRequest, "客观题不需要测试数据包（请在题面里出题）")
+		return
+	}
+	difficulty, derr := formDifficulty(form)
+	if derr != nil {
+		fail(c, http.StatusBadRequest, derr.Error())
 		return
 	}
 	raw := formValue(form, "questions_json")
@@ -1160,7 +1207,7 @@ func (h *Handlers) createObjectiveProblem(c *gin.Context, form *multipart.Form, 
 			return
 		}
 	}
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return

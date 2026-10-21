@@ -29,6 +29,7 @@ type Importer struct {
 	DataDir    string  // testdata 存储根目录
 	CreatorUID int64   // 导入者 uid（0 = 系统/命令行导入，其题目隐藏态仅 root 可改）
 	TagIDs     []int64 // 网页建题直传的标签节点 ID（非空时优先于 yaml tags 按名匹配）
+	Difficulty int     // 网页建题直传难度 1–10（非 0 时优先于 yaml difficulty；表单选择器是权威输入）
 }
 
 type problemYAML struct {
@@ -36,6 +37,7 @@ type problemYAML struct {
 	Type          string              `yaml:"type,omitempty"`          // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
 	Questions     []ObjectiveQuestion `yaml:"questions,omitempty"`     // objective 小题列表（v0.9.3）
 	Question      *ObjectiveQuestion  `yaml:"question,omitempty"`      // 单题旧写法（解析兼容，导入时并入 questions）
+	Difficulty    int                 `yaml:"difficulty,omitempty"`    // 难度 1–10（v0.11；缺省 D3）
 	Time          *timeLimit          `yaml:"time,omitempty"`          // 导出主形态（"1s"/"0.5s"）；解析时低于 timeLimitMs
 	TimeLimitMS   *int                `yaml:"timeLimitMs,omitempty"`   // 旧字段：仅解析兼容，不再导出
 	Memory        *memLimit           `yaml:"memory,omitempty"`        // 导出主形态（"256MB"）；解析时低于 memoryLimitKb
@@ -207,6 +209,21 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 	case TypeObjective, TypeFunction, TypeInteractive:
 	default:
 		return nil, fmt.Errorf("暂不支持题型 %q（当前支持：传统题 default、客观题 objective、函数题 function、交互题 interactive）", meta.Type)
+	}
+
+	// 难度归一（v0.11）：网页建题直传优先于 yaml 声明；越界值报错（手写笔误及早暴露）、
+	// 缺省落 D3（表单选择器默认档）
+	if im.Difficulty != 0 {
+		if !ValidDifficulty(im.Difficulty) {
+			return nil, fmt.Errorf("难度需在 1-10 之间")
+		}
+		meta.Difficulty = im.Difficulty
+	}
+	if meta.Difficulty != 0 && !ValidDifficulty(meta.Difficulty) {
+		return nil, fmt.Errorf("problem.yaml difficulty 需在 1-10 之间")
+	}
+	if meta.Difficulty == 0 {
+		meta.Difficulty = 3
 	}
 
 	// config.yaml 白名单字段覆盖 problem.yaml（v0.5.2-2）：未知字段忽略不报错
@@ -434,6 +451,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		Title:          meta.Title,
 		Statement:      string(statement),
 		Type:           meta.Type,
+		Difficulty:     meta.Difficulty,
 		TimeLimitMS:    msLimit,
 		MemoryLimitKB:  kbLimit,
 		Visibility:     meta.Visibility,
@@ -512,6 +530,7 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 	p := &Problem{
 		ID: pid, Title: meta.Title, Statement: string(statement),
 		Type: TypeObjective, Questions: qs,
+		Difficulty: meta.Difficulty,
 		// 客观题不消费时空限制，占位默认值（渲染导出时同样带上）
 		TimeLimitMS: 1000, MemoryLimitKB: 262144,
 		Visibility: meta.Visibility,
@@ -539,6 +558,7 @@ func (im *Importer) RenderProblemYAML(ctx context.Context, p *Problem) []byte {
 	meta := problemYAML{
 		Title:      p.Title,
 		Type:       p.Type,
+		Difficulty: p.Difficulty,
 		Time:       timeLimitPtr(timeLimit(ms) / 1000),
 		Memory:     memLimitPtr(memLimit(kb) / 1024),
 		Visibility: pickNonEmpty(p.Visibility, VisibilityPublic),
@@ -887,6 +907,7 @@ func (im *Importer) ReplaceCases(ctx context.Context, pid int64, dir string) (*P
 	// 标签写名字而非节点 ID——yaml 保持可读，重导入按名回匹配同一节点
 	meta := problemYAML{
 		Title:      p.Title,
+		Difficulty: p.Difficulty,
 		Time:       timeLimitPtr(timeLimit(p.TimeLimitMS) / 1000),
 		Memory:     memLimitPtr(memLimit(p.MemoryLimitKB) / 1024),
 		Visibility: p.Visibility,

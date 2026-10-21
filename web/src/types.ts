@@ -31,6 +31,7 @@ export interface ProblemListItem {
   title: string
   hidden?: boolean
   has_cases?: boolean // 无测试数据空壳题（v0.6.1 验收反馈）：题库列表「无数据」小提示
+  difficulty?: number // 难度 1–10（v0.11；缺省展示按 D3）
   locked?: boolean
   contest_id?: number
   exam_id?: number
@@ -132,6 +133,7 @@ export interface ProblemDetail {
   interactive?: { has_interactor: boolean } // 交互题（v0.9.2）
   time_limit_ms: number
   memory_limit_kb: number
+  difficulty?: number // 难度 1–10（v0.11；缺省展示按 D3）
   compare?: string
   float_tolerance?: number
   has_checker?: boolean
@@ -200,6 +202,37 @@ export interface RankItem {
   username: string
   nickname: string
   solved: number
+  level?: number // 学生等级 1–10（v0.11；聚合失败省略）
+}
+
+// ---------- 等级体系（v0.11） ----------
+
+// 等级配置公开视图（GET /api/levels）：徽章与进度渲染所需
+export interface LevelConfigInfo {
+  names: string[] // Lv.1–10 名称文字
+  thresholds: number[] // 达 Lv.2–10 的累计 XP（9 项）
+  decay: [number, number, number] // 低 1/2/3 级题分系数（低 ≥4 级恒 0）
+  effects_enabled: boolean
+  effects_tiers: boolean[]
+  autocomplete_min_level?: number // 代码自动补全解锁等级（缺省按 5）
+}
+
+// root 等级面板（GET/PUT /admin/levelconfig）
+export interface AdminLevelConfig {
+  names: string[]
+  thresholds: number[]
+  decay1: number
+  decay2: number
+  decay3: number
+  effects_enabled: boolean
+  effects_tiers: boolean[]
+}
+
+// /me/profile 附带的当前用户等级信息（聚合失败省略）
+export interface LevelBadgeInfo {
+  level: number
+  xp: number
+  next_xp?: number
 }
 
 export interface ClassCard {
@@ -303,7 +336,7 @@ export interface AdminUser {
 export interface UserPrefs {
   defaultLang?: string
   codeTemplates?: Record<string, string>
-  autocomplete?: boolean // 代码自动补全（默认开箱开启；后续按用户等级门槛放开）
+  autocomplete?: boolean // 代码自动补全（v0.11 起需等级 ≥ 系统设置阈值，默认 Lv.5）
   codeFont?: string // 编辑器字体：Consolas / Menlo / Monaco（默认 Consolas）
   codeFontSize?: number // 编辑器字号 px（12-48，默认 14）
   mdEditMode?: 'wysiwyg' | 'ir' | 'sv' | '' // Markdown 编辑器默认模式（空 = wysiwyg）
@@ -319,6 +352,7 @@ export interface UserProfile {
   grade: string
   qq: string
   prefs: UserPrefs
+  level?: LevelBadgeInfo // 学生等级（v0.11；顶栏徽章与补全门槛提示用）
 }
 
 // ---------- 题解（v0.5.2-1） ----------

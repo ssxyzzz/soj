@@ -154,6 +154,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"home_notice":               s.HomeNotice,
 		"backup_guide":              s.BackupGuide,
 		"data_download_daily_limit": s.DownloadDailyLimit(),
+		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 	})
 }
 
@@ -174,6 +175,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		HomeNotice             *string `json:"home_notice"`
 		BackupGuide            *string `json:"backup_guide"`
 		DataDownloadDailyLimit *int    `json:"data_download_daily_limit"`
+		AutocompleteMinLevel   *int    `json:"autocomplete_min_level"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -205,6 +207,13 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.DataDownloadDailyLimit = req.DataDownloadDailyLimit
 	}
+	if req.AutocompleteMinLevel != nil {
+		if !repo.ValidDifficulty(*req.AutocompleteMinLevel) {
+			fail(c, http.StatusBadRequest, "自动补全解锁等级需在 1-10 之间")
+			return
+		}
+		s.AutocompleteMinLevel = req.AutocompleteMinLevel
+	}
 	if req.BackupGuide != nil {
 		if len(*req.BackupGuide) > 16<<10 {
 			fail(c, http.StatusBadRequest, "备份使用说明过长（上限 16KB）")
@@ -221,5 +230,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"home_notice":               s.HomeNotice,
 		"backup_guide":              s.BackupGuide,
 		"data_download_daily_limit": s.DownloadDailyLimit(),
+		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 	})
 }

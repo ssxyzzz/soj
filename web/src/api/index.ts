@@ -14,6 +14,8 @@ import type {
   ContestMySubmission,
   ExamListItem,
   LeaderRow,
+  LevelConfigInfo,
+  AdminLevelConfig,
   LoginResult,
   ObjectiveQuestionFull,
   PaperData,
@@ -119,12 +121,13 @@ export const authApi = {
 }
 
 export const problemApi = {
-  list: (page: number, pageSize: number, q?: string, tags?: number[]) =>
+  list: (page: number, pageSize: number, q?: string, tags?: number[], difficulty?: number[]) =>
     get<ProblemListResult>('/problems', {
       page,
       page_size: pageSize,
       ...(q ? { q } : {}),
       ...(tags && tags.length ? { tags: tags.join(',') } : {}),
+      ...(difficulty && difficulty.length ? { difficulty: difficulty.join(',') } : {}),
     }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   paper: (id: number) => get<PaperData>(`/problems/${id}/paper`),
@@ -200,6 +203,11 @@ export const rankApi = {
   top: () => get<RankItem[]>('/rank'),
 }
 
+// 等级体系（v0.11）：公开读配置（排行榜/顶栏徽章渲染）
+export const levelsApi = {
+  config: () => get<LevelConfigInfo>('/levels'),
+}
+
 export const classApi = {
   list: () => get<ClassCard[]>('/classes'),
   detail: (id: number) => get<ClassDetail>(`/classes/${id}`),
@@ -253,19 +261,33 @@ export const adminApi = {
       home_notice: string
       backup_guide: string
       data_download_daily_limit: number
+      autocomplete_min_level: number
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
     home_notice?: string
     backup_guide?: string
     data_download_daily_limit?: number
+    autocomplete_min_level?: number
   }) =>
     put<{
       rate_limit_per_minute: number
       home_notice: string
       backup_guide: string
       data_download_daily_limit: number
+      autocomplete_min_level: number
     }>('/admin/settings', patch),
+  // 等级面板（v0.11，root）
+  getLevelConfig: () => get<{ config: AdminLevelConfig }>('/admin/levelconfig'),
+  saveLevelConfig: (body: {
+    names: string[]
+    thresholds: number[]
+    decay1: number
+    decay2: number
+    decay3: number
+    effects_enabled: boolean
+    effects_tiers: boolean[]
+  }) => put<{ config: AdminLevelConfig }>('/admin/levelconfig', body),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),

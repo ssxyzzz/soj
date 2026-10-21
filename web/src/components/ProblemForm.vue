@@ -22,6 +22,7 @@ import type { ObjectiveKind, ObjectiveQuestionDraft } from '@/types'
 export interface ProblemFormPayload {
   title: string
   type: 'default' | 'objective' | 'function' | 'interactive' // 题目类型（v0.9）：客观题走 question；函数题带 driver/template（v0.9.1）；交互题带 interactor（v0.9.2）
+  difficulty: number // 难度 1–10（v0.11，缺省 D3）
   time_limit_ms: number
   memory_limit_mb: number
   compare: string
@@ -90,6 +91,7 @@ const form = reactive({
       : props.initial.type === 'interactive'
         ? 'interactive'
         : 'default') as 'default' | 'objective' | 'function' | 'interactive',
+  difficulty: props.initial.difficulty ?? 3,
   time_limit_ms: props.initial.time_limit_ms ?? 1000,
   memory_limit_mb: props.initial.memory_limit_mb ?? 256,
   compare: props.initial.compare ?? 'exact',
@@ -117,6 +119,20 @@ const tagsRequired = computed(() => props.mode === 'create' && !tagTreeEmpty.val
 // 标签卡片流点选回调：整体替换 tag_ids（数组顺序即点选顺序）
 function onTagsChange(ids: number[]) {
   form.tag_ids = ids
+}
+
+// 难度锚点提示（v0.11，NOI 大纲 + 教学进度定标）：选择器旁展示当前档说明
+const DIFFICULTY_HINTS: Record<number, string> = {
+  1: '语言第一步：变量/顺序/分支/循环',
+  2: '语言基础：数组/字符串/函数/结构体/简单模拟',
+  3: '入门算法起步：枚举/排序/递归递推/前缀和差分',
+  4: '入门核心：贪心/二分/DFS·BFS/简单数论（CSP-J 100~200）',
+  5: 'DP 入门/并查集/树状数组（CSP-J 200~300）',
+  6: '提高入门：图论基础/线段树/KMP/倍增（CSP-J 满分~CSP-S 前两题）',
+  7: '提高核心：树形/状压 DP、最短路进阶、网络流入门（CSP-S 中档）',
+  8: '提高后期：数据结构综合/后缀结构/网络流建模（省选边缘）',
+  9: 'NOI 级入门：省选中档、NOI 简单题',
+  10: 'NOI 级：NOI 难题/集训队水平',
 }
 
 const fileList = ref<UploadUserFile[]>([])
@@ -391,6 +407,26 @@ function onSubmitClick() {
               </span>
             </div>
           </el-form-item>
+          <!-- 难度（v0.11）：1–10 档，学生可见并用于等级经验与筛选；锚点定标见 tooltip -->
+          <el-form-item>
+            <template #label>
+              <span class="label-with-tip">
+                难度
+                <el-tooltip
+                  placement="top"
+                  content="十档定标（NOI 大纲 + 教学进度）：D1–D3 入门级（语言基础→入门算法起步）；D4–D5 CSP-J 100~300 分两年目标带；D6 提高入门；D7–D8 提高核心到省选边缘；D9–D10 NOI 级。难度同时决定学生 AC 后获得的经验分，可后台按通过率建议后再手工微调"
+                >
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
+            <div class="difficulty-row">
+              <el-select v-model="form.difficulty" class="difficulty-select">
+                <el-option v-for="d in 10" :key="d" :value="d" :label="`D${d}`" />
+              </el-select>
+              <span class="dim">{{ DIFFICULTY_HINTS[form.difficulty] ?? '' }}</span>
+            </div>
+          </el-form-item>
           <!-- 说明框：占位留位，内容为后续功能（待定） -->
           <el-form-item>
             <div class="field-group">
@@ -641,6 +677,17 @@ function onSubmitClick() {
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap; /* 时限与内存一行排布 */
+}
+
+.difficulty-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.difficulty-select {
+  width: 96px;
 }
 
 /* 纯填空框（去加减按钮）并限宽，保证两个框加单位在右列一行放下 */

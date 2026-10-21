@@ -71,6 +71,13 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 	for _, id := range tagSel {
 		selSet[id] = true
 	}
+	// 难度筛选（v0.11）：difficulty=5 或逗号列表 difficulty=1,2,3
+	diffSel := map[int]bool{}
+	for _, part := range strings.Split(c.Query("difficulty"), ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && repo.ValidDifficulty(n) {
+			diffSel[n] = true
+		}
+	}
 
 	ctx := c.Request.Context()
 	// 生效语义（非特权可见性过滤）与展示视角分开：view 版仅用于锁定标记字段，
@@ -107,7 +114,10 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 				continue
 			}
 		}
-		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags), "has_cases": len(p.Cases) > 0}
+		if len(diffSel) > 0 && !diffSel[p.EffDifficulty()] {
+			continue
+		}
+		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags), "has_cases": len(p.Cases) > 0, "difficulty": p.EffDifficulty()}
 		// 题型徽章（v0.9）：客观题另带小类；函数/交互题只给 type（空 = 传统题不返回）
 		if p.Type != "" {
 			item["type"] = p.Type
@@ -256,6 +266,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"description":        p.Statement, // 题面（Markdown，v0.8 起单一事实源）
 		"time_limit_ms":      p.TimeLimitMS,
 		"memory_limit_kb":    p.MemoryLimitKB,
+		"difficulty":         p.EffDifficulty(),
 		"compare":            p.Compare,
 		"float_tolerance":    p.FloatTolerance,
 		"has_checker":        p.CheckerFile != "",

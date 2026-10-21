@@ -8,6 +8,7 @@ import PageShell from '@/components/PageShell.vue'
 import FitTags from '@/components/problem/FitTags.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
+import TierBadge from '@/components/TierBadge.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
 import type { ProblemListItem } from '@/types'
@@ -37,6 +38,7 @@ const pageSize = 20
 const loading = ref(false)
 const keyword = ref('')
 const tagSel = ref<number[]>([])
+const diffSel = ref<number[]>([])
 
 const solvedCount = ref<number | null>(null)
 const solvedRank = ref<number | null>(null)
@@ -44,7 +46,13 @@ const solvedRank = ref<number | null>(null)
 async function load() {
   loading.value = true
   try {
-    const r = await problemApi.list(page.value, pageSize, keyword.value.trim() || undefined, tagSel.value)
+    const r = await problemApi.list(
+      page.value,
+      pageSize,
+      keyword.value.trim() || undefined,
+      tagSel.value,
+      diffSel.value.length ? diffSel.value : undefined,
+    )
     list.value = r.list
     total.value = r.total
   } finally {
@@ -60,12 +68,19 @@ function search() {
 function resetSearch() {
   keyword.value = ''
   tagSel.value = []
+  diffSel.value = []
   page.value = 1
   load()
 }
 
 function onTagChange(ids: number[]) {
   tagSel.value = ids
+  page.value = 1
+  load()
+}
+
+function onDiffChange(ids: number[]) {
+  diffSel.value = ids
   page.value = 1
   load()
 }
@@ -140,6 +155,20 @@ onMounted(() => {
         <div v-if="tagStore.nodes.length || tagSel.length" class="tag-row">
           <TagFilter :selected="tagSel" @change="onTagChange" />
         </div>
+        <div class="diff-row">
+          <span class="dim diff-label">难度</span>
+          <el-select
+            v-model="diffSel"
+            multiple
+            collapse-tags
+            placeholder="全部"
+            clearable
+            style="width: 220px"
+            @change="onDiffChange"
+          >
+            <el-option v-for="d in 10" :key="d" :value="d" :label="`D${d}`" />
+          </el-select>
+        </div>
         <el-table
 stripe
           v-loading="loading"
@@ -166,6 +195,11 @@ stripe
               <el-tag v-if="row.locked" size="small" type="success" class="ml8">
                 {{ row.lock_kind === 'exam' ? '考试中' : '比赛中' }}
               </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="难度" width="76">
+            <template #default="{ row }">
+              <TierBadge :tier="row.difficulty ?? 3" kind="difficulty" />
             </template>
           </el-table-column>
           <el-table-column label="标签" min-width="170">
@@ -244,6 +278,18 @@ stripe
   background: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
   margin-bottom: 12px;
+}
+
+/* 难度筛选行（v0.11）：与标签行同节奏 */
+.diff-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.diff-label {
+  font-size: var(--soj-fs-body);
 }
 
 /* 实体名（题名）主色，整行可点击 */

@@ -4,6 +4,7 @@
 // 移开后保留 5 秒再收起（再点一次立即收起）。
 import { computed, onUnmounted, ref } from 'vue'
 
+import TierBadge from '@/components/TierBadge.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import type { ProblemDetail } from '@/types'
 
@@ -68,6 +69,10 @@ onUnmounted(() => {
       <span>通过 <b>{{ problem.accepted_count ?? 0 }}</b></span>
       <span>通过率 <b>{{ acceptRate }}</b></span>
     </div>
+    <!-- 难度（v0.11）：静态十阶色轴徽章，位于标签区上方 -->
+    <div class="info-diff">
+      <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
+    </div>
     <div v-if="tagIds.length" class="info-tags">
       <el-popover :visible="tagsVisible" placement="bottom-start" popper-class="tags-pop">
         <template #reference>
@@ -105,6 +110,10 @@ onUnmounted(() => {
 
 .info-stats b {
   font-weight: var(--soj-fw-emphasis);
+}
+
+.info-diff {
+  margin-top: 10px;
 }
 
 .info-tags {

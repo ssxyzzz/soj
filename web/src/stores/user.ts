@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import type { UserPrefs } from '@/types'
+import type { LevelBadgeInfo, UserPrefs } from '@/types'
 
 // 登录态持久化在 localStorage（soj_token / soj_nickname / soj_role / soj_perms）。
 // perms 为服务端计算的生效权限位全集（root 展开为全目录）；can() 是全站入口显隐的
@@ -20,6 +20,9 @@ export const useUserStore = defineStore('user', () => {
   // 用户偏好（v0.4.8 个人设置）：登录后由布局层经 /me/profile 拉取，设置页保存后同步；
   // 供提交弹窗/在线编程预填默认语言与模板消费。不落 localStorage。
   const prefs = ref<UserPrefs>({})
+
+  // 学生等级（v0.11）：顶栏徽章与补全门槛提示；/me/profile 随偏好一并下发
+  const level = ref<LevelBadgeInfo | null>(null)
 
   // 管理后台入口：root 或持有任一后台能力（角色管理面板仅 root 可见，面板内部再判）
   const canAdmin = computed(
@@ -41,6 +44,7 @@ export const useUserStore = defineStore('user', () => {
     role.value = newRole
     perms.value = newPerms
     prefs.value = {} // 新会话的偏好待 /me/profile 重新拉取
+    level.value = null
     localStorage.setItem('soj_token', newToken)
     localStorage.setItem('soj_uid', String(newUid))
     localStorage.setItem('soj_nickname', newNickname)
@@ -50,6 +54,10 @@ export const useUserStore = defineStore('user', () => {
 
   function setPrefs(p: UserPrefs) {
     prefs.value = p ?? {}
+  }
+
+  function setLevel(l: LevelBadgeInfo | null) {
+    level.value = l ?? null
   }
 
   // 本人改昵称后同步顶栏与本地持久化（token/权限不变，无需重新登录）
@@ -65,6 +73,7 @@ export const useUserStore = defineStore('user', () => {
     role.value = ''
     perms.value = []
     prefs.value = {}
+    level.value = null
     localStorage.removeItem('soj_token')
     localStorage.removeItem('soj_uid')
     localStorage.removeItem('soj_nickname')
@@ -72,5 +81,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('soj_perms')
   }
 
-  return { token, uid, nickname, role, perms, prefs, canAdmin, can, setLogin, setPrefs, setNickname, logout }
+  return { token, uid, nickname, role, perms, prefs, level, canAdmin, can, setLogin, setPrefs, setLevel, setNickname, logout }
 })

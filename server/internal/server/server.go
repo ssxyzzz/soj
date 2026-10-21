@@ -63,6 +63,8 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/problems/:id/my-submissions", AuthRequired(h), h.MyProblemSubmissions)
 		// 标签树（v0.5.5）：公开读（题库筛选/详情卡/建题表单共用），写走 /admin/tagtree
 		api.GET("/tags/tree", AuthOptional(h), h.GetTagTree)
+		// 等级配置（v0.11）：公开读（排行榜/顶栏徽章要名字与特效开关），写走 /admin/levelconfig
+		api.GET("/levels", AuthOptional(h), h.GetLevels)
 
 		api.POST("/submissions", AuthRequired(h), h.CreateSubmission)
 		// 提交记录总表需「查看全部提交」权限位（学生查自己的历史走题目页「我的提交」）
@@ -202,6 +204,10 @@ func Run(ctx context.Context, deps *Deps) {
 				// 管理面板读走 /admin/tagtree（附每节点引用数），公开读仍走 /tags/tree
 				adminG.GET("/tagtree", RequireRoot(), h.AdminTagTree)
 				adminG.PUT("/tagtree", RequireRoot(), h.AdminReplaceTagTree)
+
+				// 等级面板（v0.11）：名称/阈值/衰减系数/特效开关，仅 root
+				adminG.GET("/levelconfig", RequireRoot(), h.AdminGetLevelConfig)
+				adminG.PUT("/levelconfig", RequireRoot(), h.AdminUpdateLevelConfig)
 			}
 		}
 	}

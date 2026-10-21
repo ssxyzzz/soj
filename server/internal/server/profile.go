@@ -5,6 +5,7 @@ package server
 // 与管理员用户列表返回，不进任何公开响应（userJSON 保持不动）。
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -65,7 +66,12 @@ func (h *Handlers) GetMyProfile(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取失败")
 		return
 	}
-	ok(c, profileJSON(u, hasPerm(c, repo.PermUserNicknameEdit)))
+	info := profileJSON(u, hasPerm(c, repo.PermUserNicknameEdit))
+	// 等级（v0.11）：徽章/进度渲染；聚合失败降级省略，不阻塞个人设置
+	if lv := h.levelBadgeInfo(c, uid); lv != nil {
+		info["level"] = lv
+	}
+	ok(c, info)
 }
 
 // UpdateMyProfile 更新本人自助字段与偏好（指针语义：出现才改，显式空串=清空）。
@@ -160,6 +166,15 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 			prefs.CodeTemplates = m
 		}
 		if req.Prefs.Autocomplete != nil {
+			// 等级门槛（v0.11）：开启需等级 ≥ 系统设置阈值（默认 Lv.5）；关闭不受限
+			if *req.Prefs.Autocomplete && !h.autocompleteAllowed(c, uid) {
+				min := repo.DefaultAutocompleteMinLevel
+				if s, err := h.repo.GetSystemSettings(c.Request.Context()); err == nil {
+					min = s.MinAutocompleteLevel()
+				}
+				fail(c, http.StatusBadRequest, fmt.Sprintf("等级达到 Lv.%d 后才能开启自动补全", min))
+				return
+			}
 			prefs.Autocomplete = req.Prefs.Autocomplete
 		}
 		if req.Prefs.CodeFont != nil {

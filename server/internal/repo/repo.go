@@ -392,6 +392,28 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		}
 		log.Printf("[boot] HTML 富文本字段已回迁为 markdown（v0.8 编辑器换回 Vditor）")
 	}
+	if !flagDone("difficultyV1") {
+		// v0.11：存量题按通过率启发式预估难度（显式设过的题不动；D10 仅手工给）
+		if err := r.migrateDifficultyEstimate(ctx); err != nil {
+			return err
+		}
+		if err := setFlag("difficultyV1"); err != nil {
+			return err
+		}
+	}
+	if !flagDone("defaultTagsV1") {
+		// v0.11：全新部署（树不存在或为空）注入默认标签树；已有树的部署永不触碰
+		inserted, err := r.EnsureDefaultTagTree(ctx)
+		if err != nil {
+			return err
+		}
+		if err := setFlag("defaultTagsV1"); err != nil {
+			return err
+		}
+		if inserted {
+			log.Printf("[boot] 空标签树已注入默认两级树（defaultTagsV1）")
+		}
+	}
 	return nil
 }
 

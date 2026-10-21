@@ -2,6 +2,7 @@
 // 系统不预置任何语言的代码模板，编辑器初始为全空白；
 // 仅当用户在个人设置里自定义了该语言的模板时才填充（stores/user.ts 的 prefs，
 // 随登录经 /me/profile 拉进 store）。
+import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 import type { UserPrefs } from '@/types'
 
@@ -23,11 +24,16 @@ export function templateFor(lang: string): string {
   return pref && pref.trim() ? pref : ''
 }
 
-// ---- 自动补全可用性（预留等级接口，v0.5.3） ----
-// 后续上线用户等级功能后，由等级决定能否开启自动补全：
-// 届时只需改这一个判断点（如 `level >= 门槛等级`），编辑器与个人设置都走这里，不各自为政。
+// ---- 自动补全可用性（等级门槛，v0.11 落地 v0.5.3 预留的接口） ----
+// 等级 ≥ 系统设置阈值（默认 Lv.5）才能开启自动补全；root/admin 不受限（门槛面向学生）。
+// 编辑器与个人设置都走这一个判断点，不各自为政。等级随 /me/profile 异步就绪，就绪后本
+// 判断响应式刷新（调用处都在 computed/模板中）。
 export function autocompleteAvailable(): boolean {
-  return true
+  const st = useUserStore()
+  if (!st.token) return false
+  if (st.role === 'root' || st.role === 'admin') return true
+  const lv = st.level?.level ?? 1
+  return lv >= useLevelsStore().autocompleteMinLevel()
 }
 
 // 实际生效：可用且未显式关闭（默认开箱开启，见 v0.5.3 功能基线）。

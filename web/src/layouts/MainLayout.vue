@@ -4,21 +4,28 @@ import { useRoute, useRouter } from 'vue-router'
 import { UserFilled } from '@element-plus/icons-vue'
 
 import { authApi } from '@/api'
+import TierBadge from '@/components/TierBadge.vue'
+import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const levels = useLevelsStore()
 
 const active = computed(() => route.path)
 
-// 登录态下拉取用户偏好（默认语言/模板），供提交弹窗/在线编程消费；
+// 登录态下拉取用户偏好（默认语言/模板）与等级（顶栏徽章），供提交弹窗/在线编程消费；
 // 设置页保存后同步更新 store。失败静默（未登录/过期由拦截器统一处理）。
 onMounted(() => {
+  levels.ensure() // 等级名字/特效配置（公开接口，徽章渲染用）
   if (!userStore.token) return
   authApi
     .getProfile()
-    .then((p) => userStore.setPrefs(p.prefs ?? {}))
+    .then((p) => {
+      userStore.setPrefs(p.prefs ?? {})
+      userStore.setLevel(p.level ?? null)
+    })
     .catch(() => {})
 })
 
@@ -60,6 +67,7 @@ function onCommand(command: string) {
             <span class="username">
               <span class="user-chip"><el-icon><UserFilled /></el-icon></span>
               {{ userStore.nickname || '已登录' }}
+              <TierBadge v-if="userStore.level" :tier="userStore.level.level" kind="level" size="sm" class="user-level" />
             </span>
             <template #dropdown>
             <el-dropdown-menu>
@@ -139,6 +147,7 @@ function onCommand(command: string) {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   padding: 0 var(--el-menu-base-level-padding, 20px);
   color: var(--el-menu-text-color, var(--el-text-color-primary));
   border-bottom: 2px solid transparent;

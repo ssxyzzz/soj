@@ -17,11 +17,14 @@ type SystemSettings struct {
 	// 每日每用户可下载数据的题目数上限（problem.data.download 权限位持有者受此限额）。
 	// 指针区分「旧文档未设置」与「显式 0」：nil = 未设置按默认；0 = 不限制；>0 = 每日上限。
 	DataDownloadDailyLimit *int `bson:"dataDownloadDailyLimit,omitempty"`
+	// 代码自动补全的解锁等级（v0.11）：等级 ≥ 该值才能开启自动补全；nil = 未设置按默认 5。
+	AutocompleteMinLevel *int `bson:"autocompleteMinLevel,omitempty"`
 }
 
 const (
 	DefaultRateLimitPerMinute   = 3
 	DefaultDataDownloadDayLimit = 5
+	DefaultAutocompleteMinLevel = 5
 )
 
 func downloadLimitPtr(v int) *int { return &v }
@@ -53,8 +56,13 @@ func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
 	if s.DataDownloadDailyLimit == nil {
 		s.DataDownloadDailyLimit = downloadLimitPtr(DefaultDataDownloadDayLimit)
 	}
+	if s.AutocompleteMinLevel == nil || *s.AutocompleteMinLevel < 1 || *s.AutocompleteMinLevel > 10 {
+		s.AutocompleteMinLevel = intPtr(DefaultAutocompleteMinLevel)
+	}
 	return &s, nil
 }
+
+func intPtr(v int) *int { return &v }
 
 // UpdateSystemSettings 更新系统设置（文档不存在时创建）。
 func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) error {
@@ -70,9 +78,18 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"homeNotice":             s.HomeNotice,
 			"backupGuide":            s.BackupGuide,
 			"dataDownloadDailyLimit": s.DownloadDailyLimit(),
+			"autocompleteMinLevel":   s.MinAutocompleteLevel(),
 		}},
 	)
 	return err
+}
+
+// AutocompleteMinLevel 自动补全解锁等级：未设置/越界回默认 5。
+func (s *SystemSettings) MinAutocompleteLevel() int {
+	if s.AutocompleteMinLevel == nil || *s.AutocompleteMinLevel < 1 || *s.AutocompleteMinLevel > 10 {
+		return DefaultAutocompleteMinLevel
+	}
+	return *s.AutocompleteMinLevel
 }
 
 // TestDataDownloadAllowed 每日下载限额判断：limit 0 = 不限制；>0 时当天已下载的不同题数

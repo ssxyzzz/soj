@@ -4,12 +4,15 @@ import { ElMessage } from 'element-plus'
 
 import PageShell from '@/components/PageShell.vue'
 import { authApi } from '@/api'
+import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 import { autocompleteAvailable, languageOptions, mergedPrefs } from '@/utils/code'
 
 // 个人设置（v0.4.8）：本人自助字段（昵称/性别/学校/年级/QQ）+ 偏好（默认语言/代码模板）。
 // 昵称是否可改由后端按 user.nickname.edit 权限位现算（can_edit_nickname），默认角色默认开启。
 const userStore = useUserStore()
+const levels = useLevelsStore()
+levels.ensure() // 补全解锁等级提示（/api/levels 公开配置）
 const loading = ref(false)
 const savingProfile = ref(false)
 const savingPrefs = ref(false)
@@ -46,6 +49,7 @@ async function load() {
     prefsForm.autocomplete = p.prefs?.autocomplete ?? true
     prefsForm.mdEditMode = (p.prefs?.mdEditMode || 'wysiwyg') as typeof prefsForm.mdEditMode
     prefsForm.mdTheme = (p.prefs?.mdTheme || 'light') as typeof prefsForm.mdTheme
+    userStore.setLevel(p.level ?? null) // 顶栏徽章与补全门槛同步（AC 后进设置页即刷新）
   } finally {
     loading.value = false
   }
@@ -164,7 +168,11 @@ onMounted(load)
               @change="savePrefs"
             />
             <span class="dim">
-              {{ autocompleteAvailable() ? '代码编辑器中的关键字 / 词法补全，默认开启' : '达到指定等级后可开启自动补全' }}
+              {{
+                autocompleteAvailable()
+                  ? '代码编辑器中的关键字 / 词法补全'
+                  : `达到 Lv.${levels.autocompleteMinLevel()} 后可开启自动补全（老师角色不受限）`
+              }}
             </span>
           </div>
         </el-form-item>

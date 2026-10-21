@@ -1,4 +1,6 @@
 title: 函数题示例·两数之和
+difficulty: 1
+tags: [入门, 函数与递归]
 type: function
 time: 1s
 memory: 256MB

@@ -2,8 +2,11 @@
 import { onMounted, ref } from 'vue'
 
 import { rankApi } from '@/api'
+import TierBadge from '@/components/TierBadge.vue'
+import { useLevelsStore } from '@/stores/levels'
 import type { RankItem } from '@/types'
 
+const levels = useLevelsStore()
 const list = ref<RankItem[]>([])
 const loading = ref(false)
 
@@ -12,6 +15,7 @@ const medals = ['🥇', '🥈', '🥉']
 onMounted(async () => {
   loading.value = true
   try {
+    levels.ensure() // 等级名字/特效配置就绪后徽章自动补全
     list.value = await rankApi.top()
   } finally {
     loading.value = false
@@ -32,6 +36,12 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column prop="username" label="用户名" min-width="160" />
         <el-table-column prop="nickname" label="昵称" min-width="160" />
+        <el-table-column label="等级" width="170">
+          <template #default="{ row }">
+            <TierBadge v-if="row.level" :tier="row.level" kind="level" size="sm" />
+            <span v-else class="dim">—</span>
+          </template>
+        </el-table-column>
         <el-table-column label="解题数" width="120">
           <template #default="{ row }">
             <el-tag type="success">{{ row.solved }}</el-tag>
