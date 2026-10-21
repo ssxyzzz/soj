@@ -526,8 +526,9 @@ func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {
 		return
 	}
 	var req struct {
-		Language string `json:"language" binding:"required"`
-		Code     string `json:"code" binding:"required"`
+		Language string                 `json:"language"` // 客观题免语言/代码（v0.9）
+		Code     string                 `json:"code"`
+		Answers  []repo.ObjectiveAnswer `json:"answers"` // 客观题整卷作答（v0.9.3）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数不完整")
@@ -572,10 +573,7 @@ func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {
 			return
 		}
 	}
-	if !lang.Exists(req.Language) {
-		fail(c, http.StatusBadRequest, "不支持的语言")
-		return
-	}
+	// 语言校验移至下方非客观题分支（客观题免语言，v0.9）
 
 	// 全局限速；持有「提交不限速」权限位者豁免
 	if !hasPerm(c, repo.PermSubmissionRateExempt) {
@@ -601,6 +599,33 @@ func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {
 		eArg = ct
 	} else {
 		ctArg = ct
+	}
+	// 客观题（v0.9）：比赛/考试同款提交即判（published 语义与代码提交一致）
+	if p.IsObjective() {
+		if err := repo.ValidateObjectiveSetSubmission(p.Questions, req.Answers); err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		sid, err := h.repo.CreateObjectiveSubmission(ctx, uid, uname, p, req.Answers, ctArg, eArg)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "创建提交失败")
+			return
+		}
+		ok(c, gin.H{"id": sid})
+		return
+	}
+	if !lang.Exists(req.Language) {
+		fail(c, http.StatusBadRequest, "不支持的语言")
+		return
+	}
+	// 函数题（v0.9.1）仅 C++；交互题（v0.9.2）C/C++
+	if p.IsFunction() && req.Language != "cpp" {
+		fail(c, http.StatusBadRequest, "函数题仅支持 C++")
+		return
+	}
+	if p.IsInteractive() && req.Language != "cpp" && req.Language != "c" {
+		fail(c, http.StatusBadRequest, "交互题仅支持 C / C++")
+		return
 	}
 	// 无测试数据的空壳题（v0.6.1 验收反馈）：与前端禁提交同一文案
 	if len(p.Cases) == 0 {

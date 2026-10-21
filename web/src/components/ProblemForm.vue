@@ -9,13 +9,19 @@ import { QuestionFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
+import { downloadFile } from '@/api/download'
+
 import MdEditor from '@/components/MdEditor.vue'
+import ObjectiveEditor from '@/components/ObjectiveEditor.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
+import { useUserStore } from '@/stores/user'
+import type { ObjectiveKind, ObjectiveQuestionDraft } from '@/types'
 
 export interface ProblemFormPayload {
   title: string
+  type: 'default' | 'objective' | 'function' | 'interactive' // 题目类型（v0.9）：客观题走 question；函数题带 driver/template（v0.9.1）；交互题带 interactor（v0.9.2）
   time_limit_ms: number
   memory_limit_mb: number
   compare: string
@@ -25,6 +31,10 @@ export interface ProblemFormPayload {
   tag_ids: number[]
   zip: File | null
   checker: File | null
+  questions: ObjectiveQuestionDraft[] | null
+  driver: File | null // 函数题驱动器（v0.9.1）
+  template: File | null // 函数题学生端模板（可选）
+  interactor: File | null // 交互题交互器（v0.9.2）
 }
 
 const props = withDefaults(
@@ -32,8 +42,19 @@ const props = withDefaults(
     mode: 'create' | 'edit'
     saving?: boolean
     confirmText?: string // 管理卡主按钮文案（确认创建/确认修改）
-    initial?: Partial<Omit<ProblemFormPayload, 'zip' | 'checker'>>
+    initial?: Partial<Omit<ProblemFormPayload, 'zip' | 'checker' | 'question'>> & {
+      questions?: {
+        stem?: string
+        kind: ObjectiveKind
+        options?: string[]
+        answer?: number[]
+        blanks?: { accept: string[]; case_sensitive?: boolean }[]
+        explanation?: string
+        score?: number
+      }[]
+    }
     fileIOHint?: { input: string; output: string } // 编辑模式：现行文件 IO 实际文件名
+    pid?: number // 编辑模式：题目 ID（「下载数据」按钮拼下载地址用）
   }>(),
   {
     saving: false,
@@ -49,8 +70,26 @@ const emit = defineEmits<{
 }>()
 
 // initial 仅在挂载时读取一次；编辑页以路由承载，重进即重挂
+const userStore = useUserStore()
+
+// 下载数据：有「下载数据」权限位且已有题目（编辑模式）时展示于 zip 上传行右侧
+const canDownloadData = computed(() => !!props.pid && userStore.can('problem.data.download'))
+
+async function downloadData() {
+  if (!props.pid) return
+  // 兜底名与服务端 Content-Disposition 同格式（problem - ID - 标题.zip）
+  await downloadFile(`/problems/${props.pid}/testdata/download`, `problem - ${props.pid} - ${form.title || 'untitled'}.zip`)
+}
+
 const form = reactive({
   title: props.initial.title ?? '',
+  type: (props.initial.type === 'objective'
+    ? 'objective'
+    : props.initial.type === 'function'
+      ? 'function'
+      : props.initial.type === 'interactive'
+        ? 'interactive'
+        : 'default') as 'default' | 'objective' | 'function' | 'interactive',
   time_limit_ms: props.initial.time_limit_ms ?? 1000,
   memory_limit_mb: props.initial.memory_limit_mb ?? 256,
   compare: props.initial.compare ?? 'exact',
@@ -58,6 +97,14 @@ const form = reactive({
   statement: props.initial.statement ?? '',
   file_io_name: props.initial.file_io_name ?? '',
   tag_ids: props.initial.tag_ids ?? [],
+})
+
+// 时限输入以秒为单位（站点展示口径统一用 s），提交/存储仍为毫秒
+const timeLimitSec = computed({
+  get: () => form.time_limit_ms / 1000,
+  set: (sec: number) => {
+    form.time_limit_ms = Math.round(sec * 1000)
+  },
 })
 
 const tagStore = useTagTreeStore()
@@ -74,6 +121,14 @@ function onTagsChange(ids: number[]) {
 
 const fileList = ref<UploadUserFile[]>([])
 const checkerList = ref<UploadUserFile[]>([])
+const driverList = ref<UploadUserFile[]>([])
+const templateList = ref<UploadUserFile[]>([])
+const interactorList = ref<UploadUserFile[]>([])
+
+function oneFile(files: UploadUserFile[]): File | null {
+  const f = files[0]
+  return (f?.raw as File) ?? null
+}
 
 function onCheckerChange(_file: UploadUserFile, files: UploadUserFile[]) {
   checkerList.value = files.slice(-1)
@@ -102,6 +157,36 @@ function zipFile(): File | null {
   return (f?.raw as File) ?? null
 }
 
+// ---- 客观题整卷草稿（v0.9.3）：小题列表由 ObjectiveEditor 维护，这里只存数组 ----
+const objQuestions = ref<ObjectiveQuestionDraft[]>([])
+const objEditor = ref<{ validate: () => string | null } | null>(null)
+
+// 编辑回填：整卷完整定义（编辑者门槛下 questions_full）
+const initQs = props.initial.questions
+if (initQs && initQs.length) {
+  objQuestions.value = initQs.map((q) => ({
+    stem: q.stem ?? '',
+    kind: q.kind,
+    options: q.options?.length ? [...q.options] : q.kind === 'judge' ? ['对', '错'] : ['', '', '', ''],
+    answer: [...(q.answer ?? [])],
+    blanks: (q.blanks ?? []).map((b) => ({ accept: [...b.accept], case_sensitive: !!b.case_sensitive })),
+    explanation: q.explanation ?? '',
+    score: q.score ?? 0,
+  }))
+}
+
+// 客观题的分值：新增小题默认等分（父组件校验前会提示补全）
+function ensureObjectiveScores() {
+  const list = objQuestions.value
+  if (!list.length) return
+  if (list.every((q) => (q.score || 0) === 0)) {
+    const base = 100 / list.length
+    list.forEach((q, i) => {
+      q.score = i === list.length - 1 ? 100 - Math.floor(base) * (list.length - 1) : Math.floor(base)
+    })
+  }
+}
+
 // 校验并收集表单载荷；不合法时弹提示并返回 null
 function payload(): ProblemFormPayload | null {
   if (!form.title.trim()) {
@@ -121,6 +206,26 @@ function payload(): ProblemFormPayload | null {
     return null
   }
   const zip = zipFile() // 可选：不传则创建暂无数据的题目（详情页提示 + 禁提交），数据后续编辑页补齐
+  let questions: ObjectiveQuestionDraft[] | null = null
+  if (form.type === 'objective') {
+    ensureObjectiveScores()
+    const err = objEditor.value?.validate()
+    if (err) {
+      ElMessage.warning(err)
+      return null
+    }
+    questions = objQuestions.value.map((q) => ({ ...q }))
+  }
+  const driver = oneFile(driverList.value)
+  const interactor = oneFile(interactorList.value)
+  if (form.type === 'function' && props.mode === 'create' && !driver && !zip) {
+    ElMessage.warning('函数题需要上传 driver.cpp（含 main、调用学生实现的函数）')
+    return null
+  }
+  if (form.type === 'interactive' && props.mode === 'create' && !interactor && !zip) {
+    ElMessage.warning('交互题需要上传 interactor.cpp（读输入文件、与选手双向通信、退出码 0 = 通过）')
+    return null
+  }
   return {
     ...form,
     title: form.title.trim(),
@@ -129,6 +234,10 @@ function payload(): ProblemFormPayload | null {
     tag_ids: [...form.tag_ids],
     zip,
     checker: checkerFile(),
+    questions,
+    driver,
+    template: oneFile(templateList.value),
+    interactor,
   }
 }
 
@@ -147,6 +256,27 @@ function onSubmitClick() {
           <el-form-item label="标题" required>
             <el-input v-model="form.title" maxlength="64" show-word-limit placeholder="64 字符以内" />
           </el-form-item>
+          <el-form-item>
+            <template #label>
+              <span class="label-with-tip">
+                题目类型
+                <el-tooltip placement="top" content="传统题＝编程评测（测试数据比对/SPJ/子任务/文件 IO）；客观题＝单选/多选/判断/填空，题干写在题面里、提交即判分">
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
+            <el-radio-group
+              :model-value="form.type"
+              :disabled="mode === 'edit'"
+              @change="(v?: string | number | boolean) => { form.type = v === 'objective' ? 'objective' : v === 'function' ? 'function' : v === 'interactive' ? 'interactive' : 'default' }"
+            >
+              <el-radio-button value="default">传统题（编程）</el-radio-button>
+              <el-radio-button value="objective">客观题（选择/填空）</el-radio-button>
+              <el-radio-button value="function">函数题（补全实现）</el-radio-button>
+              <el-radio-button value="interactive">交互题（双向通信）</el-radio-button>
+            </el-radio-group>
+            <span v-if="mode === 'edit'" class="dim type-lock">题型创建后不可更改</span>
+          </el-form-item>
           <el-form-item class="plain-label" :required="tagsRequired">
             <template #label>
               <span class="label-with-tip">
@@ -164,8 +294,25 @@ function onSubmitClick() {
             </div>
             <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
           </el-form-item>
-          <el-form-item label="题面" required>
-            <MdEditor v-model="form.statement" />
+          <el-form-item :required="form.type !== 'objective'">
+            <template #label>
+              <span class="label-with-tip">
+                {{ form.type === 'objective' ? '整题说明（可选）' : '题面' }}
+                <el-tooltip
+                  v-if="form.type === 'objective'"
+                  placement="top"
+                  content="这里放整卷的导语/说明；每道小题的题干在下方小题列表里单独填写"
+                >
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
+            <MdEditor v-model="form.statement" auto-height />
+          </el-form-item>
+
+          <!-- 客观题整卷（v0.9.3）：小题列表（增删/排序 + 每题题干/选项/答案/解析/分值） -->
+          <el-form-item v-if="form.type === 'objective'" class="plain-label">
+            <ObjectiveEditor ref="objEditor" v-model="objQuestions" />
           </el-form-item>
         </el-card>
       </div>
@@ -182,19 +329,31 @@ function onSubmitClick() {
 
         <el-card>
           <template #header><span>其他信息</span></template>
-          <el-form-item>
+          <el-form-item v-if="form.type !== 'objective'">
             <template #label>
-              <span class="label-with-tip">
-                测试数据 zip（可选）
-                <el-tooltip
-                  placement="top"
-                  :content="mode === 'create'
-                    ? '不上传则创建暂无数据的题目：题面立即可用、暂不可提交，数据可后续在编辑页整包上传；选择 zip 将随建题一并导入'
-                    : '留空保留现有数据；选择新 zip 将整包替换（旧数据不保留）'"
+              <div class="zip-label-row">
+                <span class="label-with-tip">
+                  测试数据 zip（可选）
+                  <el-tooltip
+                    placement="top"
+                    :content="mode === 'create'
+                      ? '不上传则创建暂无数据的题目：题面立即可用、暂不可提交'
+                      : '留空保留现有数据；选择新 zip 将整包替换（旧数据不保留）'"
+                  >
+                    <el-icon class="dim"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+                <el-button
+                  v-if="canDownloadData"
+                  type="primary"
+                  plain
+                  size="small"
+                  title="下载该题测试数据包（含造数据脚本等存档文件）"
+                  @click.stop="downloadData"
                 >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </span>
+                  下载数据
+                </el-button>
+              </div>
             </template>
             <el-upload
               v-model:file-list="fileList"
@@ -207,12 +366,12 @@ function onSubmitClick() {
               :on-remove="onZipRemove"
             >
               <div class="zip-hint">
-                <p>{{ mode === 'create' ? '拖入 zip 或点击选择（可跳过，后续在编辑页上传）' : '拖入新 zip 整包替换，留空则不修改' }}</p>
+                <p>{{ mode === 'create' ? '拖入 zip 或点击选择' : '拖入新 zip 整包替换' }}</p>
                 <p class="dim">结构：test1.in、test1.ans/out</p>
               </div>
             </el-upload>
           </el-form-item>
-          <el-form-item>
+          <el-form-item v-if="form.type !== 'objective'">
             <div class="field-group">
               <div class="field-label">
                 文件名（可选）
@@ -238,18 +397,18 @@ function onSubmitClick() {
               <div class="pf-note dim">来源/年份/地市，用,分隔</div>
             </div>
           </el-form-item>
-          <el-form-item>
+          <el-form-item v-if="form.type !== 'objective'">
             <div class="field-group">
               <div class="field-label">时限 / 内存</div>
               <div class="limits">
-                <el-input-number v-model="form.time_limit_ms" :controls="false" :min="100" :max="600000" :step="100" />
-                <span class="dim">ms</span>
+                <el-input-number v-model="timeLimitSec" :controls="false" :min="0.1" :max="600" :step="0.1" />
+                <span class="dim">s</span>
                 <el-input-number v-model="form.memory_limit_mb" :controls="false" :min="16" :max="1024" :step="16" />
                 <span class="dim">MB</span>
               </div>
             </div>
           </el-form-item>
-          <el-form-item>
+          <el-form-item v-if="form.type !== 'objective'">
             <template #label>
               <span class="label-with-tip">
                 比对模式
@@ -271,10 +430,10 @@ function onSubmitClick() {
               </span>
             </div>
           </el-form-item>
-          <el-form-item v-if="form.compare === 'tolerant'" label="浮点容差" class="plain-label">
+          <el-form-item v-if="form.type !== 'objective' && form.compare === 'tolerant'" label="浮点容差" class="plain-label">
             <el-input-number v-model="form.float_tolerance" :min="0.000001" :max="1" :step="0.0001" :precision="6" />
           </el-form-item>
-          <el-form-item v-if="mode === 'create'" class="plain-label">
+          <el-form-item v-if="mode === 'create' && form.type !== 'objective'" class="plain-label">
             <template #label>
               <span class="label-with-tip">自定义校验器（可选）</span>
             </template>
@@ -294,6 +453,64 @@ function onSubmitClick() {
               </div>
             </div>
           </el-form-item>
+          <!-- 函数题（v0.9.1）：driver/template 上传（创建模式随表单一次交齐；编辑页走即时上传） -->
+          <template v-if="form.type === 'function' && mode === 'create'">
+            <el-form-item class="plain-label">
+              <template #label>
+                <span class="label-with-tip">
+                  驱动器 driver.cpp
+                  <el-tooltip placement="top" content="含 main 与函数原型声明、调用学生实现的函数；与学生提交的代码合编成一个程序评测。也可放进 zip 根目录">
+                    <el-icon class="dim"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-upload
+                v-model:file-list="driverList"
+                accept=".cpp"
+                :limit="1"
+                :auto-upload="false"
+              >
+                <el-button>选择 driver.cpp</el-button>
+              </el-upload>
+            </el-form-item>
+            <el-form-item class="plain-label">
+              <template #label>
+                <span class="label-with-tip">
+                  学生模板 template.cpp（可选）
+                  <el-tooltip placement="top" content="学生提交时代码编辑器预填的内容（函数签名与注释提示）">
+                    <el-icon class="dim"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-upload
+                v-model:file-list="templateList"
+                accept=".cpp"
+                :limit="1"
+                :auto-upload="false"
+              >
+                <el-button>选择 template.cpp</el-button>
+              </el-upload>
+            </el-form-item>
+          </template>
+
+          <!-- 交互题（v0.9.2）：interactor 上传（创建模式随表单；编辑页走即时上传） -->
+          <el-form-item v-if="form.type === 'interactive' && mode === 'create'" class="plain-label">
+            <template #label>
+              <span class="label-with-tip">
+                交互器 interactor.cpp
+                <el-tooltip
+                  placement="top"
+                  content="读 argv[1] 指定的输入文件，通过 stdin/stdout 与选手程序双向通信；退出码 0 = 该测试点通过，非 0 = 不通过（stderr 末行作为反馈）。也可放进 zip 根目录"
+                >
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
+            <el-upload v-model:file-list="interactorList" accept=".cpp" :limit="1" :auto-upload="false">
+              <el-button>选择 interactor.cpp</el-button>
+            </el-upload>
+          </el-form-item>
+
           <!-- 编辑页在此注入自定义校验器管理（即时上传/移除，不随保存提交） -->
           <slot name="others-extra" />
         </el-card>
@@ -305,6 +522,45 @@ function onSubmitClick() {
 </template>
 
 <style scoped>
+/* 客观题编辑（v0.9） */
+.type-lock {
+  margin-left: 10px;
+}
+
+.obj-options,
+.obj-blanks {
+  width: 100%;
+}
+
+.obj-opt-row,
+.obj-blank-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.obj-blank-idx {
+  flex: 0 0 auto;
+  color: var(--el-text-color-secondary);
+}
+
+.obj-blank-ops {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* zip 上传行：左「测试数据 zip（可选）」标签，右「下载数据」按钮（v0.8.3） */
+.zip-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
 /* 表单标签不加粗（Ant：标签与正文同字重 400，颜色不降档） */
 :deep(.el-form-item__label) {
   font-weight: var(--soj-fw-regular);

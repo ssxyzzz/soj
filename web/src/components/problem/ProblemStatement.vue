@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { fmtSec } from '@/utils/format'
 // 题面主卡：详情页主列与在线编程左栏共用——#id 标题 + 右侧（隐藏标记/时限/内存）+ 可选
 // 文件 IO 提示 + 题面；标题行右侧扩展位走 #extra 插槽（详情页放「主题库隐藏」标记，
 // 顺序：隐藏 → 时间限制 → 空间限制）。
@@ -7,10 +9,28 @@ import { Timer, Cpu } from '@element-plus/icons-vue'
 import { fmtMem } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   problem: ProblemDetail
   fileIo?: boolean // 比赛/考试启用文件 IO 时显示提示（做题页主列与在线编程左栏同款）
 }>()
+
+// 客观题（v0.9.3）：整卷题型摘要徽章（全同型给具体类型，混合给「客观题」）
+const isObjective = computed(() => props.problem.type === 'objective')
+const objectiveLabel = computed(() => {
+  const qs = props.problem.questions ?? []
+  if (!qs.length) return '客观题'
+  const kinds = new Set(qs.map((q) => q.kind))
+  if (kinds.size > 1) return `客观题 · ${qs.length} 题`
+  const map: Record<string, string> = { single: '单选题', multiple: '多选题', judge: '判断题', blank: '填空题' }
+  return map[qs[0].kind] ?? '客观题'
+})
+
+// 函数题/交互题徽章（v0.9.1/v0.9.2）
+const kindLabel = computed(() => {
+  if (props.problem.type === 'function') return '函数题'
+  if (props.problem.type === 'interactive') return '交互题'
+  return ''
+})
 </script>
 
 <template>
@@ -19,14 +39,20 @@ defineProps<{
     <div class="statement">
       <div class="title-row">
         <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
+        <el-tag v-if="problem.type === 'objective'" size="small" type="info" class="kind-tag">
+          {{ objectiveLabel }}
+        </el-tag>
+        <el-tag v-else-if="kindLabel" size="small" type="info" class="kind-tag">{{ kindLabel }}</el-tag>
         <div class="title-extra">
           <slot name="extra" />
-          <span class="limit" title="时间限制">
-            <el-icon><Timer /></el-icon>{{ problem.time_limit_ms }} ms
-          </span>
-          <span class="limit" title="内存限制">
-            <el-icon><Cpu /></el-icon>{{ fmtMem(problem.memory_limit_kb) }}
-          </span>
+          <template v-if="!isObjective">
+            <span class="limit" title="时间限制">
+              <el-icon><Timer /></el-icon>{{ fmtSec(problem.time_limit_ms) }}
+            </span>
+            <span class="limit" title="内存限制">
+              <el-icon><Cpu /></el-icon>{{ fmtMem(problem.memory_limit_kb) }}
+            </span>
+          </template>
         </div>
       </div>
       <el-alert
@@ -38,15 +64,24 @@ defineProps<{
         title="本题请以文件 IO 方式提交"
         :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
       />
+      <!-- 交互题（v0.9.2）：交互方式说明（选手不读输入文件，通过 stdin/stdout 与交互器通信） -->
+      <el-alert
+        v-if="problem.type === 'interactive'"
+        type="info"
+        :closable="false"
+        class="fileio-alert"
+        show-icon
+        title="本题为交互题：通过标准输入输出与评测器交互"
+        description="评测器会实时读取你的输出并回应，按题面约定的协议交替读写；不要使用文件读写。仅支持 C / C++。"
+      />
       <!-- 无测试数据空壳题（v0.6.1 验收反馈）：提示样式与文件 IO 提示同款，分角色文案 -->
       <el-alert
-        v-if="problem.has_cases === false"
+        v-if="!isObjective && problem.has_cases === false"
         type="warning"
         :closable="false"
         class="fileio-alert"
         show-icon
-        :title="problem.can_edit_statement ? '本题暂无测试数据，暂不可提交' : '本题暂无测试数据，无法评测。请联系管理员上传数据'"
-        :description="problem.can_edit_statement ? '请到「编辑题目」页上传测试数据 zip（整包替换），上传后题目即可正常提交评测。' : undefined"
+        title="本题暂无测试数据，不可提交"
       />
       <MdView :content="problem.description" />
     </div>
@@ -66,6 +101,10 @@ defineProps<{
   gap: 8px;
   /* 下方提示（文件 IO/空壳题）与正文的间距 */
   margin-bottom: 14px;
+}
+
+.kind-tag {
+  flex: 0 0 auto;
 }
 
 /* 页头大标题 22/600：层级顶点 */

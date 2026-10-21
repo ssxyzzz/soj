@@ -16,10 +16,12 @@ import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemInfoCard from '@/components/problem/ProblemInfoCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
+import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
+import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import { fmtDate, fmtMem, isQueueStatus } from '@/utils/format'
+import { fmtDate, fmtMem, fmtSec, isQueueStatus } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
-import type { ContestDetail, ContestMySubmission, ProblemDetail } from '@/types'
+import type { ContestDetail, ContestMySubmission, ObjectiveAnswer as ObjAnswer, ProblemDetail } from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
 
@@ -124,6 +126,13 @@ function goProblem(targetPid: number) {
 // 不再看到无效按钮（admin/root 保留，与题库详情页布局一致）
 const showSubmitWays = computed(() => running.value || canViewOthers.value)
 
+// 客观题（v0.9）：提交走作答弹窗，在线编程不适用，不受 has_cases 约束
+const isObjective = computed(() => problem.value?.type === 'objective')
+const isFunction = computed(() => problem.value?.type === 'function')
+const funcTemplate = computed(() => problem.value?.function?.template_code || '')
+const isInteractive = computed(() => problem.value?.type === 'interactive')
+const noCases = computed(() => !isObjective.value && problem.value?.has_cases === false)
+
 function openMineDetail(s: ContestMySubmission) {
   if (!s.id) return
   mineDetail.value = s
@@ -162,6 +171,20 @@ function openSolutions() {
     return
   }
   showSolutions.value = true
+}
+
+// 客观题提交（v0.9）
+async function handleObjectiveSubmit(answers: ObjAnswer[]) {
+  submitting.value = true
+  try {
+    const r = await api.value.submitObjective(roundId.value, pid.value, answers)
+    ElMessage.success('已提交')
+    showSubmit.value = false
+    await loadMine()
+    if (revealed.value) pollRevealed(r.id)
+  } finally {
+    submitting.value = false
+  }
 }
 
 async function handleSubmit(lang: string, code: string) {
@@ -239,6 +262,22 @@ onUnmounted(() => {
       </template>
 
       <ProblemStatement :problem="problem" :file-io="round.file_io" />
+
+      <!-- 客观题（v0.9.3）：作答区内联在题面下方；仅在赛中进行中可交 -->
+      <ObjectiveAnswer
+        v-if="isObjective && problem.questions?.length"
+        :questions="problem.questions"
+        :disabled="!running"
+        :disabled-reason="running ? '' : `${name}未在进行中`"
+        :submitting="submitting"
+        @submit="handleObjectiveSubmit"
+      />
+
+      <ObjectiveSolutionCard
+        v-if="isObjective && problem.questions_full?.length"
+        :questions="problem.questions_full"
+      />
+
       <template #aside>
         <!-- 管理卡（题库详情页同款）：编辑直达，免去回题库找原题 -->
         <el-card v-if="problem.can_edit_statement" class="aside-card">
@@ -251,22 +290,23 @@ onUnmounted(() => {
 
         <el-card class="aside-card">
           <div class="entry-actions">
-            <template v-if="showSubmitWays">
+            <template v-if="showSubmitWays && !isObjective">
               <el-tooltip
-                :disabled="problem?.has_cases !== false"
+                :disabled="!noCases"
                 content="本题暂无数据，无法评测。请联系管理员上传数据"
                 placement="top"
               >
-                <el-button type="primary" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showSubmit = true">
+                <el-button type="primary" plain style="width: 100%" :disabled="!running || noCases" @click="showSubmit = true">
                   提交
                 </el-button>
               </el-tooltip>
               <el-tooltip
-                :disabled="problem?.has_cases !== false"
+                v-if="!isObjective"
+                :disabled="!noCases"
                 content="本题暂无数据，无法评测。请联系管理员上传数据"
                 placement="top"
               >
-                <el-button type="success" plain style="width: 100%" :disabled="!running || problem?.has_cases === false" @click="showWorkbench = true">
+                <el-button type="success" plain style="width: 100%" :disabled="!running || noCases" @click="showWorkbench = true">
                   在线编程
                 </el-button>
               </el-tooltip>
@@ -284,11 +324,15 @@ onUnmounted(() => {
 
     <template v-if="round && problem">
       <SubmitDialog
+        v-if="!isObjective"
         v-model="showSubmit"
         :title="`#${problem.id} ${problem.title}`"
         :submitting="submitting"
+        :initial-code="isFunction ? funcTemplate : undefined"
+        :lang-only="isFunction ? 'cpp' : isInteractive ? ['cpp', 'c'] : undefined"
         @submit="handleSubmit"
       />
+
 
       <CodeWorkbench
         v-model="showWorkbench"
@@ -296,6 +340,8 @@ onUnmounted(() => {
         :problem="problem"
         :file-io="round.file_io"
         :submitting="submitting"
+        :initial-code="isFunction ? funcTemplate : undefined"
+        :lang-only="isFunction ? 'cpp' : isInteractive ? ['cpp', 'c'] : undefined"
         @submit="handleSubmit"
       />
 
@@ -316,7 +362,7 @@ onUnmounted(() => {
             <el-table-column prop="language" label="语言" width="100" />
             <el-table-column label="总耗时" width="100">
               <template #default="{ row }">
-                {{ revealed ? `${row.time_ms ?? 0} ms` : '—' }}
+                {{ revealed ? fmtSec(row.time_ms ?? 0) : '—' }}
               </template>
             </el-table-column>
             <el-table-column label="总内存" width="110">

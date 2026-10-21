@@ -32,20 +32,13 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		return
 	}
 	var req struct {
-		ProblemID int64  `json:"problem_id" binding:"required"`
-		Language  string `json:"language" binding:"required"`
-		Code      string `json:"code" binding:"required"`
+		ProblemID int64                  `json:"problem_id" binding:"required"`
+		Language  string                 `json:"language"` // 客观题免语言/代码（v0.9）
+		Code      string                 `json:"code"`
+		Answers   []repo.ObjectiveAnswer `json:"answers"` // 客观题整卷作答（v0.9.3）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数不完整")
-		return
-	}
-	if !lang.Exists(req.Language) {
-		fail(c, http.StatusBadRequest, "不支持的语言")
-		return
-	}
-	if len(req.Code) > maxCodeSize {
-		fail(c, http.StatusBadRequest, "代码过长（上限 64KB）")
 		return
 	}
 
@@ -95,6 +88,39 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		}
 	}
 
+	// 客观题（v0.9）：判分纯函数，提交即出终态（不进队列、无需唤醒）
+	if p.IsObjective() {
+		if err := repo.ValidateObjectiveSetSubmission(p.Questions, req.Answers); err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		}
+		id, err := h.repo.CreateObjectiveSubmission(ctx, uid, uname, p, req.Answers, nil, nil)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "创建提交失败")
+			return
+		}
+		log.Printf("[web] 用户 %s 提交客观题 #%d (题目 %d)", uname, id, req.ProblemID)
+		ok(c, gin.H{"id": id})
+		return
+	}
+
+	if !lang.Exists(req.Language) {
+		fail(c, http.StatusBadRequest, "不支持的语言")
+		return
+	}
+	// 函数题（v0.9.1）仅 C++：driver 与学生实现合编的语义限定；交互题（v0.9.2）C/C++
+	if p.IsFunction() && req.Language != "cpp" {
+		fail(c, http.StatusBadRequest, "函数题仅支持 C++")
+		return
+	}
+	if p.IsInteractive() && req.Language != "cpp" && req.Language != "c" {
+		fail(c, http.StatusBadRequest, "交互题仅支持 C / C++")
+		return
+	}
+	if len(req.Code) > maxCodeSize {
+		fail(c, http.StatusBadRequest, "代码过长（上限 64KB）")
+		return
+	}
 	// 无测试数据的空壳题（v0.6.1 验收反馈）：与前端禁提交同一文案
 	if len(p.Cases) == 0 {
 		fail(c, http.StatusBadRequest, "本题暂无数据，无法评测。请联系管理员上传数据")
@@ -283,6 +309,12 @@ func submissionJSON(s *repo.Submission, withCode bool) gin.H {
 	if withCode {
 		h["code"] = s.Code
 		h["detail"] = s.Detail // 测试点明细与代码同门槛（本人/总表/满分解锁）
+		if len(s.ObjectiveAnswers) > 0 {
+			h["answers"] = s.ObjectiveAnswers // 客观题整卷作答与代码同门槛（v0.9.3）
+		}
+	}
+	if len(s.ObjectiveAnswers) > 0 {
+		h["is_objective"] = true
 	}
 	return h
 }
@@ -293,6 +325,17 @@ func (h *Handlers) RejudgeSubmission(c *gin.Context) {
 	if err != nil || id <= 0 {
 		fail(c, http.StatusBadRequest, "无效的提交 ID")
 		return
+	}
+	// 客观题（v0.9）：判分纯函数，同步重判后直接返回（不走队列）
+	if s0, serr := h.repo.GetSubmission(c.Request.Context(), id); serr == nil {
+		if pp, perr := h.repo.GetProblem(c.Request.Context(), s0.ProblemID); perr == nil && pp.IsObjective() {
+			if rerr := h.repo.RegradeObjective(c.Request.Context(), id); rerr != nil {
+				fail(c, http.StatusInternalServerError, "重测失败")
+				return
+			}
+			ok(c, gin.H{"id": id})
+			return
+		}
 	}
 	err = h.repo.RejudgeSubmission(c.Request.Context(), id)
 	if errors.Is(err, repo.ErrJudging) {

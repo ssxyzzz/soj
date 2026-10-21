@@ -9,6 +9,8 @@ import { problemApi, submissionApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
+import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
+import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
@@ -17,7 +19,7 @@ import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import { useUserStore } from '@/stores/user'
 import { isQueueStatus, statusStyle } from '@/utils/format'
-import type { ProblemDetail } from '@/types'
+import type { ObjectiveAnswer as ObjAnswer, ProblemDetail } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -48,7 +50,12 @@ function roundProblemRoute(p: { locked?: boolean; lock_kind?: string; contest_id
 }
 
 const canSetHidden = computed(() => !!problem.value?.can_set_hidden)
-const submitDisabled = computed(() => !userStore.token || problem.value?.has_cases === false)
+const submitDisabled = computed(
+  () =>
+    !userStore.token ||
+    // 客观题无测试数据概念（题干即全部），不受 has_cases 约束
+    (problem.value?.type !== 'objective' && problem.value?.has_cases === false),
+)
 
 async function load() {
   loading.value = true
@@ -91,12 +98,21 @@ async function rejudgeAll() {
   }
 }
 const submitDisabledReason = computed(() => {
-  if (problem.value?.has_cases === false) return '本题暂无数据，无法评测。请联系管理员上传数据'
+  // 客观题无测试数据概念（题干即全部），不受 has_cases 约束
+  if (problem.value?.type !== 'objective' && problem.value?.has_cases === false) {
+    return '本题暂无数据，无法评测。请联系管理员上传数据'
+  }
   if (!userStore.token) return '请先登录'
   return ''
 })
 
 // 题目信息卡（v0.5.5）：统计 + 标签（共享组件）；比赛/考试做题页同款
+
+// 客观题（v0.9）：提交走作答弹窗，在线编程不适用；函数题（v0.9.1）：模板预填 + 语言锁 C++
+const isObjective = computed(() => problem.value?.type === 'objective')
+const isFunction = computed(() => problem.value?.type === 'function')
+const funcTemplate = computed(() => problem.value?.function?.template_code || '')
+const isInteractive = computed(() => problem.value?.type === 'interactive')
 
 function openSubmitEntry() {
   if (!userStore.token) {
@@ -146,6 +162,24 @@ async function handleSubmit(lang: string, code: string) {
     showWorkbench.value = false
     mineDialogRef.value?.refresh(1)
     startPolling(r.id)
+  } catch {
+    // 错误提示已由 axios 拦截器统一弹出
+  } finally {
+    submitting.value = false
+  }
+}
+
+// 客观题提交（v0.9）：作答即判，提交后刷新题面（满分后解析/答案随之出现）
+async function handleObjectiveSubmit(answers: ObjAnswer[]) {
+  if (!problem.value) return
+  submitting.value = true
+  try {
+    const r = await submissionApi.createObjective(problem.value.id, answers)
+    ElMessage.success(`已提交 #${r.id}`)
+    showSubmit.value = false
+    mineDialogRef.value?.refresh(1)
+    startPolling(r.id)
+    await load()
   } catch {
     // 错误提示已由 axios 拦截器统一弹出
   } finally {
@@ -208,6 +242,22 @@ onUnmounted(stopPolling)
           </template>
         </ProblemStatement>
 
+        <!-- 客观题（v0.9.3）：作答区在主列题面下方（页面上直接勾选/填写，不弹窗） -->
+        <ObjectiveAnswer
+          v-if="isObjective && problem.questions?.length"
+          :questions="problem.questions"
+          :disabled="!!submitDisabledReason || !userStore.token"
+          :disabled-reason="userStore.token ? submitDisabledReason : '登录后作答'"
+          :submitting="submitting"
+          @submit="handleObjectiveSubmit"
+        />
+
+        <!-- 参考答案与解析（v0.9.3 独立成卡、置于作答区下方）：questions_full 仅满分∨老师门槛下发 -->
+        <ObjectiveSolutionCard
+          v-if="isObjective && problem.questions_full?.length"
+          :questions="problem.questions_full"
+        />
+
         <template #aside>
         <el-card v-if="problem.can_edit_statement" class="aside-card">
           <template #header><span>管理</span></template>
@@ -219,10 +269,24 @@ onUnmounted(stopPolling)
 
         <el-card class="aside-card">
           <div class="entry-actions">
-            <el-button type="primary" plain style="width: 100%" :disabled="submitDisabled" @click="openSubmitEntry">
+            <el-button
+              v-if="!isObjective"
+              type="primary"
+              plain
+              style="width: 100%"
+              :disabled="submitDisabled"
+              @click="openSubmitEntry"
+            >
               提交
             </el-button>
-            <el-button type="success" plain style="width: 100%" :disabled="submitDisabled" @click="openWorkbenchEntry">
+            <el-button
+              v-if="!isObjective"
+              type="success"
+              plain
+              style="width: 100%"
+              :disabled="submitDisabled"
+              @click="openWorkbenchEntry"
+            >
               在线编程
             </el-button>
             <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
@@ -237,17 +301,23 @@ onUnmounted(stopPolling)
     </PageShell>
 
       <SubmitDialog
+      v-if="!isObjective"
       v-model="showSubmit"
       :title="`#${problem.id} ${problem.title}`"
       :submitting="submitting"
+      :initial-code="isFunction ? funcTemplate : undefined"
+      :lang-only="isFunction ? 'cpp' : isInteractive ? ['cpp', 'c'] : undefined"
       @submit="handleSubmit"
     />
+
 
     <CodeWorkbench
       v-model="showWorkbench"
       :title="`#${problem.id} ${problem.title}`"
       :problem="problem"
       :submitting="submitting"
+      :initial-code="isFunction ? funcTemplate : undefined"
+      :lang-only="isFunction ? 'cpp' : undefined"
       @submit="handleSubmit"
     />
 

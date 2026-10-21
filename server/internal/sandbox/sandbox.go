@@ -21,18 +21,40 @@ import (
 // go-judge 语义：含 content 的条目被物化为绑定到该 fd 的文件；
 // 仅 name+max 的条目是内存收集管道（输出捕获必须用这种）。
 // 因此 stdin 用 Stdin()（内容可为空但字段必须存在），stdout/stderr 用 Pipe()。
+//
+// 跨 cmd 的命名管道（交互题）：生产端 Pipe(name, max)、消费端 PipeReader(name)。
+// 实测（go-judge v1.13.3）两端都必须显式带 max 键——消费端 max:0 也必须出现，
+// 否则 400 "file type is not valid"；故 Max 用指针而非 int64+omitempty。
 type File struct {
 	Content *string `json:"content,omitempty"`
 	Name    string  `json:"name,omitempty"`
-	Max     int64   `json:"max,omitempty"`
+	Max     *int64  `json:"max,omitempty"`
 }
 
 // Stdin 以给定内容作为程序的标准输入（内容为空也必须显式传 "content": ""，
 // 空对象会被沙箱以 400 拒绝）。
 func Stdin(content string) File { return File{Content: &content} }
 
-// Pipe 声明一个内存收集管道（用于捕获 stdout/stderr）。
-func Pipe(name string, max int64) File { return File{Name: name, Max: max} }
+// Pipe 声明一个内存收集管道（用于捕获 stdout/stderr），同时可作为命名管道的生产端。
+func Pipe(name string, max int64) File { return File{Name: name, Max: &max} }
+
+// Null 不指定的 fd（JSON 序列化为 null）：交互题里由 pipeMapping 接管 stdin/stdout 时用。
+func Null() File { return File{} }
+
+// MarshalJSON 零值 File 输出 null——go-judge 对映射接管的 fd 要求未指定而非空对象。
+func (f File) MarshalJSON() ([]byte, error) {
+	if f.Content == nil && f.Name == "" && f.Max == nil {
+		return []byte("null"), nil
+	}
+	type alias File
+	return json.Marshal(alias(f))
+}
+
+// PipeReader 命名管道的消费端（另一个 cmd 以此名字 Pipe 生产）。
+func PipeReader(name string) File {
+	zero := int64(0)
+	return File{Name: name, Max: &zero}
+}
 
 // CopyFile 描述 copyIn 的文件来源：内容或已缓存的 fileId 二选一。
 type CopyFile struct {
@@ -112,8 +134,32 @@ func (c *Client) Available(ctx context.Context) bool {
 	return true
 }
 
+// PipeIndex 指向某条 cmd 的某个 fd（0=stdin 1=stdout 2=stderr）。
+type PipeIndex struct {
+	Index int `json:"index"`
+	Fd    int `json:"fd"`
+}
+
+// PipeMap 进程间直连管道：In 为写入端（生产），Out 为读取端（消费）。
+// 交互题用它把选手 stdout 接交互器 stdin、交互器 stdout 接选手 stdin；
+// 此时对应 Files 槽位传 nil（由映射接管）。
+type PipeMap struct {
+	In  PipeIndex `json:"in"`
+	Out PipeIndex `json:"out"`
+}
+
+// Run 单/多 cmd 执行（无进程间管道）。
 func (c *Client) Run(ctx context.Context, cmds []Cmd) ([]Result, error) {
-	body, err := json.Marshal(map[string]any{"cmd": cmds})
+	return c.RunPiped(ctx, cmds, nil)
+}
+
+// RunPiped 带 pipeMapping 的执行（多 cmd 互相通信，交互题判题用）。
+func (c *Client) RunPiped(ctx context.Context, cmds []Cmd, pipes []PipeMap) ([]Result, error) {
+	payload := map[string]any{"cmd": cmds}
+	if len(pipes) > 0 {
+		payload["pipeMapping"] = pipes
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}

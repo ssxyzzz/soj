@@ -1,6 +1,6 @@
 title: Subtask A+B
-timeLimitMs: 1000
-memoryLimitKb: 262144
+time: 1s
+memory: 256MB
 samples: [1]
 subtasks:
   - cases: [1, 2]

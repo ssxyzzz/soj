@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { fmtDate, fmtMem } from '@/utils/format'
+import { fmtDate, fmtMem, fmtSec } from '@/utils/format'
 import SubStatus from '@/components/SubStatus.vue'
 import type { Submission } from '@/types'
 
@@ -49,7 +49,7 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
                 </template>
               </el-table-column>
               <el-table-column label="耗时" width="120">
-                <template #default="{ row: c }">{{ c.time_ms ? `${c.time_ms} ms` : '' }}</template>
+                <template #default="{ row: c }">{{ c.time_ms ? fmtSec(c.time_ms) : '' }}</template>
               </el-table-column>
               <el-table-column label="内存" width="120">
                 <template #default="{ row: c }">{{ c.memory_kb ? fmtMem(c.memory_kb) : '' }}</template>
@@ -65,7 +65,7 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
       </el-table-column>
       <el-table-column prop="language" label="语言" width="100" />
       <el-table-column label="总耗时" width="100">
-        <template #default="{ row }">{{ row.time_ms }} ms</template>
+        <template #default="{ row }">{{ fmtSec(row.time_ms) }}</template>
       </el-table-column>
       <el-table-column label="总内存" width="110">
         <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>

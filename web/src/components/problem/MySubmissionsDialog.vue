@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { fmtSec } from '@/utils/format'
 // 我的提交弹窗（v0.5.4 ② 拆分自 ProblemDetailView）：列表点行 → 同弹窗切详情
 // （代码/耗时/内存/错误信息/测试点明细）。父层提交后经 refresh() 刷新列表。
 import { computed, ref, watch } from 'vue'
@@ -95,7 +96,7 @@ defineExpose({ refresh: loadMine })
         <el-table-column prop="language" label="语言" width="100" />
         <el-table-column label="总耗时" width="100">
           <template #default="{ row }">
-            <template v-if="row.id">{{ row.time_ms }} ms</template>
+            <template v-if="row.id">{{ fmtSec(row.time_ms) }}</template>
           </template>
         </el-table-column>
         <el-table-column label="总内存" width="110">
@@ -137,7 +138,7 @@ defineExpose({ refresh: loadMine })
           <SubStatus v-else :status="mineDetail.status" :score="mineDetail.score" />
         </el-descriptions-item>
         <el-descriptions-item label="语言">{{ mineDetail.language }}</el-descriptions-item>
-        <el-descriptions-item label="总耗时">{{ mineDetail.time_ms }} ms</el-descriptions-item>
+        <el-descriptions-item label="总耗时">{{ fmtSec(mineDetail.time_ms) }}</el-descriptions-item>
         <el-descriptions-item label="总内存">{{ fmtMem(mineDetail.memory_kb) }}</el-descriptions-item>
         <el-descriptions-item label="提交时间">{{ fmtDate(mineDetail.created_at) }}</el-descriptions-item>
       </el-descriptions>
@@ -163,7 +164,7 @@ defineExpose({ refresh: loadMine })
             </template>
           </el-table-column>
           <el-table-column label="耗时" width="90">
-            <template #default="{ row }">{{ row.time_ms != null ? `${row.time_ms} ms` : '' }}</template>
+            <template #default="{ row }">{{ fmtSec(row.time_ms) }}</template>
           </el-table-column>
           <el-table-column label="内存" width="90">
             <template #default="{ row }">{{ row.memory_kb ? fmtMem(row.memory_kb) : '' }}</template>

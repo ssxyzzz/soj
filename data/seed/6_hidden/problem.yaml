@@ -1,5 +1,5 @@
 title: Hidden Problem
 hidden: true
-timeLimitMs: 1000
-memoryLimitKb: 262144
+time: 1s
+memory: 256MB
 samples: [1]

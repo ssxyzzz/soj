@@ -35,9 +35,9 @@ const (
 // 租约参数：判题循环每 5s 心跳一次，Web 进程每 30s 扫描，
 // Judging 且心跳超过 120s 视为判题器失联，回收重排队。
 const (
-	HeartbeatInterval  = 5 * time.Second
-	LeaseStaleAfter    = 120 * time.Second
-	ReclaimScanEvery   = 30 * time.Second
+	HeartbeatInterval = 5 * time.Second
+	LeaseStaleAfter   = 120 * time.Second
+	ReclaimScanEvery  = 30 * time.Second
 )
 
 // CaseResult 单个测试点结果（状态缩写: AC/WA/TLE/MLE/RE/OLE/SE）。
@@ -50,30 +50,34 @@ type CaseResult struct {
 }
 
 type Submission struct {
-	ID           int64         `bson:"_id"`
-	UID          int64         `bson:"uid"`
-	Username     string        `bson:"uname"` // 冗余存储，列表免 JOIN
-	ProblemID    int64         `bson:"pid"`
-	ProblemTitle string        `bson:"ptitle"` // 冗余存储
-	ContestID    int64         `bson:"contestId"`
-	ContestTitle string        `bson:"contestTitle,omitempty"`
-	ExamID       int64         `bson:"examId,omitempty"`
-	ExamTitle    string        `bson:"examTitle,omitempty"`
-	Published    bool          `bson:"published,omitempty"` // 比赛/考试提交：隐藏期结束并入公开态
-	Language     string        `bson:"lang"`
-	Code         string        `bson:"code"`
-	Status       string        `bson:"status"`
-	Score        int           `bson:"score"`
-	TimeMS       int           `bson:"timeMs"`
-	MemKB        int           `bson:"memKb"`
-	ErrorInfo    string        `bson:"errorInfo,omitempty"`
-	Detail       []*CaseResult `bson:"detail,omitempty"`
-	Judge        string        `bson:"judge,omitempty"`
-	ClaimedAt    time.Time     `bson:"claimedAt,omitempty"`
-	HeartbeatAt  *time.Time    `bson:"heartbeatAt,omitempty"` // 租约心跳（v0.7.1）：判题中周期刷新，超时由回收者重排队
-	Priority     int           `bson:"priority"`              // 队列优先级：领取按其降序（v0.7.1）
-	CreatedAt    time.Time     `bson:"createdAt"`
-	JudgedAt     *time.Time    `bson:"judgedAt,omitempty"`
+	ID               int64             `bson:"_id"`
+	UID              int64             `bson:"uid"`
+	Username         string            `bson:"uname"` // 冗余存储，列表免 JOIN
+	ProblemID        int64             `bson:"pid"`
+	ProblemTitle     string            `bson:"ptitle"` // 冗余存储
+	ContestID        int64             `bson:"contestId"`
+	ContestTitle     string            `bson:"contestTitle,omitempty"`
+	ExamID           int64             `bson:"examId,omitempty"`
+	ExamTitle        string            `bson:"examTitle,omitempty"`
+	Published        bool              `bson:"published,omitempty"` // 比赛/考试提交：隐藏期结束并入公开态
+	Language         string            `bson:"lang"`
+	Code             string            `bson:"code"`
+	ObjectiveAnswers []ObjectiveAnswer `bson:"objAnswers,omitempty"` // 客观题整卷作答（v0.9.3）
+	// 旧单题作答字段：仅迁移读取用（objQuestionsV1 后 $unset，不再写入）
+	Answer      []int         `bson:"answer,omitempty"`
+	Blanks      []string      `bson:"blanks,omitempty"`
+	Status      string        `bson:"status"`
+	Score       int           `bson:"score"`
+	TimeMS      int           `bson:"timeMs"`
+	MemKB       int           `bson:"memKb"`
+	ErrorInfo   string        `bson:"errorInfo,omitempty"`
+	Detail      []*CaseResult `bson:"detail,omitempty"`
+	Judge       string        `bson:"judge,omitempty"`
+	ClaimedAt   time.Time     `bson:"claimedAt,omitempty"`
+	HeartbeatAt *time.Time    `bson:"heartbeatAt,omitempty"` // 租约心跳（v0.7.1）：判题中周期刷新，超时由回收者重排队
+	Priority    int           `bson:"priority"`              // 队列优先级：领取按其降序（v0.7.1）
+	CreatedAt   time.Time     `bson:"createdAt"`
+	JudgedAt    *time.Time    `bson:"judgedAt,omitempty"`
 }
 
 // CreateSubmission 创建提交；contest/exam 非 nil 表示比赛或考试提交（隐藏期结束前不计入公开态）。
@@ -105,6 +109,61 @@ func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p 
 		return 0, err
 	}
 	return sid, nil
+}
+
+// CreateObjectiveSubmission 客观题提交（v0.9）：判分是纯函数，不走沙箱、不进队列——
+// 提交即写终态。contest/exam 语义与代码提交一致（隐藏期结束前不计入公开态）。
+func (r *Repo) CreateObjectiveSubmission(ctx context.Context, uid int64, uname string, p *Problem, answers []ObjectiveAnswer, contest *Contest, exam *Exam) (int64, error) {
+	sid, err := r.nextSeq(ctx, "submission")
+	if err != nil {
+		return 0, err
+	}
+	status, score, detail := GradeObjectiveSet(p.Questions, answers)
+	now := time.Now()
+	doc := bson.M{
+		"_id": sid, "uid": uid, "uname": uname,
+		"pid": p.ID, "ptitle": p.Title,
+		"lang": "", "code": "",
+		"status": status, "score": score, "judgedAt": now,
+		"timeMs": 0, "memKb": 0, "priority": PriorityHigh, "createdAt": now,
+	}
+	doc["objAnswers"] = answers
+	doc["detail"] = detail
+	switch {
+	case contest != nil:
+		doc["contestId"] = contest.ID
+		doc["contestTitle"] = contest.Title
+		doc["published"] = false
+	case exam != nil:
+		doc["examId"] = exam.ID
+		doc["examTitle"] = exam.Title
+		doc["published"] = false
+	default:
+		doc["contestId"] = 0
+		doc["published"] = true
+	}
+	if _, err := r.Submissions.InsertOne(ctx, doc); err != nil {
+		return 0, err
+	}
+	return sid, nil
+}
+
+// RegradeObjective 客观题重测：按存储的作答对当前题目定义重判（题目答案被改后重测生效）。
+// 与代码提交的 Pending 重排队不同，这里同步写终态。
+func (r *Repo) RegradeObjective(ctx context.Context, id int64) error {
+	var s Submission
+	if err := r.Submissions.FindOne(ctx, bson.M{"_id": id}).Decode(&s); err != nil {
+		return err
+	}
+	p, err := r.GetProblem(ctx, s.ProblemID)
+	if err != nil {
+		return err
+	}
+	status, score, detail := GradeObjectiveSet(p.Questions, s.ObjectiveAnswers)
+	_, err = r.Submissions.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
+		"status": status, "score": score, "detail": detail, "judgedAt": time.Now(),
+	}})
+	return err
 }
 
 // ClaimSubmission 原子领取一条待判提交：Pending -> Judging。

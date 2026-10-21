@@ -98,6 +98,13 @@ export function fmtMem(kb: number): string {
   return gb >= 1 ? `${strip(gb)} GB` : `${strip(mb)} MB`
 }
 
+// 评测耗时/时限展示：毫秒统一换算为秒（固定1位小数，如 "1.0 s"），站点口径不用 ms。
+// null/undefined 返回 ''（表格空列）；0 返回 "0.0 s"。
+export function fmtSec(ms?: number | null): string {
+  if (ms == null) return ''
+  return `${(ms / 1000).toFixed(1)} s`
+}
+
 export function fmtDate(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('zh-CN', { hour12: false })

@@ -7,7 +7,7 @@ import { submissionApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, fmtSec, statusDesc } from '@/utils/format'
 import type { Submission } from '@/types'
 
 const router = useRouter()
@@ -98,7 +98,7 @@ onUnmounted(() => {
         <el-table-column prop="username" label="用户" width="140" />
         <el-table-column prop="language" label="语言" width="100" />
         <el-table-column label="总耗时" width="90">
-          <template #default="{ row }">{{ row.time_ms }} ms</template>
+          <template #default="{ row }">{{ fmtSec(row.time_ms) }}</template>
         </el-table-column>
         <el-table-column label="总内存" width="100">
           <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>

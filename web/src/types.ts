@@ -41,6 +41,8 @@ export interface ProblemListItem {
   status?: string // 我的最高分提交状态（登录才返回，全称如 Accepted/Wrong Answer）
   my_score?: number // 该提交的得分
   tags?: number[] // 标签树节点 ID，名字由前端标签树映射
+  type?: string // 题型（v0.9）：空 = 传统题；objective / function / interactive 显示徽章
+  kind?: string // 客观题小类（single/multiple/judge/blank），仅 objective 时返回
 }
 
 // 标签树（v0.5.5）：嵌套 children 表达层级，数组顺序即展示顺序
@@ -78,10 +80,56 @@ export interface TestCase {
   output: string
 }
 
+// 客观题小类（v0.9）
+export type ObjectiveKind = 'single' | 'multiple' | 'judge' | 'blank'
+
+// 客观题单小题对外视图（GetProblem questions；不含答案/解析）
+export interface ObjectiveQuestionView {
+  index: number
+  stem: string
+  kind: ObjectiveKind
+  options: string[]
+  blank_count: number
+  score: number
+}
+
+// 客观题整卷完整定义（满分∨老师门槛下的 questions_full；编辑回填也用它）
+export interface ObjectiveQuestionFull {
+  stem?: string
+  kind: ObjectiveKind
+  options?: string[]
+  answer?: number[]
+  blanks?: { accept: string[]; case_sensitive?: boolean }[]
+  explanation?: string
+  score?: number
+}
+
+// 客观题单小题编辑草稿（建题/编辑表单 → question_json）
+export interface ObjectiveQuestionDraft {
+  stem: string
+  kind: ObjectiveKind
+  options: string[]
+  answer: number[]
+  blanks: { accept: string[]; case_sensitive?: boolean }[]
+  explanation: string
+  score: number
+}
+
+// 客观题整卷作答（提交用）
+export interface ObjectiveAnswer {
+  answer?: number[]
+  blanks?: string[]
+}
+
 export interface ProblemDetail {
   id: number
   title: string
   description: string // 题面（Markdown，v0.8 起单一事实源）
+  type?: string // 题目类型（v0.9）：空/default = 传统题；objective = 客观题；function = 函数题
+  questions?: ObjectiveQuestionView[] // 客观题整卷（脱敏视图）
+  questions_full?: ObjectiveQuestionFull[] // 完整定义（满分∨老师门槛）
+  function?: { has_driver: boolean; has_template: boolean; template_code?: string } // 函数题（v0.9.1）
+  interactive?: { has_interactor: boolean } // 交互题（v0.9.2）
   time_limit_ms: number
   memory_limit_kb: number
   compare?: string
@@ -121,6 +169,8 @@ export interface Submission {
   memory_kb: number
   score: number
   code?: string
+  answers?: ObjectiveAnswer[] // 客观题整卷作答（v0.9.3，与代码同门槛回传）
+  is_objective?: boolean
   error_info?: string
   created_at: string
   contest_id?: number

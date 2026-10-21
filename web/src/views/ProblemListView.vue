@@ -13,6 +13,20 @@ import { useUserStore } from '@/stores/user'
 import type { ProblemListItem } from '@/types'
 
 const router = useRouter()
+
+// 客观题小类徽章（v0.9）
+function kindBadge(kind?: string) {
+  const map: Record<string, string> = { single: '单选', multiple: '多选', judge: '判断', blank: '填空' }
+  return map[kind ?? ''] ?? '客观'
+}
+
+// 题型徽章文案（v0.9）：客观题按小类细分；函数/交互题给固定名；传统题不显示
+function typeBadge(row: { type?: string; kind?: string }): string {
+  if (row.type === 'objective') return kindBadge(row.kind)
+  if (row.type === 'function') return '函数'
+  if (row.type === 'interactive') return '交互'
+  return ''
+}
 const userStore = useUserStore()
 const tagStore = useTagTreeStore()
 
@@ -143,8 +157,12 @@ stripe
           <el-table-column label="题目" min-width="320">
             <template #default="{ row }">
               <span class="title">{{ row.title }}</span>
+              <el-tag v-if="typeBadge(row)" size="small" type="info" class="ml8">
+                {{ typeBadge(row) }}
+              </el-tag>
               <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏</el-tag>
-              <el-tag v-if="row.has_cases === false" size="small" type="warning" class="ml8">无数据</el-tag>
+              <!-- 客观题没有测试数据是正常形态，不提示「无数据」 -->
+              <el-tag v-if="row.has_cases === false && row.type !== 'objective'" size="small" type="warning" class="ml8">无数据</el-tag>
               <el-tag v-if="row.locked" size="small" type="success" class="ml8">
                 {{ row.lock_kind === 'exam' ? '考试中' : '比赛中' }}
               </el-tag>

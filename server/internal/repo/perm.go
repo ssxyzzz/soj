@@ -11,6 +11,7 @@ const (
 	PermProblemCreate        = "problem.create"         // 新建/导入题目
 	PermProblemEditOwn       = "problem.edit.own"       // 编辑自己导入的题目（题面/隐藏）
 	PermProblemEditAll       = "problem.edit.all"       // 编辑任意题目
+	PermProblemDataDownload  = "problem.data.download"  // 下载题目测试数据包（每日可下载题数受系统设置限额）
 	PermContestBankCreate    = "contest.bank.create"    // 创建主题库比赛
 	PermClassCreate          = "class.create"           // 创建班级
 	PermClassViewAll         = "class.view.all"         // 查看全部班级（含私密班详情/邀请码）
@@ -61,6 +62,7 @@ var PermCatalog = []PermInfo{
 	{PermProblemCreate, "新建题目", "新建/导入题目（网页出题功能上线后生效）", "problem"},
 	{PermProblemEditOwn, "编辑自己的题目", "编辑自己导入的题目的题面与隐藏标记", "problem"},
 	{PermProblemEditAll, "编辑任意题目", "不受题目属主限制", "problem"},
+	{PermProblemDataDownload, "下载数据", "下载题目测试数据包（zip，含造数据脚本等存档文件）；每日可下载题数由系统设置限定，无此权限不可下载", "problem"},
 	{PermSolutionManage, "题解管理", "置顶题解、删除他人题解（满分用户均可发布自己的题解）", "problem"},
 	{PermContestBankCreate, "创建主题库比赛", "发起全站比赛", "contest"},
 	{PermClassCreate, "创建班级", "建班并成为建班人", "class"},

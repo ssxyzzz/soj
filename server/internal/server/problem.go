@@ -108,6 +108,13 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 			}
 		}
 		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags), "has_cases": len(p.Cases) > 0}
+		// 题型徽章（v0.9）：客观题另带小类；函数/交互题只给 type（空 = 传统题不返回）
+		if p.Type != "" {
+			item["type"] = p.Type
+		}
+		if p.IsObjective() {
+			item["kind"] = repo.SetKindSummary(p.Questions)
+		}
 		if vk := viewMap[p.ID]; vk != nil {
 			item["locked"] = true
 			item["lock_kind"] = vk.Kind
@@ -244,6 +251,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 
 	resp := gin.H{
 		"id":                 p.ID,
+		"type":               p.Type, // 空 = 传统题（前端按 default 处理）
 		"title":              p.Title,
 		"description":        p.Statement, // 题面（Markdown，v0.8 起单一事实源）
 		"time_limit_ms":      p.TimeLimitMS,
@@ -262,6 +270,27 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"file_io_input":      p.FileIOInput,    // 文件名对：编辑配置用；场景 warning 展示实际文件名
 		"file_io_output":     p.FileIOOutput,
 		"tags":               orEmptyInt64(p.Tags), // 节点 ID，名字由前端标签树映射
+	}
+	// 客观题（v0.9.3 多小题）：对外只回脱敏视图；正确答案与解析在满分 ∨ 老师群体门槛下附给
+	if p.IsObjective() {
+		resp["questions"] = repo.PublicSetView(p.Questions)
+		if canViewSolutions || h.problemEditable(c, p) {
+			resp["questions_full"] = p.Questions // 含答案/解析（编辑回填 + 满分解锁展示）
+		}
+	}
+	// 交互题（v0.9.2）：交互器配置状态（做题页展示交互说明卡）
+	if p.IsInteractive() {
+		resp["interactive"] = gin.H{"has_interactor": p.InteractorFile != ""}
+	}
+	// 函数题（v0.9.1）：driver 配置状态 + 学生端模板内容（提交页/在线编程预填）
+	if p.IsFunction() {
+		fn := gin.H{"has_driver": p.DriverFile != "", "has_template": p.TemplateFile != ""}
+		if p.TemplateFile != "" {
+			if src, err := testdata.ReadAll(h.provider(), id, p.TemplateFile); err == nil {
+				fn["template_code"] = string(src)
+			}
+		}
+		resp["function"] = fn
 	}
 	// 统计（题目信息卡）：公开态提交聚合；失败降级 0，不阻塞详情
 	if stats, err := h.repo.ListProblemStats(ctx, []int64{id}); err == nil {

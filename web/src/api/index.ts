@@ -130,10 +130,15 @@ export const problemApi = {
       .post<ApiResponse<{ id: number }>>('/problems', form, { timeout: 0 })
       .then((r) => r.data.data),
   updateMeta: (id: number, body: Record<string, unknown>) =>
-    patch<{ updated: number }>(`/problems/${id}/meta`, body),
+    patch<{ updated: number }>(`/problems/${id}/meta`, body), // 客观题编辑带 question_json（v0.9）
   uploadChecker: (id: number, form: FormData) =>
     client.post(`/problems/${id}/checker`, form, { timeout: 0 }).then((r) => r.data.data),
   removeChecker: (id: number) => del<{ removed: boolean }>(`/problems/${id}/checker`),
+  uploadFunctionFile: (id: number, file: 'driver' | 'template', form: FormData) =>
+    client.post(`/problems/${id}/function/${file}`, form, { timeout: 0 }).then((r) => r.data.data),
+  removeFunctionTemplate: (id: number) => del<{ removed: boolean }>(`/problems/${id}/function/template`),
+  uploadInteractor: (id: number, form: FormData) =>
+    client.post(`/problems/${id}/interactor`, form, { timeout: 0 }).then((r) => r.data.data),
   solutions: (id: number, page: number, pageSize: number) =>
     get<{ list: SolutionItem[]; total: number; can_manage: boolean }>(`/problems/${id}/solutions`, {
       page,
@@ -177,6 +182,9 @@ export const tagApi = {
 export const submissionApi = {
   create: (problemId: number, language: string, code: string) =>
     post<{ id: number }>('/submissions', { problem_id: problemId, language, code }),
+  // 客观题提交（v0.9）：作答即判，免语言/代码
+  createObjective: (problemId: number, answers: import('@/types').ObjectiveAnswer[]) =>
+    post<{ id: number }>('/submissions', { problem_id: problemId, answers }),
   get: (id: number) => get<Submission>(`/submissions/${id}`),
   rejudge: (id: number) => post<{ id: number }>(`/submissions/${id}/rejudge`, {}),
   list: (params: { page: number; page_size: number; problem_id?: number }) =>
@@ -235,9 +243,24 @@ export const adminApi = {
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
-    get<{ rate_limit_per_minute: number; home_notice: string; backup_guide: string }>('/admin/settings'),
-  updateSettings: (patch: { rate_limit_per_minute?: number; home_notice?: string; backup_guide?: string }) =>
-    put<{ rate_limit_per_minute: number; home_notice: string; backup_guide: string }>('/admin/settings', patch),
+    get<{
+      rate_limit_per_minute: number
+      home_notice: string
+      backup_guide: string
+      data_download_daily_limit: number
+    }>('/admin/settings'),
+  updateSettings: (patch: {
+    rate_limit_per_minute?: number
+    home_notice?: string
+    backup_guide?: string
+    data_download_daily_limit?: number
+  }) =>
+    put<{
+      rate_limit_per_minute: number
+      home_notice: string
+      backup_guide: string
+      data_download_daily_limit: number
+    }>('/admin/settings', patch),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),
@@ -280,6 +303,8 @@ const roundApiOf = (kind: RoundKind) => {
     remove: (id: number) => del<{ deleted: number }>(`${base}/${id}`),
     submit: (roundId: number, pid: number, language: string, code: string) =>
       post<{ id: number }>(`${base}/${roundId}/problems/${pid}/submissions`, { language, code }),
+    submitObjective: (roundId: number, pid: number, answers: import('@/types').ObjectiveAnswer[]) =>
+      post<{ id: number }>(`${base}/${roundId}/problems/${pid}/submissions`, { answers }),
     mySubmissions: (roundId: number) =>
       get<{ revealed: boolean; list: ContestMySubmission[] }>(`${base}/${roundId}/submissions/mine`),
     leaderboard: (roundId: number) => get<LeaderRow[]>(`${base}/${roundId}/leaderboard`),

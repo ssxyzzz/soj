@@ -14,11 +14,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,6 +31,9 @@ import (
 
 	"soj/internal/repo"
 )
+
+// zipNameRe 匹配卷内测试点路径 cases/<N>/in|ans（下载平铺导出用）。
+var zipNameRe = regexp.MustCompile(`^cases/(\d+)/(in|ans)$`)
 
 const (
 	maxCreateRequest   = 64 << 20  // 建题请求体上限（zip + 表单）
@@ -92,6 +98,21 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	zips := form.File["zip"]
 	if len(zips) > 1 {
 		fail(c, http.StatusBadRequest, "请上传一个测试数据 zip（含 cases/<N>/in|ans 结构）；也可以不上传直接创建（暂无数据的题目）")
+		return
+	}
+
+	// 客观题（v0.9）：表单 question_json 定义题面作答，走同一导入管道入库
+	if ptype := strings.TrimSpace(formValue(form, "type")); ptype == repo.TypeObjective {
+		h.createObjectiveProblem(c, form, title, statement, tagIDs, uid, zips)
+		return
+	} else if ptype == repo.TypeFunction {
+		h.createFunctionProblem(c, form, title, statement, tagIDs, uid, zips)
+		return
+	} else if ptype == repo.TypeInteractive {
+		h.createInteractiveProblem(c, form, title, statement, tagIDs, uid, zips)
+		return
+	} else if ptype != "" && ptype != "default" {
+		fail(c, http.StatusBadRequest, "暂不支持题型 "+ptype+"（当前支持：传统题 default、客观题 objective、函数题 function、交互题 interactive）")
 		return
 	}
 
@@ -306,6 +327,164 @@ func (h *Handlers) UpdateChecker(c *gin.Context) {
 	ok(c, gin.H{"checker": "checker.cpp", "sha": sha})
 }
 
+// UpdateFunctionFile 函数题 driver/template 即时替换（v0.9.1，编辑页不随保存提交）。
+// file 路径参数取 driver|template；内容落卷固定名并更新元数据。
+func (h *Handlers) UpdateFunctionFile(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	kind := c.Param("file") // driver | template
+	if kind != "driver" && kind != "template" {
+		fail(c, http.StatusBadRequest, "file 需为 driver 或 template")
+		return
+	}
+	p, err := h.repo.GetProblem(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
+		return
+	}
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
+		return
+	}
+	form, err := c.MultipartForm()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	files := form.File["file"]
+	if len(files) != 1 {
+		fail(c, http.StatusBadRequest, "请上传一个源文件")
+		return
+	}
+	f, err := files[0].Open()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "读取文件失败")
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "读取文件失败")
+		return
+	}
+	if len(data) > 256<<10 {
+		fail(c, http.StatusBadRequest, "文件过大（上限 256KB）")
+		return
+	}
+	name := kind + ".cpp"
+	if err := h.provider().WriteFile(id, name, data); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	set := bson.M{}
+	if kind == "driver" {
+		set["driverFile"], set["driverSha"] = name, fmt.Sprintf("%x", sha256.Sum256(data))
+	} else {
+		set["templateFile"] = name
+	}
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, set); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"file": name})
+}
+
+// UpdateInteractor 交互器即时替换（v0.9.2，判题懒编译缓存自动失效重编）。
+func (h *Handlers) UpdateInteractor(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	p, err := h.repo.GetProblem(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
+		return
+	}
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
+		return
+	}
+	form, err := c.MultipartForm()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	files := form.File["file"]
+	if len(files) != 1 {
+		fail(c, http.StatusBadRequest, "请上传一个源文件")
+		return
+	}
+	f, err := files[0].Open()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "读取文件失败")
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "读取文件失败")
+		return
+	}
+	if len(data) > 256<<10 {
+		fail(c, http.StatusBadRequest, "交互器过大（上限 256KB）")
+		return
+	}
+	if err := h.provider().WriteFile(id, "interactor.cpp", data); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{
+		"interactorFile":   "interactor.cpp",
+		"interactorSha":    fmt.Sprintf("%x", sha256.Sum256(data)),
+		"interactorFileId": "", // 编译缓存失效，判题时自动重编
+	}); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"file": "interactor.cpp"})
+}
+
+// RemoveFunctionFile 移除函数题 template（driver 不允许移除——判题依赖）。
+func (h *Handlers) RemoveFunctionFile(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	if c.Param("file") != "template" {
+		fail(c, http.StatusBadRequest, "仅 template 可移除（driver 为判题依赖）")
+		return
+	}
+	p, err := h.repo.GetProblem(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
+		return
+	}
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
+		return
+	}
+	_ = h.provider().Delete(id, "template.cpp")
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{"templateFile": ""}); err != nil {
+		fail(c, http.StatusInternalServerError, "移除失败")
+		return
+	}
+	ok(c, gin.H{"removed": true})
+}
+
 // RemoveChecker 移除题目校验器（恢复按比对模式判定）。
 func (h *Handlers) RemoveChecker(c *gin.Context) {
 	id, okID := parseID(c, "id")
@@ -434,10 +613,63 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		Compare        *string  `json:"compare"`
 		FloatTolerance *float64 `json:"float_tolerance"`
 		FileIOName     *string  `json:"file_io_name"`
-		TagIDs         *[]int64 `json:"tag_ids"` // 指针语义：缺省不动，空数组清空（v0.5.5）
+		TagIDs         *[]int64 `json:"tag_ids"`        // 指针语义：缺省不动，空数组清空（v0.5.5）
+		QuestionsJSON  *string  `json:"questions_json"` // 客观题整卷定义编辑（v0.9.3；仅客观题可带）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	// 客观题（v0.9）：题干/选项/答案/解析随 question 节整体替换；时空限制等传统题字段忽略
+	if p.IsObjective() {
+		if req.QuestionsJSON != nil {
+			var qs []repo.ObjectiveQuestion
+			if err := json.Unmarshal([]byte(*req.QuestionsJSON), &qs); err != nil {
+				fail(c, http.StatusBadRequest, "客观题内容格式错误: "+err.Error())
+				return
+			}
+			for i := range qs {
+				repo.NormalizeObjective(&qs[i])
+			}
+			repo.NormalizeScores(qs)
+			if err := repo.ValidateObjectiveSet(qs); err != nil {
+				fail(c, http.StatusBadRequest, err.Error())
+				return
+			}
+			setQ := bson.M{"questions": qs}
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, setQ); err != nil {
+				fail(c, http.StatusInternalServerError, "保存失败")
+				return
+			}
+		}
+		if req.Title != nil {
+			t := strings.TrimSpace(*req.Title)
+			if t == "" || len([]rune(t)) > 64 {
+				fail(c, http.StatusBadRequest, "标题需在 1-64 字符")
+				return
+			}
+			setT := bson.M{"title": t}
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, setT); err != nil {
+				fail(c, http.StatusInternalServerError, "保存失败")
+				return
+			}
+		}
+		if req.TagIDs != nil {
+			if err := h.repo.ValidateTagRefs(c.Request.Context(), *req.TagIDs); err != nil {
+				fail(c, http.StatusBadRequest, err.Error())
+				return
+			}
+			setTags := bson.M{"tags": *req.TagIDs}
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, setTags); err != nil {
+				fail(c, http.StatusInternalServerError, "保存失败")
+				return
+			}
+		}
+		ok(c, gin.H{"updated": id})
+		return
+	}
+	if req.QuestionsJSON != nil {
+		fail(c, http.StatusBadRequest, "questions_json 仅适用于客观题")
 		return
 	}
 	set := bson.M{}
@@ -635,4 +867,315 @@ func unwrapSingleRootDir(dir string) error {
 // isPackagingJunk 压缩工具附带的系统杂物：macOS 的 __MACOSX/、.DS_Store 与 ._ 资源分叉文件。
 func isPackagingJunk(name string) bool {
 	return name == "__MACOSX" || name == ".DS_Store" || strings.HasPrefix(name, "._")
+}
+
+// DownloadProblemTestdata 下载题目测试数据包（zip，v0.8.3）：
+// problem.data.download 权限位 + 系统设置「每日可下载题数」限额（0 = 不限制；
+// 同一题当天重复下载不重复计数）。内容 = 数据卷整目录镜像（cases / problem.yaml /
+// config.yaml / statement.md / 校验器 / extra 存档），重新上传可完整重建。
+func (h *Handlers) DownloadProblemTestdata(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	uid, _, role, _ := currentUser(c)
+	p, err := h.repo.GetProblem(c.Request.Context(), id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
+		return
+	}
+	// root 恒不限量；其余权限位持有者按系统设置限额（0 = 不限制）
+	if role != repo.RoleRoot {
+		setting, err := h.repo.GetSystemSettings(c.Request.Context())
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取设置失败")
+			return
+		}
+		if limit := setting.DownloadDailyLimit(); limit > 0 {
+			allowed, err := h.repo.TestDataDownloadAllowed(c.Request.Context(), uid, id, limit)
+			if err != nil {
+				fail(c, http.StatusInternalServerError, "限额校验失败")
+				return
+			}
+			if !allowed {
+				fail(c, http.StatusForbidden, fmt.Sprintf("已达每日下载数据上限（%d 题/天），请明日再试", limit))
+				return
+			}
+		}
+	}
+
+	// 权威导出（v0.9）：problem.yaml / statement.md 按 db 当前值渲染（网页编辑后卷内
+	// 副本会过期），卷内同名文件让位不打包；客观题无 cases 也允许导出（题面即全部）
+	skip := map[string]bool{"problem.yaml": true, "config.yaml": true, "statement.md": true}
+	var rels []string
+	if err := h.provider().Walk(id, func(rel string) error {
+		if !skip[rel] {
+			rels = append(rels, rel)
+		}
+		return nil
+	}); err != nil {
+		fail(c, http.StatusInternalServerError, "读取测试数据失败")
+		return
+	}
+	// 测试点平铺导出（v0.9 验收反馈）：cases/<N>/in|ans → 根下 <N>.in / <N>.ans，
+	// 下载包与常见题包形态一致（重新上传按平铺归一无感接收）
+	flat := func(rel string) string {
+		m := zipNameRe.FindStringSubmatch(rel)
+		if m == nil {
+			return rel
+		}
+		return m[1] + "." + m[2]
+	}
+	if len(rels) == 0 && !p.IsObjective() {
+		fail(c, http.StatusNotFound, "该题还没有测试数据")
+		return
+	}
+
+	c.Header("Content-Type", "application/zip")
+	// 文件名 = 题目 ID + 标题（problem - 16 - Atbash 密码.zip）；中文走 RFC 5987
+	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{
+		"filename": fmt.Sprintf("problem - %d - %s.zip", id, downloadSafeName(p.Title)),
+	}))
+	zw := zip.NewWriter(c.Writer)
+	imp := &repo.Importer{Repo: h.repo}
+	if yb := imp.RenderProblemYAML(c.Request.Context(), p); len(yb) > 0 {
+		if w, err := zw.Create("problem.yaml"); err == nil {
+			_, _ = w.Write(yb)
+		}
+	}
+	if p.Statement != "" {
+		if w, err := zw.Create("statement.md"); err == nil {
+			_, _ = w.Write([]byte(p.Statement))
+		}
+	}
+	for _, rel := range rels {
+		f, err := h.provider().Open(id, rel)
+		if err != nil {
+			return // 响应已开始，只能截断（本地卷文件在打包间隙被删的极端场景）
+		}
+		w, err := zw.Create(flat(rel))
+		if err == nil {
+			_, err = io.Copy(w, f)
+		}
+		f.Close()
+		if err != nil {
+			return
+		}
+	}
+	_ = zw.Close()
+	// 打包已交付后才记账（root 不记账）；记账失败不影响本次下载
+	if role != repo.RoleRoot {
+		if err := h.repo.RecordTestDataDownload(c.Request.Context(), uid, id); err != nil {
+			log.Printf("[data-download] 记录下载失败 uid=%d pid=%d: %v", uid, id, err)
+		}
+	}
+}
+
+// createFunctionProblem 函数题建题（v0.9.1）：driver（必须）/template（可选）来自表单文件，
+// 与 zip（可选，含 cases）一起进 ImportDir 管道；无 zip 时空壳入库、数据编辑页补齐。
+func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, zips []*multipart.FileHeader) {
+	tmpDir, err := os.MkdirTemp("", "soj-create-func-")
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+	yb, _ := yaml.Marshal(map[string]any{"title": title, "type": repo.TypeFunction})
+	if err := os.WriteFile(filepath.Join(tmpDir, "problem.yaml"), yb, 0o644); err != nil {
+		fail(c, http.StatusInternalServerError, "写题目文件失败")
+		return
+	}
+	if statement != "" {
+		if err := os.WriteFile(filepath.Join(tmpDir, "statement.md"), []byte(statement), 0o644); err != nil {
+			fail(c, http.StatusInternalServerError, "写题目文件失败")
+			return
+		}
+	}
+	saveFormFile := func(field, dstName string) (bool, error) {
+		files := form.File[field]
+		if len(files) != 1 {
+			return false, nil
+		}
+		f, err := files[0].Open()
+		if err != nil {
+			return false, err
+		}
+		defer f.Close()
+		data, err := io.ReadAll(f)
+		if err != nil {
+			return false, err
+		}
+		if len(data) > 256<<10 {
+			return false, fmt.Errorf("%s 过大（上限 256KB）", dstName)
+		}
+		return true, os.WriteFile(filepath.Join(tmpDir, dstName), data, 0o644)
+	}
+	if _, err := saveFormFile("driver", "driver.cpp"); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if _, err := saveFormFile("template", "template.cpp"); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(form.File["driver"]) != 1 && len(zips) == 0 {
+		fail(c, http.StatusBadRequest, "函数题需要 driver.cpp（含 main、调用学生实现的函数）：表单上传或放进 zip 均可")
+		return
+	}
+	// zip（可选）：解压后并入同一导入目录（题包内 driver/template/cases 均可）
+	if len(zips) > 0 {
+		if err := extractZipInto(zips[0], tmpDir); err != nil {
+			fail(c, http.StatusBadRequest, "测试数据包不合法："+err.Error())
+			return
+		}
+		if err := unwrapSingleRootDir(tmpDir); err != nil {
+			fail(c, http.StatusInternalServerError, "整理测试数据目录失败")
+			return
+		}
+	}
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs}).ImportDir(c.Request.Context(), tmpDir)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
+		return
+	}
+	ok(c, gin.H{"id": pr.ID, "source": "web"})
+}
+
+// createInteractiveProblem 交互题建题（v0.9.2）：interactor 必须有（表单或 zip），
+// 测试数据可后补（ans 文件可缺省——判定权在交互器）。
+func (h *Handlers) createInteractiveProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, zips []*multipart.FileHeader) {
+	tmpDir, err := os.MkdirTemp("", "soj-create-int-")
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+	yb, _ := yaml.Marshal(map[string]any{"title": title, "type": repo.TypeInteractive})
+	if err := os.WriteFile(filepath.Join(tmpDir, "problem.yaml"), yb, 0o644); err != nil {
+		fail(c, http.StatusInternalServerError, "写题目文件失败")
+		return
+	}
+	if statement != "" {
+		if err := os.WriteFile(filepath.Join(tmpDir, "statement.md"), []byte(statement), 0o644); err != nil {
+			fail(c, http.StatusInternalServerError, "写题目文件失败")
+			return
+		}
+	}
+	if files := form.File["interactor"]; len(files) == 1 {
+		if f, ferr := files[0].Open(); ferr == nil {
+			data, _ := io.ReadAll(f)
+			f.Close()
+			if len(data) > 256<<10 {
+				fail(c, http.StatusBadRequest, "交互器过大（上限 256KB）")
+				return
+			}
+			_ = os.WriteFile(filepath.Join(tmpDir, "interactor.cpp"), data, 0o644)
+		}
+	}
+	if len(zips) > 0 {
+		if err := extractZipInto(zips[0], tmpDir); err != nil {
+			fail(c, http.StatusBadRequest, "测试数据包不合法："+err.Error())
+			return
+		}
+		if err := unwrapSingleRootDir(tmpDir); err != nil {
+			fail(c, http.StatusInternalServerError, "整理测试数据目录失败")
+			return
+		}
+	}
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs}).ImportDir(c.Request.Context(), tmpDir)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
+		return
+	}
+	ok(c, gin.H{"id": pr.ID, "source": "web"})
+}
+
+// extractZipInto 把上传 zip 安全解压进 dst（建题临时目录）。
+func extractZipInto(fh *multipart.FileHeader, dst string) error {
+	tmpZip, err := os.CreateTemp("", "soj-zip-*.zip")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpZip.Name())
+	f, err := fh.Open()
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err = io.Copy(tmpZip, f); err != nil {
+		tmpZip.Close()
+		return err
+	}
+	tmpZip.Close()
+	return safeExtractZip(tmpZip.Name(), dst)
+}
+
+// createObjectiveProblem 客观题建题（v0.9）：question_json 解析校验后生成 v2 problem.yaml，
+// 走 ImportDir 客观题路径入库（无 zip；填空占位数校验在导入管道内完成）。
+func (h *Handlers) createObjectiveProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, zips []*multipart.FileHeader) {
+	if len(zips) > 0 {
+		fail(c, http.StatusBadRequest, "客观题不需要测试数据包（请在题面里出题）")
+		return
+	}
+	raw := formValue(form, "questions_json")
+	if raw == "" {
+		fail(c, http.StatusBadRequest, "缺少客观题内容（questions_json）")
+		return
+	}
+	var qs []repo.ObjectiveQuestion
+	if err := json.Unmarshal([]byte(raw), &qs); err != nil {
+		fail(c, http.StatusBadRequest, "客观题内容格式错误: "+err.Error())
+		return
+	}
+	for i := range qs {
+		repo.NormalizeObjective(&qs[i])
+	}
+	repo.NormalizeScores(qs)
+	if err := repo.ValidateObjectiveSet(qs); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	yb, err := repo.BuildObjectiveYAML(title, qs)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "生成题目配置失败")
+		return
+	}
+	tmpDir, err := os.MkdirTemp("", "soj-create-obj-")
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+	files := map[string][]byte{"problem.yaml": yb}
+	if statement != "" {
+		files["statement.md"] = []byte(statement)
+	}
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(tmpDir, name), data, 0o644); err != nil {
+			fail(c, http.StatusInternalServerError, "写题目文件失败")
+			return
+		}
+	}
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs}).ImportDir(c.Request.Context(), tmpDir)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
+		return
+	}
+	ok(c, gin.H{"id": pr.ID, "source": "web"})
+}
+
+// downloadSafeName 下载文件名清理：替换 Windows/Linux 文件名非法字符为空格、压连续空白。
+func downloadSafeName(name string) string {
+	repl := strings.NewReplacer(
+		"/", " ", "\\", " ", ":", " ", "*", " ", "?", " ", "\"", " ", "<", " ", ">", " ", "|", " ",
+	)
+	out := strings.Join(strings.Fields(repl.Replace(name)), " ")
+	if out == "" {
+		out = "untitled"
+	}
+	return out
 }

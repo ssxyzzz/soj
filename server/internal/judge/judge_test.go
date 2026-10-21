@@ -96,3 +96,22 @@ func TestOutputComparerModes(t *testing.T) {
 		t.Error("tolerance 非法值应回退默认容差")
 	}
 }
+
+func TestFileIOKeyword(t *testing.T) {
+	cases := []struct {
+		code string
+		want string
+	}{
+		{"freopen(\"a.in\", \"r\", stdin);", "freopen"},
+		{"FILE *f = fopen(\"a.in\", \"r\");", "fopen"},
+		{"ifstream cin(\"a.in\");", "ifstream"},
+		{"#include <fstream>", "fstream"},
+		{"int main(){ std::cin >> s; }", ""},
+		{"// 注释里提到 freopen 也算命中", "freopen"},
+	}
+	for _, c := range cases {
+		if got := fileIOKeyword(c.code); got != c.want {
+			t.Errorf("fileIOKeyword(%q) = %q, want %q", c.code, got, c.want)
+		}
+	}
+}

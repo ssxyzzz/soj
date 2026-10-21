@@ -18,6 +18,8 @@ const props = defineProps<{
   fileIo?: boolean // 本场启用文件 IO 时左栏与主列同款提示
   disabled?: boolean
   disabledReason?: string
+  initialCode?: string // 函数题学生模板（v0.9.1）：打开时预填，优先于个人默认模板
+  langOnly?: string | string[] // 语言锁（函数题 = 'cpp'；交互题 = ['cpp','c']）
   submitting?: boolean
 }>()
 
@@ -27,6 +29,14 @@ const emit = defineEmits<{
 }>()
 
 const lang = ref(defaultLang()) // 个人设置的默认语言优先
+
+// 语言候选：无锁 = 全量；有锁 = 锁定的那几种（函数题 cpp / 交互题 cpp+c）
+const allowedLangs = computed(() => {
+  const lock = props.langOnly
+  if (!lock) return languageOptions
+  const list = Array.isArray(lock) ? lock : [lock]
+  return languageOptions.filter((o) => list.includes(o.value))
+})
 const code = ref('')
 const leftPct = ref(50)
 const divider = ref<HTMLElement>()
@@ -52,7 +62,11 @@ async function saveEditorPrefs(patch: Partial<UserPrefs>) {
 }
 
 watch(() => props.modelValue, (open) => {
-  if (open) code.value = code.value || templateFor(lang.value)
+  if (open) {
+    const lock = props.langOnly
+    if (lock) lang.value = Array.isArray(lock) ? lock[0] : lock
+    code.value = code.value || props.initialCode || templateFor(lang.value)
+  }
 })
 
 function changeLang(l: string) {
@@ -112,7 +126,7 @@ onBeforeUnmount(() => {
         <span class="wb-title">{{ title }}</span>
         <div class="wb-actions">
           <el-select :model-value="lang" style="width: 140px" @change="changeLang">
-            <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
+            <el-option v-for="o in allowedLangs" :key="o.value" :value="o.value" :label="o.label" />
           </el-select>
           <el-select
             :model-value="codeFont"

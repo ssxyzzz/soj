@@ -94,6 +94,14 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if err != nil {
 		return err
 	}
+	// 数据包下载记账（v0.8.3）：每日限额按 (uid, day) 数不同题；同题同天重复下载去重
+	_, err = r.db.Collection("dataDownloads").Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "day", Value: 1}}},
+		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "pid", Value: 1}, {Key: "day", Value: 1}}, Options: options.Index().SetUnique(true)},
+	})
+	if err != nil {
+		return err
+	}
 
 	// 初始管理员：users 为空时创建 admin / admin123（root 角色）
 	if n, err := r.Users.CountDocuments(ctx, bson.M{}); err != nil {
@@ -301,6 +309,79 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 			return err
 		}
 		log.Printf("[boot] admin 角色已补发题库全量可见权限位（problem.view.all）")
+	}
+	if !flagDone("objQuestionsV1") {
+		// v0.9.3：客观题从单题（question）升级为多小题（questions[]）。
+		// 存量：把 question 文档搬进 questions[1]（分值 100）；提交侧 answer/blanks
+		// 搬进 objAnswers[0]，旧字段 $unset。
+		cur, err := r.Problems.Find(ctx, bson.M{"question": bson.M{"$exists": true}})
+		if err != nil {
+			return err
+		}
+		var plist []*Problem
+		if err := cur.All(ctx, &plist); err != nil {
+			return err
+		}
+		for _, p := range plist {
+			var raw struct {
+				Question *ObjectiveQuestion `bson:"question"`
+			}
+			if err := r.Problems.FindOne(ctx, bson.M{"_id": p.ID}).Decode(&raw); err != nil || raw.Question == nil {
+				continue
+			}
+			q := *raw.Question
+			if q.Score <= 0 {
+				q.Score = 100
+			}
+			if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": p.ID}, bson.M{
+				"$set":   bson.M{"questions": []ObjectiveQuestion{q}},
+				"$unset": bson.M{"question": ""},
+			}); err != nil {
+				return err
+			}
+		}
+		// 提交：answer/blanks → objAnswers[0]
+		scur, err := r.Submissions.Find(ctx, bson.M{"$or": []bson.M{
+			{"answer": bson.M{"$exists": true}}, {"blanks": bson.M{"$exists": true}},
+		}})
+		if err != nil {
+			return err
+		}
+		var slist []*Submission
+		if err := scur.All(ctx, &slist); err != nil {
+			return err
+		}
+		for _, sub := range slist {
+			oa := ObjectiveAnswer{}
+			if len(sub.Answer) > 0 {
+				oa.Answer = sub.Answer
+			}
+			if len(sub.Blanks) > 0 {
+				oa.Blanks = sub.Blanks
+			}
+			if _, err := r.Submissions.UpdateOne(ctx, bson.M{"_id": sub.ID}, bson.M{
+				"$set":   bson.M{"objAnswers": []ObjectiveAnswer{oa}},
+				"$unset": bson.M{"answer": "", "blanks": ""},
+			}); err != nil {
+				return err
+			}
+		}
+		if err := setFlag("objQuestionsV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 客观题已升级多小题（%d 题 / %d 提交迁移）", len(plist), len(slist))
+	}
+	if !flagDone("dataDownloadPermV1") {
+		// v0.8.3：下载数据权限位（初始归属 admin）补发存量 admin 角色
+		if _, err := r.Roles.UpdateOne(ctx,
+			bson.M{"_id": RoleAdmin},
+			bson.M{"$addToSet": bson.M{"perms": PermProblemDataDownload}}); err != nil {
+			return err
+		}
+		if err := setFlag("dataDownloadPermV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] admin 角色已补发下载数据权限位（problem.data.download）")
 	}
 	if !flagDone("contentMdV1") {
 		if err := r.migrateContentMd(ctx); err != nil {

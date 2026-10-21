@@ -99,7 +99,11 @@ func Run(ctx context.Context, deps *Deps) {
 			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
 			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)
 			authed.POST("/problems/:id/testdata", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ReplaceProblemTestdata)
+			authed.GET("/problems/:id/testdata/download", RequirePerm(repo.PermProblemDataDownload), h.DownloadProblemTestdata)
 			authed.POST("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateChecker)
+			authed.POST("/problems/:id/function/:file", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateFunctionFile) // driver|template（v0.9.1）
+			authed.DELETE("/problems/:id/function/:file", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveFunctionFile)
+			authed.POST("/problems/:id/interactor", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateInteractor) // 交互题（v0.9.2）
 			authed.DELETE("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveChecker)
 
 			// 题解（v0.5.2-1，多作者）：满分 ∨ 老师群体可看可写；置顶/删他人需 solution.manage

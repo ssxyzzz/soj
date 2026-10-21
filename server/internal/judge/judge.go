@@ -6,7 +6,7 @@
 //
 // 任务来源是循环用 findOneAndUpdate 从数据库原子领取；
 // 测试数据通过 testdata.Provider 按需逐点读取。
-// 给分：无子任务配置时单点等分（首个失败即终止）；配置子任务时组内全过才得分。
+// 给分：无子任务配置时单点等分（全量评测，按通过点数给分）；配置子任务时组内全过才得分（同样全量评测）。
 package judge
 
 import (
@@ -40,8 +40,8 @@ type Judger struct {
 	Repo     *repo.Repo
 	Sandbox  *sandbox.Client
 	Provider testdata.Provider
-	Name     string  // 判题进程标识，写入提交便于排查
-	Waker    *Waker  // 提交即时唤醒（v0.7.1）：Web 进程入队后非阻塞通知，空闲 worker 近零延迟领取
+	Name     string // 判题进程标识，写入提交便于排查
+	Waker    *Waker // 提交即时唤醒（v0.7.1）：Web 进程入队后非阻塞通知，空闲 worker 近零延迟领取
 }
 
 // Waker 提交入队的即时唤醒信号（Web+判题同进程部署形态下的近零延迟领取；
@@ -192,13 +192,35 @@ func cancelledResult(st *evalState) (string, int, int, int, string, []*repo.Case
 // evaluate 完整评测一份提交，按题目配置选择计分方式。
 // 每个测试点之间检查取消请求与租约：取消即停（终态 Cancelled），租约丢失弃写。
 func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+	problem, err := j.Repo.GetProblem(ctx, sub.ProblemID)
+	if err != nil {
+		return repo.StatusSystemError, 0, 0, 0, "题目不存在或读取失败", nil
+	}
+	// 客观题（v0.9）：提交时已同步判分；走到这里只可能是批量重测置 Pending 后
+	// 被 worker 领取——按存储的作答对当前题目定义重判（题目答案改后重测生效）
+	if problem.IsObjective() {
+		status, score, detail := repo.GradeObjectiveSet(problem.Questions, sub.ObjectiveAnswers)
+		return status, 0, 0, score, "", detail
+	}
 	language, ok := lang.Languages[sub.Language]
 	if !ok {
 		return repo.StatusSystemError, 0, 0, 0, "不支持的语言: " + sub.Language, nil
 	}
-	problem, err := j.Repo.GetProblem(ctx, sub.ProblemID)
-	if err != nil {
-		return repo.StatusSystemError, 0, 0, 0, "题目不存在或读取失败", nil
+	// 函数题（v0.9.1）：driver 在前、学生实现随后，同一编译单元合编；
+	// driver 顶部自带函数原型声明，学生只需给出定义
+	code := sub.Code
+	if problem.IsFunction() {
+		if problem.DriverFile == "" {
+			return repo.StatusSystemError, 0, 0, 0, "函数题缺少驱动器（driver.cpp），请联系老师补配", nil
+		}
+		if sub.Language != "cpp" {
+			return repo.StatusSystemError, 0, 0, 0, "函数题仅支持 C++", nil
+		}
+		driverSrc, derr := testdata.ReadAll(j.Provider, problem.ID, problem.DriverFile)
+		if derr != nil {
+			return repo.StatusSystemError, 0, 0, 0, "读取驱动器失败: " + derr.Error(), nil
+		}
+		code = string(driverSrc) + "\n" + sub.Code
 	}
 	if len(problem.Cases) == 0 {
 		return repo.StatusSystemError, 0, 0, 0, "题目没有测试数据", nil
@@ -211,7 +233,7 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 
 	var fileID string
 	if language.NeedCompile {
-		id, compileStatus, compileInfo, err := j.compile(ctx, language, sub.Code)
+		id, compileStatus, compileInfo, err := j.compile(ctx, language, code)
 		if err != nil {
 			return repo.StatusSystemError, 0, 0, 0, "沙箱调用失败: " + err.Error(), nil
 		}
@@ -231,6 +253,11 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 	cmp := newOutputComparer(problem)
 	chk := j.checkerRunnerFor(problem)
 
+	// 交互题（v0.9.2）：interactor 与选手双进程管道判分（逐点等分，不走比对/子任务管道）
+	if problem.IsInteractive() {
+		return j.evaluateInteractive(ctx, sub, language, fileID, problem)
+	}
+
 	// 文件 IO 模式（v0.5.2-3）：仅比赛/考试「本场启用文件 IO」时生效；
 	// 题库/练习/作业恒为 stdio。文件名对取题目配置，缺省 problem.in / problem.out。
 	fio := fileIOParams{}
@@ -248,9 +275,9 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 	}
 
 	if len(problem.Subtasks) > 0 {
-		return j.evaluateSubtasks(ctx, sub, language, fileID, sub.Code, problem, cmp, chk, fio)
+		return j.evaluateSubtasks(ctx, sub, language, fileID, code, problem, cmp, chk, fio)
 	}
-	return j.evaluatePoints(ctx, sub, language, fileID, sub.Code, problem, cmp, chk, fio)
+	return j.evaluatePoints(ctx, sub, language, fileID, code, problem, cmp, chk, fio)
 }
 
 // evalState 评测过程中的累计状态。提交级耗时/内存为各测试点之**和**（总耗时/总内存）。
@@ -416,13 +443,13 @@ func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.R
 	return caseStatus, finalStatus, reason, nil
 }
 
-// evaluatePoints 单点等分模式：每点 100/n 分。超时（TLE）只判失当前点、继续评测后续点
-// （得分=通过点数×100/n，首个 TLE 点作为整卷状态）；其余失败维持首个失败即终止的历史行为。
+// evaluatePoints 单点等分模式：每点 100/n 分，按通过点数给分。全量评测——任何测试点
+// 失败（WA/RE/MLE/TLE/OLE）都不终止，跑完全部点；整卷状态与提示取首个失败点。
 func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	st := &evalState{}
 	n := len(problem.Cases)
 	passed := 0
-	tleIdx := 0 // 首个超时点（1 基，0 = 无）
+	failStatus, failInfo := "", "" // 首个失败点的状态与原因（整卷终态）
 	for i, tc := range problem.Cases {
 		// 每个测试点之间检查取消/租约：取消即停（已跑点如实入明细，得分 0）；
 		// 放在点前而非点后——最后一个测点跑完的完整结果不被迟到取消回滚
@@ -433,14 +460,19 @@ func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, langu
 		}
 		res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 		if err != nil {
-			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(i, n),
+			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(passed, n),
 				"沙箱调用失败: " + err.Error(), st.detail
 		}
 		t, m := st.observe(res)
 		caseStatus, finalStatus, reason, jerr := j.judgeCase(ctx, tc, res, problem, cmp, chk, fio)
 		if jerr != nil {
-			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(i, n),
+			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(passed, n),
 				jerr.Error(), st.detail
+		}
+		// stdio 判题下检出文件操作：追加针对性提示——本题不需要文件操作，
+		// freopen 会因文件不存在而静默失败（读空输入/输出为空），学生常误判为算法错误
+		if finalStatus == repo.StatusWrongAnswer && !fio.enabled {
+			reason += "（检测到文件操作：本题不需要文件操作）"
 		}
 		if caseStatus != "" {
 			st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
@@ -449,24 +481,20 @@ func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, langu
 			passed++
 			continue
 		}
-		if finalStatus == repo.StatusTLE {
-			// 超时只判失当前点，继续评测后续点
-			if tleIdx == 0 {
-				tleIdx = i + 1
-			}
-			continue
+		// 失败点不终止：记录首个失败，继续评测后续点
+		if failStatus == "" {
+			failStatus = finalStatus
+			failInfo = fmt.Sprintf("第 %d 个测试点: %s", i+1, reason)
 		}
-		return finalStatus, st.sumTimeMS, st.sumMemKB, partialScore(i, n),
-			fmt.Sprintf("第 %d 个测试点: %s", i+1, reason), st.detail
 	}
-	if tleIdx > 0 {
-		return repo.StatusTLE, st.sumTimeMS, st.sumMemKB, passed * 100 / n,
-			fmt.Sprintf("第 %d 个测试点: 超出时间限制", tleIdx), st.detail
+	if failStatus != "" {
+		return failStatus, st.sumTimeMS, st.sumMemKB, partialScore(passed, n), failInfo, st.detail
 	}
 	return repo.StatusAccepted, st.sumTimeMS, st.sumMemKB, 100, "", st.detail
 }
 
-// evaluateSubtasks 子任务模式：组内测试点全过才得该组分；组内失败跳过该组剩余点继续下一组。
+// evaluateSubtasks 子任务模式：组内测试点全过才得该组分。全量评测——失败点不终止、
+// 不跳过组内剩余点，全部测试点跑完。
 // 总分 100 判 Accepted；否则以第一个失败点的状态作为整份提交状态（保留部分分）。
 func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	byIndex := map[int]repo.CaseMeta{}
@@ -502,6 +530,10 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, lan
 				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					jerr.Error(), st.detail
 			}
+			// stdio 判题下检出文件操作：提示同单点模式（本题不需要文件操作）
+			if finalStatus == repo.StatusWrongAnswer && !fio.enabled {
+				reason += "（检测到文件操作：本题不需要文件操作）"
+			}
 			if caseStatus != "" {
 				st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
 			}
@@ -511,7 +543,7 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, lan
 					firstFailStatus, firstFailReason = finalStatus,
 						fmt.Sprintf("子任务(测试点 %d): %s", tc.Index, reason)
 				}
-				break // 该组剩余测试点跳过
+				// 失败点不跳过：全量评测，组内剩余点照常运行
 			}
 		}
 		if passed {
@@ -663,6 +695,19 @@ func normalizeOutput(s string) string {
 		lines[i] = strings.TrimRight(lines[i], " \t\r")
 	}
 	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+// fileIOKeyword 扫描源码中的文件操作痕迹（freopen/fopen/fstream 家族，大小写不敏感）。
+// 仅在 stdio 判题（题库/练习恒 stdio、场次未开启文件 IO）的 WA 提示里引用：
+// freopen 打不开配置文件会静默失败，表现恰好是读空输入、输出为空。空串 = 未检出。
+func fileIOKeyword(code string) string {
+	lc := strings.ToLower(code)
+	for _, kw := range []string{"freopen", "fopen", "ifstream", "ofstream", "fstream"} {
+		if strings.Contains(lc, kw) {
+			return kw
+		}
+	}
+	return ""
 }
 
 func truncate(s string, n int) string {

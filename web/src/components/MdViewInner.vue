@@ -20,8 +20,9 @@ let unbindCopy: (() => void) | null = null
 async function render() {
   if (!el.value) return
   if (!props.content) {
+    // 空内容直接留白（v0.9.3）：不显示「暂无内容」占位文案
     el.value.innerHTML = ''
-    notice.value = '暂无内容'
+    notice.value = ''
     return
   }
   if (contentBytes(props.content) > MAX_CONTENT_BYTES) {
@@ -38,7 +39,7 @@ async function render() {
     cdn: '/vditor',
     theme: { current: 'light' },
     hljs: { lineNumber: false },
-    math: { engine: 'KaTeX' },
+    math: { engine: 'KaTeX', inlineDigit: true }, // inlineDigit: $ 后允许数字开头（默认 false，会让 $1 \le N$ 不被识别）
     markdown: { sanitize: true },
   })
 }

@@ -27,14 +27,14 @@ func renderCSV(rows [][]string) []byte {
 }
 
 // serveCSV 以附件形式写出 CSV；文件名含中文时由 mime.FormatMediaType 生成
-// `filename*=utf-8''…`（纯 ASCII 名自动退回普通 filename=）。
+// `filename*=utf-8”…`（纯 ASCII 名自动退回普通 filename=）。
 func serveCSV(c *gin.Context, filename string, rows [][]string) {
 	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 	c.Data(http.StatusOK, "text/csv; charset=utf-8", renderCSV(rows))
 }
 
 // csvSafeName 文件名安全化：标题中的文件系统保留字符替换为下划线
-//（mime 层只管编码合法，浏览器落盘时这些字符在 Windows 仍是非法文件名）。
+// （mime 层只管编码合法，浏览器落盘时这些字符在 Windows 仍是非法文件名）。
 func csvSafeName(s string) string {
 	return strings.Map(func(r rune) rune {
 		if strings.ContainsRune(`\/:*?"<>|`, r) {

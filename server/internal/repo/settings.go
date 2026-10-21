@@ -2,9 +2,11 @@ package repo
 
 import (
 	"context"
+	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // SystemSettings 系统设置（settings 集合，_id="system"）。
@@ -12,22 +14,44 @@ type SystemSettings struct {
 	RateLimitPerMinute int    `bson:"rateLimitPerMinute"`    // default 角色每分钟提交上限
 	HomeNotice         string `bson:"homeNotice"`            // 首页公告（Markdown，空 = 不展示）
 	BackupGuide        string `bson:"backupGuide,omitempty"` // 备份面板使用说明（Markdown，空 = 前端内置默认）
+	// 每日每用户可下载数据的题目数上限（problem.data.download 权限位持有者受此限额）。
+	// 指针区分「旧文档未设置」与「显式 0」：nil = 未设置按默认；0 = 不限制；>0 = 每日上限。
+	DataDownloadDailyLimit *int `bson:"dataDownloadDailyLimit,omitempty"`
 }
 
-const DefaultRateLimitPerMinute = 3
+const (
+	DefaultRateLimitPerMinute   = 3
+	DefaultDataDownloadDayLimit = 5
+)
+
+func downloadLimitPtr(v int) *int { return &v }
+
+// DownloadDailyLimit 限额取值：未设置回默认（存量 settings 文档无此字段时为 nil）。
+func (s *SystemSettings) DownloadDailyLimit() int {
+	if s.DataDownloadDailyLimit == nil || *s.DataDownloadDailyLimit < 0 {
+		return DefaultDataDownloadDayLimit
+	}
+	return *s.DataDownloadDailyLimit
+}
 
 // GetSystemSettings 读取系统设置，未初始化时返回默认值。
 func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
 	var s SystemSettings
 	err := r.db.Collection("settings").FindOne(ctx, bson.M{"_id": "system"}).Decode(&s)
 	if IsNotFound(err) {
-		return &SystemSettings{RateLimitPerMinute: DefaultRateLimitPerMinute}, nil
+		return &SystemSettings{
+			RateLimitPerMinute:     DefaultRateLimitPerMinute,
+			DataDownloadDailyLimit: downloadLimitPtr(DefaultDataDownloadDayLimit),
+		}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	if s.RateLimitPerMinute <= 0 {
 		s.RateLimitPerMinute = DefaultRateLimitPerMinute
+	}
+	if s.DataDownloadDailyLimit == nil {
+		s.DataDownloadDailyLimit = downloadLimitPtr(DefaultDataDownloadDayLimit)
 	}
 	return &s, nil
 }
@@ -42,10 +66,36 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 	_, err := col.UpdateOne(ctx,
 		bson.M{"_id": "system"},
 		bson.M{"$set": bson.M{
-			"rateLimitPerMinute": s.RateLimitPerMinute,
-			"homeNotice":         s.HomeNotice,
-			"backupGuide":        s.BackupGuide,
+			"rateLimitPerMinute":     s.RateLimitPerMinute,
+			"homeNotice":             s.HomeNotice,
+			"backupGuide":            s.BackupGuide,
+			"dataDownloadDailyLimit": s.DownloadDailyLimit(),
 		}},
+	)
+	return err
+}
+
+// TestDataDownloadAllowed 每日下载限额判断：limit 0 = 不限制；>0 时当天已下载的不同题数
+// 达到上限且本题不在其中则拒绝（同一题当天重复下载不重复计数）。
+func (r *Repo) TestDataDownloadAllowed(ctx context.Context, uid, pid int64, limit int) (bool, error) {
+	if limit <= 0 {
+		return true, nil
+	}
+	n, err := r.db.Collection("dataDownloads").CountDocuments(ctx, bson.M{
+		"uid": uid, "day": time.Now().Format("2006-01-02"), "pid": bson.M{"$ne": pid},
+	})
+	if err != nil {
+		return false, err
+	}
+	return n < int64(limit), nil
+}
+
+// RecordTestDataDownload 记录一次下载（按 uid+pid+day 去重，同题当天重复下载不新增计数）。
+func (r *Repo) RecordTestDataDownload(ctx context.Context, uid, pid int64) error {
+	_, err := r.db.Collection("dataDownloads").UpdateOne(ctx,
+		bson.M{"uid": uid, "pid": pid, "day": time.Now().Format("2006-01-02")},
+		bson.M{"$setOnInsert": bson.M{"at": time.Now()}},
+		options.UpdateOne().SetUpsert(true),
 	)
 	return err
 }

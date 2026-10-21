@@ -6,7 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, authApi } from '@/api'
-import { downloadCsv } from '@/api/download'
+import { downloadFile } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import MdView from '@/components/MdView.vue'
@@ -94,7 +94,7 @@ async function exportCsv() {
   if (!assignment.value) return
   exporting.value = true
   try {
-    await downloadCsv(`/assignments/${assignment.value.id}/export`, `${assignment.value.title}.csv`)
+    await downloadFile(`/assignments/${assignment.value.id}/export`, `${assignment.value.title}.csv`)
   } finally {
     exporting.value = false
   }

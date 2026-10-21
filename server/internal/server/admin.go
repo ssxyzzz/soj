@@ -150,9 +150,10 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{
-		"rate_limit_per_minute": s.RateLimitPerMinute,
-		"home_notice":           s.HomeNotice,
-		"backup_guide":          s.BackupGuide,
+		"rate_limit_per_minute":     s.RateLimitPerMinute,
+		"home_notice":               s.HomeNotice,
+		"backup_guide":              s.BackupGuide,
+		"data_download_daily_limit": s.DownloadDailyLimit(),
 	})
 }
 
@@ -169,9 +170,10 @@ func (h *Handlers) GetNotice(c *gin.Context) {
 // UpdateSettings 更新系统设置（公告/备份说明收 Markdown）。
 func (h *Handlers) UpdateSettings(c *gin.Context) {
 	var req struct {
-		RateLimitPerMinute *int    `json:"rate_limit_per_minute"`
-		HomeNotice         *string `json:"home_notice"`
-		BackupGuide        *string `json:"backup_guide"`
+		RateLimitPerMinute     *int    `json:"rate_limit_per_minute"`
+		HomeNotice             *string `json:"home_notice"`
+		BackupGuide            *string `json:"backup_guide"`
+		DataDownloadDailyLimit *int    `json:"data_download_daily_limit"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -196,6 +198,13 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.HomeNotice = *req.HomeNotice
 	}
+	if req.DataDownloadDailyLimit != nil {
+		if *req.DataDownloadDailyLimit < 0 || *req.DataDownloadDailyLimit > 1000 {
+			fail(c, http.StatusBadRequest, "每日可下载数据的题目数需在 0-1000 之间（0 为不限制）")
+			return
+		}
+		s.DataDownloadDailyLimit = req.DataDownloadDailyLimit
+	}
 	if req.BackupGuide != nil {
 		if len(*req.BackupGuide) > 16<<10 {
 			fail(c, http.StatusBadRequest, "备份使用说明过长（上限 16KB）")
@@ -208,8 +217,9 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{
-		"rate_limit_per_minute": s.RateLimitPerMinute,
-		"home_notice":           s.HomeNotice,
-		"backup_guide":          s.BackupGuide,
+		"rate_limit_per_minute":     s.RateLimitPerMinute,
+		"home_notice":               s.HomeNotice,
+		"backup_guide":              s.BackupGuide,
+		"data_download_daily_limit": s.DownloadDailyLimit(),
 	})
 }

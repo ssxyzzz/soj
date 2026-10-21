@@ -21,6 +21,8 @@ type Provider interface {
 	WriteFile(problemID int64, relPath string, data []byte) error
 	Delete(problemID int64, relPath string) error
 	RemoveDir(problemID int64, relPath string) error
+	// Walk 遍历题目数据卷内全部文件（数据包下载打包用），fn 收到正斜杠相对路径。
+	Walk(problemID int64, fn func(relPath string) error) error
 }
 
 // LocalFS 本地文件系统实现，目录布局: <Root>/<problemID>/<relPath>。
@@ -77,6 +79,28 @@ func (p *LocalFS) RemoveDir(problemID int64, relPath string) error {
 		return err
 	}
 	return nil
+}
+
+// Walk 遍历题目数据卷内全部文件并回调相对路径（LocalFS：目录树先序遍历，路径正斜杠）。
+// 目录不存在（题目暂无数据）时不回调、不报错。
+func (p *LocalFS) Walk(problemID int64, fn func(relPath string) error) error {
+	root := filepath.Join(p.Root, strconv.FormatInt(problemID, 10))
+	return filepath.WalkDir(root, func(full string, d os.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, full)
+		if err != nil {
+			return err
+		}
+		return fn(filepath.ToSlash(rel))
+	})
 }
 
 func (p *LocalFS) WriteFile(problemID int64, relPath string, data []byte) error {

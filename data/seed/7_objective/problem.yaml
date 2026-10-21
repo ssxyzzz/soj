@@ -1,0 +1,41 @@
+title: 客观题示例（多小题）
+type: objective
+time: 1s
+memory: 256MB
+questions:
+  - stem: |
+      # 静态区间和
+
+      给定长度为 $n$ 的整数数组，多次询问区间 $[l, r]$ 内所有数之和。
+      若要让每次询问做到 $O(1)$ 回答，应该使用哪种技术做预处理？
+    kind: single
+    options: [快慢指针, 单调栈, 前缀和, 并查集]
+    answer: [2]
+    score: 20
+    explanation: 前缀和可在 $O(1)$ 回答静态区间和查询。
+
+  - stem: |
+      下列哪些做法可以做到 $O(1)$ 查询静态区间和？（多选）
+    kind: multiple
+    options: [前缀和数组, 线段树查询, 把区间长度限制为定值后打表, 归并排序]
+    answer: [0]
+    score: 20
+    explanation: 前缀和是 $O(1)$ 查询；线段树查询是 $O(\log n)$。
+
+  - stem: 判断：二分查找要求序列有序。
+    kind: judge
+    answer: [0]
+    score: 20
+    explanation: 二分查找的前提是序列有序。
+
+  - stem: |
+      生命、宇宙以及一切的终极答案是 ____。
+
+      对长度为 $n$ 的数组求和，时间复杂度为 ____。
+    kind: blank
+    blanks:
+      - accept: ["42", "四十二"]
+      - accept: ["O(n)", "o(n)"]
+    score: 40
+    explanation: |
+      第一空是 42；一次遍历求和的复杂度是 $O(n)$。

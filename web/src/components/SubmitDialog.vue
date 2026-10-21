@@ -14,6 +14,8 @@ const props = defineProps<{
   disabled?: boolean
   disabledReason?: string
   submitting?: boolean
+  initialCode?: string // 函数题学生模板（v0.9.1）：打开时预填，优先于个人默认模板
+  langOnly?: string | string[] // 语言锁（函数题 = 'cpp'；交互题 = ['cpp','c']）
 }>()
 
 const emit = defineEmits<{
@@ -29,7 +31,11 @@ const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
 const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
 
 watch(() => props.modelValue, (open) => {
-  if (open) code.value = templateFor(lang.value)
+  if (open) {
+    const lock = props.langOnly
+    if (lock) lang.value = Array.isArray(lock) ? lock[0] : lock
+    code.value = props.initialCode || templateFor(lang.value)
+  }
 })
 
 function changeLang(l: string) {
@@ -37,6 +43,14 @@ function changeLang(l: string) {
   if (!code.value.trim() || code.value === templateFor(lang.value)) code.value = templateFor(l)
   lang.value = l
 }
+
+// 语言候选：无锁 = 全量；有锁 = 锁定的那几种（函数题 cpp / 交互题 cpp+c）
+const allowedLangs = computed(() => {
+  const lock = props.langOnly
+  if (!lock) return languageOptions
+  const list = Array.isArray(lock) ? lock : [lock]
+  return languageOptions.filter((o) => list.includes(o.value))
+})
 
 function doSubmit() {
   if (props.disabled) return
@@ -58,7 +72,7 @@ function doSubmit() {
   >
     <div class="bar">
       <el-select :model-value="lang" style="width: 160px" @change="changeLang">
-        <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
+        <el-option v-for="o in allowedLangs" :key="o.value" :value="o.value" :label="o.label" />
       </el-select>
       <span v-if="disabled" class="dim">{{ disabledReason }}</span>
     </div>

@@ -10,7 +10,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { submissionApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, isQueueStatus, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, fmtSec, isQueueStatus, statusDesc } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
 import type { Submission } from '@/types'
 
@@ -184,12 +184,30 @@ watch(
             </el-button>
           </el-descriptions-item>
           <el-descriptions-item label="语言">{{ sub.language }}</el-descriptions-item>
-          <el-descriptions-item label="总耗时">{{ sub.time_ms }} ms</el-descriptions-item>
+          <el-descriptions-item label="总耗时">{{ fmtSec(sub.time_ms) }}</el-descriptions-item>
           <el-descriptions-item label="总内存">{{ fmtMem(sub.memory_kb) }}</el-descriptions-item>
           <el-descriptions-item label="提交时间">{{ fmtDate(sub.created_at) }}</el-descriptions-item>
         </el-descriptions>
-        <div class="detail-sub">代码</div>
-        <pre class="mono sub-code">{{ sub.code }}</pre>
+        <!-- 客观题作答（v0.9）：替代代码区展示所选答案 -->
+        <template v-if="sub.is_objective">
+          <div class="detail-sub">作答</div>
+          <div class="obj-answer mono">
+            <div v-for="(a, i) in sub.answers" :key="i">
+              第 {{ i + 1 }} 题：
+              <template v-if="a.blanks?.length">
+                {{ a.blanks.map((b, k) => `第${k + 1}空 ${b || '（空）'}`).join('  ') }}
+              </template>
+              <template v-else-if="a.answer?.length">
+                {{ a.answer.map((x) => String.fromCharCode(65 + x)).join('、') }}
+              </template>
+              <template v-else>（未作答）</template>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="detail-sub">代码</div>
+          <pre class="mono sub-code">{{ sub.code }}</pre>
+        </template>
         <template v-if="sub.detail?.length">
           <div class="detail-sub">测试点明细</div>
           <el-table stripe :data="sortedDetail" size="small" border>
@@ -205,7 +223,7 @@ watch(
               </template>
             </el-table-column>
             <el-table-column label="耗时" width="90">
-              <template #default="{ row }">{{ row.time_ms != null ? `${row.time_ms} ms` : '' }}</template>
+              <template #default="{ row }">{{ fmtSec(row.time_ms) }}</template>
             </el-table-column>
             <el-table-column label="内存" width="90">
               <template #default="{ row }">{{ row.memory_kb ? fmtMem(row.memory_kb) : '' }}</template>
@@ -222,3 +240,12 @@ watch(
 </template>
 
 
+
+<style scoped>
+.obj-answer {
+  padding: 10px 14px;
+  background: var(--el-fill-color-lighter);
+  border-radius: var(--el-border-radius-base);
+  line-height: 1.8;
+}
+</style>

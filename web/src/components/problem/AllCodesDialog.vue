@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { fmtSec } from '@/utils/format'
 // 所有代码弹窗（v0.5.4 ② 拆分自 ProblemDetailView，2026-10-19 改名并加默认排序）：
 // 排序三档=最近提交（默认）/ 时间优先 / 空间优先，最多 10 条，可切语言；
 // 点行经 SubmissionDetailDialog 看代码与测试点明细。
@@ -117,7 +118,7 @@ stripe
       <el-table-column prop="language" label="语言" width="100" />
       <el-table-column label="总耗时" width="100">
         <template #default="{ row }">
-          <template v-if="row.id">{{ row.time_ms }} ms</template>
+          <template v-if="row.id">{{ fmtSec(row.time_ms) }}</template>
         </template>
       </el-table-column>
       <el-table-column label="总内存" width="110">

@@ -7,7 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { authApi, contestApi, examApi, type RoundKind } from '@/api'
-import { downloadCsv } from '@/api/download'
+import { downloadFile } from '@/api/download'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import EditRoundDialog from '@/components/EditRoundDialog.vue'
 import MdView from '@/components/MdView.vue'
@@ -194,7 +194,7 @@ async function exportCsv() {
   if (!round.value) return
   exporting.value = true
   try {
-    await downloadCsv(`/${props.kind}s/${round.value.id}/export`, `${round.value.title}.csv`)
+    await downloadFile(`/${props.kind}s/${round.value.id}/export`, `${round.value.title}.csv`)
   } finally {
     exporting.value = false
   }
