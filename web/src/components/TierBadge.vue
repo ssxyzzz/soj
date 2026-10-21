@@ -51,6 +51,8 @@ const cls = computed(() => {
   font-weight: var(--soj-fw-emphasis);
   line-height: 1;
   vertical-align: middle;
+  /* 亮银/亮金等浅档渐变上保白字可读 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 .tier-sm {
   font-size: var(--soj-fs-tag);

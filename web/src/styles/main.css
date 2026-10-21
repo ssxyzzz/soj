@@ -748,29 +748,41 @@ samp {
   font-weight: var(--soj-fw-bold);
 }
 
-/* ---- 十阶色轴（v0.11）：学生等级与题目难度共用 ----
-   色值出自 plan §2.2 定稿（基础色相递进 + 后半段亮度/光效区分）。
+/* ---- 十阶色轴（v0.11；v2 重制 2026-10-22）：学生等级与题目难度共用 ----
+   名字定稿（两字段位，取自王者荣耀段位体系）：青铜/白银/黄金/铂金/钻石/星耀/宗师/王者/传奇/极境。
+   前五档 = 材质渐变提亮（青铜=铜锈绿、白银=亮银、黄金=亮金、铂金=亮铂青、钻石=亮钻蓝，见名知色）；
+   后五档沿用定稿色（星紫/烈橙/鎏金/正红/六色）。
    等级徽章 .tier-fx-N 走逐级叠加特效链（后台等级面板可全局/逐级关闭）；
-   难度徽章 .tier-static-N 恒静态。全部动画低速低亮度（≥3s/≥4.5s），
-   系统「减少动态效果」时动画整体关闭；Lv.10 六色流动用 alternate 往返，
-   走完不突兀跳回首色。 */
+   难度徽章 .tier-static-N 恒静态（实色胶囊）。全部动画低速低亮度（≥3.6s/≥4.6s），
+   系统「减少动态效果」时动画整体关闭；六色流动用 alternate 往返，走完不突兀跳回首色。 */
 :root {
-  --soj-tier-1: #74919a; /* 灰青（蟹壳青深化） */
-  --soj-tier-2: #7c9868; /* 灰绿（荠麦绿深化） */
-  --soj-tier-3: #3cb371; /* 翠微 */
-  --soj-tier-4: #4a8dda; /* 蓝 */
-  --soj-tier-5: #00a9bf; /* 青 */
-  --soj-tier-6: #7e3e9e; /* 紫 */
-  --soj-tier-7: #ee7e1f; /* 橙 */
-  --soj-tier-8: #d4af37; /* 鎏金（渐变主色/描边/晕） */
-  --soj-tier-9: #e63946; /* 正红（渐变主色/描边/晕） */
+  --soj-tier-1: #4aa27e; /* 青铜 · 铜锈绿 */
+  --soj-tier-2: #93a5b0; /* 白银 · 亮银 */
+  --soj-tier-3: #d9a018; /* 黄金 · 亮金 */
+  --soj-tier-4: #64a8b3; /* 铂金 · 亮铂青 */
+  --soj-tier-5: #56a3ea; /* 钻石 · 亮钻蓝 */
+  --soj-tier-6: #7e3e9e; /* 星耀 · 星紫 */
+  --soj-tier-7: #ee7e1f; /* 宗师 · 烈橙 */
+  --soj-tier-8: #d4af37; /* 王者 · 鎏金（渐变主色/描边/晕） */
+  --soj-tier-9: #e63946; /* 传奇 · 正红（渐变主色/描边/晕） */
 }
 
-.tier-bg-1 { background: var(--soj-tier-1); }
-.tier-bg-2 { background: var(--soj-tier-2); }
-.tier-bg-3 { background: var(--soj-tier-3); }
-.tier-bg-4 { background: var(--soj-tier-4); }
-.tier-bg-5 { background: var(--soj-tier-5); }
+/* 前五档：金属/宝石材质渐变 */
+.tier-bg-1 {
+  background: linear-gradient(135deg, #55b48d, #3f8f6e);
+}
+.tier-bg-2 {
+  background: linear-gradient(160deg, #c3d0d8, #93a5b0 55%, #7d8f9b);
+}
+.tier-bg-3 {
+  background: linear-gradient(160deg, #f4c94e, #d9a018 55%, #b98510);
+}
+.tier-bg-4 {
+  background: linear-gradient(160deg, #8fc3cd, #64a8b3 55%, #54949f);
+}
+.tier-bg-5 {
+  background: linear-gradient(160deg, #74b0f0, #56a3ea 55%, #3f8bd8);
+}
 .tier-bg-6 { background: var(--soj-tier-6); }
 .tier-bg-7 { background: var(--soj-tier-7); }
 .tier-bg-8 {
@@ -780,9 +792,9 @@ samp {
   background: linear-gradient(135deg, #f2605a, #e63946 55%, #c11f2e);
 }
 .tier-bg-10 {
-  /* 六色循环：300% 宽 + 流动动画（见 tier-flow），alternate 往返无缝 */
+  /* 六色循环：400% 宽 + 流动动画（见 tier-flow），alternate 往返无缝 */
   background: linear-gradient(120deg, #e63946, #ee7e1f, #e9c963, #3cb371, #4a8dda, #7e3e9e);
-  background-size: 300% 100%;
+  background-size: 400% 100%;
 }
 
 /* 难度徽章静态档：低档纯色即底色；渐变档静止展示，内圈同色细边勾轮廓 */
@@ -790,13 +802,14 @@ samp {
 .tier-static-9 { box-shadow: inset 0 0 0 1px rgba(193, 31, 46, 0.5); }
 .tier-static-10 { box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.6); }
 
-/* 等级特效链（第 N 档含第 N−1 档全部效果） */
+/* 等级特效链（第 N 档含第 N−1 档全部效果；v2 加码：星耀+缓流光、宗师+光晕呼吸、
+   王者+金环脉动、传奇+双环心跳（outline 追随环）、极境+双金环/白星芒放大） */
 .tier-fx-3 { box-shadow: 0 0 0 1.5px var(--soj-tier-3); }
 .tier-fx-4 { box-shadow: 0 0 0 1.5px var(--soj-tier-4); }
 .tier-fx-5 {
   box-shadow:
     0 0 0 1.5px var(--soj-tier-5),
-    0 0 8px rgba(0, 169, 191, 0.45);
+    0 0 8px rgba(86, 163, 234, 0.45);
 }
 .tier-fx-6 {
   box-shadow:
@@ -804,19 +817,38 @@ samp {
     0 0 12px rgba(126, 62, 158, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.tier-fx-7 {
-  box-shadow:
-    0 0 0 1.5px var(--soj-tier-7),
-    0 0 12px rgba(238, 126, 31, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-/* 星点（t7）/ 星芒（t8 金、t10 白）：徽章内右上角小星，缓慢明灭 */
+/* 流光带（星耀缓速柔和版 / 宗师起全速版）；星点（宗师）/星芒（王者金、极境白）在 ::after */
+.tier-fx-6,
 .tier-fx-7,
 .tier-fx-8,
 .tier-fx-9,
 .tier-fx-10 {
   position: relative;
   overflow: hidden;
+}
+.tier-fx-6::before,
+.tier-fx-7::before,
+.tier-fx-8::before,
+.tier-fx-9::before,
+.tier-fx-10::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.32) 50%, transparent 65%);
+  transform: translateX(-130%);
+  pointer-events: none;
+  animation: tier-sweep 6s ease-in-out infinite;
+}
+.tier-fx-7::before,
+.tier-fx-8::before,
+.tier-fx-9::before,
+.tier-fx-10::before {
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.5) 50%, transparent 65%);
+  animation-duration: 3.6s;
+}
+/* 宗师：光晕呼吸 + 星点 */
+.tier-fx-7 {
+  animation: tier-glow-breathe 4.6s ease-in-out infinite;
 }
 .tier-fx-7::after,
 .tier-fx-8::after,
@@ -835,45 +867,37 @@ samp {
   color: #ffd27a;
   text-shadow: 0 0 4px rgba(255, 210, 122, 0.9);
 }
-/* 鎏金档：金描边 + 金晕 + 内高光 + 星芒 + 流光（白光带缓慢横扫） */
+/* 王者：鎏金 + 金边/金晕/星芒/流光 + 金环脉动 */
 .tier-fx-8 {
-  box-shadow:
-    0 0 0 1.5px var(--soj-tier-8),
-    0 0 14px rgba(212, 175, 55, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  animation: tier-hb-gold 4.8s ease-in-out infinite;
 }
 .tier-fx-8::after {
   color: #fff7d6;
   text-shadow: 0 0 5px rgba(255, 247, 214, 0.95);
 }
-.tier-fx-8::before,
-.tier-fx-9::before,
-.tier-fx-10::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.5) 50%, transparent 65%);
-  transform: translateX(-130%);
-  pointer-events: none;
-  animation: tier-sweep 3.6s ease-in-out infinite;
-}
-/* 传奇档：心跳光环（红扩散环脉动，含前档全部静态层） */
+/* 传奇：双环心跳（box-shadow 主环 + outline 追随环，慢半拍） */
 .tier-fx-9 {
-  animation: tier-hb-red 4.6s ease-in-out infinite;
+  animation:
+    tier-hb-red 4.6s ease-in-out infinite,
+    tier-ring2-red 4.6s ease-out infinite;
 }
 .tier-fx-9::after {
   color: #ffe3e1;
   text-shadow: 0 0 5px rgba(255, 227, 225, 0.95);
 }
-/* 神话档：六色流动（alternate 往返）+ 金边/金晕/金环脉动 + 白星芒 + 白流光 */
+/* 极境：六色 400% 流动 + 双金环脉动 + 白星芒放大脉动 + 白流光 */
 .tier-fx-10 {
   animation:
     tier-flow 9s ease-in-out infinite alternate,
-    tier-hb-gold 4.8s ease-in-out infinite;
+    tier-hb-gold 4.8s ease-in-out infinite,
+    tier-ring2-gold 4.8s ease-out infinite;
 }
 .tier-fx-10::after {
   color: #fff;
   text-shadow: 0 0 6px rgba(255, 255, 255, 0.95);
+  animation:
+    tier-twinkle 5s ease-in-out infinite,
+    tier-star-pop 5s ease-in-out infinite;
 }
 
 @keyframes tier-twinkle {
@@ -938,29 +962,89 @@ samp {
       0 0 0 9px rgba(212, 175, 55, 0);
   }
 }
+@keyframes tier-glow-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1.5px var(--soj-tier-7),
+      0 0 10px rgba(238, 126, 31, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px var(--soj-tier-7),
+      0 0 16px rgba(238, 126, 31, 0.65),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  }
+}
+/* 追随环（outline 扩散，比 box-shadow 主环慢半拍——双环心跳/双金环） */
+@keyframes tier-ring2-red {
+  0% {
+    outline: 2px solid rgba(230, 57, 70, 0.5);
+    outline-offset: 2px;
+  }
+  45%,
+  100% {
+    outline: 2px solid rgba(230, 57, 70, 0);
+    outline-offset: 12px;
+  }
+}
+@keyframes tier-ring2-gold {
+  0% {
+    outline: 2px solid rgba(212, 175, 55, 0.55);
+    outline-offset: 2px;
+  }
+  45%,
+  100% {
+    outline: 2px solid rgba(212, 175, 55, 0);
+    outline-offset: 12px;
+  }
+}
+@keyframes tier-star-pop {
+  0%,
+  100% {
+    font-size: 9px;
+  }
+  50% {
+    font-size: 12px;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .tier-fx-7::after,
-  .tier-fx-8::after,
-  .tier-fx-9::after,
-  .tier-fx-10::after {
-    animation: none;
-  }
+  .tier-fx-6::before,
+  .tier-fx-7::before,
   .tier-fx-8::before,
   .tier-fx-9::before,
   .tier-fx-10::before {
     animation: none;
     display: none;
   }
-  .tier-fx-9 {
+  .tier-fx-7::after,
+  .tier-fx-8::after,
+  .tier-fx-9::after,
+  .tier-fx-10::after {
     animation: none;
+  }
+  .tier-fx-7,
+  .tier-fx-8,
+  .tier-fx-9,
+  .tier-fx-10 {
+    animation: none;
+    outline: none;
+  }
+  .tier-fx-7 {
+    box-shadow:
+      0 0 0 1.5px var(--soj-tier-7),
+      0 0 12px rgba(238, 126, 31, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+  .tier-fx-9 {
     box-shadow:
       0 0 0 1.5px var(--soj-tier-9),
       0 0 14px rgba(230, 57, 70, 0.5),
       inset 0 1px 0 rgba(255, 255, 255, 0.35);
   }
   .tier-fx-10 {
-    animation: none;
     background-position: 50% 50%;
     box-shadow:
       0 0 0 1.5px var(--soj-tier-8),

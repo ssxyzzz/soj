@@ -2,11 +2,13 @@
 // 等级面板（v0.11，root）：等级名称 / 升级阈值 / 衰减系数 / 特效开关。
 // 十阶档数与色轴固定不开放改；特效全局关 = 全站等级徽章退静态
 //（尊重不想炫酷的部署方，开源场景各部署自定）。难度徽章恒静态，不受此面板影响。
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { adminApi } from '@/api'
-import { DEFAULT_LEVEL_NAMES } from '@/stores/levels'
+import { DEFAULT_LEVEL_NAMES, useLevelsStore } from '@/stores/levels'
+
+const levels = useLevelsStore()
 
 const form = reactive({
   names: [...DEFAULT_LEVEL_NAMES],
@@ -18,6 +20,17 @@ const form = reactive({
   effects_tiers: Array.from({ length: 10 }, () => true),
 })
 const saving = ref(false)
+
+// 全局开关打开时若逐级开关全是关的，自动全选——否则「开了全局没反应」
+//（全局开 ∧ 逐级全关 = 仍然全部静态，等价于没开）
+watch(
+  () => form.effects_enabled,
+  (on) => {
+    if (on && !form.effects_tiers.some((t) => t)) {
+      form.effects_tiers = Array.from({ length: 10 }, () => true)
+    }
+  },
+)
 
 onMounted(async () => {
   try {
@@ -57,6 +70,7 @@ async function save() {
       effects_tiers: [...form.effects_tiers],
     })
     ElMessage.success('等级配置已保存')
+    await levels.reload() // 刷新全局共享配置：排名/顶栏徽章的特效即时跟随
   } finally {
     saving.value = false
   }

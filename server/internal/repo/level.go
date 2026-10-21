@@ -18,8 +18,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
-// 等级配置默认值（root 后台可调；TenTier 名字随部署定制）。
-var DefaultLevelNames = [10]string{"启蒙", "入门", "弟子", "少侠", "侠客", "精英", "宗师", "大师", "传奇", "神话"}
+// 等级配置默认值（root 后台可调；名字 2026-10-22 两字段位版定稿：取自王者荣耀段位体系）。
+var DefaultLevelNames = [10]string{"青铜", "白银", "黄金", "铂金", "钻石", "星耀", "宗师", "王者", "传奇", "极境"}
 
 // DefaultLevelThresholds 达 Lv.2–10 的累计 XP：100×L×(L−1)。
 var DefaultLevelThresholds = [9]int64{200, 600, 1200, 2000, 3000, 4200, 5600, 7200, 9000}
@@ -39,8 +39,8 @@ type LevelConfig struct {
 	Decay3     float64    `bson:"decay3" json:"decay3"`         // 低 3 级；低 ≥4 级恒 0，不配置
 	// 特效开关：等级徽章的动画/光效（难度徽章恒静态，不受此控制）。
 	// 全局关 = 部署方不想要炫酷效果；逐级关可只保留低档纯色。
-	EffectsEnabled bool     `bson:"effectsEnabled" json:"effectsEnabled"`
-	EffectsTiers   [10]bool `bson:"effectsTiers" json:"effectsTiers"`
+	EffectsEnabled bool     `bson:"effectsEnabled" json:"effects_enabled"`
+	EffectsTiers   [10]bool `bson:"effectsTiers" json:"effects_tiers"`
 }
 
 // DefaultLevelConfig 默认等级配置（深拷贝默认数组）。

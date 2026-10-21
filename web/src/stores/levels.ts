@@ -4,8 +4,9 @@ import { defineStore } from 'pinia'
 import { levelsApi } from '@/api'
 import type { LevelConfigInfo } from '@/types'
 
-// 等级配置默认名（后端不可达时的兜底显示，与 repo.DefaultLevelNames 对应）
-export const DEFAULT_LEVEL_NAMES = ['启蒙', '入门', '弟子', '少侠', '侠客', '精英', '宗师', '大师', '传奇', '神话']
+// 等级配置默认名（后端不可达时的兜底显示，与 repo.DefaultLevelNames 对应——
+// 2026-10-22 两字段位版定稿：青铜→极境，取自王者荣耀段位体系）
+export const DEFAULT_LEVEL_NAMES = ['青铜', '白银', '黄金', '铂金', '钻石', '星耀', '宗师', '王者', '传奇', '极境']
 
 // 等级配置（v0.11）：进程内拉一次全局共享；名字/特效开关供徽章渲染，
 // 阈值供进度条。拉取失败静默降级——徽章退静态默认名，不阻塞页面。
@@ -29,6 +30,12 @@ export const useLevelsStore = defineStore('levels', () => {
     await fetching
   }
 
+  // 强制重拉（root 后台保存等级配置后调用，徽章即时跟随新特效开关）
+  async function reload() {
+    cfg.value = null
+    await ensure()
+  }
+
   function nameOf(tier: number): string {
     return cfg.value?.names[tier - 1] || DEFAULT_LEVEL_NAMES[tier - 1] || `Lv.${tier}`
   }
@@ -45,5 +52,5 @@ export const useLevelsStore = defineStore('levels', () => {
     return cfg.value?.autocomplete_min_level ?? 5
   }
 
-  return { cfg, ensure, nameOf, effectsOn, autocompleteMinLevel }
+  return { cfg, ensure, reload, nameOf, effectsOn, autocompleteMinLevel }
 })
