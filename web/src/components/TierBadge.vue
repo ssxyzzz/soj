@@ -26,12 +26,15 @@ const text = computed(() => {
 })
 
 const cls = computed(() => {
-  const arr = ['tier-badge', `tier-${props.size}`, `tier-bg-${clamped.value}`]
-  if (props.kind === 'level' && levels.effectsOn(clamped.value)) {
-    arr.push(`tier-fx-${clamped.value}`)
-  } else {
-    arr.push(`tier-static-${clamped.value}`)
+  if (props.kind === 'level') {
+    const arr = ['tier-badge', `tier-${props.size}`, `tier-bg-${clamped.value}`]
+    arr.push(levels.effectsOn(clamped.value) ? `tier-fx-${clamped.value}` : `tier-static-${clamped.value}`)
+    return arr
   }
+  // 难度：浅色 tag 风（与站点标签同浓度）+ 后四档渐进微特效（极境暗黑深邃）
+  const arr = ['tier-badge', `tier-${props.size}`, 'diff-tag', `diff-${clamped.value}`]
+  const fx = ['', '', '', '', '', '', 'diff-g7', 'diff-g8', 'diff-g9', 'diff-g10'][clamped.value - 1]
+  if (fx) arr.push(fx)
   return arr
 })
 </script>
@@ -53,6 +56,16 @@ const cls = computed(() => {
   vertical-align: middle;
   /* 亮银/亮金等浅档渐变上保白字可读 */
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* 难度（浅色 tag 风）：覆盖白字底色——深彩字、无投影；极境暗黑单独回白字幽光 */
+.tier-badge.diff-tag {
+  color: color-mix(in srgb, var(--dc) 72%, #2c3e50);
+  text-shadow: none;
+}
+.tier-badge.diff-g10 {
+  color: #e8eaf6;
+  text-shadow: 0 0 6px rgba(120, 130, 220, 0.45);
 }
 .tier-sm {
   font-size: var(--soj-fs-tag);

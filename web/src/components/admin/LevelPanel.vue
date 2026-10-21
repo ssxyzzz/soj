@@ -85,6 +85,12 @@ function chipClass(i: number): Record<string, boolean> {
   const fx = form.effects_enabled && form.effects_tiers[i]
   return { [`tier-bg-${i + 1}`]: true, [fx ? `tier-fx-${i + 1}` : `tier-static-${i + 1}`]: true }
 }
+
+// 难度名预览 chip：浅色 tag 风 + 后四档渐进微特效（与题库难度徽章同款）
+function diffChipClass(i: number): Record<string, boolean> {
+  const fx = ['', '', '', '', '', '', 'diff-g7', 'diff-g8', 'diff-g9', 'diff-g10'][i]
+  return { 'diff-tag': true, [`diff-${i + 1}`]: true, ...(fx ? { [fx]: true } : {}) }
+}
 </script>
 
 <template>
@@ -107,7 +113,7 @@ function chipClass(i: number): Record<string, boolean> {
     <div class="section-title">难度名称（难度 1–10 档的展示文字，默认与等级名相同、可独立修改；题库徽章/筛选与建题选择器均显示此名）</div>
     <div class="names-grid">
       <div v-for="(label, i) in form.difficulty_names" :key="i" class="name-cell">
-        <span class="tier-chip" :class="`tier-bg-${i + 1} tier-static-${i + 1}`">{{ i + 1 }}</span>
+        <span class="tier-chip" :class="diffChipClass(i)">{{ form.difficulty_names[i] }}</span>
         <el-input v-model="form.difficulty_names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
       </div>
     </div>
@@ -187,6 +193,14 @@ function chipClass(i: number): Record<string, boolean> {
   color: #fff;
   font-size: var(--soj-fs-small);
   font-weight: var(--soj-fw-regular); /* 徽章字重全局改常规（2026-10-22） */
+}
+
+/* 难度名预览 chip（浅色 tag 风）：覆盖 chip 默认白字 */
+.tier-chip.diff-tag {
+  color: color-mix(in srgb, var(--dc) 72%, #2c3e50);
+}
+.tier-chip.diff-g10 {
+  color: #e8eaf6;
 }
 
 .thresholds-grid {
