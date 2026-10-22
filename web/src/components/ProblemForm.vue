@@ -63,6 +63,7 @@ const props = withDefaults(
     confirmText: '确认创建',
     initial: () => ({}),
     fileIOHint: undefined,
+    pid: undefined,
   },
 )
 
