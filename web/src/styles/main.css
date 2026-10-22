@@ -542,14 +542,16 @@ strong {
   margin: 0.3em 0;
 }
 
-/* 行内 code 徽章化：选择器必须与 Vditor 主题同形（两个 :not 是特异度来源） */
+/* 行内 code 徽章化：选择器必须与 Vditor 主题同形（两个 :not 是特异度来源）；
+   底 #F2F3F4（拍板定值，较 EP fill-color 微暖一阶）+ 字重 medium——正文中略提级 */
 .soj-md.md-light .vditor-reset code:not(.hljs):not(.highlight-chroma) {
   padding: 1px 6px;
-  background-color: var(--el-fill-color);
+  background-color: #f2f3f4;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: var(--el-border-radius-small);
   color: var(--el-text-color-primary);
   font-size: var(--soj-fs-code);
+  font-weight: var(--soj-fw-medium);
   font-family: var(--font-mono);
 }
 
