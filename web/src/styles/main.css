@@ -578,15 +578,19 @@ strong {
 }
 
 /* 代码块：Vditor 默认 85% 相对字号，这里改用统一 code token。
-   行高 1.6 独立于正文 1.7（正文行距渗进代码块显松）；内距显式定 1em——运行时
-   github 主题的 pre code.hljs{padding:1em} 与 vditor 的 0.5em 同特异度 (0,1,2)、
-   后加载者胜（实际 1em），显式写死消除竞态；行号列 top 必须与 padding-top 同值
-   才对齐（见下），两处同用 em 基准（同字号）保证恒等 */
+   行高 1.6 独立于正文 1.7（正文行距渗进代码块显松）；内距显式定 0.5em 0.75em
+   （2026-10-22 验收反馈紧凑化，原 1em 四周太空）——运行时 github 主题的
+   pre code.hljs{padding:1em} 与 vditor 的 0.5em 同特异度 (0,1,2)、后加载者胜，
+   显式写死消除竞态；行号列 top 必须与 padding-top 同值才对齐（见下），
+   两处同用 em 基准（同字号）保证恒等 */
+.soj-md .vditor-reset pre {
+  margin: 0.5em 0; /* vditor 默认 1em 0，紧凑化：样例「输入:/输出:」与块间距减半 */
+}
 .soj-md .vditor-reset pre > code {
   font-size: var(--soj-fs-code);
   font-family: var(--font-mono);
   line-height: 1.6;
-  padding: 1em;
+  padding: 0.5em 0.75em;
 }
 
 /* 多行代码块：淡蓝底 + 淡蓝边（2026-10-22 二版调淡）。白底来自运行时 hljs github
@@ -602,20 +606,24 @@ strong {
 }
 /* 行号（MdViewInner 开 hljs.lineNumber，Vditor 内置覆盖层实现——数字由 ::before
    计数器绘制、代码文本不动，复制按钮 textContent 不受影响）。
-   对齐链：rows.top 与 code padding-top 同为 1em、数字 span 与代码行同 line-height
-   （继承上方 1.6）同 fontSize——首行即齐、行行对齐（首版按 vditor 源码 0.5em 设
-   top，被运行时主题的 1em padding 打破，实测恒偏 7.6px 已修）。
-   行号列 3.5em、代码左缩 5.5em → 数字与代码间隙 2em；行号色蓝灰 #8ba3c2（vditor
-   默认 38% 灰在蓝底上几乎不可见） */
+   对齐链：rows.top 与 code padding-top 同为 0.5em（紧凑化同步改）、数字 span 与
+   代码行同 line-height（继承上方 1.6）同 fontSize——首行即齐、行行对齐（首版按
+   vditor 源码 0.5em 设 top，被运行时主题的 1em padding 打破恒偏 7.6px，显式定
+   padding 后两处恒等）。
+   行号列 2.25em + 右侧淡蓝分隔线（.vditor-linenumber__rows 右缘 1px #d9e6f5）+
+   代码左缩 3.25em → 分隔线与代码间隙 1em；数字距分隔线 0.4em（覆盖 vditor ::before
+   的 padding-right 1em）；行号色蓝灰 #8ba3c2（vditor 默认 38% 灰在蓝底上几乎不可见） */
 .soj-md.md-light .vditor-reset pre > code.vditor-linenumber {
-  padding-left: 5.5em !important;
+  padding-left: 3.25em !important;
 }
 .soj-md.md-light .vditor-reset pre .vditor-linenumber__rows {
-  top: 1em;
-  width: 3.5em;
+  top: 0.5em;
+  width: 2.25em;
+  border-right: 1px solid #d9e6f3;
 }
 .soj-md.md-light .vditor-reset pre .vditor-linenumber__rows > span::before {
   color: #8ba3c2;
+  padding-right: 0.4em;
 }
 
 .soj-md.md-light .vditor-reset table th,
@@ -674,8 +682,8 @@ strong {
 
 .soj-md .vditor-reset pre .md-copy-btn {
   position: absolute;
-  top: 8px;
-  right: 10px;
+  top: 5px;
+  right: 7px; /* 内距紧凑化（0.5em≈7.6px）后同步内收，贴角不压首行文字 */
   z-index: 3;
   display: inline-flex;
   align-items: center;
