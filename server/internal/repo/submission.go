@@ -167,7 +167,7 @@ func (r *Repo) RegradeObjective(ctx context.Context, id int64) error {
 }
 
 // ClaimSubmission 原子领取一条待判提交：Pending -> Judging。
-// 数据库原子性保证多个判题线程/进程不会领到同一份提交（见 DEVELOPMENT.md 判题调度）。
+// 数据库原子性保证多个判题线程/进程不会领到同一份提交。
 // 领取按优先级降序（学生新提交 > 单条重测 > 批量重测），同档按先来先服务。
 // 无待判任务时返回 (nil, nil)。
 func (r *Repo) ClaimSubmission(ctx context.Context, judgeName string) (*Submission, error) {

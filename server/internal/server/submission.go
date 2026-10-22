@@ -52,7 +52,7 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		return
 	}
 
-	// 题目隐藏 + 比赛锁题判定（见 DEVELOPMENT.md「题目」「比赛」节）
+	// 题目隐藏 + 比赛锁题判定
 	lockMap, err := h.loadLockMap(ctx, uid, role)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取比赛状态失败")

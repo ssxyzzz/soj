@@ -13,7 +13,7 @@ import (
 )
 
 // ClassProblemRef 班级对题库题目的引用。Hidden=true 表示仅本班成员可见
-// （只影响班级页展示，全局题库恒可见——见 DEVELOPMENT.md 需求结论）。
+// （只影响班级页展示，全局题库恒可见）。
 type ClassProblemRef struct {
 	PID    int64 `bson:"pid"`
 	Hidden bool  `bson:"hidden"`
