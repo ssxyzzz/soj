@@ -60,7 +60,7 @@ const stars = computed(() => {
 </script>
 
 <template>
-  <span :class="cls">{{ text }}<i
+  <span :class="cls"><slot>{{ text }}</slot><i
     v-for="(s, i) in stars"
     :key="i"
     class="lv-star"

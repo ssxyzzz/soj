@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { UserFilled } from '@element-plus/icons-vue'
 
 import { authApi } from '@/api'
-import TierBadge from '@/components/TierBadge.vue'
+import UserNameLevel from '@/components/UserNameLevel.vue'
 import { LEVEL_STARS, useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 
@@ -97,8 +97,7 @@ function onCommand(command: string) {
           <el-dropdown class="user-dropdown" @command="onCommand">
             <span class="username">
               <span class="user-chip"><el-icon><UserFilled /></el-icon></span>
-              {{ userStore.nickname || '已登录' }}
-              <TierBadge v-if="userStore.level" :tier="userStore.level.level" kind="level" size="sm" class="user-level" />
+              <UserNameLevel :name="userStore.nickname || '已登录'" :level="userStore.level?.level ?? null" />
             </span>
             <template #dropdown>
             <el-dropdown-menu>

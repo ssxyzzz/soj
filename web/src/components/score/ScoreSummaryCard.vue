@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import TierBadge from '@/components/TierBadge.vue'
+import UserNameLevel from '@/components/UserNameLevel.vue'
 import type { ScoreBoardView } from './types'
 
 // 前三名勋章（与排名页 RankView 同一套）
@@ -60,7 +60,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
     <div v-if="!visible" class="empty">{{ emptyText }}</div>
     <div v-else v-loading="loading" class="list">
       <div v-if="!board?.rows.length" class="empty">暂无成绩</div>
-      <!-- 三列（v0.7.2 定稿）：排名（前三勋章）/ 昵称 / 分数；点行查看完整成绩表 -->
+      <!-- 三列：排名（前三勋章）/ 昵称·等级一体 / 分数；点行查看完整成绩表 -->
       <div
         v-for="row in board?.rows ?? []"
         :key="row.uid"
@@ -72,8 +72,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
           <span v-if="row.rank != null && row.rank > 0 && row.rank <= 3">{{ medals[row.rank - 1] }}</span>
           <span v-else>{{ row.rank ?? '—' }}</span>
         </span>
-        <span class="name" :title="row.name">{{ row.name }}</span>
-        <TierBadge v-if="row.level" :tier="row.level" kind="level" size="sm" />
+        <UserNameLevel :name="row.name" :level="row.level" />
         <span class="total">{{ row.total }}</span>
       </div>
     </div>
@@ -105,8 +104,8 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 
 .row {
   display: grid;
-  /* 四列（v0.11 等级勋章）：排名 / 昵称(可截断) / 等级徽章 / 分数 */
-  grid-template-columns: 28px minmax(0, 1fr) auto 44px;
+  /* 三列（v0.11 昵称·等级一体渲染，回归三列）：排名 / 昵称(可截断) / 分数 */
+  grid-template-columns: 28px minmax(0, 1fr) 44px;
   gap: 6px;
   align-items: center;
   padding: 3px 4px;
@@ -129,12 +128,6 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 .rank {
   text-align: center;
   font-variant-numeric: tabular-nums;
-}
-
-.name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .total {

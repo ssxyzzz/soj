@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 
-import TierBadge from '@/components/TierBadge.vue'
+import UserNameLevel from '@/components/UserNameLevel.vue'
 
 import ScoreCell from './ScoreCell.vue'
 import type { ScoreBoardView, ScoreCellView, ScoreProblemView, ScoreRowView } from './types'
@@ -92,10 +92,9 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
         <el-table-column label="排名" width="54" align="center" fixed="left">
           <template #default="{ row }">{{ row.rank ?? '—' }}</template>
         </el-table-column>
-        <el-table-column label="昵称" min-width="150" fixed="left">
+        <el-table-column label="昵称" min-width="190" fixed="left">
           <template #default="{ row }">
-            <span class="name" :class="{ me: row.uid === myUid }" :title="row.name">{{ row.name }}</span>
-            <TierBadge v-if="row.level" :tier="row.level" kind="level" size="sm" class="ml8" />
+            <UserNameLevel :name="row.name" :level="row.level" :me="row.uid === myUid" />
           </template>
         </el-table-column>
         <el-table-column label="总分" width="64" align="center" fixed="left">
@@ -152,20 +151,6 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
 
 .score-table :deep(.el-link:hover) {
   text-decoration: underline;
-}
-
-.name {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  vertical-align: middle;
-}
-
-.name.me {
-  color: var(--el-color-primary);
-  font-weight: var(--soj-fw-emphasis);
 }
 
 .total {
