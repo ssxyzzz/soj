@@ -31,12 +31,23 @@ func (r *Repo) migrateDataLayoutV2(ctx context.Context, store testdata.Provider)
 	}
 	for _, p := range list {
 		if p.IsObjective() {
-			continue // 客观题无数据卷内容
+			// 客观题无数据卷内容，但旧管道曾归档 yaml/题面副本与 extra/——一并清掉
+			_ = store.RemoveDir(p.ID, "extra")
+			_ = store.RemoveDir(p.ID, "cases")
+			_ = store.Delete(p.ID, "problem.yaml")
+			_ = store.Delete(p.ID, "config.yaml")
+			_ = store.Delete(p.ID, "statement.md")
+			if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": p.ID},
+				bson.M{"$unset": bson.M{"sample": ""}}); err != nil {
+				return err
+			}
+			continue
 		}
 		if len(p.Cases) == 0 {
 			continue
 		}
 		set := bson.M{}
+		unset := bson.M{"sample": ""} // 旧顶层 sample 字段（历史版本遗留）一并摘除
 		cases := make([]CaseMeta, 0, len(p.Cases))
 		sorted := append([]CaseMeta(nil), p.Cases...)
 		sort.Slice(sorted, func(i, j int) bool { return sorted[i].Index < sorted[j].Index })
@@ -66,8 +77,6 @@ func (r *Repo) migrateDataLayoutV2(ctx context.Context, store testdata.Provider)
 			continue
 		}
 		set["cases"] = cases
-		set["sample"] = nil // 旧 sample 字段（CaseMeta 已删）
-		unset := bson.M{}
 		for field, old := range map[string]string{
 			"checkerFile":    p.CheckerFile,
 			"driverFile":     p.DriverFile,
