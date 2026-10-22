@@ -1,8 +1,8 @@
 package repo
 
-// config.yaml 白名单解析族（v0.5.4 ② 自 importer.go 拆出）：题包配置的解析、
-// 别名归一与平铺布局归一，与导入/替换流程（importer.go）解耦——zip 上传与
-// 命令行导入两条路径共用。yamlSubtask 同属本族（subtasks 字段类型）。
+// data/config.yaml 解析与渲染（import-design.md：时限/内存/文件 IO/子任务/校验器都住在
+// data/ 里；samples 样例标记已随样例机制整体废弃）。时间/内存兼容纯数字与 Hydro 惯例
+// 带单位字符串（1s / 256m）；subtasks.cases 兼容编号列表与 Hydro 文件对列表。
 
 import (
 	"fmt"
@@ -22,9 +22,8 @@ type yamlSubtask struct {
 	Score int `yaml:"score"`
 }
 
-// UnmarshalYAML cases 兼容两种写法：本站惯例 [1, 2]（测试点编号），以及 Hydro 题包
-// 惯例的文件对列表（- input: 1.in / output: 1.out，编号取输入文件名的数字前缀）。
-// Score 走默认解码；其他字段（如 Hydro 的 type）忽略。
+// UnmarshalYAML cases 兼容两种写法：编号列表 [1, 2]，以及 Hydro 惯例的文件对列表
+//（- input: test1.in / output: test1.out，编号取输入文件名的末段数字）。
 func (s *yamlSubtask) UnmarshalYAML(node *yaml.Node) error {
 	var raw struct {
 		Cases subtaskCases `yaml:"cases"`
@@ -37,7 +36,7 @@ func (s *yamlSubtask) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// subtaskCases 测试点编号列表（见 yamlSubtask.UnmarshalYAML）。
+// subtaskCases 测试点编号列表。
 type subtaskCases []int
 
 func (c *subtaskCases) UnmarshalYAML(node *yaml.Node) error {
@@ -64,7 +63,7 @@ func (c *subtaskCases) UnmarshalYAML(node *yaml.Node) error {
 		}
 		idx, ok := trailingNumber(path.Base(name))
 		if !ok {
-			return fmt.Errorf("无法从测试点文件名 %q 推断编号（文件名需含数字，如 1.in / atbash1.in）", name)
+			return fmt.Errorf("无法从测试点文件名 %q 推断编号（文件名需含数字，如 test1.in / sound3.in）", name)
 		}
 		out = append(out, idx)
 	}
@@ -72,8 +71,7 @@ func (c *subtaskCases) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// timeLimit 时限秒数：兼容纯数字与 Hydro 惯例带单位字符串（1s / 500ms / 2m / 1h）。
-// 导出（MarshalYAML）为直白带单位形态：整秒 "1s"、非整 "0.5s"。
+// timeLimit 时限秒数：兼容纯数字与带单位字符串（1s / 500ms / 2m / 1h）；导出带单位。
 type timeLimit float64
 
 func (t timeLimit) MarshalYAML() (any, error) {
@@ -102,8 +100,7 @@ func (t *timeLimit) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// memLimit 内存 MB 数：兼容纯数字与带单位字符串（256m / 512mb / 1g / 262144k）。
-// 导出为直白带单位形态：整 MB "256MB"、不足 1MB "512KB"。
+// memLimit 内存 MB 数：兼容纯数字与带单位字符串（256m / 512mb / 1g）；导出带单位。
 type memLimit float64
 
 func (m memLimit) MarshalYAML() (any, error) {
@@ -126,7 +123,7 @@ func (m *memLimit) UnmarshalYAML(node *yaml.Node) error {
 	}
 	var s string
 	if err := node.Decode(&s); err != nil {
-		return fmt.Errorf("内存需为数字（MB）或带单位字符串（256m/1g/262144k）")
+		return fmt.Errorf("内存需为数字（MB）或带单位字符串（256m/1g）")
 	}
 	v, err := parseUnitValue(s, map[string]float64{"kb": 1.0 / 1024, "k": 1.0 / 1024, "mb": 1, "m": 1, "gb": 1024, "g": 1024}, "内存")
 	if err != nil {
@@ -136,12 +133,9 @@ func (m *memLimit) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
-// parseUnitValue 解析「数值 + 单位后缀」标量：长后缀优先匹配（ms 先于 s、kb 先于 k），
-// 无后缀按基准单位处理，未知后缀报错并回显原值。
+// parseUnitValue 解析「数值 + 单位后缀」标量：长后缀优先（ms 先于 s、kb 先于 k）。
 func parseUnitValue(s string, units map[string]float64, field string) (float64, error) {
 	s = strings.TrimSpace(strings.ToLower(s))
-	// 后缀按长度降序逐个尝试：HasSuffix 会同时命中长短后缀（"500ms" 以 "s" 结尾），
-	// 短的先匹配会把 "ms" 拆成数值 50 + 单位 m 之外的残串
 	suffixes := make([]string, 0, len(units))
 	for k := range units {
 		suffixes = append(suffixes, k)
@@ -172,43 +166,39 @@ func sortedKeys(m map[string]float64) []string {
 	return keys
 }
 
-// configYAML 支持的字段（含 Hydro 惯例别名 time/memory/filename）。未知字段 yaml 解码自动忽略。
+// configYAML data/config.yaml 支持的字段（未知字段忽略）。
 type configYAML struct {
-	Time           *timeLimit     `yaml:"time"`          // 秒（数字或 Hydro 惯例 "1s"/"500ms" 带单位写法）
-	TimeLimitMS    *int           `yaml:"timeLimitMs"`   // 毫秒（本站惯例，优先级更高）
-	MemoryMB       *memLimit      `yaml:"memory"`        // MB（数字或 "256m"/"1g" 带单位写法）
-	MemoryLimitKB  *int           `yaml:"memoryLimitKb"` // KB（本站惯例，优先级更高）
+	Time           *timeLimit     `yaml:"time"`
+	TimeLimitMS    *int           `yaml:"timeLimitMs"` // 本站惯例（毫秒），优先级更高
+	MemoryMB       *memLimit      `yaml:"memory"`
+	MemoryLimitKB  *int           `yaml:"memoryLimitKb"` // 本站惯例（KB），优先级更高
 	Compare        *string        `yaml:"compare"`       // exact / tolerant
-	CheckerType    *string        `yaml:"checker_type"`  // default→exact、tokens→tolerant、strict→exact、custom→需配 checker 文件
-	Checker        *string        `yaml:"checker"`       // 校验器源文件名（zip 内）
+	CheckerType    *string        `yaml:"checker_type"`  // Hydro 惯例：default→tolerant、strict→exact
+	Checker        *string        `yaml:"checker"`       // 校验器源文件（data/ 内相对名）
 	FloatTolerance *float64       `yaml:"float_tolerance"`
-	Type           *string        `yaml:"type"`           // 题目类型（压扁 Hydro 包/旧双层包的 type 落点）
-	FileIO         *bool          `yaml:"file_io"`        // v0.5.2-3 生效
-	FileIOInput    *string        `yaml:"file_io_input"`  // v0.5.2-3 生效
-	FileIOOutput   *string        `yaml:"file_io_output"` // v0.5.2-3 生效
-	Filename       *string        `yaml:"filename"`       // Hydro 惯例文件 IO：reverse → reverse.in / reverse.out
-	Samples        *[]int         `yaml:"samples"`
+	Type           *string        `yaml:"type"` // Hydro 兼容落点（SOJ 格式题型在 problem.yaml）
+	FileIO         *bool          `yaml:"file_io"`
+	FileIOInput    *string        `yaml:"file_io_input"`
+	FileIOOutput   *string        `yaml:"file_io_output"`
+	Filename       *string        `yaml:"filename"` // Hydro 惯例文件 IO：way → way.in/way.out
 	Subtasks       *[]yamlSubtask `yaml:"subtasks"`
 }
 
-// ProblemConfig 从目录内 config.yaml 解析出的白名单配置（无 config.yaml 时为 nil）。
+// ProblemConfig data/config.yaml 解析结果（无 config.yaml 时为 nil）。
 type ProblemConfig struct {
-	Type           string
 	TimeLimitMS    *int
 	MemoryLimitKB  *int
 	Compare        *string
 	FloatTolerance *float64
 	Checker        *string
+	Type           string
 	FileIO         *bool
 	FileIOInput    *string
 	FileIOOutput   *string
-	Samples        *[]int
 	Subtasks       *[]yamlSubtask
-
-	raw []byte
 }
 
-// parseProblemConfig 读取目录内 config.yaml（不存在返回 nil, nil）。
+// parseProblemConfig 读取 dir 内 config.yaml（不存在返回 nil, nil）——dir 传 data/ 目录。
 func parseProblemConfig(dir string) (*ProblemConfig, error) {
 	raw, err := os.ReadFile(filepath.Join(dir, "config.yaml"))
 	if err != nil {
@@ -221,14 +211,14 @@ func parseProblemConfig(dir string) (*ProblemConfig, error) {
 	if err := yaml.Unmarshal(raw, &y); err != nil {
 		return nil, err
 	}
-	// Hydro 惯例别名归一：time(秒)→timeLimitMs、memory(MB)→memoryLimitKb、checker_type→compare、
-	// filename(name)→文件 IO（name.in / name.out，仅未显式声明时补位）
+	// Hydro 惯例别名归一：time(秒)→timeLimitMs、memory(MB)→memoryLimitKb、
+	// checker_type→compare、filename→文件 IO（仅未显式声明时补位）
 	if y.TimeLimitMS == nil && y.Time != nil && *y.Time > 0 {
 		ms := int(float64(*y.Time) * 1000)
 		y.TimeLimitMS = &ms
 	}
 	if y.MemoryLimitKB == nil && y.MemoryMB != nil && *y.MemoryMB > 0 {
-		kb := int(float64(*y.MemoryMB)) * 1024 // config 按 MB 填写，存储按 KB
+		kb := int(float64(*y.MemoryMB)) * 1024
 		y.MemoryLimitKB = &kb
 	}
 	if y.Compare == nil && y.CheckerType != nil {
@@ -255,71 +245,22 @@ func parseProblemConfig(dir string) (*ProblemConfig, error) {
 			y.FileIOOutput = &out
 		}
 	}
+	var typ string
 	if y.Type != nil {
-		y2 := strings.TrimSpace(*y.Type)
-		y.Type = &y2
+		typ = strings.TrimSpace(*y.Type)
 	}
 	return &ProblemConfig{
-		Type:           y.TypeString(),
 		TimeLimitMS:    y.TimeLimitMS,
 		MemoryLimitKB:  y.MemoryLimitKB,
 		Compare:        y.Compare,
 		FloatTolerance: y.FloatTolerance,
 		Checker:        y.Checker,
+		Type:           typ,
 		FileIO:         y.FileIO,
 		FileIOInput:    y.FileIOInput,
 		FileIOOutput:   y.FileIOOutput,
-		Samples:        y.Samples,
 		Subtasks:       y.Subtasks,
-		raw:            raw,
 	}, nil
-}
-
-// applyTo 把时限/内存/样例/子任务覆盖进 problem.yaml 解析结果（config 优先）。
-// checker_type 的映射：strict→exact，default/tokens→tolerant，custom→需配 checker 文件。
-func (c *ProblemConfig) applyTo(m *problemYAML) {
-	if c == nil {
-		return
-	}
-	if c.TimeLimitMS != nil {
-		v := *c.TimeLimitMS
-		m.TimeLimitMS = &v
-	}
-	if c.MemoryLimitKB != nil {
-		v := *c.MemoryLimitKB
-		m.MemoryLimitKB = &v
-	}
-	if m.Type == "" && c.Type != "" {
-		m.Type = c.Type
-	}
-	if c.Samples != nil {
-		m.Samples = *c.Samples
-	}
-	if c.Subtasks != nil {
-		m.Subtasks = *c.Subtasks
-	}
-	if c.Compare != nil && *c.Compare != "" {
-		m.Compare = *c.Compare
-	}
-}
-
-// resolvedCompare 比对模式：有校验器时交由 checker 全权判定（返回空），
-// 否则 config.compare > problem.yaml compare > 空（exact）。
-func (c *ProblemConfig) resolvedCompare(checkerRel string) string {
-	if checkerRel != "" {
-		return ""
-	}
-	if c != nil && c.Compare != nil {
-		return *c.Compare
-	}
-	return ""
-}
-
-func (c *ProblemConfig) resolvedTolerance() float64 {
-	if c != nil && c.FloatTolerance != nil {
-		return *c.FloatTolerance
-	}
-	return 0
 }
 
 func (c *ProblemConfig) resolvedFileIO() bool {
@@ -340,75 +281,21 @@ func (c *ProblemConfig) resolvedFileIOOutput() string {
 	return ""
 }
 
-// normalizeFlatCases 平铺测试点布局归一：根目录存在 *.in 且配有同名 .ans/.out 时，
-// 按数字序重建为 cases/<序号>/in|ans。已是 cases/<N> 子目录结构则原样跳过。
-func normalizeFlatCases(dir string) error {
-	casesDir := filepath.Join(dir, "cases")
-	if entries, err := os.ReadDir(casesDir); err == nil {
-		for _, e := range entries {
-			if e.IsDir() {
-				return nil // 已是标准结构
-			}
-		}
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	type pair struct{ in, ans string }
-	names := make([]string, 0, 8)
-	pairs := map[string]pair{}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".in") {
-			continue
-		}
-		base := strings.TrimSuffix(e.Name(), ".in")
-		ans := filepath.Join(dir, base+".ans")
-		if _, err := os.Stat(ans); err != nil {
-			ans = filepath.Join(dir, base+".out")
-			if _, err := os.Stat(ans); err != nil {
-				return fmt.Errorf("测试点 %s 缺少对应的答案文件（.ans/.out）", base)
-			}
-		}
-		names = append(names, base)
-		pairs[base] = pair{in: filepath.Join(dir, e.Name()), ans: ans}
-	}
-	if len(names) == 0 {
-		return nil
-	}
-	sort.Slice(names, func(i, j int) bool {
-		ni, iok := trailingNumber(names[i])
-		nj, jok := trailingNumber(names[j])
-		if iok && jok {
-			return ni < nj
-		}
-		return names[i] < names[j]
-	})
-	if err := os.MkdirAll(casesDir, 0o755); err != nil {
-		return err
-	}
-	for i, base := range names {
-		n := i + 1
-		sub := filepath.Join(casesDir, strconv.Itoa(n))
-		if err := os.MkdirAll(sub, 0o755); err != nil {
-			return err
-		}
-		// 移动（非复制）：源文件留在根会被附带文件存档误收，造成测试数据双份
-		for src, dst := range map[string]string{
-			pairs[base].in:  filepath.Join(sub, "in"),
-			pairs[base].ans: filepath.Join(sub, "ans"),
-		} {
-			if err := os.Rename(src, dst); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+// configOut 权威导出 data/config.yaml 的字段面（时间/内存直白带单位）。
+type configOut struct {
+	Time           *timeLimit     `yaml:"time"`
+	Memory         *memLimit      `yaml:"memory"`
+	Compare        string         `yaml:"compare,omitempty"`
+	FloatTolerance float64        `yaml:"float_tolerance,omitempty"`
+	Checker        string         `yaml:"checker,omitempty"` // data/ 内相对名
+	Filename       string         `yaml:"filename,omitempty"`
+	FileIOInput    string         `yaml:"file_io_input,omitempty"`
+	FileIOOutput   string         `yaml:"file_io_output,omitempty"`
+	Subtasks       []yamlSubtask  `yaml:"subtasks,omitempty"`
 }
 
 // trailingNumber 取文件名（去扩展名）末段的连续数字：
-// "1.in"→1、"atbash1.in"→1、"test10.in"→10；无数字返回 false。
-// 兼容 testlib/Hydro 两种命名（数字前缀与字母前缀+数字后缀）。
+// "test10"→10、"sound3"→3、"1"→1；无数字返回 false。
 func trailingNumber(name string) (int, bool) {
 	base := name
 	if i := strings.LastIndex(base, "."); i > 0 {
@@ -423,12 +310,4 @@ func trailingNumber(name string) (int, bool) {
 	}
 	n, err := strconv.Atoi(base[end:])
 	return n, err == nil
-}
-
-// TypeString config.yaml 声明的题型（未声明返回空）。
-func (y *configYAML) TypeString() string {
-	if y.Type == nil {
-		return ""
-	}
-	return *y.Type
 }

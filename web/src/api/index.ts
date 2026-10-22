@@ -227,14 +227,14 @@ export const sourcesApi = {
     post<{ node_id: number; updated: number }>(`/admin/sources/${id}/to-tag`, body),
 }
 
-// 批量导入（v0.15）：题包（含题面）唯一入口；problem.create 权限
+// 题包导入（v0.15 统一格式）：独立 /import 页按来源（soj|hydro）适配；problem.create 权限
 export const importApi = {
   upload: (form: FormData) =>
     client
-      .post<ApiResponse<{ started: boolean }>>('/admin/problems/import', form, { timeout: 0 })
+      .post<ApiResponse<{ started: boolean; source: string }>>('/import', form, { timeout: 0 })
       .then((r) => r.data.data),
-  status: () => get<BatchImportStatus>('/admin/problems/import/status'),
-  cancel: () => post<{ cancel_requested: boolean }>('/admin/problems/import/cancel'),
+  status: () => get<BatchImportStatus>('/import/status'),
+  cancel: () => post<{ cancel_requested: boolean }>('/import/cancel'),
 }
 
 export const submissionApi = {

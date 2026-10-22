@@ -1,5 +1,18 @@
 package repo
 
+// Importer 把「SOJ 题包目录」导入系统（import-design.md 定稿格式，2026-10-22 换血）：
+//
+//	<题目目录>/
+//	  problem.md      题面（唯一来源；样例直接写在正文里）
+//	  problem.yaml    title/type/difficulty/tag/来源四字段（客观题另带 questions 小题定义）
+//	  answer.yaml     客观题纯答案
+//	  answer.md       客观题解析
+//	  data/           数据对原名（*.in + *.ans|.out）+ config.yaml + 附属文件
+//	    config.yaml   time/memory/filename/subtasks/checker
+//
+// 表单直传字段（建题路径）优先于包内声明；题号一律自动分配（IgnoreDirPID 防顶号）。
+// 旧格式（statement.md / cases/ 序号 / samples 样例标记 / extra/）不再支持。
+
 import (
 	"context"
 	"crypto/sha256"
@@ -17,95 +30,36 @@ import (
 	"soj/internal/testdata"
 )
 
-// Importer 把「题目目录」导入系统：文件本体复制进 testdata 存储，元数据写入数据库。
-// 目录布局（与存储布局一致）:
-//
-//	<pid>_<title>/           # 目录名前缀数字作为题目 ID，可省略（省略则自动分配）
-//	  problem.yaml           # title / 时限 / 内存 / samples / hidden / subtasks
-//	  statement.md           # 题面
-//	  cases/1/in 1/ans ...   # 每个测试点一对文件
 type Importer struct {
 	Repo       *Repo
-	DataDir    string  // testdata 存储根目录
-	CreatorUID int64   // 导入者 uid（0 = 系统/命令行导入，其题目隐藏态仅 root 可改）
-	TagIDs     []int64 // 网页建题直传的标签节点 ID（非空时优先于 yaml tags 按名匹配）
-	Difficulty int     // 网页建题直传难度 1–10（非 0 时优先于 yaml difficulty；表单选择器是权威输入）
-	SourceType string  // 网页建题直传来源类型（非空时优先；空 = 未归类）
-	Source     string  // 直传来源名（非空时优先）
-	Year       int     // 直传年份（非 0 时优先）
-	Region     string  // 直传地区（非空时优先）
-	// IgnoreDirPID 忽略目录名数字前缀、题号一律自动分配（v0.15 批量导入用：
-	// 老师题包目录常是 1_x/2_x 式编号，顶号导入会整文档覆盖存量题）。
+	DataDir    string // testdata 存储根目录
+	CreatorUID int64  // 导入者 uid（0 = 系统/命令行导入，其题目隐藏态仅 root 可改）
+
+	// ---- 表单直传（建题路径权威输入，非零值优先于包内声明）----
+	TagIDs          []int64 // 标签节点 ID
+	Difficulty      int     // 难度 1–10
+	SourceType      string  // 来源类型
+	Source          string
+	Year            int
+	Region          string
+	TimeLimitMS     int // 时限毫秒
+	MemoryLimitKB   int // 内存 KB
+	FileIOName      string // 文件 IO 基名（way → way.in/way.out）
+	Compare         string // exact / tolerant
+	FloatTolerance  float64
+	Hidden          bool  // 显式隐藏态（建题表单无此输入，恒 false；批量走 DefaultHidden）
+	// ObjectiveQuestions 网页建客观题直传（含答案的完整定义，非空时优先于包内 questions）。
+	ObjectiveQuestions []ObjectiveQuestion
+	// Checker 表单上传校验器的 data/ 内固定名（非空 = 声明启用；文件不存在则忽略）。
+	Checker string
+
+	// IgnoreDirPID 忽略目录名数字前缀、题号一律自动分配（批量导入防顶号）。
 	IgnoreDirPID bool
-	// DefaultHidden yaml 未声明 hidden 时的缺省值（v0.15 批量导入「导入后默认隐藏」开关）。
+	// DefaultHidden yaml 未声明 hidden 时的缺省值（批量导入「导入后默认隐藏」开关）。
 	DefaultHidden bool
 }
 
-type problemYAML struct {
-	Title         string              `yaml:"title"`
-	Type          string              `yaml:"type,omitempty"`          // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
-	Questions     []ObjectiveQuestion `yaml:"questions,omitempty"`     // objective 小题列表（v0.9.3）
-	Question      *ObjectiveQuestion  `yaml:"question,omitempty"`      // 单题旧写法（解析兼容，导入时并入 questions）
-	Difficulty    int                 `yaml:"difficulty,omitempty"`    // 难度 1–10（v0.11；缺省 D3）
-	SourceType    string              `yaml:"source_type,omitempty"`   // 来源类型（v0.12）：oj/contest/region/local/other
-	Source        string              `yaml:"source,omitempty"`        // 来源名
-	Year          int                 `yaml:"year,omitempty"`          // 年份
-	Region        string              `yaml:"region,omitempty"`        // 地区
-	Time          *timeLimit          `yaml:"time,omitempty"`          // 导出主形态（"1s"/"0.5s"）；解析时低于 timeLimitMs
-	TimeLimitMS   *int                `yaml:"timeLimitMs,omitempty"`   // 旧字段：仅解析兼容，不再导出
-	Memory        *memLimit           `yaml:"memory,omitempty"`        // 导出主形态（"256MB"）；解析时低于 memoryLimitKb
-	MemoryLimitKB *int                `yaml:"memoryLimitKb,omitempty"` // 旧字段：仅解析兼容，不再导出
-	Samples       []int               `yaml:"samples,omitempty"`
-	Visibility    string              `yaml:"visibility,omitempty"`
-	Hidden        *bool               `yaml:"hidden,omitempty"` // 主题库隐藏；指针区分「未声明」（取 Importer.DefaultHidden）与显式 true/false
-	Tags          []string            `yaml:"tags,omitempty"`
-	Compare       string              `yaml:"compare,omitempty"`       // 比对模式 exact/tolerant（v0.5.2-1）
-	Subtasks      []yamlSubtask       `yaml:"subtasks,omitempty"`      // 可选：子任务分组给分（组内全过才得分）
-	Checker       string              `yaml:"checker,omitempty"`       // 校验器源文件名（卷内相对路径）
-	Filename      string              `yaml:"filename,omitempty"`      // 文件 IO 直白形态：atbash → atbash.in/out
-	FileIO        string              `yaml:"file_io,omitempty"`       // 同 filename 的别名（解析兼容）
-	FileIOInput   string              `yaml:"file_io_input,omitempty"` // 显式对（in/out 不同名时的保真形态）
-	FileIOOutput  string              `yaml:"file_io_output,omitempty"`
-}
-
-// resolvedFileIO v2 单 yaml 的文件 IO 归一：显式 input/output 优先于别名；
-// 未声明时返回 (false, "", "")（由 config.yaml 覆盖层或场次级开关接管）。
-func (y *problemYAML) resolvedFileIO() (bool, string, string) {
-	in, out := y.FileIOInput, y.FileIOOutput
-	name := y.Filename // filename 与 file_io 同义别名，filename 优先
-	if name == "" {
-		name = y.FileIO
-	}
-	if name != "" {
-		if in == "" {
-			in = name + ".in"
-		}
-		if out == "" {
-			out = name + ".out"
-		}
-	}
-	return (name != "" || in != "" || out != ""), in, out
-}
-
-// applyYAMLLimits 归一 problem.yaml 的时限/内存：本站字段优先于 Hydro 惯例带单位字段，
-// 缺省/非法回落默认（1s / 256MB）。返回 (ms, kb)。
-func (y *problemYAML) applyYAMLLimits() (int, int) {
-	ms, kb := 1000, 262144
-	if y.TimeLimitMS != nil && *y.TimeLimitMS > 0 {
-		ms = *y.TimeLimitMS
-	} else if y.Time != nil && *y.Time > 0 {
-		ms = int(float64(*y.Time) * 1000)
-	}
-	if y.MemoryLimitKB != nil && *y.MemoryLimitKB > 0 {
-		kb = *y.MemoryLimitKB
-	} else if y.Memory != nil && *y.Memory > 0 {
-		kb = int(float64(*y.Memory) * 1024)
-	}
-	return ms, kb
-}
-
-// seedPID 从目录名解析题号：数字前缀即题号（如 "6_hidden" → 6）；无前缀、
-// 非数字或非正数返回 0（由调用方决定自动分配）。ImportDir 与 SeedAll 共用同一条规则。
+// seedPID 从目录名解析题号（仅种子播种用）：数字前缀即题号；无前缀返回 0。
 func seedPID(name string) int64 {
 	if n, err := strconv.ParseInt(strings.SplitN(name, "_", 2)[0], 10, 64); err == nil && n > 0 {
 		return n
@@ -113,17 +67,21 @@ func seedPID(name string) int64 {
 	return 0
 }
 
-// SeedAll 首次部署播种 seedDir 下全部题目目录：meta.migrations.seedV1 置位后跳过
-// （每次启动重播会以整文档替换冲掉网页端对种子题的修改）。中途失败不置旗标、
-// 下次启动重试，循环内的逐目录补缺跳过保护重试窗口。点开头的隐藏目录（编辑器
-// 缓存、.mimosa 等扫描器状态）不是题包，直接忽略、不进导入也不报错。
+// dirTitleFallback 无 problem.yaml/title 时的标题：目录名剥掉前导「数字+分隔符」。
+func dirTitleFallback(name string) string {
+	name = strings.TrimLeft(name, "0123456789")
+	return strings.TrimLeft(name, "_- .")
+}
+
+// SeedAll 首次部署播种 seedDir 下全部题目目录（SOJ 格式）：meta.migrations.seedV1
+// 置位后跳过；点开头的隐藏目录不是题包直接忽略。
 func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 	done, err := im.Repo.seedDone(ctx)
 	if err != nil {
 		return err
 	}
 	if done {
-		fmt.Println("[seed] 已播种过（meta.seedV1），跳过——新增题目用 make import 或网页建题")
+		fmt.Println("[seed] 已播种过（meta.seedV1），跳过——新增题目用批量导入或网页建题")
 		return nil
 	}
 	entries, err := os.ReadDir(seedDir)
@@ -164,7 +122,7 @@ func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 }
 
 // seedSkipReason 判断种子目录是否跳过（补缺不覆盖）：有数字前缀按题号查库，
-// 无前缀按 problem.yaml 标题（缺省用目录名）查同名题。返回 (是否跳过, 原因, 错误)。
+// 无前缀按 problem.yaml 标题查同名题。
 func (im *Importer) seedSkipReason(ctx context.Context, dir, name string) (bool, string, error) {
 	if pid := seedPID(name); pid > 0 {
 		err := im.Repo.Problems.FindOne(ctx, bson.M{"_id": pid}).Err()
@@ -176,7 +134,7 @@ func (im *Importer) seedSkipReason(ctx context.Context, dir, name string) (bool,
 		}
 		return false, "", nil
 	}
-	title := name
+	title := dirTitleFallback(name)
 	if raw, err := os.ReadFile(filepath.Join(dir, "problem.yaml")); err == nil {
 		var meta problemYAML
 		if yaml.Unmarshal(raw, &meta) == nil && meta.Title != "" {
@@ -193,7 +151,7 @@ func (im *Importer) seedSkipReason(ctx context.Context, dir, name string) (bool,
 	return false, "", nil
 }
 
-// ImportDir 导入单个题目目录，返回创建的题目（含 config.yaml/内置 checker 解析结果）。
+// ImportDir 导入单个 SOJ 题目目录，返回创建的题目。
 func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error) {
 	base := filepath.Base(dir)
 	pid := int64(0)
@@ -201,177 +159,145 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		pid = seedPID(base)
 	}
 
-	// 无感嗅探（v0.9）：SOJ / Hydro / 裸数据三路归一，无法识别时带所见内容报错
-	if _, err := DetectAndNormalize(dir); err != nil {
-		return nil, err
+	// problem.md = 题目目录的身份证（缺失即不是 SOJ 题包）
+	statement, err := os.ReadFile(filepath.Join(dir, "problem.md"))
+	if err != nil {
+		return nil, fmt.Errorf("缺少 problem.md（SOJ 题包以 problem.md 题面识别题目目录；纯数据上传请走建题/编辑页）")
 	}
 
-	raw, err := os.ReadFile(filepath.Join(dir, "problem.yaml"))
-	if err != nil {
-		return nil, fmt.Errorf("读取 problem.yaml: %w", err)
-	}
 	var meta problemYAML
-	if err := yaml.Unmarshal(raw, &meta); err != nil {
-		return nil, fmt.Errorf("解析 problem.yaml: %w", err)
+	if raw, err := os.ReadFile(filepath.Join(dir, "problem.yaml")); err == nil {
+		if err := yaml.Unmarshal(raw, &meta); err != nil {
+			return nil, fmt.Errorf("解析 problem.yaml: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
+	}
+	if strings.TrimSpace(meta.Title) == "" {
+		meta.Title = dirTitleFallback(base)
 	}
 	if meta.Title == "" {
-		meta.Title = base
+		return nil, fmt.Errorf("标题为空：problem.yaml 缺 title 且目录名无可用文字")
 	}
-	if meta.Visibility == "" {
-		meta.Visibility = VisibilityPublic
+
+	// 表单直传覆盖（建题路径权威输入）；yaml 的 "default" 归一为空串（TypeDefault）
+	if im.ObjectiveQuestions != nil {
+		meta.Type = TypeObjective
+	}
+	if meta.Type == "default" {
+		meta.Type = TypeDefault
 	}
 	switch meta.Type {
-	case "", "default":
-		meta.Type = TypeDefault
-	case TypeObjective, TypeFunction, TypeInteractive:
+	case TypeDefault, TypeObjective, TypeFunction, TypeInteractive:
 	default:
 		return nil, fmt.Errorf("暂不支持题型 %q（当前支持：传统题 default、客观题 objective、函数题 function、交互题 interactive）", meta.Type)
 	}
 
-	// 难度归一（v0.11）：网页建题直传优先于 yaml 声明；越界值报错（手写笔误及早暴露）、
-	// 缺省落 D3（表单选择器默认档）
-	if im.Difficulty != 0 {
-		if !ValidDifficulty(im.Difficulty) {
-			return nil, fmt.Errorf("难度需在 1-10 之间")
-		}
-		meta.Difficulty = im.Difficulty
+	// 难度归一：表单 > yaml > 默认 D3
+	d := im.Difficulty
+	if d == 0 {
+		d = meta.Difficulty
 	}
-	if meta.Difficulty != 0 && !ValidDifficulty(meta.Difficulty) {
-		return nil, fmt.Errorf("problem.yaml difficulty 需在 1-10 之间")
+	if d != 0 && !ValidDifficulty(d) {
+		return nil, fmt.Errorf("难度需在 1-10 之间")
 	}
-	if meta.Difficulty == 0 {
-		meta.Difficulty = 3
+	if d == 0 {
+		d = 3
 	}
+	meta.Difficulty = d
 
-	// 来源四字段归一（v0.12）：网页表单直传 > problem.yaml > 标题方括号前缀识别，
-	// 仅回填空缺字段；类型枚举与年份区间非法即报错（手写笔误及早暴露）
-	if err := applySourceFields(*im, meta.Title, &meta.SourceType, &meta.Source, &meta.Year, &meta.Region); err != nil {
+	// 来源四字段归一：表单 > yaml > 标题方括号识别
+	if err := im.applySourceFields(meta.Title, &meta); err != nil {
 		return nil, err
 	}
-	// 来源名沉淀进来源库（v0.12）：表单/ yaml 解析出的来源名登记（类型随填），
-	// 供建题表单 datalist 建议与 root 来源面板归类；失败不阻塞导入
 	if meta.Source != "" {
 		_ = im.Repo.UpsertSourceByName(ctx, meta.Source, meta.SourceType)
 	}
 
-	// config.yaml 白名单字段覆盖 problem.yaml（v0.5.2-2）：未知字段忽略不报错
-	cfg, err := parseProblemConfig(dir)
-	if err != nil {
-		return nil, fmt.Errorf("解析 config.yaml: %w", err)
-	}
-	cfg.applyTo(&meta)
-	// 限额归一须在 config 覆盖之后（Hydro 别名/旧双层覆盖层同样作用于时限内存）
-	msLimit, kbLimit := meta.applyYAMLLimits()
-
-	// config.yaml 声明的校验器文件（白名单成员，提前确定供附带文件收集排除）
-	checkerRel := ""
-	if cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
-		checkerRel = *cfg.Checker
-	}
-
-	// 标签挂载（v0.5.5）：网页建题直传节点 ID（校验存在性），否则 yaml tags 按名匹配
-	//（同名取首个；未命中名不丢弃——v0.12 起登记进来源库并保留在题目 rawTags 上）
-	tagIDs, rawNames, err := im.resolveTags(ctx, meta.Tags)
+	// 标签：表单节点 ID > yaml tag 名匹配（未匹配入来源库 + rawTags 保留）
+	tagIDs, rawNames, err := im.resolveTags(ctx, meta.Tag)
 	if err != nil {
 		return nil, fmt.Errorf("挂载标签: %w", err)
 	}
 	for _, n := range rawNames {
-		_ = im.Repo.UpsertSourceByName(ctx, n, "") // 未分类，root 面板整理
+		_ = im.Repo.UpsertSourceByName(ctx, n, "")
 	}
 
-	statement, err := os.ReadFile(filepath.Join(dir, "statement.md"))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-
-	// 平铺测试点布局归一：根目录 N.in/N.ans 自动整理为 cases/<序号>/ 结构
-	if err := normalizeFlatCases(dir); err != nil {
-		return nil, err
-	}
-
-	// 附带文件存档（gen.py / std.cpp 等造数据脚本）：必须在平铺归一之后收集——
-	// 否则根下的测试数据文件会被误当附带文件双份存档；__MACOSX/.DS_Store/._* 不入档
-	extraFiles, err := collectExtraFiles(dir, checkerRel, typeWhitelist(meta.Type))
-	if err != nil {
-		return nil, fmt.Errorf("收集附带文件: %w", err)
-	}
-
-	// 客观题（v0.9）：无测试数据/校验器/子任务，定义校验后直接入库
+	// 客观题：无 data/；小题定义三源合并（表单直传 > problem.yaml + answer.yaml + answer.md）
 	if meta.Type == TypeObjective {
-		return im.importObjective(ctx, dir, pid, &meta, statement, tagIDs, rawNames, extraFiles, raw)
+		return im.importObjective(ctx, dir, pid, &meta, statement, tagIDs, rawNames)
 	}
 
-	// 收集测试点
-	casesDir := filepath.Join(dir, "cases")
-	caseEntries, err := os.ReadDir(casesDir)
+	// ---- 编程题：data/ 收集 ----
+	pairs, attachments, cfg, err := collectDataDir(filepath.Join(dir, "data"), meta.Type)
 	if err != nil {
-		return nil, fmt.Errorf("读取 cases 目录: %w", err)
-	}
-	indexes := make([]int, 0, len(caseEntries))
-	for _, e := range caseEntries {
-		if !e.IsDir() {
-			continue
-		}
-		if n, err := strconv.Atoi(e.Name()); err == nil {
-			indexes = append(indexes, n)
-		}
-	}
-	sort.Ints(indexes)
-	if len(indexes) == 0 && meta.Type != TypeFunction {
-		return nil, fmt.Errorf("cases 目录下没有测试点")
+		return nil, err
 	}
 
-	// 题目 ID 未指定则自动分配
+	// 时限/内存：config > 表单 > 默认
+	msLimit, kbLimit := 1000, 262144
+	if cfg != nil {
+		if cfg.TimeLimitMS != nil {
+			msLimit = *cfg.TimeLimitMS
+		}
+		if cfg.MemoryLimitKB != nil {
+			kbLimit = *cfg.MemoryLimitKB
+		}
+	}
+	if im.TimeLimitMS != 0 {
+		msLimit = im.TimeLimitMS
+	}
+	if im.MemoryLimitKB != 0 {
+		kbLimit = im.MemoryLimitKB
+	}
+
+	// 校验器声明：表单固定名 > data/config.yaml 的 checker 字段
+	checkerRel := im.Checker
+	if checkerRel == "" && cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
+		checkerRel = *cfg.Checker
+	}
+	if im.Checker != "" {
+		if _, err := os.Stat(filepath.Join(dir, "data", im.Checker)); err != nil {
+			checkerRel = "" // 表单声明了但文件没落盘（未上传）——不启用
+		}
+	}
+
 	if pid == 0 {
-		pid, err = im.Repo.nextSeq(ctx, "problem")
-		if err != nil {
+		if pid, err = im.Repo.nextSeq(ctx, "problem"); err != nil {
 			return nil, err
 		}
 	}
-
 	store := testdata.NewLocalFS(im.DataDir)
-	sampleSet := map[int]bool{}
-	for _, i := range meta.Samples {
-		sampleSet[i] = true
-	}
 
-	// 内置校验器（v0.5.2-2）：目录内的 checker 源文件存入测试数据卷
-	checkerSha, checkerSrc := "", []byte(nil)
-	if checkerRel != "" {
-		src, err := os.ReadFile(filepath.Join(dir, checkerRel))
+	// 数据对落卷（原名 data/<name>），序号按排序重排 1..N
+	cases := make([]CaseMeta, 0, len(pairs))
+	for i, pr := range pairs {
+		inData, err := os.ReadFile(filepath.Join(dir, "data", pr.Base+".in"))
 		if err != nil {
-			return nil, fmt.Errorf("读取校验器文件: %w", err)
+			return nil, fmt.Errorf("读取测试点 %s.in: %w", pr.Base, err)
 		}
-		checkerSha = sha256Hex(src)
-		checkerSrc = src
-	}
-
-	cases := make([]CaseMeta, 0, len(indexes))
-	contents := make(map[int]SampleIO, len(indexes))
-	for _, i := range indexes {
-		inData, err := os.ReadFile(filepath.Join(casesDir, strconv.Itoa(i), "in"))
-		if err != nil {
-			return nil, fmt.Errorf("读取测试点 %d 输入: %w", i, err)
-		}
-		ansData, err := os.ReadFile(filepath.Join(casesDir, strconv.Itoa(i), "ans"))
-		if err != nil {
-			if meta.Type != TypeInteractive {
-				return nil, fmt.Errorf("读取测试点 %d 答案: %w", i, err)
+		var ansData []byte
+		ansName := ""
+		if pr.AnsExt != "" {
+			ansName = "data/" + pr.Base + pr.AnsExt
+			ansData, err = os.ReadFile(filepath.Join(dir, "data", pr.Base+pr.AnsExt))
+			if err != nil {
+				return nil, fmt.Errorf("读取答案 %s: %w", pr.Base+pr.AnsExt, err)
 			}
-			ansData = []byte{} // 交互题答案文件可缺省（判定权在 interactor）
+		} else if meta.Type != TypeInteractive {
+			return nil, fmt.Errorf("测试点 %s 缺少答案文件（.ans/.out）", pr.Base)
 		}
-		contents[i] = SampleIO{Input: string(inData), Output: string(ansData)}
-		inName, ansName := fmt.Sprintf("cases/%d/in", i), fmt.Sprintf("cases/%d/ans", i)
-		if err := store.WriteFile(pid, inName, inData); err != nil {
+		if err := store.WriteFile(pid, "data/"+pr.Base+".in", inData); err != nil {
 			return nil, err
 		}
-		if err := store.WriteFile(pid, ansName, ansData); err != nil {
-			return nil, err
+		if ansName != "" {
+			if err := store.WriteFile(pid, ansName, ansData); err != nil {
+				return nil, err
+			}
 		}
 		cases = append(cases, CaseMeta{
-			Index:   i,
-			Sample:  sampleSet[i],
-			InName:  inName,
+			Index:   i + 1,
+			InName:  "data/" + pr.Base + ".in",
 			AnsName: ansName,
 			InSize:  int64(len(inData)),
 			AnsSize: int64(len(ansData)),
@@ -379,155 +305,202 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 			AnsSHA:  sha256Hex(ansData),
 		})
 	}
-	// 未声明样例时默认第一个测试点为样例
-	if len(sampleSet) == 0 {
-		cases[0].Sample = true
+	if len(cases) == 0 && meta.Type != TypeFunction {
+		// 无数据空壳题允许（题面立即可用、暂不可提交）；函数题必须有 driver 也不必强求数据
+		_ = cases
 	}
 
-	// 样例并入题面：以 Markdown 章节追加，编辑题面即可一并维护样例
-	samples := make([]SampleIO, 0, 4)
-	for _, tc := range cases {
-		if tc.Sample {
-			samples = append(samples, contents[tc.Index])
-		}
-	}
-	statement = []byte(AppendSamplesMdForType(string(statement), samples, meta.Type))
-
-	// 子任务校验：测试点必须存在、分值合计 100
-	subtasks := make([]Subtask, 0, len(meta.Subtasks))
-	if len(meta.Subtasks) > 0 {
-		exists := map[int]bool{}
-		for _, c := range cases {
-			exists[c.Index] = true
-		}
-		sum := 0
-		for _, st := range meta.Subtasks {
-			if len(st.Cases) == 0 {
-				return nil, fmt.Errorf("子任务不能为空")
-			}
-			for _, ci := range st.Cases {
-				if !exists[ci] {
-					return nil, fmt.Errorf("子任务引用了不存在的测试点 %d", ci)
-				}
-			}
-			if st.Score <= 0 {
-				return nil, fmt.Errorf("子任务分值必须为正数")
-			}
-			sum += st.Score
-			subtasks = append(subtasks, Subtask(st))
-		}
-		if sum != 100 {
-			return nil, fmt.Errorf("子任务分值之和必须为 100，当前为 %d", sum)
-		}
+	// 子任务校验（config.subtasks；引用 = 测试点序号，Hydro 文件对写法归一为序号）
+	subtasks, err := validateSubtasks(cfgSubtasks(cfg), len(cases))
+	if err != nil {
+		return nil, err
 	}
 
-	// problem.yaml 与题面一并归档到存储目录，保证数据目录自包含
-	_ = store.WriteFile(pid, "problem.yaml", raw)
-	if cfg != nil {
-		_ = store.WriteFile(pid, "config.yaml", cfg.raw)
-	}
-	if len(statement) > 0 {
-		_ = store.WriteFile(pid, "statement.md", statement)
-	}
-	if checkerRel != "" {
-		if err := store.WriteFile(pid, checkerRel, checkerSrc); err != nil {
-			return nil, err
-		}
-	}
-	// 函数题（v0.9.1）：driver/template 固定名落卷（driver 必须有，template 可选）
-	driverFile, driverSHA, templateFile := "", "", ""
-	interactorFile, interactorSHA := "", ""
-	if meta.Type == TypeFunction {
-		if src, err := os.ReadFile(filepath.Join(dir, "driver.cpp")); err == nil {
-			if err := store.WriteFile(pid, "driver.cpp", src); err != nil {
-				return nil, err
-			}
-			driverFile, driverSHA = "driver.cpp", sha256Hex(src)
-		}
-		if src, err := os.ReadFile(filepath.Join(dir, "template.cpp")); err == nil {
-			if err := store.WriteFile(pid, "template.cpp", src); err != nil {
-				return nil, err
-			}
-			templateFile = "template.cpp"
-		}
-		if driverFile == "" {
-			return nil, fmt.Errorf("函数题缺少 driver.cpp（含 main、调用学生实现的函数）")
-		}
-	}
-	// 交互题（v0.9.2）：interactor.cpp 固定名落卷（必须有，判题依赖）
-	if meta.Type == TypeInteractive {
-		src, ierr := os.ReadFile(filepath.Join(dir, "interactor.cpp"))
-		if ierr != nil {
-			return nil, fmt.Errorf("交互题缺少 interactor.cpp（读 argv[1] 输入文件、stdin/stdout 与选手双向通信、退出码 0 = 通过）")
-		}
-		if err := store.WriteFile(pid, "interactor.cpp", src); err != nil {
-			return nil, err
-		}
-		interactorSHA = sha256Hex(src)
-		interactorFile = "interactor.cpp"
-	}
-	// 附带文件落卷 extra/<zip内路径>：存档备用，判题流程不消费
-	for _, rel := range extraFiles {
-		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
-		if err != nil {
-			return nil, fmt.Errorf("读取附带文件 %s: %w", rel, err)
-		}
-		if err := store.WriteFile(pid, "extra/"+rel, data); err != nil {
-			return nil, err
-		}
-	}
-
+	// 函数/交互题固定名文件（data/ 内）；校验器声明文件
 	p := &Problem{
 		ID:             pid,
 		Title:          meta.Title,
 		Statement:      string(statement),
 		Type:           meta.Type,
-		Difficulty:     meta.Difficulty,
+		Difficulty:     d,
 		SourceType:     meta.SourceType,
 		Source:         meta.Source,
 		Year:           meta.Year,
 		Region:         meta.Region,
 		TimeLimitMS:    msLimit,
 		MemoryLimitKB:  kbLimit,
-		Visibility:     meta.Visibility,
+		Visibility:     VisibilityPublic,
 		Hidden:         im.effHidden(&meta),
 		CreatedBy:      im.CreatorUID,
 		Tags:           tagIDs,
 		RawTags:        rawNames,
 		Subtasks:       subtasks,
 		Cases:          cases,
-		Compare:        pickNonEmpty(cfg.resolvedCompare(checkerRel), meta.Compare),
-		FloatTolerance: cfg.resolvedTolerance(),
-		CheckerFile:    checkerRel,
-		CheckerSHA:     checkerSha,
-		DriverFile:     driverFile,
-		DriverSHA:      driverSHA,
-		TemplateFile:   templateFile,
-		InteractorFile: interactorFile,
-		InteractorSHA:  interactorSHA,
 	}
-	// 文件 IO 归一（v0.9 单 yaml）：config.yaml 覆盖层 > problem.yaml 声明 > 无
-	if yFio, yIn, yOut := meta.resolvedFileIO(); yFio && !cfg.resolvedFileIO() {
-		p.FileIO, p.FileIOInput, p.FileIOOutput = true, yIn, yOut
-	} else {
-		p.FileIO, p.FileIOInput, p.FileIOOutput = cfg.resolvedFileIO(), cfg.resolvedFileIOInput(), cfg.resolvedFileIOOutput()
+	if err := im.writeTypeFiles(store, p, dir, checkerRel); err != nil {
+		return nil, err
 	}
+	// 附属文件落卷（data/<原名>，与数据对同目录）
+	for _, rel := range attachments {
+		data, err := os.ReadFile(filepath.Join(dir, "data", filepath.FromSlash(rel)))
+		if err != nil {
+			return nil, fmt.Errorf("读取附属文件 %s: %w", rel, err)
+		}
+		if err := store.WriteFile(pid, "data/"+rel, data); err != nil {
+			return nil, err
+		}
+	}
+	im.applyConfigExtras(p, cfg)
+
 	if err := im.Repo.UpsertProblem(ctx, p); err != nil {
 		return nil, err
 	}
 	return p, nil
 }
 
-// importObjective 客观题导入路径（v0.9）：校验 question 定义与填空占位数，
-// 无测试数据/校验器/子任务，problem.yaml/statement.md/extra 归档后入库。
-func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, meta *problemYAML, statement []byte, tagIDs []int64, rawNames []string, extraFiles []string, raw []byte) (*Problem, error) {
-	// 小题来源：questions[] 优先；旧包只有单题 question 时并入
-	qs := meta.Questions
-	if len(qs) == 0 && meta.Question != nil {
-		qs = []ObjectiveQuestion{*meta.Question}
+// writeTypeFiles 题型专属文件落卷（data/ 固定名）：函数题 driver 必须、template 可选；
+// 交互题 interactor 必须；校验器按 config.checker 声明。
+func (im *Importer) writeTypeFiles(store testdata.Provider, p *Problem, dir, checkerRel string) error {
+	pid := p.ID
+	read := func(name string) ([]byte, error) {
+		return os.ReadFile(filepath.Join(dir, "data", name))
 	}
-	if len(qs) == 0 {
-		return nil, fmt.Errorf("客观题缺少 questions 定义（problem.yaml 的 questions 列表）")
+	if p.Type == TypeFunction {
+		if src, err := read("driver.cpp"); err == nil {
+			if err := store.WriteFile(pid, "data/driver.cpp", src); err != nil {
+				return err
+			}
+			p.DriverFile, p.DriverSHA = "data/driver.cpp", sha256Hex(src)
+		} else {
+			return fmt.Errorf("函数题缺少 data/driver.cpp（含 main、调用学生实现的函数）")
+		}
+		if src, err := read("template.cpp"); err == nil {
+			if err := store.WriteFile(pid, "data/template.cpp", src); err != nil {
+				return err
+			}
+			p.TemplateFile = "data/template.cpp"
+		}
+	}
+	if p.Type == TypeInteractive {
+		src, err := read("interactor.cpp")
+		if err != nil {
+			return fmt.Errorf("交互题缺少 data/interactor.cpp（读 argv[1] 输入文件、stdin/stdout 与选手双向通信、退出码 0 = 通过）")
+		}
+		if err := store.WriteFile(pid, "data/interactor.cpp", src); err != nil {
+			return err
+		}
+		p.InteractorFile, p.InteractorSHA = "data/interactor.cpp", sha256Hex(src)
+	}
+	if checkerRel != "" {
+		src, err := os.ReadFile(filepath.Join(dir, "data", filepath.FromSlash(checkerRel)))
+		if err != nil {
+			return fmt.Errorf("读取校验器文件 %s: %w", checkerRel, err)
+		}
+		rel := "data/" + checkerRel
+		if err := store.WriteFile(pid, rel, src); err != nil {
+			return err
+		}
+		p.CheckerFile, p.CheckerSHA = rel, sha256Hex(src)
+	}
+	return nil
+}
+
+// applyConfigExtras config.yaml 的比对模式/文件 IO 归一（时限内存已单独处理）。
+func (im *Importer) applyConfigExtras(p *Problem, cfg *ProblemConfig) {
+	compare := ""
+	tol := 0.0
+	if cfg != nil {
+		if cfg.Compare != nil {
+			compare = *cfg.Compare
+		}
+		if cfg.FloatTolerance != nil {
+			tol = *cfg.FloatTolerance
+		}
+	}
+	if im.Compare != "" {
+		compare = im.Compare // 表单直传优先
+		if im.Compare == CompareTolerant && im.FloatTolerance > 0 {
+			tol = im.FloatTolerance
+		}
+	}
+	if p.CheckerFile == "" && compare != "" {
+		p.Compare = compare
+		if compare == CompareTolerant && tol > 0 {
+			p.FloatTolerance = tol
+		}
+	}
+	fileIO, inName, outName := false, "", ""
+	if cfg != nil {
+		fileIO = cfg.resolvedFileIO()
+		inName, outName = cfg.resolvedFileIOInput(), cfg.resolvedFileIOOutput()
+	}
+	if im.FileIOName != "" {
+		fileIO = true
+		inName, outName = im.FileIOName+".in", im.FileIOName+".out"
+	}
+	if fileIO {
+		p.FileIO, p.FileIOInput, p.FileIOOutput = true, inName, outName
+	}
+}
+
+// cfgSubtasks config 声明的子任务（未声明返回 nil）。
+func cfgSubtasks(cfg *ProblemConfig) []yamlSubtask {
+	if cfg == nil || cfg.Subtasks == nil {
+		return nil
+	}
+	return *cfg.Subtasks
+}
+
+// validateSubtasks 子任务校验：引用的测试点序号必须存在、分值合计 100。
+func validateSubtasks(ysts []yamlSubtask, caseCount int) ([]Subtask, error) {
+	if len(ysts) == 0 {
+		return nil, nil
+	}
+	if caseCount == 0 {
+		return nil, fmt.Errorf("声明了 subtasks 但 data/ 里没有数据对")
+	}
+	exists := map[int]bool{}
+	for i := 1; i <= caseCount; i++ {
+		exists[i] = true
+	}
+	sum := 0
+	out := make([]Subtask, 0, len(ysts))
+	for _, st := range ysts {
+		if len(st.Cases) == 0 {
+			return nil, fmt.Errorf("子任务不能为空")
+		}
+		for _, ci := range st.Cases {
+			if !exists[ci] {
+				return nil, fmt.Errorf("子任务引用了不存在的测试点 %d（本包共 %d 个数据对）", ci, caseCount)
+			}
+		}
+		if st.Score <= 0 {
+			return nil, fmt.Errorf("子任务分值必须为正数")
+		}
+		sum += st.Score
+		out = append(out, Subtask(st))
+	}
+	if sum != 100 {
+		return nil, fmt.Errorf("子任务分值之和必须为 100，当前为 %d", sum)
+	}
+	return out, nil
+}
+
+// importObjective 客观题导入：小题定义 = 表单直传（含答案）∨ problem.yaml questions
+// + answer.yaml 答案 + answer.md 解析 三源合并；ValidateObjectiveSet 兜底校验。
+func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, meta *problemYAML, statement []byte, tagIDs []int64, rawNames []string) (*Problem, error) {
+	qs := im.ObjectiveQuestions
+	if qs == nil {
+		answers, err := parseAnswerFile(filepath.Join(dir, "answer.yaml"))
+		if err != nil {
+			return nil, err
+		}
+		expRaw, _ := os.ReadFile(filepath.Join(dir, "answer.md"))
+		explanations := splitAnswerMarkdown(string(expRaw))
+		qs, err = mergeObjective(meta.Questions, answers, explanations)
+		if err != nil {
+			return nil, err
+		}
 	}
 	for i := range qs {
 		NormalizeObjective(&qs[i])
@@ -536,30 +509,9 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 	if err := ValidateObjectiveSet(qs); err != nil {
 		return nil, fmt.Errorf("客观题定义不合法: %w", err)
 	}
-	// 单道填空题允许把题干写在整题 statement 里（旧包/单题习惯）
-	if len(qs) == 1 && qs[0].Kind == ObjBlank && strings.TrimSpace(qs[0].Stem) == "" {
-		if n := CountBlanksInStatement(string(statement)); n != len(qs[0].Blanks) {
-			return nil, fmt.Errorf("题面里有 %d 个空位（____），定义里有 %d 空，请保持一致", n, len(qs[0].Blanks))
-		}
-		qs[0].Stem = string(statement)
-	}
 	var err error
 	if pid == 0 {
 		if pid, err = im.Repo.nextSeq(ctx, "problem"); err != nil {
-			return nil, err
-		}
-	}
-	store := testdata.NewLocalFS(im.DataDir)
-	_ = store.WriteFile(pid, "problem.yaml", raw)
-	if len(statement) > 0 {
-		_ = store.WriteFile(pid, "statement.md", statement)
-	}
-	for _, rel := range extraFiles {
-		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
-		if err != nil {
-			return nil, fmt.Errorf("读取附带文件 %s: %w", rel, err)
-		}
-		if err := store.WriteFile(pid, "extra/"+rel, data); err != nil {
 			return nil, err
 		}
 	}
@@ -568,9 +520,9 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 		Type: TypeObjective, Questions: qs,
 		Difficulty: meta.Difficulty,
 		SourceType: meta.SourceType, Source: meta.Source, Year: meta.Year, Region: meta.Region,
-		// 客观题不消费时空限制，占位默认值（渲染导出时同样带上）
+		// 客观题不消费时空限制，占位默认值
 		TimeLimitMS: 1000, MemoryLimitKB: 262144,
-		Visibility: meta.Visibility,
+		Visibility: VisibilityPublic,
 		Hidden:     im.effHidden(meta),
 		CreatedBy:  im.CreatorUID,
 		Tags:       tagIDs,
@@ -583,55 +535,204 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 	return p, nil
 }
 
-// RenderProblemYAML 权威导出（v0.9 下载）：题目元数据按 db 当前值渲染为 v2 单 yaml，
-// 下载包重新上传可完整重建。客观题定义全量导出（含答案与解析——下载本身有权限位+限额把门）。
-func (im *Importer) RenderProblemYAML(ctx context.Context, p *Problem) []byte {
-	ms, kb := p.TimeLimitMS, p.MemoryLimitKB
-	if ms <= 0 {
-		ms = 1000
-	}
-	if kb <= 0 {
-		kb = 262144
-	}
-	meta := problemYAML{
-		Title:      p.Title,
-		Type:       p.Type,
-		Difficulty: p.Difficulty,
-		SourceType: p.SourceType,
-		Source:     p.Source,
-		Year:       p.Year,
-		Region:     p.Region,
-		Time:       timeLimitPtr(timeLimit(ms) / 1000),
-		Memory:     memLimitPtr(memLimit(kb) / 1024),
-		Visibility: pickNonEmpty(p.Visibility, VisibilityPublic),
-		Hidden:     hiddenPtr(p.Hidden),
-		Tags:       im.tagNamesOf(ctx, p.Tags),
-		Compare:    p.Compare,
-		Questions:  p.Questions,
-	}
-	for _, c := range p.Cases {
-		if c.Sample {
-			meta.Samples = append(meta.Samples, c.Index)
-		}
-	}
-	for _, st := range p.Subtasks {
-		meta.Subtasks = append(meta.Subtasks, yamlSubtask{Cases: st.Cases, Score: st.Score})
-	}
-	if p.CheckerFile != "" {
-		meta.Checker = p.CheckerFile
-	}
-	renderFileIO(&meta, p)
-	yb, err := yaml.Marshal(&meta)
+func parseAnswerFile(path string) (answerYAML, error) {
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return yb
+	return parseAnswerYAML(raw)
 }
 
-func timeLimitPtr(v timeLimit) *timeLimit { return &v }
-func memLimitPtr(v memLimit) *memLimit    { return &v }
+// ReplaceData 编辑页整包替换数据（zip 只认 data/）：数据对/附属/题型文件/校验器全量重建，
+// data/config.yaml 可覆盖时限内存/子任务/文件 IO/比对模式；题面与题目元数据（标题/难度/
+// 来源/标签/隐藏）一律不动。
+func (im *Importer) ReplaceData(ctx context.Context, pid int64, dir string) (*Problem, error) {
+	p, err := im.Repo.GetProblem(ctx, pid)
+	if err != nil {
+		return nil, fmt.Errorf("读取原题目: %w", err)
+	}
+	if p.IsObjective() {
+		return nil, fmt.Errorf("客观题没有测试数据：请在编辑页直接修改题目内容")
+	}
+	dataDir := filepath.Join(dir, "data")
+	if fi, err := os.Stat(dataDir); err != nil || !fi.IsDir() {
+		return nil, fmt.Errorf("数据包缺少 data/ 目录（建题/编辑页 zip 只收 data/ 数据与 config.yaml 配置）")
+	}
+	pairs, attachments, cfg, err := collectDataDir(dataDir, p.Type)
+	if err != nil {
+		return nil, err
+	}
+	store := testdata.NewLocalFS(im.DataDir)
+	_ = store.RemoveDir(pid, "data") // 纯替换语义：旧数据/附属全清
 
-// hiddenPtr 导出用：仅 true 落 yaml（false 省略，保持导出格式与既往一致）。
+	cases := make([]CaseMeta, 0, len(pairs))
+	for i, pr := range pairs {
+		inData, err := os.ReadFile(filepath.Join(dataDir, filepath.FromSlash(pr.Base+".in")))
+		if err != nil {
+			return nil, fmt.Errorf("读取测试点 %s: %w", pr.Base+".in", err)
+		}
+		ansName := ""
+		var ansData []byte
+		if pr.AnsExt != "" {
+			ansName = "data/" + pr.Base + pr.AnsExt
+			ansData, err = os.ReadFile(filepath.Join(dataDir, filepath.FromSlash(pr.Base+pr.AnsExt)))
+			if err != nil {
+				return nil, fmt.Errorf("读取答案 %s: %w", pr.Base+pr.AnsExt, err)
+			}
+		} else if p.Type != TypeInteractive {
+			return nil, fmt.Errorf("测试点 %s 缺少答案文件（.ans/.out）", pr.Base)
+		}
+		if err := store.WriteFile(pid, "data/"+pr.Base+".in", inData); err != nil {
+			return nil, err
+		}
+		if ansName != "" {
+			if err := store.WriteFile(pid, ansName, ansData); err != nil {
+				return nil, err
+			}
+		}
+		cases = append(cases, CaseMeta{
+			Index: i + 1, InName: "data/" + pr.Base + ".in", AnsName: ansName,
+			InSize: int64(len(inData)), AnsSize: int64(len(ansData)),
+			InSHA: sha256Hex(inData), AnsSHA: sha256Hex(ansData),
+		})
+	}
+
+	// 子任务：config 声明 > 沿用原配置（引用序号必须仍存在）
+	var subtasks []Subtask
+	switch {
+	case cfg != nil && cfg.Subtasks != nil:
+		subtasks, err = validateSubtasks(*cfg.Subtasks, len(cases))
+		if err != nil {
+			return nil, err
+		}
+	case len(p.Subtasks) > 0 && len(cases) > 0:
+		subtasks, err = validateSubtasks(subtasksOf(p.Subtasks), len(cases))
+		if err != nil {
+			return nil, fmt.Errorf("新数据不满足原子任务配置（请在 data/config.yaml 重新声明 subtasks）: %w", err)
+		}
+	}
+
+	checkerRel := ""
+	if cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
+		checkerRel = *cfg.Checker
+	}
+	if err := im.writeTypeFiles(store, p, dir, checkerRel); err != nil {
+		return nil, err
+	}
+	for _, rel := range attachments {
+		data, err := os.ReadFile(filepath.Join(dataDir, filepath.FromSlash(rel)))
+		if err != nil {
+			return nil, fmt.Errorf("读取附属文件 %s: %w", rel, err)
+		}
+		if err := store.WriteFile(pid, "data/"+rel, data); err != nil {
+			return nil, err
+		}
+	}
+
+	// config 覆盖（时限/内存/文件 IO/比对），声明才动
+	if cfg != nil {
+		if cfg.TimeLimitMS != nil {
+			p.TimeLimitMS = *cfg.TimeLimitMS
+		}
+		if cfg.MemoryLimitKB != nil {
+			p.MemoryLimitKB = *cfg.MemoryLimitKB
+		}
+		if cfg.FileIO != nil {
+			p.FileIO = *cfg.FileIO
+		}
+		if cfg.FileIOInput != nil {
+			p.FileIOInput = *cfg.FileIOInput
+		}
+		if cfg.FileIOOutput != nil {
+			p.FileIOOutput = *cfg.FileIOOutput
+		}
+		if p.CheckerFile == "" && cfg.Compare != nil && *cfg.Compare != "" {
+			p.Compare = *cfg.Compare
+		}
+	}
+	p.Cases = cases
+	p.Subtasks = subtasks
+	if err := im.Repo.UpsertProblem(ctx, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func subtasksOf(ss []Subtask) []yamlSubtask {
+	out := make([]yamlSubtask, 0, len(ss))
+	for _, st := range ss {
+		out = append(out, yamlSubtask(st))
+	}
+	return out
+}
+
+// collectDataDir 收集 data/ 目录：数据对（*.in + 同名 .ans|.out，交互题答案可缺）+
+// 附属文件（其余全部，含 gen.py/std.cpp；config.yaml 与数据对文件除外）+ config 解析。
+func collectDataDir(dataDir, typ string) (pairs []dataPair, attachments []string, cfg *ProblemConfig, err error) {
+	if fi, e := os.Stat(dataDir); e != nil || !fi.IsDir() {
+		return nil, nil, nil, nil // data/ 可缺省 = 无数据题
+	}
+	cfg, err = parseProblemConfig(dataDir)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("解析 data/config.yaml: %w", err)
+	}
+	entries, err := os.ReadDir(dataDir)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	inFiles := map[string]bool{}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".in") {
+			inFiles[strings.TrimSuffix(e.Name(), ".in")] = true
+		}
+	}
+	claimed := map[string]bool{"config.yaml": true}
+	pairs = make([]dataPair, 0, len(inFiles))
+	for base := range inFiles {
+		ext := ""
+		if _, err := os.Stat(filepath.Join(dataDir, base+".ans")); err == nil {
+			ext = ".ans"
+		} else if _, err := os.Stat(filepath.Join(dataDir, base+".out")); err == nil {
+			ext = ".out"
+		} else if typ != TypeInteractive {
+			return nil, nil, nil, fmt.Errorf("数据对 %s.in 缺少答案文件（%s.ans 或 %s.out）", base, base, base)
+		}
+		pairs = append(pairs, dataPair{Base: base, InName: base + ".in", AnsExt: ext})
+		claimed[base+".in"] = true
+		claimed[base+".ans"] = true // 两种答案扩展名都认领：未选中的同名兄弟不是附属文件
+		claimed[base+".out"] = true
+	}
+	sortDataPairs(pairs)
+	for _, e := range entries {
+		if e.IsDir() || claimed[e.Name()] || isPackJunk(e.Name()) {
+			continue
+		}
+		attachments = append(attachments, e.Name())
+	}
+	sort.Strings(attachments)
+	return pairs, attachments, cfg, nil
+}
+
+// isPackJunk macOS 打包杂物。
+func isPackJunk(name string) bool {
+	return name == ".DS_Store" || strings.HasPrefix(name, "._") || name == "__MACOSX"
+}
+
+// effHidden 隐藏态归一：yaml 显式声明优先，未声明取 DefaultHidden（批量导入开关）。
+func (im *Importer) effHidden(meta *problemYAML) bool {
+	if meta.Hidden != nil {
+		return *meta.Hidden
+	}
+	if im.Hidden {
+		return true
+	}
+	return im.DefaultHidden
+}
+
+// hiddenPtr 导出用：仅 true 落 yaml（false 省略）。
 func hiddenPtr(v bool) *bool {
 	if v {
 		return &v
@@ -639,42 +740,33 @@ func hiddenPtr(v bool) *bool {
 	return nil
 }
 
-// effHidden 隐藏态归一（v0.15）：yaml 显式声明优先，未声明取 DefaultHidden（批量导入开关）。
-func (im *Importer) effHidden(meta *problemYAML) bool {
-	if meta.Hidden != nil {
-		return *meta.Hidden
-	}
-	return im.DefaultHidden
-}
-
-// applySourceFields 来源四字段归一：表单直传最高优先（权威输入，覆盖 yaml，语义同
-// difficulty），四字段全空才走标题方括号前缀识别；类型枚举与年份区间非法即报错。
-func applySourceFields(im Importer, title string, sourceType, source *string, year *int, region *string) error {
+// applySourceFields 来源四字段归一：表单直传 > yaml > 标题方括号识别（仅全空才识别）。
+func (im *Importer) applySourceFields(title string, meta *problemYAML) error {
 	if im.SourceType != "" {
-		*sourceType = im.SourceType
+		meta.SourceType = im.SourceType
 	}
 	if im.Source != "" {
-		*source = im.Source
+		meta.Source = im.Source
 	}
 	if im.Year != 0 {
-		*year = im.Year
+		meta.Year = im.Year
 	}
 	if im.Region != "" {
-		*region = im.Region
+		meta.Region = im.Region
 	}
-	if *sourceType == "" && *source == "" && *year == 0 && *region == "" {
+	if meta.SourceType == "" && meta.Source == "" && meta.Year == 0 && meta.Region == "" {
 		if h := ParseSourceHint(title); h.Source != "" || h.Region != "" || h.Year != 0 {
-			*sourceType, *source, *year, *region = h.SourceType, h.Source, h.Year, h.Region
+			meta.SourceType, meta.Source, meta.Year, meta.Region = h.SourceType, h.Source, h.Year, h.Region
 		}
 	}
-	if !ValidSourceType(*sourceType) {
+	if !ValidSourceType(meta.SourceType) {
 		return fmt.Errorf("source_type 需为 oj / contest / region / local / other")
 	}
-	if *year != 0 && (*year < 1900 || *year > 2100) {
+	if meta.Year != 0 && (meta.Year < 1900 || meta.Year > 2100) {
 		return fmt.Errorf("year 需在 1900-2100 之间")
 	}
-	*source = truncateRunes(*source, 64)
-	*region = truncateRunes(*region, 64)
+	meta.Source = truncateRunes(meta.Source, 64)
+	meta.Region = truncateRunes(meta.Region, 64)
 	return nil
 }
 
@@ -686,41 +778,9 @@ func truncateRunes(s string, max int) string {
 	return s
 }
 
-// renderFileIO 文件 IO 渲染（直白优先）：in/out 同基名 → filename: atbash 一个字段；
-// 显式配了不同名才落 file_io_input/output 保真。
-func renderFileIO(meta *problemYAML, p *Problem) {
-	if !p.FileIO {
-		return
-	}
-	base := func(name, def string) string {
-		if i := strings.LastIndex(name, "."); i > 0 {
-			return name[:i]
-		}
-		return def
-	}
-	inB := base(p.FileIOInput, "problem")
-	outB := base(p.FileIOOutput, inB)
-	if inB == outB && inB != "problem" {
-		meta.Filename = inB
-		return
-	}
-	if p.FileIOInput != "" || p.FileIOOutput != "" {
-		meta.FileIOInput, meta.FileIOOutput = p.FileIOInput, p.FileIOOutput
-	} else {
-		meta.Filename = inB
-	}
-}
-
-// BuildObjectiveYAML 网页建客观题用：生成 v2 problem.yaml（title/type/questions 列表）。
-func BuildObjectiveYAML(title string, qs []ObjectiveQuestion) ([]byte, error) {
-	meta := problemYAML{Title: title, Type: TypeObjective, Questions: qs}
-	return yaml.Marshal(&meta)
-}
-
 func sha256Hex(b []byte) string { return fmt.Sprintf("%x", sha256.Sum256(b)) }
 
-// tagNamesOf 节点 ID → 名字（problem.yaml 归档用；树中已不存在的 ID 忽略，
-// 读取树失败时返回 nil——归档是尽力而为，不阻塞替换主流程）。
+// tagNamesOf 节点 ID → 名字（导出渲染 problem.yaml 的 tag 字段用）。
 func (im *Importer) tagNamesOf(ctx context.Context, ids []int64) []string {
 	if len(ids) == 0 {
 		return nil
@@ -739,9 +799,8 @@ func (im *Importer) tagNamesOf(ctx context.Context, ids []int64) []string {
 	return out
 }
 
-// resolveTags 把标签来源归一为树节点 ID：TagIDs 非空（网页建题）时校验每个 ID
-// 在树中存在（此路不产生原始名保留）；否则按名字匹配（同名取首个），未命中的名字
-// 作为原始名返回（v0.12：登记来源库 + 挂题目 rawTags，不再静默丢弃）。
+// resolveTags 标签归一为树节点 ID：TagIDs 非空（网页建题）时校验存在；否则按 yaml tag
+// 名匹配（未匹配的入来源库 + rawTags 保留，v0.12）。
 func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, []string, error) {
 	if len(im.TagIDs) > 0 {
 		if err := im.Repo.ValidateTagRefs(ctx, im.TagIDs); err != nil {
@@ -760,9 +819,7 @@ func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, [
 	return ids, unmatched, nil
 }
 
-// matchTagNames 按名匹配树节点（纯函数，单测覆盖）：命中取 ID（同名节点取先见者、
-// ID 去重），未命中的原名保留返回（v0.12 来源库联动）；名字 TrimSpace、空名跳过、
-// 重名输入去重。
+// matchTagNames 按名匹配树节点（纯函数，单测覆盖）。
 func matchTagNames(lookup map[string]int64, names []string) (ids []int64, unmatched []string) {
 	seenID := map[int64]bool{}
 	seenName := map[string]bool{}
@@ -784,276 +841,7 @@ func matchTagNames(lookup map[string]int64, names []string) (ids []int64, unmatc
 	return ids, unmatched
 }
 
-// ReplaceCases 整包替换既有题目的测试数据（编辑题目复用建题界面，v0.5.2-4）：
-// dir 为新数据包解压目录（cases/<N>/in|ans 结构），旧测试点文件全部删除；
-// 标题/时限/内存/隐藏态等元数据保持不变，新包 config.yaml 可覆盖
-// 样例/子任务/文件 IO/校验器（与建题的「config 优先」语义一致）；
-// 题面正文保留，样例章节按新数据重建（「## 样例」剥离后重追加）。
-func (im *Importer) ReplaceCases(ctx context.Context, pid int64, dir string) (*Problem, error) {
-	p, err := im.Repo.GetProblem(ctx, pid)
-	if err != nil {
-		return nil, fmt.Errorf("读取原题目: %w", err)
-	}
-	if p.IsObjective() {
-		return nil, fmt.Errorf("客观题不支持整包替换：请在编辑页直接修改题目内容")
-	}
-	if _, err := DetectAndNormalize(dir); err != nil {
-		return nil, err
-	}
-	if err := normalizeFlatCases(dir); err != nil {
-		return nil, err
-	}
-	cfg, err := parseProblemConfig(dir)
-	if err != nil {
-		return nil, fmt.Errorf("解析 config.yaml: %w", err)
-	}
-	if probePackageType(dir) == TypeObjective {
-		return nil, fmt.Errorf("整包替换不支持客观题包：请在编辑页直接修改题目内容")
-	}
-	// 校验器声明与附带文件清单（extra 存档）——收集在 normalizeFlatCases 之后的布局上进行
-	checkerRel := ""
-	if cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
-		checkerRel = *cfg.Checker
-	}
-	extraFiles, err := collectExtraFiles(dir, checkerRel, typeWhitelist(p.Type))
-	if err != nil {
-		return nil, fmt.Errorf("收集附带文件: %w", err)
-	}
-
-	casesDir := filepath.Join(dir, "cases")
-	caseEntries, err := os.ReadDir(casesDir)
-	if err != nil {
-		return nil, fmt.Errorf("读取 cases 目录: %w", err)
-	}
-	indexes := make([]int, 0, len(caseEntries))
-	for _, e := range caseEntries {
-		if !e.IsDir() {
-			continue
-		}
-		if n, err := strconv.Atoi(e.Name()); err == nil {
-			indexes = append(indexes, n)
-		}
-	}
-	sort.Ints(indexes)
-	if len(indexes) == 0 {
-		return nil, fmt.Errorf("cases 目录下没有测试点")
-	}
-
-	store := testdata.NewLocalFS(im.DataDir)
-
-	// 样例标记：config 声明 > 沿用原样例标记 > 首个测试点
-	sampleSet := map[int]bool{}
-	if cfg != nil && cfg.Samples != nil {
-		for _, i := range *cfg.Samples {
-			sampleSet[i] = true
-		}
-	} else {
-		for _, c := range p.Cases {
-			if c.Sample {
-				sampleSet[c.Index] = true
-			}
-		}
-	}
-
-	// 子任务：config 声明（校验存在性与分值合计）> 沿用原子任务（引用的测试点必须仍存在）
-	var subtasks []Subtask
-	validateSubtasks := func(ysts []yamlSubtask) ([]Subtask, error) {
-		exists := map[int]bool{}
-		for _, i := range indexes {
-			exists[i] = true
-		}
-		sum := 0
-		out := make([]Subtask, 0, len(ysts))
-		for _, st := range ysts {
-			if len(st.Cases) == 0 {
-				return nil, fmt.Errorf("子任务不能为空")
-			}
-			for _, ci := range st.Cases {
-				if !exists[ci] {
-					return nil, fmt.Errorf("子任务引用了不存在的测试点 %d", ci)
-				}
-			}
-			if st.Score <= 0 {
-				return nil, fmt.Errorf("子任务分值必须为正数")
-			}
-			sum += st.Score
-			out = append(out, Subtask(st))
-		}
-		if sum != 100 {
-			return nil, fmt.Errorf("子任务分值之和必须为 100，当前为 %d", sum)
-		}
-		return out, nil
-	}
-	switch {
-	case cfg != nil && cfg.Subtasks != nil:
-		if subtasks, err = validateSubtasks(*cfg.Subtasks); err != nil {
-			return nil, err
-		}
-	case len(p.Subtasks) > 0:
-		exists := map[int]bool{}
-		for _, i := range indexes {
-			exists[i] = true
-		}
-		for _, st := range p.Subtasks {
-			for _, ci := range st.Cases {
-				if !exists[ci] {
-					return nil, fmt.Errorf("新数据缺少原子任务引用的测试点 %d（原题目配置了子任务计分，请在 zip 内 config.yaml 声明 subtasks）", ci)
-				}
-			}
-		}
-		subtasks = p.Subtasks
-	}
-
-	// 写入新测试点并重建元数据
-	cases := make([]CaseMeta, 0, len(indexes))
-	contents := make(map[int]SampleIO, len(indexes))
-	for _, i := range indexes {
-		inData, err := os.ReadFile(filepath.Join(casesDir, strconv.Itoa(i), "in"))
-		if err != nil {
-			return nil, fmt.Errorf("读取测试点 %d 输入: %w", i, err)
-		}
-		ansData, err := os.ReadFile(filepath.Join(casesDir, strconv.Itoa(i), "ans"))
-		if err != nil {
-			return nil, fmt.Errorf("读取测试点 %d 答案: %w", i, err)
-		}
-		contents[i] = SampleIO{Input: string(inData), Output: string(ansData)}
-		inName, ansName := fmt.Sprintf("cases/%d/in", i), fmt.Sprintf("cases/%d/ans", i)
-		if err := store.WriteFile(pid, inName, inData); err != nil {
-			return nil, err
-		}
-		if err := store.WriteFile(pid, ansName, ansData); err != nil {
-			return nil, err
-		}
-		cases = append(cases, CaseMeta{
-			Index:   i,
-			Sample:  sampleSet[i],
-			InName:  inName,
-			AnsName: ansName,
-			InSize:  int64(len(inData)),
-			AnsSize: int64(len(ansData)),
-			InSHA:   sha256Hex(inData),
-			AnsSHA:  sha256Hex(ansData),
-		})
-	}
-	hasSample := false
-	for i := range cases {
-		if cases[i].Sample {
-			hasSample = true
-			break
-		}
-	}
-	if !hasSample {
-		cases[0].Sample = true
-	}
-
-	// 旧测试点清理：新包未覆盖到的编号，文件与目录一并删除（纯替换语义）；
-	// 附带文件存档同批清理，随后按新包重建
-	newNames := map[string]bool{}
-	newIdx := map[int]bool{}
-	for _, c := range cases {
-		newNames[c.InName], newNames[c.AnsName] = true, true
-		newIdx[c.Index] = true
-	}
-	for _, c := range p.Cases {
-		for _, name := range []string{c.InName, c.AnsName} {
-			if !newNames[name] {
-				_ = store.Delete(pid, name)
-			}
-		}
-		if !newIdx[c.Index] {
-			_ = store.RemoveDir(pid, fmt.Sprintf("cases/%d", c.Index))
-		}
-	}
-	_ = store.RemoveDir(pid, "extra")
-
-	// 题面：正文保留，样例章节按新数据重建（md 单一格式，v0.8 起 HTML 题面已随回迁消失）
-	samples := make([]SampleIO, 0, 4)
-	for _, tc := range cases {
-		if tc.Sample {
-			samples = append(samples, contents[tc.Index])
-		}
-	}
-	p.Statement = AppendSamplesMdForType(StripSamplesMd(p.Statement), samples, p.Type)
-	if err := store.WriteFile(pid, "statement.md", []byte(p.Statement)); err != nil {
-		return nil, err
-	}
-
-	// 校验器：新包 config.yaml 声明才替换，否则沿用（旧文件名不同则删除旧文件）
-	if cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
-		src, err := os.ReadFile(filepath.Join(dir, *cfg.Checker))
-		if err != nil {
-			return nil, fmt.Errorf("读取校验器文件: %w", err)
-		}
-		if err := store.WriteFile(pid, *cfg.Checker, src); err != nil {
-			return nil, err
-		}
-		if p.CheckerFile != "" && p.CheckerFile != *cfg.Checker {
-			_ = store.Delete(pid, p.CheckerFile)
-		}
-		p.CheckerFile, p.CheckerSHA = *cfg.Checker, sha256Hex(src)
-	}
-
-	// 附带文件按新包重建（extra/<zip内路径>；旧存档已在上方整目录清理）
-	for _, rel := range extraFiles {
-		data, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(rel)))
-		if err != nil {
-			return nil, fmt.Errorf("读取附带文件 %s: %w", rel, err)
-		}
-		if err := store.WriteFile(pid, "extra/"+rel, data); err != nil {
-			return nil, err
-		}
-	}
-
-	// 文件 IO：新包 config.yaml 声明才覆盖
-	if cfg != nil {
-		if cfg.FileIO != nil {
-			p.FileIO = *cfg.FileIO
-		}
-		if cfg.FileIOInput != nil {
-			p.FileIOInput = *cfg.FileIOInput
-		}
-		if cfg.FileIOOutput != nil {
-			p.FileIOOutput = *cfg.FileIOOutput
-		}
-	}
-
-	// problem.yaml 归档重建（数据卷保持自包含，反映替换后的数据形态）；
-	// 标签写名字而非节点 ID——yaml 保持可读，重导入按名回匹配同一节点
-	meta := problemYAML{
-		Title:      p.Title,
-		Difficulty: p.Difficulty,
-		Time:       timeLimitPtr(timeLimit(p.TimeLimitMS) / 1000),
-		Memory:     memLimitPtr(memLimit(p.MemoryLimitKB) / 1024),
-		Visibility: p.Visibility,
-		Hidden:     hiddenPtr(p.Hidden),
-		Tags:       im.tagNamesOf(ctx, p.Tags),
-		Compare:    p.Compare,
-	}
-	for _, c := range cases {
-		if c.Sample {
-			meta.Samples = append(meta.Samples, c.Index)
-		}
-	}
-	for _, st := range subtasks {
-		meta.Subtasks = append(meta.Subtasks, yamlSubtask(st))
-	}
-	renderFileIO(&meta, p)
-	if yb, err := yaml.Marshal(&meta); err == nil {
-		_ = store.WriteFile(pid, "problem.yaml", yb)
-	}
-	if cfg != nil && len(cfg.raw) > 0 {
-		_ = store.WriteFile(pid, "config.yaml", cfg.raw)
-	}
-
-	p.Cases = cases
-	p.Subtasks = subtasks
-	if err := im.Repo.UpsertProblem(ctx, p); err != nil {
-		return nil, err
-	}
-	return p, nil
-}
-
-// pickNonEmpty 返回第一个非空值（全空返回空串）。
+// pickNonEmpty 返回第一个非空值。
 func pickNonEmpty(vals ...string) string {
 	for _, v := range vals {
 		if v != "" {
@@ -1063,58 +851,62 @@ func pickNonEmpty(vals ...string) string {
 	return ""
 }
 
-// collectExtraFiles 收集题包目录中判题白名单之外的文件（gen.py/std.cpp 等造数据脚本，
-// 存档备用、随数据包下载，v0.8.3）。白名单 = cases/ 子树、problem.yaml、config.yaml、
-// statement.md、config.yaml 声明的校验器文件；返回相对 dir 的正斜杠路径（稳定排序）。
-func collectExtraFiles(dir, checkerRel string, extraWhitelist []string) ([]string, error) {
-	skipRoot := map[string]bool{"problem.yaml": true, "config.yaml": true, "statement.md": true}
-	for _, name := range extraWhitelist {
-		skipRoot[name] = true
-	}
-	out := make([]string, 0, 8)
-	err := filepath.WalkDir(dir, func(full string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			// cases/ 子树整棵跳过（测试数据本体）；__MACOSX 打包杂物目录不入存档
-			if full != dir && d.Name() == "cases" && filepath.Dir(full) == dir {
-				return filepath.SkipDir
-			}
-			if d.Name() == "__MACOSX" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		// macOS 打包杂物：.DS_Store 与 AppleDouble（._*）不入存档
-		if d.Name() == ".DS_Store" || strings.HasPrefix(d.Name(), "._") {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, full)
-		if err != nil {
-			return err
-		}
-		rel = filepath.ToSlash(rel)
-		if skipRoot[rel] || (checkerRel != "" && rel == checkerRel) {
-			return nil
-		}
-		out = append(out, rel)
-		return nil
-	})
+// RenderProblemYAML 权威导出根 problem.yaml（按 db 当前值；客观题小题定义不带答案）。
+func (im *Importer) RenderProblemYAML(ctx context.Context, p *Problem) []byte {
+	yb, err := renderProblemYAML(p, im.tagNamesOf(ctx, p.Tags))
 	if err != nil {
-		return nil, err
+		return nil
 	}
-	sort.Strings(out)
-	return out, nil
+	return yb
 }
 
-// typeWhitelist 题型专属的固定名文件（不入 extra 存档：判题消费或前端预填）。
-func typeWhitelist(t string) []string {
-	switch t {
-	case TypeFunction:
-		return []string{"driver.cpp", "template.cpp"}
-	case TypeInteractive:
-		return []string{"interactor.cpp"}
+// RenderConfigYAML 权威导出 data/config.yaml（时限/内存/文件 IO/子任务/校验器）。
+func (im *Importer) RenderConfigYAML(p *Problem) []byte {
+	out := configOut{
+		Time:   timeLimitPtr(timeLimit(p.TimeLimitMS) / 1000),
+		Memory: memLimitPtr(memLimit(p.MemoryLimitKB) / 1024),
 	}
-	return nil
+	if ms, kb := p.TimeLimitMS, p.MemoryLimitKB; ms <= 0 || kb <= 0 {
+		if ms <= 0 {
+			out.Time = timeLimitPtr(1)
+		}
+		if kb <= 0 {
+			out.Memory = memLimitPtr(256)
+		}
+	}
+	if p.Compare != "" {
+		out.Compare = p.Compare
+		if p.Compare == CompareTolerant && p.FloatTolerance > 0 {
+			out.FloatTolerance = p.FloatTolerance
+		}
+	}
+	if p.CheckerFile != "" {
+		out.Checker = strings.TrimPrefix(p.CheckerFile, "data/")
+	}
+	if p.FileIO {
+		inB, outB := fileIOBase(p.FileIOInput), fileIOBase(p.FileIOOutput)
+		if inB == outB && inB != "" {
+			out.Filename = inB
+		} else {
+			out.FileIOInput, out.FileIOOutput = p.FileIOInput, p.FileIOOutput
+		}
+	}
+	for _, st := range p.Subtasks {
+		out.Subtasks = append(out.Subtasks, yamlSubtask(st))
+	}
+	yb, err := yaml.Marshal(&out)
+	if err != nil {
+		return nil
+	}
+	return yb
 }
+
+func fileIOBase(name string) string {
+	if i := strings.LastIndex(name, "."); i > 0 {
+		return name[:i]
+	}
+	return name
+}
+
+func timeLimitPtr(v timeLimit) *timeLimit { return &v }
+func memLimitPtr(v memLimit) *memLimit    { return &v }

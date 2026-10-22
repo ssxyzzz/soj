@@ -1,7 +1,5 @@
 title: Hidden Problem
+type: default
 difficulty: 3
-tags: [杂题]
+tag: [杂题]
 hidden: true
-time: 1s
-memory: 256MB
-samples: [1]

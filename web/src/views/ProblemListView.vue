@@ -298,7 +298,7 @@ stripe
         <template #header><span>题目管理</span></template>
         <div class="entry-actions">
           <el-button type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
-          <el-button style="width: 100%" @click="router.push('/admin?section=import')">导入题目</el-button>
+          <el-button style="width: 100%" @click="router.push('/import')">导入题目</el-button>
         </div>
         <div class="dim tip">新增题在表单里写题面、zip 只收数据/配置；题包（含题面）批量导入走「导入题目」</div>
       </el-card>

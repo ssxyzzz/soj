@@ -117,12 +117,6 @@ export interface ProblemListResult {
   total: number
 }
 
-export interface TestCase {
-  id: number
-  input: string
-  output: string
-}
-
 // 客观题小类（v0.9）
 export type ObjectiveKind = 'single' | 'multiple' | 'judge' | 'blank'
 
@@ -185,7 +179,6 @@ export interface ProblemDetail {
   float_tolerance?: number
   has_checker?: boolean
   has_cases?: boolean // 无测试数据空壳题（v0.6.1 验收反馈）：详情提示 + 禁提交
-  samples: TestCase[]
   has_subtasks?: boolean
   hidden?: boolean
   can_set_hidden?: boolean

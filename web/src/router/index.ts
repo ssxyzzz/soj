@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import MainLayout from '@/layouts/MainLayout.vue'
 import { useUserStore } from '@/stores/user'
 import AdminView from '@/views/AdminView.vue'
+import ImportView from '@/views/ImportView.vue'
 import ClassDetailView from '@/views/ClassDetailView.vue'
 import ClassesView from '@/views/ClassesView.vue'
 import ContestDetailView from '@/views/ContestDetailView.vue'
@@ -127,6 +128,12 @@ const router = createRouter({
           name: 'admin',
           component: AdminView,
           meta: { title: '管理', requiresAdmin: true },
+        },
+        {
+          path: 'import',
+          name: 'import',
+          component: ImportView,
+          meta: { title: '导入题目', requiresPerm: 'problem.create' },
         },
       ],
     },

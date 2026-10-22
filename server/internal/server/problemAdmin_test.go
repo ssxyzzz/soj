@@ -92,17 +92,28 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 	t.Run("打包杂物不影响判断且保留", func(t *testing.T) {
 		dir := t.TempDir()
 		mkTree(t, dir, map[string]string{
-			"data/cases/1/in":    "1 2\n",
-			"data/cases/1/ans":   "3\n",
-			"__MACOSX/data/._in": "\x00\x01",
+			"pkg/cases/1/in":     "1 2\n",
+			"pkg/cases/1/ans":    "3\n",
+			"__MACOSX/pkg/._in":  "\x00\x01",
 			".DS_Store":          "",
 		})
 		if err := unwrapSingleRootDir(dir); err != nil {
 			t.Fatalf("unwrapSingleRootDir: %v", err)
 		}
 		mustExist(t, dir, "cases/1/in")
-		mustNotExist(t, dir, "data")
+		mustNotExist(t, dir, "pkg")
 		mustExist(t, dir, "__MACOSX")
+	})
+
+	t.Run("data 为保留名不下钻（v0.15 数据目录）", func(t *testing.T) {
+		dir := t.TempDir()
+		mkTree(t, dir, map[string]string{
+			"data/test1.in": "1\n",
+		})
+		if err := unwrapSingleRootDir(dir); err != nil {
+			t.Fatalf("unwrapSingleRootDir: %v", err)
+		}
+		mustExist(t, dir, "data/test1.in")
 	})
 
 	t.Run("根下仅剩单个文件不动", func(t *testing.T) {

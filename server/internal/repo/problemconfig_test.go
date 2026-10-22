@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 )
 
@@ -140,7 +139,7 @@ func TestTrailingNumberAndAtbashLayout(t *testing.T) {
 		t.Error("无数字文件名应返回 false")
 	}
 
-	// 平铺归一排序：10 个 atbashN.in 应按 1..10 编号入 cases/
+	// 数字排序（布局无关）：collectDataDir 按末段数字排 atbash1 < atbash2 < atbash10
 	dir := t.TempDir()
 	for i := 1; i <= 10; i++ {
 		name := fmt.Sprintf("atbash%d", i)
@@ -151,12 +150,13 @@ func TestTrailingNumberAndAtbashLayout(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := normalizeFlatCases(dir); err != nil {
-		t.Fatalf("平铺归一失败: %v", err)
+	pairs, _, _, err := collectDataDir(dir, TypeDefault)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for i := 1; i <= 10; i++ {
-		if _, err := os.Stat(filepath.Join(dir, "cases", strconv.Itoa(i), "in")); err != nil {
-			t.Errorf("cases/%d/in 缺失（排序/编号错位）: %v", i, err)
+	for i, pr := range pairs {
+		if want := fmt.Sprintf("atbash%d", i+1); pr.Base != want {
+			t.Fatalf("排序不符: %v", pairs)
 		}
 	}
 }

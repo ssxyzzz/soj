@@ -179,7 +179,7 @@ var freshSkipFlags = []string{
 	"samplesMdV1", "solutionManageV1", "submissionViewUserV1", "nicknameEditV1",
 	"roundFlagsV1", "classLeaveV1", "assignmentScoreViewV1", "contestScorePermV1",
 	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
-	"dataDownloadPermV1", "contentMdV1", "difficultyV1",
+	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2",
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
@@ -267,14 +267,14 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		}
 		log.Printf("[boot] 班级比赛已迁移为考试（exams 集合）")
 	}
-	if !flagDone("samplesMdV1") {
-		if err := r.migrateSamplesMd(ctx, store); err != nil {
+	if !flagDone("dataLayoutV2") {
+		if err := r.migrateDataLayoutV2(ctx, store); err != nil {
 			return err
 		}
-		if err := setFlag("samplesMdV1"); err != nil {
+		if err := setFlag("dataLayoutV2"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 样例已并入题面（Markdown）")
+		log.Printf("[boot] 测试数据卷已换血为 data/<原始文件名> 布局（v0.15 统一题包格式）")
 	}
 	if !flagDone("solutionManageV1") {
 		// v0.5.2-1：题解管理权限位（初始归属 admin）补发存量 admin 角色

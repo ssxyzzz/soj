@@ -1,6 +1,4 @@
 title: Double
+type: default
 difficulty: 1
-tags: [入门, 顺序·分支·循环]
-time: 1s
-memory: 256MB
-samples: [1]
+tag: [入门, 顺序·分支·循环]

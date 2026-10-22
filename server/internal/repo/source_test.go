@@ -43,7 +43,7 @@ func TestParseSourceHint(t *testing.T) {
 // 来源四字段归一：直传 > yaml > 标题识别，仅全空才走识别；枚举/年份校验。
 func TestApplySourceFields(t *testing.T) {
 	run := func(im Importer, title string, meta *problemYAML) error {
-		return applySourceFields(im, title, &meta.SourceType, &meta.Source, &meta.Year, &meta.Region)
+		return im.applySourceFields(title, meta)
 	}
 	t.Run("全空走标题识别", func(t *testing.T) {
 		meta := &problemYAML{}
@@ -109,14 +109,17 @@ func TestMatchTagNames(t *testing.T) {
 
 // yaml 往返：导出带来源四字段，重新解析可读回。
 func TestSourceYAMLRoundTrip(t *testing.T) {
-	im := &Importer{}
 	p := &Problem{
 		Title: "修理牛棚", TimeLimitMS: 1000, MemoryLimitKB: 262144,
 		SourceType: SourceTypeOJ, Source: "USACO 1.3.2", Year: 2020, Region: "合肥市瑶海区",
 		Cases: []CaseMeta{{Index: 1}},
 	}
+	raw, err := renderProblemYAML(p, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var meta problemYAML
-	if err := yaml.Unmarshal(im.RenderProblemYAML(nil, p), &meta); err != nil {
+	if err := yaml.Unmarshal(raw, &meta); err != nil {
 		t.Fatal(err)
 	}
 	if meta.SourceType != SourceTypeOJ || meta.Source != "USACO 1.3.2" || meta.Year != 2020 || meta.Region != "合肥市瑶海区" {

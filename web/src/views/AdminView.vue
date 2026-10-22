@@ -9,7 +9,6 @@ import { useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 
 import BackupPanel from '@/components/admin/BackupPanel.vue'
-import ImportPanel from '@/components/admin/ImportPanel.vue'
 import LevelPanel from '@/components/admin/LevelPanel.vue'
 import NoticePanel from '@/components/admin/NoticePanel.vue'
 import RolesPanel from '@/components/admin/RolesPanel.vue'
@@ -23,7 +22,7 @@ import { useUserStore } from '@/stores/user'
 const userStore = useUserStore()
 const route = useRoute()
 
-const sections = ['users', 'import', 'roles', 'tags', 'sources', 'levels', 'security', 'notice', 'settings', 'backup'] as const
+const sections = ['users', 'roles', 'tags', 'sources', 'levels', 'security', 'notice', 'settings', 'backup'] as const
 type Section = (typeof sections)[number]
 const initial = (Array.isArray(route.query.section) ? route.query.section[0] : route.query.section) as Section | undefined
 const section = ref<Section>(initial && sections.includes(initial) ? initial : 'users')
@@ -58,15 +57,6 @@ async function switchSection(target: typeof section.value) {
       >
         <span class="nav-title">编辑用户</span>
         <span class="nav-sub">搜索 / 建号 / 角色 / 重置密码</span>
-      </div>
-      <div
-        v-if="userStore.can('problem.create')"
-        class="nav-item"
-        :class="{ active: section === 'import' }"
-        @click="switchSection('import')"
-      >
-        <span class="nav-title">导入题目</span>
-        <span class="nav-sub">题包批量导入（含题面）</span>
       </div>
       <div
         v-if="userStore.role === 'root'"
@@ -142,7 +132,6 @@ async function switchSection(target: typeof section.value) {
 
     <main class="admin-main">
       <UsersPanel v-if="section === 'users'" />
-      <ImportPanel v-else-if="section === 'import'" />
       <RolesPanel v-else-if="section === 'roles'" />
       <TagsPanel v-else-if="section === 'tags'" @update:dirty="tagsDirty = $event" />
       <SourcesPanel v-else-if="section === 'sources'" />

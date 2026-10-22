@@ -1,0 +1,7 @@
+time: 1s
+memory: 256MB
+subtasks:
+  - cases: [1, 2]
+    score: 40
+  - cases: [3]
+    score: 60

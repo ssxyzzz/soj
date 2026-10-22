@@ -262,28 +262,6 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		return
 	}
 
-	sampleItems := make([]gin.H, 0)
-	for _, tc := range p.Cases {
-		if !tc.Sample {
-			continue
-		}
-		input, err := testdata.ReadAll(h.provider(), id, tc.InName)
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "读取样例失败")
-			return
-		}
-		output, err := testdata.ReadAll(h.provider(), id, tc.AnsName)
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "读取样例失败")
-			return
-		}
-		sampleItems = append(sampleItems, gin.H{
-			"id":     int64(tc.Index),
-			"input":  string(input),
-			"output": string(output),
-		})
-	}
-
 	resp := gin.H{
 		"id":                 p.ID,
 		"type":               p.Type, // 空 = 传统题（前端按 default 处理）
@@ -296,7 +274,6 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"float_tolerance":    p.FloatTolerance,
 		"has_checker":        p.CheckerFile != "",
 		"has_cases":          len(p.Cases) > 0, // 无测试数据空壳题（v0.6.1 验收反馈）：前端禁提交+详情提示
-		"samples":            sampleItems,
 		"has_subtasks":       len(p.Subtasks) > 0,
 		"hidden":             p.Hidden,
 		"can_set_hidden":     h.problemEditable(c, p),

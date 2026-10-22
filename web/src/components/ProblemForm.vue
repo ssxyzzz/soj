@@ -382,8 +382,8 @@ function onSubmitClick() {
                   <el-tooltip
                     placement="top"
                     :content="mode === 'create'
-                      ? '只收数据与配置（题面写在上方编辑器，包内题面不导入）。不上传则创建暂无数据的题目：题面立即可用、暂不可提交'
-                      : '留空保留现有数据；选择新 zip 将整包替换数据与配置（旧数据不保留，题面不受影响）'"
+                      ? 'zip 根下放 data/ 目录（数据对原名 + config.yaml + 附属文件；题面写在上方编辑器，包内不收题面）。不上传则创建暂无数据的题目：题面立即可用、暂不可提交'
+                      : '留空保留现有数据；新 zip 需含 data/ 目录，将整包替换数据与配置（题面不受影响）'"
                   >
                     <el-icon class="dim"><QuestionFilled /></el-icon>
                   </el-tooltip>
@@ -412,7 +412,7 @@ function onSubmitClick() {
             >
               <div class="zip-hint">
                 <p>{{ mode === 'create' ? '拖入 zip 或点击选择' : '拖入新 zip 整包替换' }}</p>
-                <p class="dim">结构：test1.in、test1.ans/out</p>
+                <p class="dim">结构：data/ 下 test1.in + test1.ans/.out 等数据对（保持原名）</p>
               </div>
             </el-upload>
           </el-form-item>
