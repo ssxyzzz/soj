@@ -32,6 +32,15 @@ func (h *Handlers) userWithPermsJSON(ctx context.Context, u *repo.User) gin.H {
 }
 
 func (h *Handlers) Register(c *gin.Context) {
+	s, err := h.repo.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器内部错误")
+		return
+	}
+	if !s.RegistrationOpen() {
+		fail(c, http.StatusForbidden, "注册已关闭，请联系管理员")
+		return
+	}
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
@@ -79,6 +88,16 @@ func (h *Handlers) Register(c *gin.Context) {
 	}
 	u := &repo.User{ID: uid, Username: req.Username, Nickname: nickname, Role: repo.RoleDefault}
 	ok(c, gin.H{"token": token, "user": h.userWithPermsJSON(c.Request.Context(), u)})
+}
+
+// RegisterOpen 注册开关状态（公开）：登录页据此显隐「注册」页签。
+func (h *Handlers) RegisterOpen(c *gin.Context) {
+	s, err := h.repo.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器内部错误")
+		return
+	}
+	ok(c, gin.H{"open": s.RegistrationOpen()})
 }
 
 func (h *Handlers) Login(c *gin.Context) {

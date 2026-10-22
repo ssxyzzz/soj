@@ -8,9 +8,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminApi } from '@/api'
 import TierBadge from '@/components/TierBadge.vue'
 import { useAdminRolesStore } from '@/stores/adminRoles'
+import { useUserStore } from '@/stores/user'
 import type { AdminUser, UserLevelInfo } from '@/types'
 
 const roleStore = useAdminRolesStore()
+const userStore = useUserStore()
 
 const pageSize = 100
 const keyword = ref('')
@@ -192,14 +194,17 @@ async function refreshAfterMutation(userId: number, patch?: Partial<AdminUser>) 
   else await loadDefaultView()
 }
 
-// ---- 编辑弹窗：昵称 / 密码 / 确认密码（用户名是身份标识，后端不支持改，只读展示）----
+// ---- 编辑弹窗：用户名 / 昵称 / 密码 / 确认密码 ----
+// 用户名是登录身份标识：持有 user.username.edit 权限位（默认仅 root）才可改，其余只读展示
+const canRename = computed(() => userStore.can('user.username.edit'))
 const showEdit = ref(false)
 const editSaving = ref(false)
-const editForm = reactive({ id: 0, username: '', nickname: '', password: '', confirm: '' })
+const editForm = reactive({ id: 0, username: '', originUsername: '', nickname: '', password: '', confirm: '' })
 
 function openEdit(row: AdminUser) {
   editForm.id = row.id
   editForm.username = row.username
+  editForm.originUsername = row.username
   editForm.nickname = row.nickname ?? ''
   editForm.password = ''
   editForm.confirm = ''
@@ -207,6 +212,11 @@ function openEdit(row: AdminUser) {
 }
 
 async function submitEdit() {
+  const renamed = canRename.value && editForm.username.trim() !== editForm.originUsername
+  if (renamed && !/^[A-Za-z0-9_]{3,32}$/.test(editForm.username.trim())) {
+    ElMessage.warning('用户名需为 3-32 位字母/数字/下划线')
+    return
+  }
   if (!editForm.nickname.trim()) {
     ElMessage.warning('昵称不能为空')
     return
@@ -222,7 +232,7 @@ async function submitEdit() {
     }
   }
   try {
-    await ElMessageBox.confirm(`确认修改用户 ${editForm.username} 的信息？`, '确认修改', {
+    await ElMessageBox.confirm(`确认修改用户 ${editForm.originUsername} 的信息？`, '确认修改', {
       type: 'warning',
       confirmButtonText: '确认修改',
       cancelButtonText: '取消',
@@ -234,11 +244,15 @@ async function submitEdit() {
   try {
     await adminApi.updateUser(editForm.id, {
       nickname: editForm.nickname.trim(),
+      ...(renamed ? { username: editForm.username.trim() } : {}),
       ...(editForm.password ? { password: editForm.password } : {}),
     })
     ElMessage.success('用户信息已修改')
     showEdit.value = false
-    await refreshAfterMutation(editForm.id, { nickname: editForm.nickname.trim() })
+    await refreshAfterMutation(editForm.id, {
+      nickname: editForm.nickname.trim(),
+      ...(renamed ? { username: editForm.username.trim() } : {}),
+    })
   } finally {
     editSaving.value = false
   }
@@ -439,10 +453,14 @@ defineExpose({ refresh: loadDefaultView })
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showEdit" :title="`编辑 · ${editForm.username}`" width="520">
+    <el-dialog v-model="showEdit" :title="`编辑 · ${editForm.originUsername}`" width="520">
       <el-form label-position="top">
         <el-form-item label="用户名">
-          <el-input v-model="editForm.username" disabled />
+          <el-input
+            v-model="editForm.username"
+            :disabled="!canRename"
+            :placeholder="canRename ? '3-32 位字母/数字/下划线' : '无修改用户名权限，只读'"
+          />
         </el-form-item>
         <el-form-item label="昵称">
           <el-input v-model="editForm.nickname" maxlength="32" placeholder="用于榜单、题解等公开页面展示" />

@@ -4,15 +4,22 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { authApi } from '@/api'
+import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const site = useSiteStore()
 
 const mode = ref<'login' | 'register'>('login')
 const loading = ref(false)
 const form = reactive({ username: '', password: '', nickname: '' })
+
+// 注册开关（后台系统设置）：关闭时隐藏「注册」页签，并兜底切回登录
+site.ensure().then(() => {
+  if (!site.registerOpen) mode.value = 'login'
+})
 
 async function submit() {
   if (!form.username || !form.password) {
@@ -43,7 +50,7 @@ async function submit() {
         <div class="tabs">
           <el-radio-group v-model="mode">
             <el-radio-button value="login">登录</el-radio-button>
-            <el-radio-button value="register">注册</el-radio-button>
+            <el-radio-button v-if="site.registerOpen" value="register">注册</el-radio-button>
           </el-radio-group>
         </div>
       </template>

@@ -81,6 +81,7 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		Role     *string `json:"role"`
 		Password *string `json:"password"`
 		Nickname *string `json:"nickname"`
+		Username *string `json:"username"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -101,6 +102,18 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			return
 		}
 		set["role"] = *req.Role
+	}
+	if req.Username != nil {
+		// 用户名是登录身份标识，独立权限位控制（默认仅 root）
+		if !hasPerm(c, repo.PermUserUsernameEdit) {
+			fail(c, http.StatusForbidden, "当前角色不允许修改用户名")
+			return
+		}
+		if !usernameRE.MatchString(*req.Username) {
+			fail(c, http.StatusBadRequest, "用户名需为 3-32 位字母/数字/下划线")
+			return
+		}
+		set["username"] = *req.Username
 	}
 	if req.Nickname != nil {
 		nickname := trimTo(*req.Nickname, 32)
@@ -131,11 +144,15 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			fail(c, http.StatusNotFound, "用户不存在")
 			return
 		}
+		if isDupKey(err) {
+			fail(c, http.StatusBadRequest, "用户名已存在")
+			return
+		}
 		fail(c, http.StatusInternalServerError, "更新失败")
 		return
 	}
-	if req.Role != nil {
-		h.idents.flush() // 角色变更即时生效（不等缓存 TTL）
+	if req.Role != nil || req.Username != nil {
+		h.idents.flush() // 角色/用户名变更即时生效（不等缓存 TTL）
 	}
 	ok(c, gin.H{"updated": id})
 }
@@ -155,6 +172,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"backup_guide":              s.BackupGuide,
 		"data_download_daily_limit": s.DownloadDailyLimit(),
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
+		"allow_register":            s.RegistrationOpen(),
 	})
 }
 
@@ -176,6 +194,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		BackupGuide            *string `json:"backup_guide"`
 		DataDownloadDailyLimit *int    `json:"data_download_daily_limit"`
 		AutocompleteMinLevel   *int    `json:"autocomplete_min_level"`
+		AllowRegister          *bool   `json:"allow_register"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -214,6 +233,9 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.AutocompleteMinLevel = req.AutocompleteMinLevel
 	}
+	if req.AllowRegister != nil {
+		s.AllowRegister = req.AllowRegister
+	}
 	if req.BackupGuide != nil {
 		if len(*req.BackupGuide) > 16<<10 {
 			fail(c, http.StatusBadRequest, "备份使用说明过长（上限 16KB）")
@@ -231,5 +253,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"backup_guide":              s.BackupGuide,
 		"data_download_daily_limit": s.DownloadDailyLimit(),
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
+		"allow_register":            s.RegistrationOpen(),
 	})
 }

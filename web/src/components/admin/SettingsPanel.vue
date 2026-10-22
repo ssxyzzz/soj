@@ -10,6 +10,8 @@ const rateLimit = ref(3)
 const dataDownloadLimit = ref(5)
 // 代码自动补全解锁等级（v0.11）：等级 ≥ 该值才能开启自动补全
 const autocompleteMinLevel = ref(5)
+// 允许自助注册：关闭后登录页不再出现「注册」入口，建号走用户管理
+const allowRegister = ref(true)
 const savingSettings = ref(false)
 
 onMounted(async () => {
@@ -18,6 +20,7 @@ onMounted(async () => {
     rateLimit.value = s.rate_limit_per_minute
     dataDownloadLimit.value = s.data_download_daily_limit
     autocompleteMinLevel.value = s.autocomplete_min_level
+    allowRegister.value = s.allow_register
   } catch {
     // 加载失败保留默认值展示
   }
@@ -30,6 +33,7 @@ async function saveSettings() {
       rate_limit_per_minute: rateLimit.value,
       data_download_daily_limit: dataDownloadLimit.value,
       autocomplete_min_level: autocompleteMinLevel.value,
+      allow_register: allowRegister.value,
     })
     ElMessage.success('设置已保存')
   } finally {
@@ -60,6 +64,12 @@ async function saveSettings() {
         <el-input-number v-model="autocompleteMinLevel" :min="1" :max="10" />
         <span class="dim" style="margin-left: 8px">
           学生等级达到该档后才能在设置里开启代码自动补全（1–10）
+        </span>
+      </el-form-item>
+      <el-form-item label="允许自助注册">
+        <el-switch v-model="allowRegister" />
+        <span class="dim" style="margin-left: 8px">
+          关闭后登录页不再提供注册入口，建号请走「用户管理」；已注册账号不受影响
         </span>
       </el-form-item>
     </el-form>

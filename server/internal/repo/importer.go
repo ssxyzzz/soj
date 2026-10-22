@@ -110,7 +110,8 @@ func seedPID(name string) int64 {
 
 // SeedAll 首次部署播种 seedDir 下全部题目目录：meta.migrations.seedV1 置位后跳过
 // （每次启动重播会以整文档替换冲掉网页端对种子题的修改）。中途失败不置旗标、
-// 下次启动重试，循环内的逐目录补缺跳过保护重试窗口。
+// 下次启动重试，循环内的逐目录补缺跳过保护重试窗口。点开头的隐藏目录（编辑器
+// 缓存、.mimosa 等扫描器状态）不是题包，直接忽略、不进导入也不报错。
 func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 	done, err := im.Repo.seedDone(ctx)
 	if err != nil {
@@ -129,7 +130,7 @@ func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 	}
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if e.IsDir() {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
 			names = append(names, e.Name())
 		}
 	}

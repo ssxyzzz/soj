@@ -19,15 +19,19 @@ type SystemSettings struct {
 	DataDownloadDailyLimit *int `bson:"dataDownloadDailyLimit,omitempty"`
 	// 代码自动补全的解锁等级（v0.11）：等级 ≥ 该值才能开启自动补全；nil = 未设置按默认 5。
 	AutocompleteMinLevel *int `bson:"autocompleteMinLevel,omitempty"`
+	// 是否开放自助注册；nil = 未设置按默认开放（存量部署行为不变）。关闭后建号走用户管理。
+	AllowRegister *bool `bson:"allowRegister,omitempty"`
 }
 
 const (
 	DefaultRateLimitPerMinute   = 3
 	DefaultDataDownloadDayLimit = 5
 	DefaultAutocompleteMinLevel = 5
+	DefaultAllowRegister        = true
 )
 
 func downloadLimitPtr(v int) *int { return &v }
+func boolPtr(v bool) *bool        { return &v }
 
 // DownloadDailyLimit 限额取值：未设置回默认（存量 settings 文档无此字段时为 nil）。
 func (s *SystemSettings) DownloadDailyLimit() int {
@@ -45,6 +49,7 @@ func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
 		return &SystemSettings{
 			RateLimitPerMinute:     DefaultRateLimitPerMinute,
 			DataDownloadDailyLimit: downloadLimitPtr(DefaultDataDownloadDayLimit),
+			AllowRegister:          boolPtr(DefaultAllowRegister),
 		}, nil
 	}
 	if err != nil {
@@ -58,6 +63,9 @@ func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
 	}
 	if s.AutocompleteMinLevel == nil || *s.AutocompleteMinLevel < 1 || *s.AutocompleteMinLevel > 10 {
 		s.AutocompleteMinLevel = intPtr(DefaultAutocompleteMinLevel)
+	}
+	if s.AllowRegister == nil {
+		s.AllowRegister = boolPtr(DefaultAllowRegister)
 	}
 	return &s, nil
 }
@@ -79,6 +87,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"backupGuide":            s.BackupGuide,
 			"dataDownloadDailyLimit": s.DownloadDailyLimit(),
 			"autocompleteMinLevel":   s.MinAutocompleteLevel(),
+			"allowRegister":          s.RegistrationOpen(),
 		}},
 	)
 	return err
@@ -90,6 +99,14 @@ func (s *SystemSettings) MinAutocompleteLevel() int {
 		return DefaultAutocompleteMinLevel
 	}
 	return *s.AutocompleteMinLevel
+}
+
+// RegistrationOpen 自助注册是否开放：未设置回默认开放（存量 settings 文档无此字段时为 nil）。
+func (s *SystemSettings) RegistrationOpen() bool {
+	if s.AllowRegister == nil {
+		return DefaultAllowRegister
+	}
+	return *s.AllowRegister
 }
 
 // TestDataDownloadAllowed 每日下载限额判断：limit 0 = 不限制；>0 时当天已下载的不同题数

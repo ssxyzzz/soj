@@ -6,12 +6,14 @@ import { UserFilled } from '@element-plus/icons-vue'
 import { authApi } from '@/api'
 import UserNameLevel from '@/components/UserNameLevel.vue'
 import { LEVEL_STARS, useLevelsStore } from '@/stores/levels'
+import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const levels = useLevelsStore()
+const site = useSiteStore()
 
 const active = computed(() => route.path)
 
@@ -39,6 +41,7 @@ const brandStars = computed(() => {
 // 设置页保存后同步更新 store。失败静默（未登录/过期由拦截器统一处理）。
 onMounted(() => {
   levels.ensure() // 等级名字/特效配置（公开接口，徽章渲染用）
+  site.ensure() // 注册开关（公开接口，顶栏按钮文案用）
   if (!userStore.token) return
   authApi
     .getProfile()
@@ -107,7 +110,9 @@ function onCommand(command: string) {
             </template>
           </el-dropdown>
         </template>
-        <el-button v-else type="primary" @click="router.push('/login')">登录 / 注册</el-button>
+        <el-button v-else type="primary" @click="router.push('/login')">
+          {{ site.registerOpen ? '登录 / 注册' : '登录' }}
+        </el-button>
       </div>
     </el-header>
     <el-main class="main">

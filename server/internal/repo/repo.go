@@ -108,16 +108,19 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		return err
 	}
 
-	// 初始管理员：users 为空时创建 admin / admin123（root 角色）
+	// 初始管理员：users 为空时创建 root / sojroot123（root 角色）；
+	// 空用户表同时作为 runMigrations 全新库判定的一环
+	usersEmpty := false
 	if n, err := r.Users.CountDocuments(ctx, bson.M{}); err != nil {
 		return err
 	} else if n == 0 {
-		uid, err := r.CreateUserWithPassword(ctx, "admin", "admin123", "管理员", RoleRoot)
+		usersEmpty = true
+		uid, err := r.CreateUserWithPassword(ctx, "root", "sojroot123", "超级管理员", RoleRoot)
 		if err != nil {
 			return err
 		}
 		_ = uid
-		log.Printf("[boot] 已创建初始管理员: admin / admin123（请尽快修改密码）")
+		log.Printf("[boot] 已创建初始管理员: root / sojroot123（请尽快修改密码）")
 	}
 
 	// 角色种子：内置 default/admin/root（不存在才建，不覆盖 root 的调整）
@@ -125,8 +128,9 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		return err
 	}
 
-	// 一次性数据迁移（角色体系、班级引用结构等），meta.migrations 记录完成标记
-	if err := r.runMigrations(ctx, store); err != nil {
+	// 一次性数据迁移（角色体系、班级引用结构等），meta.migrations 记录完成标记；
+	// 全新库直接预置历史迁移标记（见 runMigrations），老库升级照旧逐项执行
+	if err := r.runMigrations(ctx, store, usersEmpty); err != nil {
 		return err
 	}
 
@@ -153,11 +157,26 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	return err
 }
 
+// freshSkipFlags 全新库可整体预置的历史迁移标记：全部只服务老库升级——权限位类
+// builtinRoles 定义已包含（老库角色文档才靠迁移补发），数据类迁移在空库上空转。
+// defaultTagsV1 兼职默认标签树播种、seedV1 归 SeedAll 管理，均不在此列。
+var freshSkipFlags = []string{
+	"rolesV2", "classRefsV1", "memberRolesV1", "assignmentsV1", "examsV1",
+	"samplesMdV1", "solutionManageV1", "submissionViewUserV1", "nicknameEditV1",
+	"roundFlagsV1", "classLeaveV1", "assignmentScoreViewV1", "contestScorePermV1",
+	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
+	"dataDownloadPermV1", "contentMdV1", "difficultyV1",
+}
+
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
-func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error {
+// usersEmpty 由 Bootstrap 传入（空用户表 = 本次启动刚做首次初始化）；三空
+// （无迁移标记、无用户、无题目）判定为全新部署，一次性预置历史迁移标记后
+// 重读标记文档，让下方各块 flagDone 命中自然静默跳过——老库升级路径不受影响。
+func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, usersEmpty bool) error {
 	meta := r.db.Collection("meta")
 	var done bson.M
 	err := meta.FindOne(ctx, bson.M{"_id": "migrations"}).Decode(&done)
+	migrationsSeen := err == nil
 	if err != nil && !IsNotFound(err) {
 		return err
 	}
@@ -171,6 +190,22 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		}
 		_, err := meta.UpdateOne(ctx, bson.M{"_id": "migrations"}, bson.M{"$set": bson.M{k: true}})
 		return err
+	}
+
+	if !migrationsSeen && usersEmpty {
+		if n, err := r.Problems.CountDocuments(ctx, bson.M{}); err != nil {
+			return err
+		} else if n == 0 {
+			for _, k := range freshSkipFlags {
+				if err := setFlag(k); err != nil {
+					return err
+				}
+			}
+			log.Printf("[boot] 全新数据库：预置 %d 项历史迁移标记（老库升级才会逐项执行）", len(freshSkipFlags))
+			if err := meta.FindOne(ctx, bson.M{"_id": "migrations"}).Decode(&done); err != nil {
+				return err
+			}
+		}
 	}
 
 	if !flagDone("rolesV2") {

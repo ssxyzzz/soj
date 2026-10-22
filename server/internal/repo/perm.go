@@ -24,6 +24,7 @@ const (
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
 	PermSolutionManage       = "solution.manage"        // 题解管理：置顶/删除他人题解（v0.5.2-1）
 	PermUserNicknameEdit     = "user.nickname.edit"     // 本人自助修改昵称（默认用户默认开启）
+	PermUserUsernameEdit     = "user.username.edit"     // 用户管理中修改登录用户名（身份标识；默认仅 root，admin 无此位）
 	PermAdminUserManage      = "admin.user.manage"      // 管理端用户管理
 	PermAdminSettings        = "admin.settings"         // 系统设置
 	PermBackupRun            = "backup.run"             // 一键备份下载（v0.4.9 备份面板）
@@ -78,6 +79,7 @@ var PermCatalog = []PermInfo{
 	{PermSubmissionViewUser, "查看用户提交明细", "榜单/进度表中点看指定用户在某题的全部提交（含代码与测试点明细）", "submission"},
 	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},
 	{PermUserNicknameEdit, "修改昵称", "允许用户在本人的个人设置中修改昵称；关闭后只能由管理员在用户管理中修改", "user"},
+	{PermUserUsernameEdit, "修改用户名", "在用户管理中修改任意用户的登录用户名（改名后原用户名即释放，登录与展示即时切换）；默认仅 root 开启，admin 无此位", "user"},
 	{PermAdminUserManage, "用户管理", "管理后台：建号/改角色/重置密码", "admin"},
 	{PermAdminSettings, "系统设置", "管理后台：公告与提交限速等站点设置", "admin"},
 	{PermBackupRun, "备份下载", "一键备份到本地（加密归档下载）", "admin"},

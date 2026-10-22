@@ -54,6 +54,8 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/health", h.Health)
 
 		api.POST("/auth/register", h.Register)
+		// 注册开关状态（公开）：登录页显隐「注册」页签用
+		api.GET("/auth/register-open", h.RegisterOpen)
 		api.POST("/auth/login", h.Login)
 		api.GET("/me", AuthRequired(h), h.Me)
 

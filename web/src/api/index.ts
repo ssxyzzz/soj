@@ -108,6 +108,8 @@ export const authApi = {
     post<LoginResult>('/auth/login', { username, password }),
   register: (username: string, password: string, nickname: string) =>
     post<LoginResult>('/auth/register', { username, password, nickname }),
+  // 注册开关状态（公开）：后台「系统设置」可关闭自助注册
+  registerOpen: () => get<{ open: boolean }>('/auth/register-open'),
   me: () => get<{ id: number; username: string; nickname: string; role: string; perms: string[] }>('/me'),
   // 个人设置（v0.4.8）：本人自助字段 + 偏好；昵称额外受 user.nickname.edit 权限位约束
   getProfile: () => get<UserProfile>('/me/profile'),
@@ -254,7 +256,7 @@ export const adminApi = {
     }),
   createUser: (username: string, password: string, nickname: string, role: string) =>
     post<{ id: number }>('/admin/users', { username, password, nickname, role }),
-  updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string }) =>
+  updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; username?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
     get<{
@@ -263,6 +265,7 @@ export const adminApi = {
       backup_guide: string
       data_download_daily_limit: number
       autocomplete_min_level: number
+      allow_register: boolean
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
@@ -270,6 +273,7 @@ export const adminApi = {
     backup_guide?: string
     data_download_daily_limit?: number
     autocomplete_min_level?: number
+    allow_register?: boolean
   }) =>
     put<{
       rate_limit_per_minute: number
@@ -277,6 +281,7 @@ export const adminApi = {
       backup_guide: string
       data_download_daily_limit: number
       autocomplete_min_level: number
+      allow_register: boolean
     }>('/admin/settings', patch),
   // 等级面板（v0.11，root）
   getLevelConfig: () => get<{ config: AdminLevelConfig }>('/admin/levelconfig'),

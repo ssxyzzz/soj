@@ -343,7 +343,9 @@ func (r *Repo) migrateDifficultyEstimate(ctx context.Context) error {
 	if err := cursor.Err(); err != nil {
 		return err
 	}
-	log.Printf("[migrate][difficultyV1] 已按通过率预估 %d 道存量题的难度（D10 仅手工）", changed)
+	if changed > 0 {
+		log.Printf("[migrate][difficultyV1] 已按通过率预估 %d 道存量题的难度（D10 仅手工）", changed)
+	}
 	return nil
 }
 
