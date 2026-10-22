@@ -812,7 +812,8 @@ func (h *Handlers) ExamMySubmissions(c *gin.Context) { h.roundMySubmissions(c, s
 // ---------- 共享「用户提交明细」（榜单单元格点看） ----------
 
 // roundUserSubmissions 查看指定用户在某比赛/考试某题的全部提交。
-// 门槛：组织者本人 ∨「查看用户提交明细」权限位（root 恒过）。
+// 门槛：组织者本人 ∨「查看用户提交明细」∨「查看比赛/考试成绩表详情」（v0.11 新增，
+// root/admin 默认持有；root 恒过）。
 func (h *Handlers) roundUserSubmissions(c *gin.Context, s roundScope) {
 	uid, _, _, logged := currentUser(c)
 	if !logged {
@@ -842,8 +843,8 @@ func (h *Handlers) roundUserSubmissions(c *gin.Context, s roundScope) {
 		fail(c, http.StatusInternalServerError, "读取"+s.Name+"失败")
 		return
 	}
-	if uid != ct.CreatedBy && !hasPerm(c, repo.PermSubmissionViewUser) {
-		fail(c, http.StatusForbidden, "需要「查看用户提交明细」权限或为该"+s.Name+"组织者")
+	if uid != ct.CreatedBy && !hasPermAny(c, repo.PermSubmissionViewUser, repo.PermContestScoreDetail) {
+		fail(c, http.StatusForbidden, "需要「查看用户提交明细」或「查看比赛成绩表详情」权限，或为该"+s.Name+"组织者")
 		return
 	}
 	subs, err := h.repo.RoundUserProblemSubmissions(ctx, s.Kind, ct.ID, targetUID, pid)
@@ -903,6 +904,12 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 	}
 	isOrganizer := logged && (uid == ct.CreatedBy || role == repo.RoleRoot)
 	if !isOrganizer {
+		// v0.11：参与者/旁观者需持「查看比赛成绩表」（contest.score.view，root/admin 默认
+		// 开启、default 无）——组织者不受限；场次开关与发布态约束保持不变
+		if !hasPerm(c, repo.PermContestScoreView) {
+			fail(c, http.StatusForbidden, "需要「查看比赛成绩表」权限")
+			return
+		}
 		if !ct.Scoreboard {
 			fail(c, http.StatusForbidden, "本场未开启成绩表")
 			return
@@ -965,10 +972,12 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 	ok(c, entry.rows)
 }
 
-// ContestLeaderboard 比赛榜单：赛时与隐藏期内仅组织者/root 可见。
+// ContestLeaderboard 比赛榜单：组织者/root 恒可见；他人需「查看比赛成绩表」权限位，
+// 且赛时与隐藏期内仍不可见（发布态/实时规则不变）。
 func (h *Handlers) ContestLeaderboard(c *gin.Context) { h.roundLeaderboard(c, scopeContest) }
 
-// ExamLeaderboard 考试榜单：考时与隐藏期内仅组织者/root 可见。
+// ExamLeaderboard 考试榜单：组织者/root 恒可见；本班成员需「查看比赛成绩表」权限位，
+// 且考时与隐藏期内仍不可见（发布态/实时规则不变）。
 func (h *Handlers) ExamLeaderboard(c *gin.Context) { h.roundLeaderboard(c, scopeExam) }
 
 // ---------- 成绩导出 CSV（v0.5.6 老师教学闭环） ----------

@@ -13,9 +13,12 @@ const (
 	PermProblemEditAll       = "problem.edit.all"       // 编辑任意题目
 	PermProblemDataDownload  = "problem.data.download"  // 下载题目测试数据包（每日可下载题数受系统设置限额）
 	PermContestBankCreate    = "contest.bank.create"    // 创建主题库比赛
+	PermContestScoreView     = "contest.score.view"     // 查看比赛/考试成绩表（root/admin 默认开启，default 无）
+	PermContestScoreDetail   = "contest.score.detail"   // 比赛成绩表详情：点看他人某题提交明细与代码（root/admin 默认开启，default 无）
 	PermClassCreate          = "class.create"           // 创建班级
 	PermClassViewAll         = "class.view.all"         // 查看全部班级（含私密班详情/邀请码）
 	PermClassLeave           = "class.leave"            // 成员自行退出班级（default 默认关闭，v0.7.2）
+	PermAssignmentScoreView  = "assignment.score.view"  // 查看班级作业成绩表（本班作业全班完成情况，default 默认开启）
 	PermSubmissionViewAll    = "submission.view.all"    // 提交记录总表 + 他人提交详情
 	PermSubmissionViewUser   = "submission.view.user"   // 榜单/进度表中点看指定用户在某题的提交明细（含代码）
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
@@ -65,9 +68,12 @@ var PermCatalog = []PermInfo{
 	{PermProblemDataDownload, "下载数据", "下载题目测试数据包（zip，含造数据脚本等存档文件）；每日可下载题数由系统设置限定，无此权限不可下载", "problem"},
 	{PermSolutionManage, "题解管理", "置顶题解、删除他人题解（满分用户均可发布自己的题解）", "problem"},
 	{PermContestBankCreate, "创建主题库比赛", "发起全站比赛", "contest"},
+	{PermContestScoreView, "查看比赛/考试成绩表", "可查看比赛与考试的成绩表（各题得分与排名）；仍受场次「开启成绩表」开关与结果发布状态约束，组织者不受限。default 角色默认无此位", "contest"},
+	{PermContestScoreDetail, "查看比赛/考试成绩表详情", "在比赛/考试成绩表中点看指定用户某题的提交明细与代码（AC 与各次通过状态）；组织者与「查看用户提交明细」持有者不受限。default 角色默认无此位", "contest"},
 	{PermClassCreate, "创建班级", "建班并成为建班人", "class"},
 	{PermClassViewAll, "查看全部班级", "可见私密班级的详情、成员与邀请码", "class"},
 	{PermClassLeave, "退出班级", "成员可自行退出所在班级；关闭后只能由老师移出（default 角色默认关闭）", "class"},
+	{PermAssignmentScoreView, "查看班级作业成绩表", "班级成员可查看本班作业的完整成绩表（全班各题得分与排名）；关闭后只能看到自己的完成进度。点看他人提交代码仍受「查看用户提交明细」或该题满分约束，不随此位放开", "class"},
 	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码", "submission"},
 	{PermSubmissionViewUser, "查看用户提交明细", "榜单/进度表中点看指定用户在某题的全部提交（含代码与测试点明细）", "submission"},
 	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},

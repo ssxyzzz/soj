@@ -42,9 +42,12 @@ const leadersLoading = ref(false)
 const myUid = ref<number | null>(null)
 const showScoreBoard = ref(false)
 
-// 榜单单元格点看用户提交明细：组织者本人 ∨「查看用户提交明细」权限位
+// 榜单单元格点看用户提交明细：组织者本人 ∨「查看用户提交明细」∨「查看比赛/考试成绩表详情」
 const canInspectSubs = computed(
-  () => !!round.value?.is_organizer || userStore.can('submission.view.user'),
+  () =>
+    !!round.value?.is_organizer ||
+    userStore.can('submission.view.user') ||
+    userStore.can('contest.score.detail'),
 )
 const scoreBoard = computed<ScoreBoardView | null>(() => {
   if (!round.value) return null
@@ -118,7 +121,8 @@ const progressPct = computed(() => {
 
 const problemTotal = computed(() => round.value?.problems?.length ?? 0)
 
-// 成绩表可见：组织者恒可见；参与者需开启成绩表且结果已发布（关隐藏时赛中实时可见）
+// 成绩表可见：组织者恒可见；他人需「查看比赛/考试成绩表」权限位（v0.11，root/admin 默认
+// 持有、default 无），且需开启成绩表且结果已发布（关隐藏时赛中实时可见）——与服务端同规则
 // 题目行跳转（v0.7.3 优先级）：
 //   考试题被主题库比赛收录（隐藏期）→ 引导进比赛做题页；
 //   考试彻底结束（已发布，锁已解除）→ 学生入口回题库题目页，组织者留在考试上下文看本场明细；
@@ -140,6 +144,7 @@ const boardVisible = computed(() => {
   const c = round.value
   if (!c || !userStore.token) return false
   if (c.is_organizer) return true
+  if (!userStore.can('contest.score.view')) return false
   if (!c.scoreboard) return false
   return c.published || (c.status === 'running' && !c.hide_during)
 })

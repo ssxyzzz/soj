@@ -434,8 +434,10 @@ func (h *Handlers) RemoveAssignmentProblem(c *gin.Context) {
 	ok(c, gin.H{"removed": pid})
 }
 
-// AssignmentProgress 作业完成情况（班级管理员/root）：
-// 本班每个学生在各题的提交次数 / 最高分 / 是否通过。
+// AssignmentProgress 作业完成情况（成绩表数据源）：
+// 班级管理员/root ∨ 持「查看班级作业成绩表」权限位（assignment.score.view，default 默认
+// 开启）→ 本班全部学生在各题的提交次数 / 最高分 / 是否通过；否则只返回自己一行。
+// 他人提交代码的查看门槛（submission.view.user / 该题满分）不受此位影响。
 func (h *Handlers) AssignmentProgress(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -460,7 +462,7 @@ func (h *Handlers) AssignmentProgress(c *gin.Context) {
 	manage := h.classManageable(c, cl)
 
 	uids := make([]int64, 0, 8)
-	if manage {
+	if manage || hasPerm(c, repo.PermAssignmentScoreView) {
 		members, err := h.repo.ListMembers(ctx, a.ClassID)
 		if err != nil {
 			fail(c, http.StatusInternalServerError, "读取成员失败")

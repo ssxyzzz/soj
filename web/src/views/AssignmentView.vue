@@ -52,14 +52,15 @@ const canInspectSubs = computed(
   () => !!assignment.value?.manageable || userStore.can('submission.view.user'),
 )
 
+// 排名列：老师（可管理）∨「查看班级作业成绩表」权限位（全班视角）时展示；
+// 行数（全班 / 只自己）由服务端按同一权限判定下发，这里只对齐排名列显隐
+const showRank = computed(
+  () => !!assignment.value?.manageable || userStore.can('assignment.score.view'),
+)
+
 const scoreBoard = computed<ScoreBoardView | null>(() => {
   if (!assignment.value) return null
-  return buildAssignmentBoard(
-    assignment.value,
-    progress.value,
-    canInspectSubs.value,
-    assignment.value.manageable,
-  )
+  return buildAssignmentBoard(assignment.value, progress.value, canInspectSubs.value, showRank.value)
 })
 const scoreTitle = computed(() => (assignment.value ? `成绩表 · ${assignment.value.title}` : '成绩表'))
 
@@ -292,7 +293,7 @@ onMounted(() => {
           </div>
         </el-card>
 
-        <!-- 成绩表：作业始终显示（教师全班、学生自己） -->
+        <!-- 成绩表：作业始终显示（老师与持「查看班级作业成绩表」者全班，否则只自己——行数由服务端决定） -->
         <ScoreSummaryCard
           v-if="userStore.token"
           class="aside-card"

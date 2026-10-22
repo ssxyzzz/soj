@@ -302,6 +302,32 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		}
 		log.Printf("[boot] admin 角色已补发退出班级权限位（class.leave）")
 	}
+	if !flagDone("assignmentScoreViewV1") {
+		// v0.11：查看班级作业成绩表权限位（assignment.score.view），default 默认开启；
+		// 存量 default/admin 角色补发，未持有的成员在作业页只能看到自己的完成进度
+		if _, err := r.Roles.UpdateMany(ctx,
+			bson.M{"_id": bson.M{"$in": []string{RoleDefault, RoleAdmin}}},
+			bson.M{"$addToSet": bson.M{"perms": PermAssignmentScoreView}}); err != nil {
+			return err
+		}
+		if err := setFlag("assignmentScoreViewV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] default/admin 角色已补发查看班级作业成绩表权限位（assignment.score.view）")
+	}
+	if !flagDone("contestScorePermV1") {
+		// v0.11：比赛/考试成绩表两个权限位（查看 / 详情点看），初始归属 admin（root 走 "*" 恒通）；
+		// default 刻意不给——普通学生默认看不了比赛成绩表，由老师按角色放开发
+		if _, err := r.Roles.UpdateOne(ctx,
+			bson.M{"_id": RoleAdmin},
+			bson.M{"$addToSet": bson.M{"perms": bson.M{"$each": []string{PermContestScoreView, PermContestScoreDetail}}}}); err != nil {
+			return err
+		}
+		if err := setFlag("contestScorePermV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] admin 角色已补发比赛/考试成绩表权限位（contest.score.view / contest.score.detail）")
+	}
 	if !flagDone("adminProblemViewAllV1") {
 		// v0.7.2：存量 admin 角色补发「题库全量可见」——builtin 定义一直包含该位，
 		// 但早期创建的角色文档没有它且从未补发过（导致存量 admin 看不到隐藏题/锁定标记）
