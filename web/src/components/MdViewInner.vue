@@ -38,7 +38,7 @@ async function render() {
     lang: 'zh_CN',
     cdn: '/vditor',
     theme: { current: 'light' },
-    hljs: { lineNumber: false },
+    hljs: { lineNumber: true }, // 多行代码行号（Vditor 内置数字列覆盖层，不动代码文本；间距/配色在 main.css 调）
     math: { engine: 'KaTeX', inlineDigit: true }, // inlineDigit: $ 后允许数字开头（默认 false，会让 $1 \le N$ 不被识别）
     markdown: { sanitize: true },
   })

@@ -561,6 +561,34 @@ strong {
   font-family: var(--font-mono);
 }
 
+/* 多行代码块（2026-10-22 拍板）：爱丽丝蓝底 + 稍浓蓝边，与题型徽章同族色系。
+   白底来自运行时 hljs github 主题（.hljs 在 code 上），故底色落 pre、code 透明；
+   pre 原无圆角边框（圆角 5px 在 code 上），改落 pre 一处。特异度 (0,3,1) 压运行时
+   (0,1,0)/(0,1,1)，不依赖加载顺序 */
+.soj-md.md-light .vditor-reset pre {
+  background: #f0f8ff;
+  border: 1px solid #d2e2ff;
+  border-radius: var(--el-border-radius-small);
+}
+.soj-md.md-light .vditor-reset pre > code {
+  background: transparent;
+}
+/* 行号（MdViewInner 开 hljs.lineNumber，Vditor 内置覆盖层实现——数字由 ::before
+   绘制、代码文本不动，复制按钮 textContent 不受影响）。Vditor 默认：数字列 3em、
+   代码左缩 4em (!important)、数字 38% 灰（蓝底上几乎不可见）、rows top 1em。
+   此处：数字列 3.5em、左缩 5.5em (!important 对 !important、特异度取胜) →
+   数字与代码间隙 3em；行号色改蓝灰 #8ba3c2；top 对齐 code 实际 padding 0.5em */
+.soj-md.md-light .vditor-reset pre > code.vditor-linenumber {
+  padding-left: 5.5em !important;
+}
+.soj-md.md-light .vditor-reset pre .vditor-linenumber__rows {
+  top: 0.5em;
+  width: 3.5em;
+}
+.soj-md.md-light .vditor-reset pre .vditor-linenumber__rows > span::before {
+  color: #8ba3c2;
+}
+
 .soj-md.md-light .vditor-reset table th,
 .soj-md.md-light .vditor-reset table td {
   border: 1px solid var(--el-border-color-lighter);
