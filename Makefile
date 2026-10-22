@@ -1,8 +1,8 @@
 .PHONY: up down restart logs ps backup bin image web-building server-building import webui-dist soj-dev web-dev help
 
-up: ## 构建并启动全部服务（3 容器；先编译前端产物，镜像缺失时自动构建）
+up: ## 构建发版并对齐镜像（= bin + image：编译热替换后重建 soj 镜像，容器重建/宿主机重启不回退）
 	./scripts/web-building.sh
-	docker compose up -d
+	docker compose up -d --build soj
 
 down: ## 停止并移除容器（数据卷保留）
 	docker compose down
