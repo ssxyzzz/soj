@@ -120,10 +120,10 @@ func Run(ctx context.Context, deps *Deps) {
 
 			// 网页建题（v0.5.2-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
 			authed.POST("/problems", RequirePerm(repo.PermProblemCreate), h.CreateProblem)
-			// 批量导入（v0.15）：题包（含题面）唯一入口；problem.create 权限即可
-			authed.POST("/admin/problems/import", RequirePerm(repo.PermProblemCreate), h.AdminImportProblems)
-			authed.GET("/admin/problems/import/status", RequirePerm(repo.PermProblemCreate), h.AdminImportStatus)
-			authed.POST("/admin/problems/import/cancel", RequirePerm(repo.PermProblemCreate), h.AdminImportCancel)
+			// 题包批量导入（v0.15 统一格式）：独立 /import 页按来源（SOJ/Hydro）适配；problem.create 权限即可
+			authed.POST("/import", RequirePerm(repo.PermProblemCreate), h.StartImport)
+			authed.GET("/import/status", RequirePerm(repo.PermProblemCreate), h.ImportStatus)
+			authed.POST("/import/cancel", RequirePerm(repo.PermProblemCreate), h.ImportCancel)
 			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
 			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
 			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)
@@ -231,6 +231,8 @@ func Run(ctx context.Context, deps *Deps) {
 				// 管理面板读走 /admin/tagtree（附每节点引用数），公开读仍走 /tags/tree
 				adminG.GET("/tagtree", RequireRoot(), h.AdminTagTree)
 				adminG.PUT("/tagtree", RequireRoot(), h.AdminReplaceTagTree)
+				// 保存被删拦截后的解绑（一键全部/逐题），同 root 专属
+				adminG.POST("/tagtree/unbind", RequireRoot(), h.AdminUnbindTags)
 
 				// 来源库（v0.12，root）：条目 CRUD + 转为标签；公开建议读走 /sources/meta
 				adminG.GET("/sources", RequireRoot(), h.AdminListSources)

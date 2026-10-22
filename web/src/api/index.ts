@@ -210,6 +210,9 @@ export const tagApi = {
   tree: () => get<TagTreeResult>('/tags/tree'),
   adminTree: () => get<AdminTagTreeResult>('/admin/tagtree'),
   save: (nodes: TagNode[]) => put<{ count: number }>('/admin/tagtree', { nodes }),
+  // 保存被删拦截后的解绑（一键全部/逐题）：从题目上摘除待删标签，其余标签不动
+  unbind: (problemIds: number[], tagIds: number[]) =>
+    post<{ unbound: number }>('/admin/tagtree/unbind', { problem_ids: problemIds, tag_ids: tagIds }),
 }
 
 // 来源库（v0.12）：元数据公开读（表单 datalist + 题库筛选），管理写仅 root

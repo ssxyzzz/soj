@@ -29,6 +29,9 @@ const counts = ref<Record<string, number>>({})
 const loading = ref(true)
 const saving = ref(false)
 const blockedProblems = ref<TagRefProblem[] | null>(null)
+// 本次保存待删且仍被引用的标签 ID（failData.removed_ids）——逐行/一键解绑的目标
+const removedTagIds = ref<number[]>([])
+const unbinding = ref(false)
 const path = ref<number[]>([]) // 悬停路径：path[i] = 第 i 层悬停的节点 id，其子级即第 i+1 行——悬停即「当前在哪」
 const search = ref('') // 标签搜索：非空时整树按名匹配平铺展示（悬停导航/＋/拖拽停用）
 const floating = ref<number | null>(null) // 长按浮动态中的节点 id
@@ -624,8 +627,15 @@ async function onSave() {
   } catch {
     return
   }
+  await doSave()
+}
+
+// doSave 实际保存（onSave 确认后与解绑后自动重试共用；重试不再弹确认——
+// 用户已确认过本次草稿，解绑只是清除了拦截原因）
+async function doSave() {
   saving.value = true
   blockedProblems.value = null
+  removedTagIds.value = []
   try {
     const r = await tagApi.save(toPayload(draft.value))
     ElMessage.success(`标签树已保存（${r.count} 个标签）`)
@@ -637,11 +647,49 @@ async function onSave() {
     path.value = []
     await tagStore.load()
   } catch (e) {
-    // 拦截器已 toast 文案；这里取 failData 附带的引用题目明细做表格展示
-    blockedProblems.value =
-      (e as Error & { data?: { problems?: TagRefProblem[] } }).data?.problems ?? []
+    // 拦截器已 toast 文案；这里取 failData 附带的引用题目明细做表格展示，
+    // removed_ids = 本次保存待删且仍被引用的标签 ID（逐行/一键解绑的目标）
+    const data = (e as Error & { data?: { problems?: TagRefProblem[]; removed_ids?: number[] } }).data
+    blockedProblems.value = data?.problems ?? []
+    removedTagIds.value = data?.removed_ids ?? []
   } finally {
     saving.value = false
+  }
+}
+
+// 解绑（unbindAll=true = 拦截明细全部题目；否则只解 row 那一道）：
+// 从题目上摘除本次待删标签（其余标签不动），成功后清掉对应行；
+// 明细清空即拦截原因消失，自动重试保存。一键在动手前二次确认（批量改题目）。
+async function unbind(row?: TagRefProblem) {
+  const problems = blockedProblems.value ?? []
+  const ids = row ? [row.id] : problems.map((p) => p.id)
+  if (!ids.length || !removedTagIds.value.length) return
+  if (!row) {
+    try {
+      await ElMessageBox.confirm(
+        `将从 ${ids.length} 道题上移除待删除的标签（其余标签保留），随后自动重试保存。确定？`,
+        '一键解绑',
+        { type: 'warning', confirmButtonText: '解绑并重试', cancelButtonText: '取消' },
+      )
+    } catch {
+      return
+    }
+  }
+  unbinding.value = true
+  try {
+    await tagApi.unbind(ids, removedTagIds.value)
+    if (row) {
+      blockedProblems.value = problems.filter((p) => p.id !== row.id)
+      ElMessage.success(`已从「#${row.id} ${row.title}」解绑`)
+    } else {
+      ElMessage.success(`已从 ${ids.length} 道题解绑`)
+    }
+    if (!blockedProblems.value?.length) {
+      blockedProblems.value = null
+      await doSave()
+    }
+  } finally {
+    unbinding.value = false
   }
 }
 </script>
@@ -804,12 +852,22 @@ async function onSave() {
     </div>
 
     <template v-if="blockedProblems">
-      <el-alert
-        type="error"
-        :closable="false"
-        class="blocked-alert"
-        title="保存被拒：以下题目仍在使用将被删除的标签，请先在题目上解绑（编辑题目 → 标签）"
-      />
+      <div class="blocked-row">
+        <el-alert
+          type="error"
+          :closable="false"
+          class="blocked-alert"
+          title="保存被拒：以下题目仍在使用将被删除的标签，解绑后自动重试保存"
+        />
+        <el-button
+          type="warning"
+          size="small"
+          :loading="unbinding"
+          @click="unbind()"
+        >
+          一键解绑全部
+        </el-button>
+      </div>
       <el-table stripe :data="blockedProblems" size="small">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="题目" min-width="240" />
@@ -817,6 +875,19 @@ async function onSave() {
           <template #default="{ row }">
             <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-gap">{{ t }}</el-tag>
             <span v-if="!row.tags?.length" class="dim">（无）</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="90">
+          <template #default="{ row }">
+            <el-button
+              link
+              type="warning"
+              size="small"
+              :disabled="unbinding"
+              @click="unbind(row as TagRefProblem)"
+            >
+              解绑
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -1055,8 +1126,17 @@ async function onSave() {
   text-decoration: underline;
 }
 
-.blocked-alert {
+/* 拦截提示行：alert 占满剩余宽度，「一键解绑全部」按钮右侧同行 */
+.blocked-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   margin-top: 12px;
+}
+
+.blocked-row .blocked-alert {
+  flex: 1 1 auto;
+  margin-top: 0;
 }
 
 .tag-gap {

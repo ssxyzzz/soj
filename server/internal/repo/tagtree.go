@@ -169,6 +169,21 @@ func (r *Repo) TagRefProblems(ctx context.Context, tagIDs []int64) ([]*Problem, 
 	return out, nil
 }
 
+// UnbindTags 从指定题目上批量摘除指定标签（$pull），题目其余标签不动——
+// 标签树保存被删拦截后的「一键/逐题解绑」用。返回实际改动的题数。
+func (r *Repo) UnbindTags(ctx context.Context, problemIDs, tagIDs []int64) (int64, error) {
+	if len(problemIDs) == 0 || len(tagIDs) == 0 {
+		return 0, nil
+	}
+	res, err := r.Problems.UpdateMany(ctx,
+		bson.M{"_id": bson.M{"$in": problemIDs}, "tags": bson.M{"$in": tagIDs}},
+		bson.M{"$pull": bson.M{"tags": bson.M{"$in": tagIDs}}})
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
 // TagUsageCounts 统计每个标签节点被题目直接引用的题数（聚合 Problem.Tags，
 // 与题库筛选「精确匹配」同口径，不做子树扩散）。管理面板角标与删除/改名的前置拦截用。
 func (r *Repo) TagUsageCounts(ctx context.Context) (map[int64]int64, error) {
