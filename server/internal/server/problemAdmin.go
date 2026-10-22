@@ -216,6 +216,9 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "整理测试数据目录失败")
 		return
 	}
+	// v0.15 入口收口：建题 zip = 纯数据/配置载体——包内题面（statement.md / Hydro
+	// statement/）一律忽略，题面以表单为唯一来源（题包导入走后台「导入题目」页）
+	stripPackageStatement(tmpDir)
 
 	// problem.yaml 由表单生成（zip 里若带了同名文件，以表单为准）；表单题面（Markdown）
 	// 写进 statement.md 一起进导入管道——样例并入、数据卷归档与目录式导入同一条路
@@ -860,6 +863,14 @@ func (h *Handlers) upsertSourceLib(c *gin.Context, sourceType, source *string) {
 	}
 }
 
+// stripPackageStatement 剔除包内题面文件（v0.15 入口收口）：建题/编辑 zip 只收数据与
+// 配置，statement.md 与 Hydro 的 statement/ 目录一并忽略——Hydro 归一发生在 ImportDir
+// 内部，提前删除即可让上翻无源。题面唯一来源 = 表单编辑器；题包（含题面）走批量导入。
+func stripPackageStatement(dir string) {
+	_ = os.Remove(filepath.Join(dir, "statement.md"))
+	_ = os.RemoveAll(filepath.Join(dir, "statement"))
+}
+
 // formDifficulty 建题表单难度（v0.11）：缺省 D3，越界报错。
 func formDifficulty(form *multipart.Form) (int, error) {
 	d := atoiDefault(formValue(form, "difficulty"), 3)
@@ -925,8 +936,14 @@ func quoteYaml(s string) string {
 }
 
 // safeExtractZip 把 zip 解压到 dst：拒绝穿越成分、条目数与解压总量超限、非法成对结构不在此校验
-// （交给 Importer）。
+// （交给 Importer）。建题/整包替换用固定小限额（单题面）。
 func safeExtractZip(zipPath, dst string) error {
+	return safeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "20MB", "200MB")
+}
+
+// safeExtractZipLimits 参数化限额版（v0.15 批量导入：整包 GB 级、条目随限额放宽）；
+// singleMBHint/totalMBHint 只用于超限报错文案。
+func safeExtractZipLimits(zipPath, dst string, maxEntries int, maxTotal, maxSingle int64, singleMBHint, totalMBHint string) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return errors.New("不是合法的 zip 文件")
@@ -934,7 +951,7 @@ func safeExtractZip(zipPath, dst string) error {
 	defer zr.Close()
 	dstRoot := filepath.Clean(dst)
 	total := int64(0)
-	if len(zr.File) > maxZipEntries {
+	if len(zr.File) > maxEntries {
 		return errors.New("压缩包条目过多")
 	}
 	for _, f := range zr.File {
@@ -945,12 +962,12 @@ func safeExtractZip(zipPath, dst string) error {
 		if f.Mode().IsDir() {
 			continue
 		}
-		if f.UncompressedSize64 > maxZipFile {
-			return errors.New("压缩包内单文件超过 20MB")
+		if f.UncompressedSize64 > uint64(maxSingle) {
+			return fmt.Errorf("压缩包内单文件超过 %s", singleMBHint)
 		}
 		total += int64(f.UncompressedSize64)
-		if total > maxZipUncompressed {
-			return errors.New("压缩包解压总量超过 200MB")
+		if total > maxTotal {
+			return fmt.Errorf("压缩包解压总量超过 %s", totalMBHint)
 		}
 		dest := filepath.Join(dstRoot, filepath.FromSlash(path.Clean("/"+name)))
 		if !strings.HasPrefix(dest, dstRoot+string(os.PathSeparator)) {
@@ -1139,17 +1156,6 @@ func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, t
 		fail(c, http.StatusBadRequest, derr.Error())
 		return
 	}
-	yb, _ := yaml.Marshal(map[string]any{"title": title, "type": repo.TypeFunction})
-	if err := os.WriteFile(filepath.Join(tmpDir, "problem.yaml"), yb, 0o644); err != nil {
-		fail(c, http.StatusInternalServerError, "写题目文件失败")
-		return
-	}
-	if statement != "" {
-		if err := os.WriteFile(filepath.Join(tmpDir, "statement.md"), []byte(statement), 0o644); err != nil {
-			fail(c, http.StatusInternalServerError, "写题目文件失败")
-			return
-		}
-	}
 	saveFormFile := func(field, dstName string) (bool, error) {
 		files := form.File[field]
 		if len(files) != 1 {
@@ -1192,6 +1198,20 @@ func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, t
 			return
 		}
 	}
+	// v0.15 入口收口：表单元数据与题面在解压之后落盘（覆盖包内同名文件），
+	// 包内题面一律剔除——zip 只当数据/配置载体
+	stripPackageStatement(tmpDir)
+	yb, _ := yaml.Marshal(map[string]any{"title": title, "type": repo.TypeFunction})
+	if err := os.WriteFile(filepath.Join(tmpDir, "problem.yaml"), yb, 0o644); err != nil {
+		fail(c, http.StatusInternalServerError, "写题目文件失败")
+		return
+	}
+	if statement != "" {
+		if err := os.WriteFile(filepath.Join(tmpDir, "statement.md"), []byte(statement), 0o644); err != nil {
+			fail(c, http.StatusInternalServerError, "写题目文件失败")
+			return
+		}
+	}
 	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty,
 		SourceType: src.Type, Source: src.Name, Year: src.Year, Region: src.Region}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
@@ -1215,17 +1235,6 @@ func (h *Handlers) createInteractiveProblem(c *gin.Context, form *multipart.Form
 		fail(c, http.StatusBadRequest, derr.Error())
 		return
 	}
-	yb, _ := yaml.Marshal(map[string]any{"title": title, "type": repo.TypeInteractive})
-	if err := os.WriteFile(filepath.Join(tmpDir, "problem.yaml"), yb, 0o644); err != nil {
-		fail(c, http.StatusInternalServerError, "写题目文件失败")
-		return
-	}
-	if statement != "" {
-		if err := os.WriteFile(filepath.Join(tmpDir, "statement.md"), []byte(statement), 0o644); err != nil {
-			fail(c, http.StatusInternalServerError, "写题目文件失败")
-			return
-		}
-	}
 	if files := form.File["interactor"]; len(files) == 1 {
 		if f, ferr := files[0].Open(); ferr == nil {
 			data, _ := io.ReadAll(f)
@@ -1244,6 +1253,19 @@ func (h *Handlers) createInteractiveProblem(c *gin.Context, form *multipart.Form
 		}
 		if err := unwrapSingleRootDir(tmpDir); err != nil {
 			fail(c, http.StatusInternalServerError, "整理测试数据目录失败")
+			return
+		}
+	}
+	// v0.15 入口收口：表单元数据与题面在解压之后落盘（覆盖包内同名文件），包内题面剔除
+	stripPackageStatement(tmpDir)
+	yb, _ := yaml.Marshal(map[string]any{"title": title, "type": repo.TypeInteractive})
+	if err := os.WriteFile(filepath.Join(tmpDir, "problem.yaml"), yb, 0o644); err != nil {
+		fail(c, http.StatusInternalServerError, "写题目文件失败")
+		return
+	}
+	if statement != "" {
+		if err := os.WriteFile(filepath.Join(tmpDir, "statement.md"), []byte(statement), 0o644); err != nil {
+			fail(c, http.StatusInternalServerError, "写题目文件失败")
 			return
 		}
 	}

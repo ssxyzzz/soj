@@ -79,6 +79,32 @@ export interface SourceEntry {
   refs: number
 }
 
+// ---------- 批量导入（v0.15） ----------
+
+// 单题导入结果（结果流条目）
+export interface BatchImportResult {
+  name: string
+  status: 'ok' | 'skipped' | 'failed'
+  pid?: number
+  title?: string
+  reason?: string
+}
+
+// 导入任务进度快照（GET /admin/problems/import/status）
+export interface BatchImportStatus {
+  state: 'idle' | 'running' | 'done' | 'cancelled' | 'failed'
+  total: number
+  done: number
+  ok_count: number
+  fail_count: number
+  skip_count: number
+  results: BatchImportResult[]
+  error?: string
+  by?: string
+  started_at?: string
+  ended_at?: string
+}
+
 // 标签树保存被拒（删除被引用标签）时 failData 附带的引用题目明细
 export interface TagRefProblem {
   id: number

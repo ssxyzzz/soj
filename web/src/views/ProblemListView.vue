@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 
 import { authApi, problemApi, rankApi, sourcesApi } from '@/api'
@@ -144,10 +143,6 @@ function acceptRate(row: { submit_count?: number; accepted_count?: number }): st
 function onPageChange(p: number) {
   page.value = p
   load()
-}
-
-function comingSoon() {
-  ElMessage.info('批量题包导入尚未上线；单题可直接点「新增题目」上传 zip，批量仍用命令行导入')
 }
 
 onMounted(() => {
@@ -303,9 +298,9 @@ stripe
         <template #header><span>题目管理</span></template>
         <div class="entry-actions">
           <el-button type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
-          <el-button style="width: 100%" @click="comingSoon">导入题目</el-button>
+          <el-button style="width: 100%" @click="router.push('/admin?section=import')">导入题目</el-button>
         </div>
-        <div class="dim tip">网页出题（含测试数据 zip 上传）在 v0.5.2 上线</div>
+        <div class="dim tip">新增题在表单里写题面、zip 只收数据/配置；题包（含题面）批量导入走「导入题目」</div>
       </el-card>
 
       <el-card class="aside-card">

@@ -3,10 +3,13 @@
 // 面板用 v-if 切换（销毁重建、各自拉数据）——顺带解决「角色变更后用户列表刷新」
 // 的跨面板联动；面板实现见 components/admin/*，角色清单由 stores/adminRoles 共享。
 // 角色管理仅 root 可见（后端同样硬编码 root，增删改不可下放）。
+// ?section= 深链（v0.15）：题库页「导入题目」等入口直达对应分区。
 import { ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 
 import BackupPanel from '@/components/admin/BackupPanel.vue'
+import ImportPanel from '@/components/admin/ImportPanel.vue'
 import LevelPanel from '@/components/admin/LevelPanel.vue'
 import NoticePanel from '@/components/admin/NoticePanel.vue'
 import RolesPanel from '@/components/admin/RolesPanel.vue'
@@ -18,8 +21,12 @@ import UsersPanel from '@/components/admin/UsersPanel.vue'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
+const route = useRoute()
 
-const section = ref<'users' | 'roles' | 'tags' | 'sources' | 'levels' | 'security' | 'notice' | 'settings' | 'backup'>('users')
+const sections = ['users', 'import', 'roles', 'tags', 'sources', 'levels', 'security', 'notice', 'settings', 'backup'] as const
+type Section = (typeof sections)[number]
+const initial = (Array.isArray(route.query.section) ? route.query.section[0] : route.query.section) as Section | undefined
+const section = ref<Section>(initial && sections.includes(initial) ? initial : 'users')
 
 // 标签树面板草稿的脏状态：切走分区前拦截确认（面板 v-if 销毁，草稿随组件丢失）
 const tagsDirty = ref(false)
@@ -51,6 +58,15 @@ async function switchSection(target: typeof section.value) {
       >
         <span class="nav-title">编辑用户</span>
         <span class="nav-sub">搜索 / 建号 / 角色 / 重置密码</span>
+      </div>
+      <div
+        v-if="userStore.can('problem.create')"
+        class="nav-item"
+        :class="{ active: section === 'import' }"
+        @click="switchSection('import')"
+      >
+        <span class="nav-title">导入题目</span>
+        <span class="nav-sub">题包批量导入（含题面）</span>
       </div>
       <div
         v-if="userStore.role === 'root'"
@@ -126,6 +142,7 @@ async function switchSection(target: typeof section.value) {
 
     <main class="admin-main">
       <UsersPanel v-if="section === 'users'" />
+      <ImportPanel v-else-if="section === 'import'" />
       <RolesPanel v-else-if="section === 'roles'" />
       <TagsPanel v-else-if="section === 'tags'" @update:dirty="tagsDirty = $event" />
       <SourcesPanel v-else-if="section === 'sources'" />

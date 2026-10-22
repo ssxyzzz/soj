@@ -34,6 +34,11 @@ type Importer struct {
 	Source     string  // 直传来源名（非空时优先）
 	Year       int     // 直传年份（非 0 时优先）
 	Region     string  // 直传地区（非空时优先）
+	// IgnoreDirPID 忽略目录名数字前缀、题号一律自动分配（v0.15 批量导入用：
+	// 老师题包目录常是 1_x/2_x 式编号，顶号导入会整文档覆盖存量题）。
+	IgnoreDirPID bool
+	// DefaultHidden yaml 未声明 hidden 时的缺省值（v0.15 批量导入「导入后默认隐藏」开关）。
+	DefaultHidden bool
 }
 
 type problemYAML struct {
@@ -52,7 +57,7 @@ type problemYAML struct {
 	MemoryLimitKB *int                `yaml:"memoryLimitKb,omitempty"` // 旧字段：仅解析兼容，不再导出
 	Samples       []int               `yaml:"samples,omitempty"`
 	Visibility    string              `yaml:"visibility,omitempty"`
-	Hidden        bool                `yaml:"hidden,omitempty"` // 主题库隐藏
+	Hidden        *bool               `yaml:"hidden,omitempty"` // 主题库隐藏；指针区分「未声明」（取 Importer.DefaultHidden）与显式 true/false
 	Tags          []string            `yaml:"tags,omitempty"`
 	Compare       string              `yaml:"compare,omitempty"`       // 比对模式 exact/tolerant（v0.5.2-1）
 	Subtasks      []yamlSubtask       `yaml:"subtasks,omitempty"`      // 可选：子任务分组给分（组内全过才得分）
@@ -191,7 +196,10 @@ func (im *Importer) seedSkipReason(ctx context.Context, dir, name string) (bool,
 // ImportDir 导入单个题目目录，返回创建的题目（含 config.yaml/内置 checker 解析结果）。
 func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error) {
 	base := filepath.Base(dir)
-	pid := seedPID(base)
+	pid := int64(0)
+	if !im.IgnoreDirPID {
+		pid = seedPID(base)
+	}
 
 	// 无感嗅探（v0.9）：SOJ / Hydro / 裸数据三路归一，无法识别时带所见内容报错
 	if _, err := DetectAndNormalize(dir); err != nil {
@@ -482,7 +490,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		TimeLimitMS:    msLimit,
 		MemoryLimitKB:  kbLimit,
 		Visibility:     meta.Visibility,
-		Hidden:         meta.Hidden,
+		Hidden:         im.effHidden(&meta),
 		CreatedBy:      im.CreatorUID,
 		Tags:           tagIDs,
 		RawTags:        rawNames,
@@ -563,7 +571,7 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 		// 客观题不消费时空限制，占位默认值（渲染导出时同样带上）
 		TimeLimitMS: 1000, MemoryLimitKB: 262144,
 		Visibility: meta.Visibility,
-		Hidden:     meta.Hidden,
+		Hidden:     im.effHidden(meta),
 		CreatedBy:  im.CreatorUID,
 		Tags:       tagIDs,
 		RawTags:    rawNames,
@@ -596,7 +604,7 @@ func (im *Importer) RenderProblemYAML(ctx context.Context, p *Problem) []byte {
 		Time:       timeLimitPtr(timeLimit(ms) / 1000),
 		Memory:     memLimitPtr(memLimit(kb) / 1024),
 		Visibility: pickNonEmpty(p.Visibility, VisibilityPublic),
-		Hidden:     p.Hidden,
+		Hidden:     hiddenPtr(p.Hidden),
 		Tags:       im.tagNamesOf(ctx, p.Tags),
 		Compare:    p.Compare,
 		Questions:  p.Questions,
@@ -622,6 +630,22 @@ func (im *Importer) RenderProblemYAML(ctx context.Context, p *Problem) []byte {
 
 func timeLimitPtr(v timeLimit) *timeLimit { return &v }
 func memLimitPtr(v memLimit) *memLimit    { return &v }
+
+// hiddenPtr 导出用：仅 true 落 yaml（false 省略，保持导出格式与既往一致）。
+func hiddenPtr(v bool) *bool {
+	if v {
+		return &v
+	}
+	return nil
+}
+
+// effHidden 隐藏态归一（v0.15）：yaml 显式声明优先，未声明取 DefaultHidden（批量导入开关）。
+func (im *Importer) effHidden(meta *problemYAML) bool {
+	if meta.Hidden != nil {
+		return *meta.Hidden
+	}
+	return im.DefaultHidden
+}
 
 // applySourceFields 来源四字段归一：表单直传最高优先（权威输入，覆盖 yaml，语义同
 // difficulty），四字段全空才走标题方括号前缀识别；类型枚举与年份区间非法即报错。
@@ -1001,7 +1025,7 @@ func (im *Importer) ReplaceCases(ctx context.Context, pid int64, dir string) (*P
 		Time:       timeLimitPtr(timeLimit(p.TimeLimitMS) / 1000),
 		Memory:     memLimitPtr(memLimit(p.MemoryLimitKB) / 1024),
 		Visibility: p.Visibility,
-		Hidden:     p.Hidden,
+		Hidden:     hiddenPtr(p.Hidden),
 		Tags:       im.tagNamesOf(ctx, p.Tags),
 		Compare:    p.Compare,
 	}

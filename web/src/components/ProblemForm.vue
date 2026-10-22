@@ -382,8 +382,8 @@ function onSubmitClick() {
                   <el-tooltip
                     placement="top"
                     :content="mode === 'create'
-                      ? '不上传则创建暂无数据的题目：题面立即可用、暂不可提交'
-                      : '留空保留现有数据；选择新 zip 将整包替换（旧数据不保留）'"
+                      ? '只收数据与配置（题面写在上方编辑器，包内题面不导入）。不上传则创建暂无数据的题目：题面立即可用、暂不可提交'
+                      : '留空保留现有数据；选择新 zip 将整包替换数据与配置（旧数据不保留，题面不受影响）'"
                   >
                     <el-icon class="dim"><QuestionFilled /></el-icon>
                   </el-tooltip>

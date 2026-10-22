@@ -23,6 +23,9 @@ type SystemSettings struct {
 	AllowRegister *bool `bson:"allowRegister,omitempty"`
 	// ICP 备案号（v0.13）：页脚悬挂并链接工信部备案系统；空 = 不展示（未备案部署不显示）。
 	IcpNumber string `bson:"icpNumber"`
+	// 批量导入限额（v0.15，MB）：单题数据上限 / 整包 zip 上限；nil = 未设置按默认（100 / 2048）。
+	BatchImportProblemMB *int `bson:"batchImportProblemMB,omitempty"`
+	BatchImportZipMB     *int `bson:"batchImportZipMB,omitempty"`
 }
 
 const (
@@ -30,6 +33,8 @@ const (
 	DefaultDataDownloadDayLimit = 5
 	DefaultAutocompleteMinLevel = 5
 	DefaultAllowRegister        = true
+	DefaultBatchImportProblemMB = 100  // 单题数据 100MB
+	DefaultBatchImportZipMB     = 2048 // 整包 zip 2GB
 )
 
 func downloadLimitPtr(v int) *int { return &v }
@@ -69,6 +74,12 @@ func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
 	if s.AllowRegister == nil {
 		s.AllowRegister = boolPtr(DefaultAllowRegister)
 	}
+	if s.BatchImportProblemMB == nil || *s.BatchImportProblemMB < 1 {
+		s.BatchImportProblemMB = intPtr(DefaultBatchImportProblemMB)
+	}
+	if s.BatchImportZipMB == nil || *s.BatchImportZipMB < 1 {
+		s.BatchImportZipMB = intPtr(DefaultBatchImportZipMB)
+	}
 	return &s, nil
 }
 
@@ -91,6 +102,8 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"autocompleteMinLevel":   s.MinAutocompleteLevel(),
 			"allowRegister":          s.RegistrationOpen(),
 			"icpNumber":              s.IcpNumber,
+			"batchImportProblemMB":   s.BatchImportProblemMBVal(),
+			"batchImportZipMB":       s.BatchImportZipMBVal(),
 		}},
 	)
 	return err
@@ -135,4 +148,20 @@ func (r *Repo) RecordTestDataDownload(ctx context.Context, uid, pid int64) error
 		options.UpdateOne().SetUpsert(true),
 	)
 	return err
+}
+
+// BatchImportProblemMBVal 批量导入单题数据上限（MB）：未设置/越界回默认 100。
+func (s *SystemSettings) BatchImportProblemMBVal() int {
+	if s.BatchImportProblemMB == nil || *s.BatchImportProblemMB < 1 {
+		return DefaultBatchImportProblemMB
+	}
+	return *s.BatchImportProblemMB
+}
+
+// BatchImportZipMBVal 批量导入整包 zip 上限（MB）：未设置/越界回默认 2048。
+func (s *SystemSettings) BatchImportZipMBVal() int {
+	if s.BatchImportZipMB == nil || *s.BatchImportZipMB < 1 {
+		return DefaultBatchImportZipMB
+	}
+	return *s.BatchImportZipMB
 }

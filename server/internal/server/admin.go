@@ -202,11 +202,13 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
+		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
+		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
 	})
 }
 
 // GetSiteInfo 站点公开信息（v0.13 收编原 /auth/register-open）：注册开关 + ICP 备案号，
-// 登录页页签显隐与页脚悬挂共用；后续公开站点事实（v0.15 注册验证方式等）并入此处。
+// 登录页页签显隐与页脚悬挂共用；后续公开站点事实（v0.16 注册验证方式等）并入此处。
 func (h *Handlers) GetSiteInfo(c *gin.Context) {
 	s, err := h.repo.GetSystemSettings(c.Request.Context())
 	if err != nil {
@@ -236,6 +238,8 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		AutocompleteMinLevel   *int    `json:"autocomplete_min_level"`
 		AllowRegister          *bool   `json:"allow_register"`
 		IcpNumber              *string `json:"icp_number"`
+		BatchImportProblemMB   *int    `json:"batch_import_problem_mb"` // 批量导入单题数据上限 MB（v0.15）
+		BatchImportZipMB       *int    `json:"batch_import_zip_mb"`     // 批量导入整包 zip 上限 MB（v0.15）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -292,6 +296,20 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.BackupGuide = *req.BackupGuide
 	}
+	if req.BatchImportProblemMB != nil {
+		if *req.BatchImportProblemMB < 1 || *req.BatchImportProblemMB > 4096 {
+			fail(c, http.StatusBadRequest, "批量导入单题数据上限需在 1-4096MB 之间")
+			return
+		}
+		s.BatchImportProblemMB = req.BatchImportProblemMB
+	}
+	if req.BatchImportZipMB != nil {
+		if *req.BatchImportZipMB < 1 || *req.BatchImportZipMB > 8192 {
+			fail(c, http.StatusBadRequest, "批量导入整包上限需在 1-8192MB 之间")
+			return
+		}
+		s.BatchImportZipMB = req.BatchImportZipMB
+	}
 	if err := h.repo.UpdateSystemSettings(c.Request.Context(), s); err != nil {
 		fail(c, http.StatusInternalServerError, "更新失败")
 		return
@@ -304,5 +322,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
+		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
+		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
 	})
 }

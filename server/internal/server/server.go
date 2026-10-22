@@ -51,7 +51,6 @@ func Run(ctx context.Context, deps *Deps) {
 		ipLimitAuth:   newIPLimiter(ipRateAuthPerMin, time.Minute),
 		leaderCache:   map[string]leaderEntry{},
 	}
-
 	r := gin.New()
 	// 可信代理（v0.13）：ClientIP() 只从可信直连方解析 X-Forwarded-For，
 	// 防 XFF 伪造；Caddy/frp 隧道拓扑下配置后可还原学生真实 IP（v0.14 限流依赖）
@@ -121,6 +120,10 @@ func Run(ctx context.Context, deps *Deps) {
 
 			// 网页建题（v0.5.2-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
 			authed.POST("/problems", RequirePerm(repo.PermProblemCreate), h.CreateProblem)
+			// 批量导入（v0.15）：题包（含题面）唯一入口；problem.create 权限即可
+			authed.POST("/admin/problems/import", RequirePerm(repo.PermProblemCreate), h.AdminImportProblems)
+			authed.GET("/admin/problems/import/status", RequirePerm(repo.PermProblemCreate), h.AdminImportStatus)
+			authed.POST("/admin/problems/import/cancel", RequirePerm(repo.PermProblemCreate), h.AdminImportCancel)
 			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
 			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
 			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)

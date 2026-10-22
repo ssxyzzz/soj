@@ -37,6 +37,10 @@ type Handlers struct {
 
 	leaderMu    sync.Mutex
 	leaderCache map[string]leaderEntry
+
+	// 批量导入（v0.15）：全站单任务（同一时刻仅一个导入任务）；job 在锁下创建/替换
+	batchMu sync.Mutex
+	batch   *batchImportJob
 }
 
 // wakeJudge 提交/重测入队后唤醒判题 worker（多进程部署收不到，靠 1s 轮询兜底）。

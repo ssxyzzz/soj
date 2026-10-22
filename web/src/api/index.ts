@@ -24,6 +24,7 @@ import type {
   PermInfo,
   SolutionItem,
   BackupStatus,
+  BatchImportStatus,
   SourceEntry,
   SourceMetaResult,
   UserProfile,
@@ -223,6 +224,16 @@ export const sourcesApi = {
     post<{ node_id: number; updated: number }>(`/admin/sources/${id}/to-tag`, body),
 }
 
+// 批量导入（v0.15）：题包（含题面）唯一入口；problem.create 权限
+export const importApi = {
+  upload: (form: FormData) =>
+    client
+      .post<ApiResponse<{ started: boolean }>>('/admin/problems/import', form, { timeout: 0 })
+      .then((r) => r.data.data),
+  status: () => get<BatchImportStatus>('/admin/problems/import/status'),
+  cancel: () => post<{ cancel_requested: boolean }>('/admin/problems/import/cancel'),
+}
+
 export const submissionApi = {
   create: (problemId: number, language: string, code: string) =>
     post<{ id: number }>('/submissions', { problem_id: problemId, language, code }),
@@ -300,6 +311,8 @@ export const adminApi = {
       autocomplete_min_level: number
       allow_register: boolean
       icp_number: string
+      batch_import_problem_mb: number
+      batch_import_zip_mb: number
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
@@ -309,6 +322,8 @@ export const adminApi = {
     autocomplete_min_level?: number
     allow_register?: boolean
     icp_number?: string
+    batch_import_problem_mb?: number
+    batch_import_zip_mb?: number
   }) =>
     put<{
       rate_limit_per_minute: number
@@ -318,6 +333,8 @@ export const adminApi = {
       autocomplete_min_level: number
       allow_register: boolean
       icp_number: string
+      batch_import_problem_mb: number
+      batch_import_zip_mb: number
     }>('/admin/settings', patch),
   // 等级面板（v0.11，root）
   getLevelConfig: () => get<{ config: AdminLevelConfig }>('/admin/levelconfig'),

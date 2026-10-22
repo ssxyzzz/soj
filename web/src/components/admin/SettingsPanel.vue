@@ -15,6 +15,9 @@ const autocompleteMinLevel = ref(5)
 const allowRegister = ref(true)
 // ICP 备案号（v0.13）：备案下来后填入，页脚悬挂并链接工信部备案系统；空 = 不展示
 const icpNumber = ref('')
+// 批量导入限额（v0.15）：单题数据 / 整包 zip（MB）
+const batchProblemMB = ref(100)
+const batchZipMB = ref(2048)
 const savingSettings = ref(false)
 
 onMounted(async () => {
@@ -25,6 +28,8 @@ onMounted(async () => {
     autocompleteMinLevel.value = s.autocomplete_min_level
     allowRegister.value = s.allow_register
     icpNumber.value = s.icp_number || ''
+    batchProblemMB.value = s.batch_import_problem_mb
+    batchZipMB.value = s.batch_import_zip_mb
   } catch {
     // 加载失败保留默认值展示
   }
@@ -39,6 +44,8 @@ async function saveSettings() {
       autocomplete_min_level: autocompleteMinLevel.value,
       allow_register: allowRegister.value,
       icp_number: icpNumber.value.trim(),
+      batch_import_problem_mb: batchProblemMB.value,
+      batch_import_zip_mb: batchZipMB.value,
     })
     ElMessage.success('设置已保存')
     // 备案号改了页脚要跟着变：重置站点公开状态的进程内缓存（下次 ensure 重拉）
@@ -88,6 +95,18 @@ async function saveSettings() {
         />
         <span class="dim" style="margin-left: 8px">
           备案通过后填入，页脚展示并链接工信部备案系统；留空不展示
+        </span>
+      </el-form-item>
+      <el-form-item label="批量导入单题数据上限（MB）">
+        <el-input-number v-model="batchProblemMB" :min="1" :max="4096" />
+        <span class="dim" style="margin-left: 8px">
+          后台「导入题目」页单道题数据的体积上限，超限该题跳过（v0.15）
+        </span>
+      </el-form-item>
+      <el-form-item label="批量导入整包上限（MB）">
+        <el-input-number v-model="batchZipMB" :min="1" :max="8192" />
+        <span class="dim" style="margin-left: 8px">
+          单次上传题包 zip 的体积上限；题多请分批传
         </span>
       </el-form-item>
     </el-form>
