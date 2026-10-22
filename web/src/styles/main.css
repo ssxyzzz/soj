@@ -1062,14 +1062,16 @@ samp {
    落点 = 题面主卡标题行 / 题库列表 / 客观题作答与解析卡的小题类型。
    底 #F0F8FF（爱丽丝蓝）/ 边 #B9D0E8（浅蓝 32% 档，沿用浅色徽章惯例）/ 字 #3A6491
    （深湘蓝，对底对比 5.74:1 过 WCAG AA 小字标准；纯灰 info 字仅 2.87 不达标）。
-   挂 .ptype-tag 于 el-tag，覆盖 EP tag 变量——main.css 恒序在 EP 之后，
-   同特异度（0,1,0）后到者胜，属 EP 官方主题化路径。 */
+   覆盖机制（必读，勿降回单类）：EP 的 tag 类型变体是 .el-tag.el-tag--<type>
+   双类特异度（0,2,0）——单类 .ptype-tag（0,1,0）必败，特异度先于加载顺序，
+   首版因此整体退回 primary 浅蓝灰。此处 .el-tag.ptype-tag 对齐到（0,2,0），
+   与 EP 变体平特异度后靠 main.css 恒序（EP→vditor→main.css）后到者胜。 */
 :root {
   --soj-probtype-bg: #f0f8ff;
   --soj-probtype-border: #b9d0e8;
   --soj-probtype-text: #3a6491;
 }
-.ptype-tag {
+.el-tag.ptype-tag {
   --el-tag-bg-color: var(--soj-probtype-bg);
   --el-tag-border-color: var(--soj-probtype-border);
   --el-tag-text-color: var(--soj-probtype-text);
