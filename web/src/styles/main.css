@@ -1079,3 +1079,14 @@ samp {
   --el-tag-border-color: var(--soj-probtype-border);
   --el-tag-text-color: var(--soj-probtype-text);
 }
+/* 交互题说明提示（ProblemStatement el-alert，type=info）：与题型徽章同族浅蓝。
+   EP 结构：.el-alert--info.is-light (0,2,0) 定 bg 与根 color（标题/图标继承之），
+   .el-alert--info.is-light .el-alert__description (0,3,0) 单独定 description——
+   两条各对齐特异度靠恒序取胜；图标无独立 color 规则，随根 color 走。 */
+.el-alert.ptype-alert {
+  --el-alert-bg-color: var(--soj-probtype-bg);
+  color: var(--soj-probtype-text);
+}
+.el-alert.ptype-alert .el-alert__description {
+  color: var(--soj-probtype-text);
+}

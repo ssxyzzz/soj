@@ -64,12 +64,13 @@ const kindLabel = computed(() => {
         title="本题请以文件 IO 方式提交"
         :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
       />
-      <!-- 交互题（v0.9.2）：交互方式说明（选手不读输入文件，通过 stdin/stdout 与交互器通信） -->
+      <!-- 交互题（v0.9.2）：交互方式说明（选手不读输入文件，通过 stdin/stdout 与交互器通信）；
+           ptype-alert = 题型徽章同族浅蓝（main.css） -->
       <el-alert
         v-if="problem.type === 'interactive'"
         type="info"
         :closable="false"
-        class="fileio-alert"
+        class="fileio-alert ptype-alert"
         show-icon
         title="本题为交互题：通过标准输入输出与评测器交互"
         description="评测器会实时读取你的输出并回应，按题面约定的协议交替读写；不要使用文件读写。仅支持 C / C++。"
