@@ -189,7 +189,7 @@ stripe
           <el-table-column label="题目" min-width="320">
             <template #default="{ row }">
               <span class="title">{{ row.title }}</span>
-              <el-tag v-if="typeBadge(row)" size="small" type="info" class="ml8">
+              <el-tag v-if="typeBadge(row)" size="small" class="ml8 ptype-tag">
                 {{ typeBadge(row) }}
               </el-tag>
               <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏题</el-tag>

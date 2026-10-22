@@ -90,7 +90,7 @@ function doSubmit() {
     <div v-for="(q, qi) in questions" :key="qi" class="obj-item">
       <div class="obj-item-head">
         <span class="obj-idx">第 {{ qi + 1 }} 题</span>
-        <el-tag size="small" type="info">{{ kindLabel(q.kind) }}</el-tag>
+        <el-tag size="small" class="ptype-tag">{{ kindLabel(q.kind) }}</el-tag>
         <span class="dim obj-score">{{ q.score }} 分</span>
       </div>
       <div v-if="q.stem" class="obj-stem"><MdView :content="q.stem" /></div>

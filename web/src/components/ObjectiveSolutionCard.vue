@@ -45,7 +45,7 @@ const rows = computed(() =>
     <div v-for="r in rows" :key="r.index" class="sol-item">
       <div class="sol-head">
         <span class="sol-idx">第 {{ r.index }} 题</span>
-        <el-tag size="small" type="info">{{ r.kindText }}</el-tag>
+        <el-tag size="small" class="ptype-tag">{{ r.kindText }}</el-tag>
         <span class="dim">{{ r.score }} 分</span>
         <span class="sol-answer">参考答案：{{ r.text || '—' }}</span>
       </div>

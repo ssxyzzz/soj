@@ -1056,3 +1056,21 @@ samp {
     box-shadow: 0 0 10px rgba(94, 106, 190, 0.4);
   }
 }
+
+/* ---- 题型徽章配色（2026-10-22）：特殊题型统一浅蓝族 ----
+   覆盖范围：客观题（含小类单选/多选/判断/填空）、函数题、交互题的题型标签，
+   落点 = 题面主卡标题行 / 题库列表 / 客观题作答与解析卡的小题类型。
+   底 #F0F8FF（爱丽丝蓝）/ 边 #B9D0E8（浅蓝 32% 档，沿用浅色徽章惯例）/ 字 #3A6491
+   （深湘蓝，对底对比 5.74:1 过 WCAG AA 小字标准；纯灰 info 字仅 2.87 不达标）。
+   挂 .ptype-tag 于 el-tag，覆盖 EP tag 变量——main.css 恒序在 EP 之后，
+   同特异度（0,1,0）后到者胜，属 EP 官方主题化路径。 */
+:root {
+  --soj-probtype-bg: #f0f8ff;
+  --soj-probtype-border: #b9d0e8;
+  --soj-probtype-text: #3a6491;
+}
+.ptype-tag {
+  --el-tag-bg-color: var(--soj-probtype-bg);
+  --el-tag-border-color: var(--soj-probtype-border);
+  --el-tag-text-color: var(--soj-probtype-text);
+}

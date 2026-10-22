@@ -39,10 +39,10 @@ const kindLabel = computed(() => {
     <div class="statement">
       <div class="title-row">
         <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
-        <el-tag v-if="problem.type === 'objective'" size="small" type="info" class="kind-tag">
+        <el-tag v-if="problem.type === 'objective'" size="small" class="kind-tag ptype-tag">
           {{ objectiveLabel }}
         </el-tag>
-        <el-tag v-else-if="kindLabel" size="small" type="info" class="kind-tag">{{ kindLabel }}</el-tag>
+        <el-tag v-else-if="kindLabel" size="small" class="kind-tag ptype-tag">{{ kindLabel }}</el-tag>
         <div class="title-extra">
           <slot name="extra" />
           <template v-if="!isObjective">
