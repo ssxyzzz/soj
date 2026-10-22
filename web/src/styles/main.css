@@ -132,15 +132,13 @@ body,
   /* 组件字重 400（Ant：强调只靠 600 档与颜色） */
   --el-font-weight-primary: var(--soj-fw-regular);
   --el-font-size-base: var(--soj-fs-body);
-  /* EP 默认字体栈含裸 Helvetica——Windows FontSubstitutes 把它别名成 Arial，
-     拉丁命中 Arial 与雅黑汉字同行混排度量不一致（理由详见 body 注释）。
-     main.css 在 EP 之后加载，:root 同级覆盖恒胜 */
+  /* CJK 先行，理由见 body 注释；main.css 在 EP 之后加载，:root 同级覆盖恒胜 */
   --el-font-family:
-    'Helvetica Neue',
     'PingFang SC',
     'Hiragino Sans GB',
     'Microsoft YaHei',
     '微软雅黑',
+    'Helvetica Neue',
     Arial,
     sans-serif;
 
@@ -172,18 +170,22 @@ body,
 
 body {
   font-size: var(--soj-fs-body);
-  /* 字体栈纪律（2026-10-22 二修）：任何「Windows 上能命中」的拉丁字体都不得排在
-     中文字体前。一修把 Helvetica 插在雅黑前仍失效——Windows 注册表 FontSubstitutes
-     把 Helvetica 强制别名成 Arial（Chrome/DirectWrite 遵守），拉丁照样命中 Arial，
-     与雅黑汉字同行混排两字体度量不一致，纯英文文本视觉上浮（标签树题目链接实测
-     5-9px@1.5x）。故裸 Helvetica 必须移除；'Helvetica Neue' 保留首位（Mac 真字体，
-     Windows 极少安装不影响大众场景）。EP --el-font-family 同步覆盖（见下 :root）。 */
+  /* 字体栈纪律（2026-10-22 三修定稿）：CJK 字体必须排在一切拉丁字体之前。
+     行盒基线按该锚点实际用到的字体集合的最大 ascent 定位——栈里拉丁在前时，
+     纯英文链接只命中拉丁字体（基线高）、含中文链接多命中 CJK 字体（基线低），
+     同一行链接各自为政（标签树题目链接像素实测数字墨迹差 5px，且「前面几个歪」
+     恰因英文题名排前）。历史两坑：① Arial 在前——Windows 拉丁命中 Arial 与雅黑
+     汉字分裂；② 'Helvetica Neue' 在前——装了 Adobe/Office 的 Windows 也有
+     Helvetica Neue，同样分裂。唯 CJK 先行可保证拉丁与汉字必然同字体：
+     Windows 落雅黑、Mac 落 PingFang、Linux 落 sans-serif，全平台零偏移；
+     代价仅 Mac 拉丁从 Helvetica Neue 换 PingFang 拉丁字形。EP --el-font-family
+     同步覆盖（见下 :root）。 */
   font-family:
-    'Helvetica Neue',
     'PingFang SC',
     'Hiragino Sans GB',
     'Microsoft YaHei',
     '微软雅黑',
+    'Helvetica Neue',
     Arial,
     sans-serif;
   background-color: var(--el-bg-color-page);
@@ -454,13 +456,13 @@ strong {
    注意：Vditor 的 index.css 与 content-theme CSS 是运行时加载的，靠特异度压制而非顺序 ——
    .soj-md .vditor-reset 为 (0,2,0)，行内 code 规则为 (0,4,1)，压过主题的 (0,3,1) */
 .soj-md .vditor-reset {
-  /* 中文字体在 Arial 前、无裸 Helvetica——理由见 body 注释（中英混排基线一致性） */
+  /* CJK 先行，理由见 body 注释（行盒基线按实际用到字体集合的最大 ascent 定位） */
   font-family:
-    'Helvetica Neue',
     'PingFang SC',
     'Hiragino Sans GB',
     'Microsoft YaHei',
     '微软雅黑',
+    'Helvetica Neue',
     Arial,
     sans-serif;
   font-size: var(--soj-fs-rich);
