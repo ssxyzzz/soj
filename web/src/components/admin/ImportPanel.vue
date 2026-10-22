@@ -21,13 +21,23 @@ const running = computed(() => status.value.state === 'running')
 const finished = computed(() => ['done', 'cancelled', 'failed'].includes(status.value.state))
 
 let timer: ReturnType<typeof setInterval> | undefined
+// 快照序号：重置/新导入自增后，在途旧快照返回即丢弃——否则点击「再导一批」的
+// 瞬间恰有一份已完成任务的快照在路上，仍会把界面冲回终态报告页
+let loadSeq = 0
 
 async function refreshStatus() {
+  const seq = ++loadSeq
+  let s: BatchImportStatus
   try {
-    status.value = await importApi.status()
+    s = await importApi.status()
   } catch {
-    /* 轮询失败静默，下个周期重试 */
+    return /* 轮询失败静默，下个周期重试 */
   }
+  if (seq !== loadSeq) return
+  status.value = s
+  // 任务到终态即停表：服务端任务不会消失，轮询不停的话重置出的本地 idle
+  // 会在 1 秒内被下一次快照冲回终态，上传表单永远回不来
+  if (finished.value) stopPolling()
 }
 
 function ensurePolling() {
@@ -39,6 +49,15 @@ function stopPolling() {
     clearInterval(timer)
     timer = undefined
   }
+}
+
+// 再导一批：清本地状态回表单（终态报告在服务端保留，重进页面仍可看）；
+// 自增序号丢弃在途快照，防点击瞬间那份「已完成」响应把界面冲回去
+function resetForNextBatch() {
+  ++loadSeq
+  stopPolling()
+  status.value = { state: 'idle', total: 0, done: 0, ok_count: 0, fail_count: 0, skip_count: 0, results: [] }
+  fileList.value = []
 }
 
 onMounted(() => {
@@ -235,7 +254,7 @@ const reversedResults = computed(() => [...status.value.results].reverse())
           {{ resultLine(r) }}
         </div>
       </div>
-      <el-button v-if="finished" text type="primary" @click="status = { state: 'idle', total: 0, done: 0, ok_count: 0, fail_count: 0, skip_count: 0, results: [] }; fileList = []">
+      <el-button v-if="finished" text type="primary" @click="resetForNextBatch">
         再导一批
       </el-button>
     </div>
