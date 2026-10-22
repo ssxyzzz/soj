@@ -45,10 +45,14 @@ func ValidCompare(c string) bool { return c == CompareExact || c == CompareToler
 type Problem struct {
 	ID               int64               `bson:"_id"`
 	Title            string              `bson:"title"`
-	Statement        string              `bson:"statement"`           // 题面（Markdown，v0.8 起单一事实源；v0.6–v0.7 富文本时代的 contentHtml 已启动回迁）
-	Type             string              `bson:"type,omitempty"`      // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
-	Questions        []ObjectiveQuestion `bson:"questions,omitempty"` // 客观题小题列表（v0.9.3；单题时代的 question 由启动迁移并入）
-	Difficulty       int                 `bson:"difficulty,omitempty"` // 难度 1–10（v0.11；0 = 未设置，展示按 D3）
+	Statement        string              `bson:"statement"`             // 题面（Markdown，v0.8 起单一事实源；v0.6–v0.7 富文本时代的 contentHtml 已启动回迁）
+	Type             string              `bson:"type,omitempty"`        // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
+	Questions        []ObjectiveQuestion `bson:"questions,omitempty"`   // 客观题小题列表（v0.9.3；单题时代的 question 由启动迁移并入）
+	Difficulty       int                 `bson:"difficulty,omitempty"`  // 难度 1–10（v0.11；0 = 未设置，展示按 D3）
+	SourceType       string              `bson:"source_type,omitempty"` // 来源类型（v0.12）：空 = 未归类；oj/contest/region/local/other
+	Source           string              `bson:"source,omitempty"`      // 来源名（洛谷、NOIP、合肥市信息学科普日……）
+	Year             int                 `bson:"year,omitempty"`        // 年份（0 = 未设置）
+	Region           string              `bson:"region,omitempty"`      // 地区（建议「省·市·区」自便）
 	TimeLimitMS      int                 `bson:"timeLimitMs"`
 	MemoryLimitKB    int                 `bson:"memoryLimitKb"`
 	Visibility       string              `bson:"visibility"`

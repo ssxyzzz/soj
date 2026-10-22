@@ -30,6 +30,10 @@ type Importer struct {
 	CreatorUID int64   // 导入者 uid（0 = 系统/命令行导入，其题目隐藏态仅 root 可改）
 	TagIDs     []int64 // 网页建题直传的标签节点 ID（非空时优先于 yaml tags 按名匹配）
 	Difficulty int     // 网页建题直传难度 1–10（非 0 时优先于 yaml difficulty；表单选择器是权威输入）
+	SourceType string  // 网页建题直传来源类型（非空时优先；空 = 未归类）
+	Source     string  // 直传来源名（非空时优先）
+	Year       int     // 直传年份（非 0 时优先）
+	Region     string  // 直传地区（非空时优先）
 }
 
 type problemYAML struct {
@@ -38,6 +42,10 @@ type problemYAML struct {
 	Questions     []ObjectiveQuestion `yaml:"questions,omitempty"`     // objective 小题列表（v0.9.3）
 	Question      *ObjectiveQuestion  `yaml:"question,omitempty"`      // 单题旧写法（解析兼容，导入时并入 questions）
 	Difficulty    int                 `yaml:"difficulty,omitempty"`    // 难度 1–10（v0.11；缺省 D3）
+	SourceType    string              `yaml:"source_type,omitempty"`   // 来源类型（v0.12）：oj/contest/region/local/other
+	Source        string              `yaml:"source,omitempty"`        // 来源名
+	Year          int                 `yaml:"year,omitempty"`          // 年份
+	Region        string              `yaml:"region,omitempty"`        // 地区
 	Time          *timeLimit          `yaml:"time,omitempty"`          // 导出主形态（"1s"/"0.5s"）；解析时低于 timeLimitMs
 	TimeLimitMS   *int                `yaml:"timeLimitMs,omitempty"`   // 旧字段：仅解析兼容，不再导出
 	Memory        *memLimit           `yaml:"memory,omitempty"`        // 导出主形态（"256MB"）；解析时低于 memoryLimitKb
@@ -224,6 +232,12 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 	}
 	if meta.Difficulty == 0 {
 		meta.Difficulty = 3
+	}
+
+	// 来源四字段归一（v0.12）：网页表单直传 > problem.yaml > 标题方括号前缀识别，
+	// 仅回填空缺字段；类型枚举与年份区间非法即报错（手写笔误及早暴露）
+	if err := applySourceFields(*im, meta.Title, &meta.SourceType, &meta.Source, &meta.Year, &meta.Region); err != nil {
+		return nil, err
 	}
 
 	// config.yaml 白名单字段覆盖 problem.yaml（v0.5.2-2）：未知字段忽略不报错
@@ -452,6 +466,10 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		Statement:      string(statement),
 		Type:           meta.Type,
 		Difficulty:     meta.Difficulty,
+		SourceType:     meta.SourceType,
+		Source:         meta.Source,
+		Year:           meta.Year,
+		Region:         meta.Region,
 		TimeLimitMS:    msLimit,
 		MemoryLimitKB:  kbLimit,
 		Visibility:     meta.Visibility,
@@ -531,6 +549,7 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 		ID: pid, Title: meta.Title, Statement: string(statement),
 		Type: TypeObjective, Questions: qs,
 		Difficulty: meta.Difficulty,
+		SourceType: meta.SourceType, Source: meta.Source, Year: meta.Year, Region: meta.Region,
 		// 客观题不消费时空限制，占位默认值（渲染导出时同样带上）
 		TimeLimitMS: 1000, MemoryLimitKB: 262144,
 		Visibility: meta.Visibility,
@@ -559,6 +578,10 @@ func (im *Importer) RenderProblemYAML(ctx context.Context, p *Problem) []byte {
 		Title:      p.Title,
 		Type:       p.Type,
 		Difficulty: p.Difficulty,
+		SourceType: p.SourceType,
+		Source:     p.Source,
+		Year:       p.Year,
+		Region:     p.Region,
 		Time:       timeLimitPtr(timeLimit(ms) / 1000),
 		Memory:     memLimitPtr(memLimit(kb) / 1024),
 		Visibility: pickNonEmpty(p.Visibility, VisibilityPublic),
@@ -588,6 +611,45 @@ func (im *Importer) RenderProblemYAML(ctx context.Context, p *Problem) []byte {
 
 func timeLimitPtr(v timeLimit) *timeLimit { return &v }
 func memLimitPtr(v memLimit) *memLimit    { return &v }
+
+// applySourceFields 来源四字段归一：表单直传最高优先（权威输入，覆盖 yaml，语义同
+// difficulty），四字段全空才走标题方括号前缀识别；类型枚举与年份区间非法即报错。
+func applySourceFields(im Importer, title string, sourceType, source *string, year *int, region *string) error {
+	if im.SourceType != "" {
+		*sourceType = im.SourceType
+	}
+	if im.Source != "" {
+		*source = im.Source
+	}
+	if im.Year != 0 {
+		*year = im.Year
+	}
+	if im.Region != "" {
+		*region = im.Region
+	}
+	if *sourceType == "" && *source == "" && *year == 0 && *region == "" {
+		if h := ParseSourceHint(title); h.Source != "" || h.Region != "" || h.Year != 0 {
+			*sourceType, *source, *year, *region = h.SourceType, h.Source, h.Year, h.Region
+		}
+	}
+	if !ValidSourceType(*sourceType) {
+		return fmt.Errorf("source_type 需为 oj / contest / region / local / other")
+	}
+	if *year != 0 && (*year < 1900 || *year > 2100) {
+		return fmt.Errorf("year 需在 1900-2100 之间")
+	}
+	*source = truncateRunes(*source, 64)
+	*region = truncateRunes(*region, 64)
+	return nil
+}
+
+// truncateRunes 按 rune 截断到上限。
+func truncateRunes(s string, max int) string {
+	if r := []rune(s); len(r) > max {
+		return string(r[:max])
+	}
+	return s
+}
 
 // renderFileIO 文件 IO 渲染（直白优先）：in/out 同基名 → filename: atbash 一个字段；
 // 显式配了不同名才落 file_io_input/output 保真。

@@ -328,6 +328,51 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider) error
 		}
 		log.Printf("[boot] admin 角色已补发比赛/考试成绩表权限位（contest.score.view / contest.score.detail）")
 	}
+	if !flagDone("sourceBackfillV1") {
+		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次
+		//（仅回填，识别不出保持空；之后 root 逐题手调）
+		cur, err := r.Problems.Find(ctx, bson.M{
+			"source_type": bson.M{"$in": bson.A{"", nil}},
+			"source":      bson.M{"$in": bson.A{"", nil}},
+			"year":        bson.M{"$in": bson.A{0, nil}},
+			"region":      bson.M{"$in": bson.A{"", nil}},
+		})
+		if err != nil {
+			return err
+		}
+		var plist []*Problem
+		if err := cur.All(ctx, &plist); err != nil {
+			return err
+		}
+		filled := 0
+		for _, p := range plist {
+			h := ParseSourceHint(p.Title)
+			if h.Source == "" && h.Region == "" && h.Year == 0 {
+				continue
+			}
+			set := bson.M{}
+			if h.SourceType != "" {
+				set["source_type"] = h.SourceType
+			}
+			if h.Source != "" {
+				set["source"] = h.Source
+			}
+			if h.Year != 0 {
+				set["year"] = h.Year
+			}
+			if h.Region != "" {
+				set["region"] = h.Region
+			}
+			if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": p.ID}, bson.M{"$set": set}); err != nil {
+				return err
+			}
+			filled++
+		}
+		if err := setFlag("sourceBackfillV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 来源四字段存量回填完成：识别并回填 %d / 扫描 %d 题", filled, len(plist))
+	}
 	if !flagDone("adminProblemViewAllV1") {
 		// v0.7.2：存量 admin 角色补发「题库全量可见」——builtin 定义一直包含该位，
 		// 但早期创建的角色文档没有它且从未补发过（导致存量 admin 看不到隐藏题/锁定标记）

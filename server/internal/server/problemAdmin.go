@@ -615,7 +615,11 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		Title          *string  `json:"title"`
 		TimeLimitMS    *int     `json:"time_limit_ms"`
 		MemoryLimitKB  *int     `json:"memory_limit_kb"`
-		Difficulty     *int     `json:"difficulty"` // 难度 1–10（v0.11）
+		Difficulty     *int     `json:"difficulty"`  // 难度 1–10（v0.11）
+		SourceType     *string  `json:"source_type"` // 来源类型（v0.12）：空串 = 清为未归类
+		Source         *string  `json:"source"`      // 来源名
+		Year           *int     `json:"year"`        // 年份（0 = 清除）
+		Region         *string  `json:"region"`      // 地区
 		Compare        *string  `json:"compare"`
 		FloatTolerance *float64 `json:"float_tolerance"`
 		FileIOName     *string  `json:"file_io_name"`
@@ -681,6 +685,15 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				return
 			}
 		}
+		if setSrc, err := sourceMetaSet(req.SourceType, req.Source, req.Year, req.Region); err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
+		} else if len(setSrc) > 0 {
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, setSrc); err != nil {
+				fail(c, http.StatusInternalServerError, "保存失败")
+				return
+			}
+		}
 		ok(c, gin.H{"updated": id})
 		return
 	}
@@ -717,6 +730,14 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			return
 		}
 		set["difficulty"] = *req.Difficulty
+	}
+	if setSrc, err := sourceMetaSet(req.SourceType, req.Source, req.Year, req.Region); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	} else {
+		for k, v := range setSrc {
+			set[k] = v
+		}
 	}
 	if req.Compare != nil {
 		if !repo.ValidCompare(*req.Compare) {
@@ -772,6 +793,40 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 }
 
 // ---- helpers ----
+
+// sourceMetaSet 来源四字段 PATCH 校验（v0.12）：指针语义——缺省不动，空串/0 = 清除；
+// 枚举/年份区间/超长非法返回错误。传统题并入整体 $set，客观题分支单独提交。
+func sourceMetaSet(sourceType, source *string, year *int, region *string) (bson.M, error) {
+	set := bson.M{}
+	if sourceType != nil {
+		t := strings.TrimSpace(*sourceType)
+		if !repo.ValidSourceType(t) {
+			return nil, fmt.Errorf("source_type 需为 oj / contest / region / local / other")
+		}
+		set["source_type"] = t
+	}
+	if source != nil {
+		s := strings.TrimSpace(*source)
+		if len([]rune(s)) > 64 {
+			return nil, fmt.Errorf("来源名最长 64 字")
+		}
+		set["source"] = s
+	}
+	if year != nil {
+		if *year != 0 && (*year < 1900 || *year > 2100) {
+			return nil, fmt.Errorf("year 需在 1900-2100 之间")
+		}
+		set["year"] = *year
+	}
+	if region != nil {
+		r := strings.TrimSpace(*region)
+		if len([]rune(r)) > 64 {
+			return nil, fmt.Errorf("地区最长 64 字")
+		}
+		set["region"] = r
+	}
+	return set, nil
+}
 
 // formDifficulty 建题表单难度（v0.11）：缺省 D3，越界报错。
 func formDifficulty(form *multipart.Form) (int, error) {
