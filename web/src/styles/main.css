@@ -555,34 +555,41 @@ strong {
   font-family: var(--font-mono);
 }
 
-/* 代码块：Vditor 默认 85% 相对字号，这里改用统一 code token，配色沿 light 主题 */
+/* 代码块：Vditor 默认 85% 相对字号，这里改用统一 code token。
+   行高 1.6 独立于正文 1.7（正文行距渗进代码块显松）；内距显式定 1em——运行时
+   github 主题的 pre code.hljs{padding:1em} 与 vditor 的 0.5em 同特异度 (0,1,2)、
+   后加载者胜（实际 1em），显式写死消除竞态；行号列 top 必须与 padding-top 同值
+   才对齐（见下），两处同用 em 基准（同字号）保证恒等 */
 .soj-md .vditor-reset pre > code {
   font-size: var(--soj-fs-code);
   font-family: var(--font-mono);
+  line-height: 1.6;
+  padding: 1em;
 }
 
-/* 多行代码块（2026-10-22 拍板）：爱丽丝蓝底 + 稍浓蓝边，与题型徽章同族色系。
-   白底来自运行时 hljs github 主题（.hljs 在 code 上），故底色落 pre、code 透明；
-   pre 原无圆角边框（圆角 5px 在 code 上），改落 pre 一处。特异度 (0,3,1) 压运行时
-   (0,1,0)/(0,1,1)，不依赖加载顺序 */
+/* 多行代码块：淡蓝底 + 淡蓝边（2026-10-22 二版调淡）。白底来自运行时 hljs github
+   主题（.hljs 在 code 上），故底色落 pre、code 透明；pre 原无圆角边框（圆角 5px
+   在 code 上），改落 pre 一处。特异度 (0,3,0) 压运行时 (0,1,0)/(0,1,2)，不依赖加载顺序 */
 .soj-md.md-light .vditor-reset pre {
-  background: #f0f8ff;
-  border: 1px solid #d2e2ff;
+  background: #f5faff;
+  border: 1px solid #ebf5ff;
   border-radius: var(--el-border-radius-small);
 }
 .soj-md.md-light .vditor-reset pre > code {
   background: transparent;
 }
 /* 行号（MdViewInner 开 hljs.lineNumber，Vditor 内置覆盖层实现——数字由 ::before
-   绘制、代码文本不动，复制按钮 textContent 不受影响）。Vditor 默认：数字列 3em、
-   代码左缩 4em (!important)、数字 38% 灰（蓝底上几乎不可见）、rows top 1em。
-   此处：数字列 3.5em、左缩 5.5em (!important 对 !important、特异度取胜) →
-   数字与代码间隙 3em；行号色改蓝灰 #8ba3c2；top 对齐 code 实际 padding 0.5em */
+   计数器绘制、代码文本不动，复制按钮 textContent 不受影响）。
+   对齐链：rows.top 与 code padding-top 同为 1em、数字 span 与代码行同 line-height
+   （继承上方 1.6）同 fontSize——首行即齐、行行对齐（首版按 vditor 源码 0.5em 设
+   top，被运行时主题的 1em padding 打破，实测恒偏 7.6px 已修）。
+   行号列 3.5em、代码左缩 5.5em → 数字与代码间隙 2em；行号色蓝灰 #8ba3c2（vditor
+   默认 38% 灰在蓝底上几乎不可见） */
 .soj-md.md-light .vditor-reset pre > code.vditor-linenumber {
   padding-left: 5.5em !important;
 }
 .soj-md.md-light .vditor-reset pre .vditor-linenumber__rows {
-  top: 0.5em;
+  top: 1em;
   width: 3.5em;
 }
 .soj-md.md-light .vditor-reset pre .vditor-linenumber__rows > span::before {
