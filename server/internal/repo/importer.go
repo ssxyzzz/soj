@@ -240,6 +240,11 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 	if err := applySourceFields(*im, meta.Title, &meta.SourceType, &meta.Source, &meta.Year, &meta.Region); err != nil {
 		return nil, err
 	}
+	// 来源名沉淀进来源库（v0.12）：表单/ yaml 解析出的来源名登记（类型随填），
+	// 供建题表单 datalist 建议与 root 来源面板归类；失败不阻塞导入
+	if meta.Source != "" {
+		_ = im.Repo.UpsertSourceByName(ctx, meta.Source, meta.SourceType)
+	}
 
 	// config.yaml 白名单字段覆盖 problem.yaml（v0.5.2-2）：未知字段忽略不报错
 	cfg, err := parseProblemConfig(dir)
@@ -257,10 +262,13 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 	}
 
 	// 标签挂载（v0.5.5）：网页建题直传节点 ID（校验存在性），否则 yaml tags 按名匹配
-	//（同名取首个，未命中忽略——树里没有的名字不阻塞导入）
-	tagIDs, err := im.resolveTags(ctx, meta.Tags)
+	//（同名取首个；未命中名不丢弃——v0.12 起登记进来源库并保留在题目 rawTags 上）
+	tagIDs, rawNames, err := im.resolveTags(ctx, meta.Tags)
 	if err != nil {
 		return nil, fmt.Errorf("挂载标签: %w", err)
+	}
+	for _, n := range rawNames {
+		_ = im.Repo.UpsertSourceByName(ctx, n, "") // 未分类，root 面板整理
 	}
 
 	statement, err := os.ReadFile(filepath.Join(dir, "statement.md"))
@@ -282,7 +290,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 
 	// 客观题（v0.9）：无测试数据/校验器/子任务，定义校验后直接入库
 	if meta.Type == TypeObjective {
-		return im.importObjective(ctx, dir, pid, &meta, statement, tagIDs, extraFiles, raw)
+		return im.importObjective(ctx, dir, pid, &meta, statement, tagIDs, rawNames, extraFiles, raw)
 	}
 
 	// 收集测试点
@@ -477,6 +485,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		Hidden:         meta.Hidden,
 		CreatedBy:      im.CreatorUID,
 		Tags:           tagIDs,
+		RawTags:        rawNames,
 		Subtasks:       subtasks,
 		Cases:          cases,
 		Compare:        pickNonEmpty(cfg.resolvedCompare(checkerRel), meta.Compare),
@@ -503,7 +512,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 
 // importObjective 客观题导入路径（v0.9）：校验 question 定义与填空占位数，
 // 无测试数据/校验器/子任务，problem.yaml/statement.md/extra 归档后入库。
-func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, meta *problemYAML, statement []byte, tagIDs []int64, extraFiles []string, raw []byte) (*Problem, error) {
+func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, meta *problemYAML, statement []byte, tagIDs []int64, rawNames []string, extraFiles []string, raw []byte) (*Problem, error) {
 	// 小题来源：questions[] 优先；旧包只有单题 question 时并入
 	qs := meta.Questions
 	if len(qs) == 0 && meta.Question != nil {
@@ -557,6 +566,7 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 		Hidden:     meta.Hidden,
 		CreatedBy:  im.CreatorUID,
 		Tags:       tagIDs,
+		RawTags:    rawNames,
 		Cases:      []CaseMeta{},
 	}
 	if err := im.Repo.UpsertProblem(ctx, p); err != nil {
@@ -706,31 +716,48 @@ func (im *Importer) tagNamesOf(ctx context.Context, ids []int64) []string {
 }
 
 // resolveTags 把标签来源归一为树节点 ID：TagIDs 非空（网页建题）时校验每个 ID
-// 在树中存在；否则按名字匹配（同名取首个，未命中的名字忽略不报错）。
-func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, error) {
+// 在树中存在（此路不产生原始名保留）；否则按名字匹配（同名取首个），未命中的名字
+// 作为原始名返回（v0.12：登记来源库 + 挂题目 rawTags，不再静默丢弃）。
+func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, []string, error) {
 	if len(im.TagIDs) > 0 {
 		if err := im.Repo.ValidateTagRefs(ctx, im.TagIDs); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return im.TagIDs, nil
+		return im.TagIDs, nil, nil
 	}
 	if len(names) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	tree, err := im.Repo.GetTagTree(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	lookup := TagNameLookup(tree)
-	out := make([]int64, 0, len(names))
-	seen := map[int64]bool{}
+	ids, unmatched := matchTagNames(TagNameLookup(tree), names)
+	return ids, unmatched, nil
+}
+
+// matchTagNames 按名匹配树节点（纯函数，单测覆盖）：命中取 ID（同名节点取先见者、
+// ID 去重），未命中的原名保留返回（v0.12 来源库联动）；名字 TrimSpace、空名跳过、
+// 重名输入去重。
+func matchTagNames(lookup map[string]int64, names []string) (ids []int64, unmatched []string) {
+	seenID := map[int64]bool{}
+	seenName := map[string]bool{}
 	for _, name := range names {
-		if id, ok := lookup[name]; ok && !seen[id] {
-			out = append(out, id)
-			seen[id] = true
+		name = strings.TrimSpace(name)
+		if name == "" || seenName[name] {
+			continue
+		}
+		seenName[name] = true
+		if id, ok := lookup[name]; ok {
+			if !seenID[id] {
+				ids = append(ids, id)
+				seenID[id] = true
+			}
+		} else {
+			unmatched = append(unmatched, name)
 		}
 	}
-	return out, nil
+	return ids, unmatched
 }
 
 // ReplaceCases 整包替换既有题目的测试数据（编辑题目复用建题界面，v0.5.2-4）：

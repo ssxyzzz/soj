@@ -116,6 +116,11 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}); err != nil {
 		return err
 	}
+	// 来源库（v0.12）：名称唯一（表单沉淀/导入登记/root 手工三条路并发不重名）
+	if _, err := r.db.Collection("sources").Indexes().CreateOne(ctx,
+		mongo.IndexModel{Keys: bson.D{{Key: "name", Value: 1}}, Options: options.Index().SetUnique(true)}); err != nil {
+		return err
+	}
 
 	// 初始管理员：users 为空时创建 root / sojroot123（root 角色）；
 	// 空用户表同时作为 runMigrations 全新库判定的一环

@@ -604,6 +604,28 @@ strong {
   background: var(--el-fill-color-lighter);
 }
 
+/* ---- Vditor 工具栏 tooltip 翻向（2026-10-22 修复）----
+   Vditor 工具栏按钮的 tooltip 是 vditor-tooltipped__n（气泡在按钮上方 bottom:100%），
+   会伸出 .vditor 根的顶边之外：自生长编辑器（.md-field 给 .vditor 挂 overflow:hidden）
+   直接把气泡裁掉——表现为「提示被上面的内容盖住/偶发只见一条甚至不显示」；固定高
+   编辑器虽不裁，气泡也窜到编辑器上方与表单标签/卡片内容重叠。这里把工具栏内的
+   __n 镜像成 __s（南向）几何：气泡落在编辑器内容区内，永不越界，z-index 1000000
+   原生保证盖在正文上。范围限定 .md-editor .vditor-toolbar——内容区里 vditor 自用的
+   表格行列小 tooltip（同为 __n，浮层在正文中间，朝上是合理的）不受影响。
+   几何值逐条镜像 vditor 自身的 .vditor-tooltipped__s 规则（含 translateX(50%) 居中
+   与箭头 border 换向），特异度 (0,3,1) 压 vditor 的 (0,1,1)，不依赖加载顺序。 */
+.md-editor .vditor-toolbar .vditor-tooltipped__n::after {
+  top: 100%;
+  bottom: auto;
+  margin-top: 5px;
+}
+.md-editor .vditor-toolbar .vditor-tooltipped__n::before {
+  top: auto;
+  bottom: -5px;
+  border-top-color: transparent;
+  border-bottom-color: #3b3e43;
+}
+
 /* ---- 代码块复制按钮（站内自建 md-copy-btn）----
    Vditor 自带按钮（.vditor-copy：绝对定位 + tooltip 浮框）与站内胶囊样式反复冲突，
    整个隐藏；utils/md.ts bindCopyFeedback 在 pre 上挂自建按钮。常态淡蓝胶囊
@@ -1105,6 +1127,13 @@ samp {
   --soj-probtype-text: #4a76a8;
 }
 .el-tag.ptype-tag {
+  --el-tag-bg-color: var(--soj-probtype-bg);
+  --el-tag-border-color: var(--soj-probtype-border);
+  --el-tag-text-color: var(--soj-probtype-text);
+}
+/* 来源徽章（v0.12 题目信息卡「标签」下方一行）：与题型徽章同族浅蓝，token 复用；
+   双类选择器机制同上（勿降回单类）。 */
+.el-tag.src-tag {
   --el-tag-bg-color: var(--soj-probtype-bg);
   --el-tag-border-color: var(--soj-probtype-border);
   --el-tag-text-color: var(--soj-probtype-text);

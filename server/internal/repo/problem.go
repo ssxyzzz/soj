@@ -59,6 +59,7 @@ type Problem struct {
 	Hidden           bool                `bson:"hidden"`             // 题目隐藏：无「题库全量可见」权限的视角看不到也不可交（备题用）
 	CreatedBy        int64               `bson:"createdBy"`          // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
 	Tags             []int64             `bson:"tags"`               // 标签树节点 ID（v0.5.5），名字与层级由 tags 集合的树实时解析
+	RawTags          []string            `bson:"rawTags,omitempty"`  // 题包导入未匹配标签树的原始名（v0.12）：保留在题目上，root 可在来源库「转为标签」归队
 	Subtasks         []Subtask           `bson:"subtasks,omitempty"` // nil = 单点等分
 	Cases            []CaseMeta          `bson:"cases"`
 	Compare          string              `bson:"compare,omitempty"`        // 比对模式，空 = exact

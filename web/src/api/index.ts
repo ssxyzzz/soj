@@ -24,6 +24,8 @@ import type {
   PermInfo,
   SolutionItem,
   BackupStatus,
+  SourceEntry,
+  SourceMetaResult,
   UserProfile,
   UserPrefs,
   ProblemDetail,
@@ -133,13 +135,23 @@ export const siteApi = {
 }
 
 export const problemApi = {
-  list: (page: number, pageSize: number, q?: string, tags?: number[], difficulty?: number[]) =>
+  list: (
+    page: number,
+    pageSize: number,
+    q?: string,
+    tags?: number[],
+    difficulty?: number[],
+    sourceType?: string[],
+    year?: number[],
+  ) =>
     get<ProblemListResult>('/problems', {
       page,
       page_size: pageSize,
       ...(q ? { q } : {}),
       ...(tags && tags.length ? { tags: tags.join(',') } : {}),
       ...(difficulty && difficulty.length ? { difficulty: difficulty.join(',') } : {}),
+      ...(sourceType && sourceType.length ? { source_type: sourceType.join(',') } : {}),
+      ...(year && year.length ? { year: year.join(',') } : {}),
     }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   paper: (id: number) => get<PaperData>(`/problems/${id}/paper`),
@@ -197,6 +209,18 @@ export const tagApi = {
   tree: () => get<TagTreeResult>('/tags/tree'),
   adminTree: () => get<AdminTagTreeResult>('/admin/tagtree'),
   save: (nodes: TagNode[]) => put<{ count: number }>('/admin/tagtree', { nodes }),
+}
+
+// 来源库（v0.12）：元数据公开读（表单 datalist + 题库筛选），管理写仅 root
+export const sourcesApi = {
+  meta: () => get<SourceMetaResult>('/sources/meta'),
+  adminList: () => get<{ list: SourceEntry[] }>('/admin/sources'),
+  create: (name: string, type: string) => post<{ id: number }>('/admin/sources', { name, type }),
+  update: (id: number, body: { name?: string; type?: string }) =>
+    patch<{ updated: number }>(`/admin/sources/${id}`, body),
+  remove: (id: number) => del<{ deleted: number }>(`/admin/sources/${id}`),
+  toTag: (id: number, body: { node_id?: number; parent_id?: number; name?: string }) =>
+    post<{ node_id: number; updated: number }>(`/admin/sources/${id}/to-tag`, body),
 }
 
 export const submissionApi = {

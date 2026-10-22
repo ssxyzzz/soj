@@ -92,6 +92,12 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		fail(c, http.StatusBadRequest, derr.Error())
 		return
 	}
+	// 来源四字段（v0.12 表单直传，权威输入）：空 = 不设置（导入管道里 yaml/标题识别兜底）
+	src, serr := formSource(form)
+	if serr != nil {
+		fail(c, http.StatusBadRequest, serr.Error())
+		return
+	}
 	// 标签（v0.5.5）：级联选择直传节点 ID（JSON 数组字符串），存在性由 importer 校验
 	var tagIDs []int64
 	if raw := formValue(form, "tag_ids"); raw != "" {
@@ -108,13 +114,13 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 
 	// 客观题（v0.9）：表单 question_json 定义题面作答，走同一导入管道入库
 	if ptype := strings.TrimSpace(formValue(form, "type")); ptype == repo.TypeObjective {
-		h.createObjectiveProblem(c, form, title, statement, tagIDs, uid, zips)
+		h.createObjectiveProblem(c, form, title, statement, tagIDs, uid, src, zips)
 		return
 	} else if ptype == repo.TypeFunction {
-		h.createFunctionProblem(c, form, title, statement, tagIDs, uid, zips)
+		h.createFunctionProblem(c, form, title, statement, tagIDs, uid, src, zips)
 		return
 	} else if ptype == repo.TypeInteractive {
-		h.createInteractiveProblem(c, form, title, statement, tagIDs, uid, zips)
+		h.createInteractiveProblem(c, form, title, statement, tagIDs, uid, src, zips)
 		return
 	} else if ptype != "" && ptype != "default" {
 		fail(c, http.StatusBadRequest, "暂不支持题型 "+ptype+"（当前支持：传统题 default、客观题 objective、函数题 function、交互题 interactive）")
@@ -128,7 +134,11 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		p := &repo.Problem{
 			Title: title, Statement: statement, TimeLimitMS: timeLimit, MemoryLimitKB: memLimit,
 			Compare: compare, FloatTolerance: tol, Difficulty: difficulty,
+			SourceType: src.Type, Source: src.Name, Year: src.Year, Region: src.Region,
 			Cases: []repo.CaseMeta{}, CreatedBy: uid, CreatedAt: time.Now(),
+		}
+		if src.Name != "" {
+			_ = h.repo.UpsertSourceByName(c.Request.Context(), src.Name, src.Type)
 		}
 		if len(tagIDs) > 0 {
 			if err := h.repo.ValidateTagRefs(c.Request.Context(), tagIDs); err != nil {
@@ -226,7 +236,8 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		}
 	}
 
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty,
+		SourceType: src.Type, Source: src.Name, Year: src.Year, Region: src.Region}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return
@@ -693,6 +704,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				fail(c, http.StatusInternalServerError, "保存失败")
 				return
 			}
+			h.upsertSourceLib(c, req.SourceType, req.Source)
 		}
 		ok(c, gin.H{"updated": id})
 		return
@@ -738,6 +750,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		for k, v := range setSrc {
 			set[k] = v
 		}
+		h.upsertSourceLib(c, req.SourceType, req.Source)
 	}
 	if req.Compare != nil {
 		if !repo.ValidCompare(*req.Compare) {
@@ -828,6 +841,25 @@ func sourceMetaSet(sourceType, source *string, year *int, region *string) (bson.
 	return set, nil
 }
 
+// upsertSourceLib 来源编辑联动登记（v0.12）：来源名非空时沉淀进来源库，类型仅在库内
+// 尚无类型时补（root 面板里的归类优先，不被表单提交覆盖）。失败记日志不阻塞保存。
+func (h *Handlers) upsertSourceLib(c *gin.Context, sourceType, source *string) {
+	if source == nil {
+		return
+	}
+	name := strings.TrimSpace(*source)
+	if name == "" {
+		return
+	}
+	typ := ""
+	if sourceType != nil {
+		typ = strings.TrimSpace(*sourceType)
+	}
+	if err := h.repo.UpsertSourceByName(c.Request.Context(), name, typ); err != nil {
+		log.Printf("[source] 登记来源「%s」失败: %v", name, err)
+	}
+}
+
 // formDifficulty 建题表单难度（v0.11）：缺省 D3，越界报错。
 func formDifficulty(form *multipart.Form) (int, error) {
 	d := atoiDefault(formValue(form, "difficulty"), 3)
@@ -835,6 +867,37 @@ func formDifficulty(form *multipart.Form) (int, error) {
 		return 0, fmt.Errorf("难度需在 1-10 之间")
 	}
 	return d, nil
+}
+
+// sourceForm 建题表单来源四字段（v0.12）。
+type sourceForm struct {
+	Type   string
+	Name   string
+	Year   int
+	Region string
+}
+
+// formSource 解析并校验表单来源四字段：类型枚举、年份 1900-2100、名称/地区 ≤64 字。
+func formSource(form *multipart.Form) (sourceForm, error) {
+	src := sourceForm{
+		Type:   strings.TrimSpace(formValue(form, "source_type")),
+		Name:   strings.TrimSpace(formValue(form, "source")),
+		Year:   atoiDefault(formValue(form, "year"), 0),
+		Region: strings.TrimSpace(formValue(form, "region")),
+	}
+	if src.Type != "" && !repo.ValidSourceType(src.Type) {
+		return src, fmt.Errorf("source_type 需为 oj / contest / region / local / other")
+	}
+	if src.Year != 0 && (src.Year < 1900 || src.Year > 2100) {
+		return src, fmt.Errorf("year 需在 1900-2100 之间")
+	}
+	if len([]rune(src.Name)) > 64 {
+		return src, fmt.Errorf("来源名最长 64 字")
+	}
+	if len([]rune(src.Region)) > 64 {
+		return src, fmt.Errorf("地区最长 64 字")
+	}
+	return src, nil
 }
 
 func formValue(form *multipart.Form, key string) string {
@@ -1064,7 +1127,7 @@ func (h *Handlers) DownloadProblemTestdata(c *gin.Context) {
 
 // createFunctionProblem 函数题建题（v0.9.1）：driver（必须）/template（可选）来自表单文件，
 // 与 zip（可选，含 cases）一起进 ImportDir 管道；无 zip 时空壳入库、数据编辑页补齐。
-func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, zips []*multipart.FileHeader) {
+func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, src sourceForm, zips []*multipart.FileHeader) {
 	tmpDir, err := os.MkdirTemp("", "soj-create-func-")
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
@@ -1129,7 +1192,8 @@ func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, t
 			return
 		}
 	}
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty,
+		SourceType: src.Type, Source: src.Name, Year: src.Year, Region: src.Region}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return
@@ -1139,7 +1203,7 @@ func (h *Handlers) createFunctionProblem(c *gin.Context, form *multipart.Form, t
 
 // createInteractiveProblem 交互题建题（v0.9.2）：interactor 必须有（表单或 zip），
 // 测试数据可后补（ans 文件可缺省——判定权在交互器）。
-func (h *Handlers) createInteractiveProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, zips []*multipart.FileHeader) {
+func (h *Handlers) createInteractiveProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, src sourceForm, zips []*multipart.FileHeader) {
 	tmpDir, err := os.MkdirTemp("", "soj-create-int-")
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
@@ -1183,7 +1247,8 @@ func (h *Handlers) createInteractiveProblem(c *gin.Context, form *multipart.Form
 			return
 		}
 	}
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty,
+		SourceType: src.Type, Source: src.Name, Year: src.Year, Region: src.Region}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return
@@ -1213,7 +1278,7 @@ func extractZipInto(fh *multipart.FileHeader, dst string) error {
 
 // createObjectiveProblem 客观题建题（v0.9）：question_json 解析校验后生成 v2 problem.yaml，
 // 走 ImportDir 客观题路径入库（无 zip；填空占位数校验在导入管道内完成）。
-func (h *Handlers) createObjectiveProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, zips []*multipart.FileHeader) {
+func (h *Handlers) createObjectiveProblem(c *gin.Context, form *multipart.Form, title, statement string, tagIDs []int64, uid int64, src sourceForm, zips []*multipart.FileHeader) {
 	if len(zips) > 0 {
 		fail(c, http.StatusBadRequest, "客观题不需要测试数据包（请在题面里出题）")
 		return
@@ -1262,7 +1327,8 @@ func (h *Handlers) createObjectiveProblem(c *gin.Context, form *multipart.Form, 
 			return
 		}
 	}
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty}).ImportDir(c.Request.Context(), tmpDir)
+	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid, TagIDs: tagIDs, Difficulty: difficulty,
+		SourceType: src.Type, Source: src.Name, Year: src.Year, Region: src.Region}).ImportDir(c.Request.Context(), tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return

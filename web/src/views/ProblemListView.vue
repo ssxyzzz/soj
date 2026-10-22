@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 
-import { authApi, problemApi, rankApi } from '@/api'
+import { authApi, problemApi, rankApi, sourcesApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import FitTags from '@/components/problem/FitTags.vue'
 import SubStatus from '@/components/SubStatus.vue'
@@ -12,6 +13,7 @@ import TierBadge from '@/components/TierBadge.vue'
 import { useLevelsStore } from '@/stores/levels'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
+import { SOURCE_TYPE_LABELS } from '@/utils/source'
 import type { ProblemListItem } from '@/types'
 
 const router = useRouter()
@@ -42,9 +44,14 @@ const loading = ref(false)
 const keyword = ref('')
 const tagSel = ref<number[]>([])
 const diffSel = ref<number[]>([])
-
-const solvedCount = ref<number | null>(null)
-const solvedRank = ref<number | null>(null)
+// 高级筛选（v0.12）：难度 + 来源类型/年份收进折叠区，默认收起保持筛选区简洁
+const advOpen = ref(false)
+const srcTypeSel = ref<string[]>([])
+const yearSel = ref<number[]>([])
+const sourceYears = ref<number[]>([])
+const activeAdvCount = computed(
+  () => diffSel.value.length + srcTypeSel.value.length + yearSel.value.length,
+)
 
 async function load() {
   loading.value = true
@@ -55,6 +62,8 @@ async function load() {
       keyword.value.trim() || undefined,
       tagSel.value,
       diffSel.value.length ? diffSel.value : undefined,
+      srcTypeSel.value.length ? srcTypeSel.value : undefined,
+      yearSel.value.length ? yearSel.value : undefined,
     )
     list.value = r.list
     total.value = r.total
@@ -72,6 +81,8 @@ function resetSearch() {
   keyword.value = ''
   tagSel.value = []
   diffSel.value = []
+  srcTypeSel.value = []
+  yearSel.value = []
   page.value = 1
   load()
 }
@@ -87,6 +98,21 @@ function onDiffChange(ids: number[]) {
   page.value = 1
   load()
 }
+
+function onSrcTypeChange(ts: string[]) {
+  srcTypeSel.value = ts
+  page.value = 1
+  load()
+}
+
+function onYearChange(ys: number[]) {
+  yearSel.value = ys
+  page.value = 1
+  load()
+}
+
+const solvedCount = ref<number | null>(null)
+const solvedRank = ref<number | null>(null)
 
 async function loadOverview() {
   if (!userStore.token) return
@@ -128,6 +154,11 @@ onMounted(() => {
   load()
   loadOverview()
   tagStore.ensure() // 标签树异步就绪后筛选区自动出现（v-if 响应 store）
+  // 来源年份选项（v0.12 高级筛选）：加载失败静默（筛选仍可用难度/类型）
+  sourcesApi
+    .meta()
+    .then((m) => (sourceYears.value = m.years))
+    .catch(() => {})
 })
 </script>
 
@@ -158,19 +189,60 @@ onMounted(() => {
         <div v-if="tagStore.nodes.length || tagSel.length" class="tag-row">
           <TagFilter :selected="tagSel" @change="onTagChange" />
         </div>
-        <div class="diff-row">
-          <span class="dim diff-label">难度</span>
-          <el-select
-            v-model="diffSel"
-            multiple
-            collapse-tags
-            placeholder="全部"
-            clearable
-            style="width: 220px"
-            @change="onDiffChange"
-          >
-            <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
-          </el-select>
+        <!-- 高级筛选（v0.12）：难度 + 来源类型/年份收进折叠区，收起时角标提示已选数 -->
+        <div class="adv-toggle" @click="advOpen = !advOpen">
+          <el-icon class="adv-arrow" :class="{ open: advOpen }"><ArrowDown /></el-icon>
+          高级筛选
+          <span v-if="!advOpen && activeAdvCount" class="adv-count">{{ activeAdvCount }}</span>
+        </div>
+        <div v-show="advOpen" class="adv-panel">
+          <div class="diff-row">
+            <span class="dim diff-label">难度</span>
+            <el-select
+              v-model="diffSel"
+              multiple
+              collapse-tags
+              placeholder="全部"
+              clearable
+              style="width: 220px"
+              @change="onDiffChange"
+            >
+              <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
+            </el-select>
+          </div>
+          <div class="diff-row">
+            <span class="dim diff-label">来源类型</span>
+            <el-select
+              v-model="srcTypeSel"
+              multiple
+              collapse-tags
+              placeholder="全部"
+              clearable
+              style="width: 220px"
+              @change="onSrcTypeChange"
+            >
+              <el-option
+                v-for="(label, value) in SOURCE_TYPE_LABELS"
+                :key="value"
+                :value="value"
+                :label="label"
+              />
+            </el-select>
+          </div>
+          <div class="diff-row">
+            <span class="dim diff-label">年份</span>
+            <el-select
+              v-model="yearSel"
+              multiple
+              collapse-tags
+              placeholder="全部"
+              clearable
+              style="width: 220px"
+              @change="onYearChange"
+            >
+              <el-option v-for="y in sourceYears" :key="y" :value="y" :label="String(y)" />
+            </el-select>
+          </div>
         </div>
         <el-table
 stripe
@@ -283,12 +355,60 @@ stripe
   margin-bottom: 12px;
 }
 
+/* 高级筛选折叠（v0.12）：文字开关 + 展开面板；难度行样式沿用 */
+.adv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--el-color-primary);
+  cursor: pointer;
+  font-size: var(--soj-fs-body);
+  margin-bottom: 12px;
+  user-select: none;
+}
+
+.adv-toggle:hover {
+  text-decoration: underline;
+}
+
+.adv-arrow {
+  transition: transform 0.2s;
+}
+
+.adv-arrow.open {
+  transform: rotate(180deg);
+}
+
+/* 收起时的已选条件数角标 */
+.adv-count {
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--el-color-primary);
+  color: var(--el-color-white);
+  font-size: var(--soj-fs-small);
+  text-align: center;
+}
+
+.adv-panel {
+  padding: 10px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: var(--el-border-radius-base);
+  margin-bottom: 12px;
+}
+
 /* 难度筛选行（v0.11）：与标签行同节奏 */
 .diff-row {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+}
+
+.adv-panel .diff-row:last-child {
+  margin-bottom: 2px;
 }
 
 .diff-label {

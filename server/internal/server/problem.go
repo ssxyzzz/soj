@@ -78,6 +78,25 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 			diffSel[n] = true
 		}
 	}
+	// 来源筛选（v0.12）：source_type=oj,contest 逗号列表（枚举校验）+ year=2020,2021
+	srcTypeSel := map[string]bool{}
+	for _, part := range strings.Split(c.Query("source_type"), ",") {
+		t := strings.TrimSpace(part)
+		if t == "" {
+			continue
+		}
+		if !repo.ValidSourceType(t) {
+			fail(c, http.StatusBadRequest, "source_type 需为 oj / contest / region / local / other")
+			return
+		}
+		srcTypeSel[t] = true
+	}
+	yearSel := map[int]bool{}
+	for _, part := range strings.Split(c.Query("year"), ",") {
+		if n, err := strconv.Atoi(strings.TrimSpace(part)); err == nil && n >= 1900 && n <= 2100 {
+			yearSel[n] = true
+		}
+	}
 
 	ctx := c.Request.Context()
 	// 生效语义（非特权可见性过滤）与展示视角分开：view 版仅用于锁定标记字段，
@@ -115,6 +134,12 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 			}
 		}
 		if len(diffSel) > 0 && !diffSel[p.EffDifficulty()] {
+			continue
+		}
+		if len(srcTypeSel) > 0 && !srcTypeSel[p.SourceType] {
+			continue
+		}
+		if len(yearSel) > 0 && !yearSel[p.Year] {
 			continue
 		}
 		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags), "has_cases": len(p.Cases) > 0, "difficulty": p.EffDifficulty()}
@@ -280,7 +305,15 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"can_view_solutions": canViewSolutions, // 满分 ∨ 老师群体：题解弹窗入口提示用
 		"file_io_input":      p.FileIOInput,    // 文件名对：编辑配置用；场景 warning 展示实际文件名
 		"file_io_output":     p.FileIOOutput,
+		"source_type":        p.SourceType, // 来源四字段（v0.12）：详情右卡徽章链与编辑回填
+		"source":             p.Source,
+		"year":               p.Year,
+		"region":             p.Region,
 		"tags":               orEmptyInt64(p.Tags), // 节点 ID，名字由前端标签树映射
+	}
+	// 导入保留的原标签名（v0.12）：编辑表单提示展示，仅编辑者可见
+	if h.problemEditable(c, p) && len(p.RawTags) > 0 {
+		resp["raw_tags"] = p.RawTags
 	}
 	// 客观题（v0.9.3 多小题）：对外只回脱敏视图；正确答案与解析在满分 ∨ 老师群体门槛下附给
 	if p.IsObjective() {

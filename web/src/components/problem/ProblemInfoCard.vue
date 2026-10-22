@@ -6,6 +6,7 @@ import { computed, onUnmounted, ref } from 'vue'
 
 import TierBadge from '@/components/TierBadge.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
+import { sourceChain } from '@/utils/source'
 import type { ProblemDetail } from '@/types'
 
 const props = defineProps<{ problem: ProblemDetail }>()
@@ -13,6 +14,9 @@ const props = defineProps<{ problem: ProblemDetail }>()
 const tagStore = useTagTreeStore()
 
 const tagIds = computed(() => props.problem.tags ?? [])
+
+// 来源徽章链（v0.12）：标签下方一行，如「全国赛事 · NOIP 2020」；全空不渲染
+const sourceText = computed(() => sourceChain(props.problem))
 
 const acceptRate = computed(() => {
   const p = props.problem
@@ -99,6 +103,10 @@ onUnmounted(() => {
       </el-popover>
     </div>
     <div v-else class="dim">暂无标签</div>
+    <!-- 来源徽章链（v0.12）：标签下方，与题型徽章同族浅蓝 -->
+    <div v-if="sourceText" class="info-source">
+      <el-tag size="small" class="src-tag">{{ sourceText }}</el-tag>
+    </div>
   </el-card>
 </template>
 
@@ -120,6 +128,10 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 10px;
+}
+
+.info-source {
   margin-top: 10px;
 }
 

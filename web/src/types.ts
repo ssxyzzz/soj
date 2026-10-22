@@ -63,6 +63,22 @@ export interface AdminTagTreeResult {
   counts: Record<string, number>
 }
 
+// ---------- 来源库（v0.12） ----------
+
+// 公开来源元数据（GET /sources/meta）：建题表单 datalist 建议名 + 题库筛选年份选项
+export interface SourceMetaResult {
+  names: string[]
+  years: number[]
+}
+
+// root 来源面板条目（GET /admin/sources）：引用数按题目侧实时聚合
+export interface SourceEntry {
+  id: number
+  name: string
+  type: string // 空 = 未分类
+  refs: number
+}
+
 // 标签树保存被拒（删除被引用标签）时 failData 附带的引用题目明细
 export interface TagRefProblem {
   id: number
@@ -134,6 +150,11 @@ export interface ProblemDetail {
   time_limit_ms: number
   memory_limit_kb: number
   difficulty?: number // 难度 1–10（v0.11；缺省展示按 D3）
+  source_type?: string // 来源类型（v0.12）：oj/contest/region/local/other；空 = 未归类
+  source?: string // 来源名（如 NOIP、USACO 1.3.2）
+  year?: number // 年份（0 = 未设置）
+  region?: string // 地区（如 瑶海区）
+  raw_tags?: string[] // 题包导入未匹配标签树的原始名（v0.12，仅编辑者可见）
   compare?: string
   float_tolerance?: number
   has_checker?: boolean
@@ -469,6 +490,10 @@ export interface PaperProblem {
   questions?: PaperQuestion[] // 客观题公开字段（无答案/解析/分值）
   file_io_input?: string // 比赛/考试开启文件 IO 时的英文文件名
   file_io_output?: string
+  source_type?: string // 来源四字段（v0.12 打印带来源）
+  source?: string
+  year?: number
+  region?: string
 }
 
 export interface PaperData {

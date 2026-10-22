@@ -87,6 +87,26 @@ func TestApplySourceFields(t *testing.T) {
 	})
 }
 
+// 标签按名匹配与未匹配名保留（v0.12 来源库联动）：命中去重、同名取先见节点、
+// 未命中原名保序返回、空名/重复输入剔除。
+func TestMatchTagNames(t *testing.T) {
+	lookup := map[string]int64{"贪心": 11, "动态规划": 20, "线性 DP": 21}
+	ids, unmatched := matchTagNames(lookup, []string{"贪心", "神秘标签Q", " 线性 DP ", "", "贪心", "动态规划", "另一个未知"})
+	if len(ids) != 3 || ids[0] != 11 || ids[1] != 21 || ids[2] != 20 {
+		t.Fatalf("命中 ID 不符: %v", ids)
+	}
+	if len(unmatched) != 2 || unmatched[0] != "神秘标签Q" || unmatched[1] != "另一个未知" {
+		t.Fatalf("未匹配名不符: %v", unmatched)
+	}
+	// 全命中 / 空输入
+	if ids2, un2 := matchTagNames(lookup, []string{"贪心"}); len(ids2) != 1 || len(un2) != 0 {
+		t.Fatalf("全命中: %v %v", ids2, un2)
+	}
+	if ids3, un3 := matchTagNames(lookup, nil); ids3 != nil || un3 != nil {
+		t.Fatalf("空输入应双 nil: %v %v", ids3, un3)
+	}
+}
+
 // yaml 往返：导出带来源四字段，重新解析可读回。
 func TestSourceYAMLRoundTrip(t *testing.T) {
 	im := &Importer{}

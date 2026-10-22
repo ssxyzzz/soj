@@ -17,13 +17,17 @@ async function onSubmit(p: ProblemFormPayload) {
   try {
     const fd = new FormData()
     fd.append('title', p.title)
+    // 来源四字段（v0.12）：所有题型共用，服务端校验后直传导入管道
+    fd.append('source_type', p.source_type || '')
+    fd.append('source', p.source || '')
+    fd.append('year', String(p.year || 0))
+    fd.append('region', p.region || '')
     // 函数题（v0.9.1）：type + driver/template 文件；zip 可选（含 cases）
     if (p.type === 'function') {
       fd.append('type', 'function')
-      fd.append('title', p.title)
       fd.append('statement', p.statement)
       fd.append('tag_ids', JSON.stringify(p.tag_ids))
-    fd.append('difficulty', String(p.difficulty))
+      fd.append('difficulty', String(p.difficulty))
       if (p.driver) fd.append('driver', p.driver)
       if (p.template) fd.append('template', p.template)
       if (p.zip) fd.append('zip', p.zip)
@@ -35,7 +39,6 @@ async function onSubmit(p: ProblemFormPayload) {
     // 交互题（v0.9.2）：type + interactor 文件；zip 可选（含 cases，ans 可缺）
     if (p.type === 'interactive') {
       fd.append('type', 'interactive')
-      fd.append('title', p.title)
       fd.append('statement', p.statement)
       fd.append('tag_ids', JSON.stringify(p.tag_ids))
     fd.append('difficulty', String(p.difficulty))

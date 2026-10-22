@@ -1,12 +1,13 @@
 <script setup lang="ts">
 // 比赛/考试学生版打印视图（v0.10）：独立路由（MainLayout 之外），仅 organizer/root
-// 能取到数据；按卷内顺序拼接题目，只保留题号/标题/题面/样例/客观题题干与选项，
-// 不带答案、解析、分值、标签、来源、统计、时空限制。浏览器打印/另存 PDF。
+// 能取到数据；按卷内顺序拼接题目，只保留题号/标题/题面/样例/客观题题干与选项/来源
+// （v0.12 起带），不带答案、解析、分值、标签、统计、时空限制。浏览器打印/另存 PDF。
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { contestApi, examApi, problemApi } from '@/api'
 import MdView from '@/components/MdView.vue'
+import { sourceChain } from '@/utils/source'
 import type { ObjectiveKind, PaperData } from '@/types'
 
 type PaperKind = 'contest' | 'exam' | 'problem'
@@ -30,6 +31,11 @@ const kindMap: Record<ObjectiveKind, string> = {
 
 function kindName(kind: ObjectiveKind): string {
   return kindMap[kind] ?? '客观题'
+}
+
+// 来源链（v0.12 打印带来源）：`类型 · 来源名 年份（地区）`，全空返回空串
+function sourceOf(p: { source_type?: string; source?: string; year?: number; region?: string }): string {
+  return sourceChain(p)
 }
 
 function letter(i: number): string {
@@ -108,6 +114,7 @@ async function printPaper() {
 
       <section v-for="(p, i) in paper.problems" :key="p.id" class="paper-problem">
         <h2 v-if="!paper.single" class="paper-problem-title"><span class="paper-label">T{{ i + 1 }}</span>{{ p.title }}</h2>
+        <div v-if="sourceOf(p)" class="paper-source">来源：{{ sourceOf(p) }}</div>
         <div v-if="p.file_io_input" class="paper-file-io">
           文件 IO：{{ p.file_io_input }} / {{ p.file_io_output }}
         </div>
@@ -212,6 +219,13 @@ async function printPaper() {
 .paper-file-io {
   margin: -4px 0 12px;
   color: #333;
+  font-size: 14px;
+}
+
+/* 来源行（v0.12 打印带来源）：题号标题下、文件 IO 上，弱化灰 */
+.paper-source {
+  margin: -4px 0 8px;
+  color: #555;
   font-size: 14px;
 }
 
