@@ -79,15 +79,6 @@ async function switchSection(target: typeof section.value) {
         <span class="nav-sub">名称 / 阈值 / 特效开关</span>
       </div>
       <div
-        v-if="userStore.role === 'root'"
-        class="nav-item"
-        :class="{ active: section === 'security' }"
-        @click="switchSection('security')"
-      >
-        <span class="nav-title">安全日志</span>
-        <span class="nav-sub">登录 / 锁定 / 改密 / 限流</span>
-      </div>
-      <div
         class="nav-item"
         :class="{ active: section === 'notice' }"
         @click="switchSection('notice')"
@@ -112,6 +103,15 @@ async function switchSection(target: typeof section.value) {
         <span class="nav-title">数据备份</span>
         <span class="nav-sub">一键备份 / 恢复方法</span>
       </div>
+      <div
+        v-if="userStore.role === 'root'"
+        class="nav-item"
+        :class="{ active: section === 'security' }"
+        @click="switchSection('security')"
+      >
+        <span class="nav-title">安全日志</span>
+        <span class="nav-sub">登录 / 锁定 / 改密 / 限流</span>
+      </div>
     </aside>
 
     <main class="admin-main">
@@ -119,10 +119,10 @@ async function switchSection(target: typeof section.value) {
       <RolesPanel v-else-if="section === 'roles'" />
       <TagsPanel v-else-if="section === 'tags'" @update:dirty="tagsDirty = $event" />
       <LevelPanel v-else-if="section === 'levels'" />
-      <SecurityLogsPanel v-else-if="section === 'security'" />
       <NoticePanel v-else-if="section === 'notice'" />
       <SettingsPanel v-else-if="section === 'settings'" />
       <BackupPanel v-else-if="section === 'backup'" />
+      <SecurityLogsPanel v-else-if="section === 'security'" />
     </main>
   </div>
 </template>
