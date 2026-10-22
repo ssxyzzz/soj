@@ -31,6 +31,7 @@ import type {
   ProgressRow,
   RankItem,
   RoleInfo,
+  SecurityLogItem,
   Submission,
   SubmissionListResult,
   AdminTagTreeResult,
@@ -108,9 +109,11 @@ export const authApi = {
     post<LoginResult>('/auth/login', { username, password }),
   register: (username: string, password: string, nickname: string) =>
     post<LoginResult>('/auth/register', { username, password, nickname }),
-  // 注册开关状态（公开）：后台「系统设置」可关闭自助注册
-  registerOpen: () => get<{ open: boolean }>('/auth/register-open'),
   me: () => get<{ id: number; username: string; nickname: string; role: string; perms: string[] }>('/me'),
+  // 本人修改密码（v0.14）：验旧密码后落库并 pwdVer+1，全部登录态（含当前）立即失效，
+  // 成功后前端主动登出跳登录页；新密码二次确认在 UI 层做
+  changePassword: (oldPassword: string, newPassword: string) =>
+    post<{ changed: boolean }>('/auth/password', { old_password: oldPassword, new_password: newPassword }),
   // 个人设置（v0.4.8）：本人自助字段 + 偏好；昵称额外受 user.nickname.edit 权限位约束
   getProfile: () => get<UserProfile>('/me/profile'),
   updateProfile: (body: {
@@ -121,6 +124,12 @@ export const authApi = {
     qq?: string
     prefs?: UserPrefs
   }) => patch<UserProfile>('/me/profile', body),
+}
+
+// 站点公开信息（v0.13 收编原 /auth/register-open）：注册开关 + ICP 备案号，
+// 登录页页签显隐与页脚悬挂共用；后续公开站点事实（v0.15 注册验证方式等）并入此处
+export const siteApi = {
+  info: () => get<{ register_open: boolean; icp_number: string }>('/site'),
 }
 
 export const problemApi = {
@@ -266,6 +275,7 @@ export const adminApi = {
       data_download_daily_limit: number
       autocomplete_min_level: number
       allow_register: boolean
+      icp_number: string
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
@@ -274,6 +284,7 @@ export const adminApi = {
     data_download_daily_limit?: number
     autocomplete_min_level?: number
     allow_register?: boolean
+    icp_number?: string
   }) =>
     put<{
       rate_limit_per_minute: number
@@ -282,6 +293,7 @@ export const adminApi = {
       data_download_daily_limit: number
       autocomplete_min_level: number
       allow_register: boolean
+      icp_number: string
     }>('/admin/settings', patch),
   // 等级面板（v0.11，root）
   getLevelConfig: () => get<{ config: AdminLevelConfig }>('/admin/levelconfig'),
@@ -299,6 +311,14 @@ export const adminApi = {
   getUserLevel: (id: number) => get<UserLevelInfo>(`/admin/users/${id}/level`),
   adjustUserXp: (id: number, delta: number, reason: string) =>
     post<UserLevelInfo>(`/admin/users/${id}/xp-adjust`, { delta, reason }),
+  // 安全日志（v0.14，root）：登录/锁定/改密/重置/限流事件，type 精确、q 按用户名/IP 模糊
+  securityLogs: (page: number, pageSize: number, type?: string, q?: string) =>
+    get<{ list: SecurityLogItem[]; total: number; types: string[] }>('/admin/security-logs', {
+      page,
+      page_size: pageSize,
+      ...(type ? { type } : {}),
+      ...(q ? { q } : {}),
+    }),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),

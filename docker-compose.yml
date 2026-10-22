@@ -42,6 +42,10 @@ services:
       SOJ_DATA_DIR: /data/testdata
       SOJ_SEED_DIR: /data/seed
       SOJ_JWT_SECRET: ${SOJ_JWT_SECRET:-soj-dev-secret-change-me}
+      # 可信代理（v0.13）：ClientIP 只从可信直连方解析 X-Forwarded-For（防 XFF 伪造）。
+      # 容器视角直连方是 docker 网桥网关（172.x）而非 127.0.0.1，故放开 loopback + 私网段；
+      # Caddy/frp 反代拓扑下用于还原学生真实 IP；none = 不信任任何代理
+      SOJ_TRUSTED_PROXIES: "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
       SOJ_JUDGE_WORKERS: "2"
       SOJ_SANDBOX_ADDR: "http://sandbox:5050"
       SOJ_BACKUP_DIR: "/data/backups"

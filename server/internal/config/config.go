@@ -3,8 +3,10 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -18,11 +20,14 @@ type Config struct {
 	SeedDir      string // 启动时自动导入的种子题目目录（可为空）
 	SandboxAddr  string // go-judge 沙箱地址
 	JWTSecret    string
-	JudgeWorkers int // 判题并发数
+	JudgeWorkers int    // 判题并发数
+	// 可信代理（v0.13）：ClientIP() 仅从可信直连方解析 X-Forwarded-For。
+	// 反代/Caddy + frp 隧道拓扑下用于还原学生真实 IP；nil = 不信任任何代理。
+	TrustedProxies []string
 }
 
 func Load() *Config {
-	return &Config{
+	c := &Config{
 		Addr:         getEnv("SOJ_ADDR", ":8080"),
 		MongoURI:     getEnv("SOJ_MONGO_URI", "mongodb://127.0.0.1:27017"),
 		MongoDB:      getEnv("SOJ_MONGO_DB", "soj"),
@@ -32,9 +37,34 @@ func Load() *Config {
 		KeysDir:      getEnv("SOJ_KEYS_DIR", "./data/keys"),
 		SeedDir:      getEnv("SOJ_SEED_DIR", ""),
 		SandboxAddr:  getEnv("SOJ_SANDBOX_ADDR", "http://127.0.0.1:5050"),
-		JWTSecret:    getEnv("SOJ_JWT_SECRET", "soj-dev-secret"),
+		JWTSecret:    os.Getenv("SOJ_JWT_SECRET"), // v0.14 起无默认值：缺失由 server.Run 拒绝启动
 		JudgeWorkers: getEnvInt("SOJ_JUDGE_WORKERS", 2),
 	}
+	c.TrustedProxies = parseTrustedProxies(getEnv("SOJ_TRUSTED_PROXIES", "127.0.0.1,::1"))
+	if len(c.TrustedProxies) == 0 {
+		log.Printf("[web] 可信代理: 无（不解析 X-Forwarded-For，ClientIP 取直连地址）")
+	} else {
+		log.Printf("[web] 可信代理: %s", strings.Join(c.TrustedProxies, ","))
+	}
+	return c
+}
+
+// parseTrustedProxies 解析 SOJ_TRUSTED_PROXIES（逗号分隔的 IP/CIDR）：
+// "none" = 不信任任何代理；"*" = 信任所有（等价 0.0.0.0/0 + ::/0，仅直连无代理时用）。
+func parseTrustedProxies(v string) []string {
+	switch strings.TrimSpace(strings.ToLower(v)) {
+	case "none":
+		return nil
+	case "*":
+		return []string{"0.0.0.0/0", "::/0"}
+	}
+	var out []string
+	for _, item := range strings.Split(v, ",") {
+		if item = strings.TrimSpace(item); item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func getEnv(key, def string) string {

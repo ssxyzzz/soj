@@ -2,7 +2,7 @@
 .env
 backups/
 # 部署同步脚本（各机自建：服务器别名与路径因机而异，README 里有模板）
-scripts/deploy.sh
+scripts/sync-to-server.sh
 
 # 前端
 node_modules/

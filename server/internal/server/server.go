@@ -28,35 +28,55 @@ type Deps struct {
 // Run 启动 HTTP 服务（阻塞直至 ctx 取消或监听失败）。
 func Run(ctx context.Context, deps *Deps) {
 	cfg := deps.Cfg
+	// JWT 密钥（v0.14）：缺失拒绝启动（公网伪造 token 防线）；开发默认值警告放行
+	if cfg.JWTSecret == "" {
+		log.Fatal("[web] 未设置 SOJ_JWT_SECRET，拒绝启动（生产安全强制项，见 .env.example / docker-compose.yml）")
+	}
+	if cfg.JWTSecret == "soj-dev-secret-change-me" || cfg.JWTSecret == "soj-dev-secret" {
+		log.Println("[web] 警告: SOJ_JWT_SECRET 为开发默认值，生产环境务必更换为随机长字符串")
+	}
 	if os.Getenv("SOJ_DEBUG") == "" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	h := &Handlers{
-		cfg:         cfg,
-		repo:        deps.Repo,
-		sandbox:     deps.Sandbox,
-		waker:       deps.Waker,
-		rank:        newRankCache(deps.Repo),
-		limiter:     newRateLimiter(),
-		idents:      newIdentCache(),
-		leaderCache: map[string]leaderEntry{},
+		cfg:           cfg,
+		repo:          deps.Repo,
+		sandbox:       deps.Sandbox,
+		waker:         deps.Waker,
+		rank:          newRankCache(deps.Repo),
+		limiter:       newRateLimiter(),
+		idents:        newIdentCache(),
+		ipLimitGlobal: newIPLimiter(ipRateGlobalPerMin, time.Minute),
+		ipLimitAuth:   newIPLimiter(ipRateAuthPerMin, time.Minute),
+		leaderCache:   map[string]leaderEntry{},
 	}
 
 	r := gin.New()
+	// 可信代理（v0.13）：ClientIP() 只从可信直连方解析 X-Forwarded-For，
+	// 防 XFF 伪造；Caddy/frp 隧道拓扑下配置后可还原学生真实 IP（v0.14 限流依赖）
+	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("[web] 可信代理配置无效（SOJ_TRUSTED_PROXIES）: %v", err)
+	}
 	r.Use(gin.Logger(), gin.Recovery(), CORS(), Gzip())
 
 	// 题面图片公开读取（v0.5.1）：非 /api 前缀，随机文件名 + immutable 缓存
 	r.GET("/uploads/:file", h.ServeUpload)
 
 	api := r.Group("/api")
+	api.Use(h.rateLimit("global")) // IP 限流（v0.14）：私网来源跳过，公网直连生效
 	{
 		api.GET("/health", h.Health)
 
-		api.POST("/auth/register", h.Register)
-		// 注册开关状态（公开）：登录页显隐「注册」页签用
-		api.GET("/auth/register-open", h.RegisterOpen)
-		api.POST("/auth/login", h.Login)
+		// 认证类接口（v0.14）叠加更严的 IP 限流（登录/注册是爆破主面）
+		authLimit := h.rateLimit("auth")
+		api.POST("/auth/register", authLimit, h.Register)
+		// 站点公开信息（v0.13 收编原 /auth/register-open）：注册开关 + ICP 备案号，
+		// 登录页页签显隐与页脚悬挂共用；后续公开站点事实（v0.15 注册验证方式等）也归这里
+		api.GET("/site", h.GetSiteInfo)
+		api.POST("/auth/login", authLimit, h.Login)
+		// 本人修改密码（v0.14）：旧密码 + 新密码（前端二次确认），成功后全端下线
+		api.POST("/auth/password", AuthRequired(h), h.ChangePassword)
 		api.GET("/me", AuthRequired(h), h.Me)
 
 		api.GET("/problems", AuthOptional(h), h.ListProblems)
@@ -210,6 +230,9 @@ func Run(ctx context.Context, deps *Deps) {
 				// 等级面板（v0.11）：名称/阈值/衰减系数/特效开关，仅 root
 				adminG.GET("/levelconfig", RequireRoot(), h.AdminGetLevelConfig)
 				adminG.PUT("/levelconfig", RequireRoot(), h.AdminUpdateLevelConfig)
+
+				// 安全日志（v0.14）：登录/锁定/改密/重置/限流事件，仅 root
+				adminG.GET("/security-logs", RequireRoot(), h.AdminListSecurityLogs)
 
 				// 经验调整（用户管理界面）：查等级 + 加/减经验，用户管理权限位
 				adminG.GET("/users/:id/level", RequirePerm(repo.PermAdminUserManage), h.AdminGetUserLevel)

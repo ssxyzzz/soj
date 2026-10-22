@@ -1,0 +1,17 @@
+# frpc 参考配置（内网机侧，v0.13 存档现网拓扑；按实际参数对照，勿直接覆盖现网文件）
+# 链路：VPS frps:8080 --TLS隧道--> 本机 frpc --> SOJ（docker 主机端口 80 -> 容器 8080）
+serverAddr = "VPS公网IP"
+serverPort = 7000
+auth.token = "请改成-长随机串-与frps一致"
+
+# v0.50+ 默认已 TLS（transport.tls.enable = true），显式写出以防被配置覆盖；
+# 低于 0.50 的版本必须加这行，否则隧道明文跨公网
+transport.tls.enable = true
+
+[[proxies]]
+name = "soj"
+type = "tcp"
+remotePort = 8080
+# SOJ 跑在 docker（主机 80 映射容器 8080）；frpc 与 docker 同机时转发到主机端口
+localIP = "127.0.0.1"
+localPort = 80

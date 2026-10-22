@@ -14,10 +14,11 @@ import (
 // 都要拿权威身份；库 + 角色两份文档读进来后缓存 TTL 60s，用户或角色变更时整体失效
 // （AdminUpdateUser / 角色管理各接口调用 flush），降权即时生效。
 type identEntry struct {
-	uname string
-	role  string
-	perms []string
-	exp   time.Time
+	uname  string
+	role   string
+	perms  []string
+	pwdVer int // 密码版本（v0.14）：token 携带值与库不一致 → 改密后的旧 token，拒绝
+	exp    time.Time
 }
 
 type identCache struct {
@@ -55,7 +56,7 @@ func (h *Handlers) loadIdent(ctx context.Context, uid int64) (identEntry, bool) 
 	if err != nil {
 		return identEntry{}, false // 用户挂着已删除的角色：拒绝，直到管理员修正
 	}
-	e = identEntry{uname: u.Username, role: u.Role, perms: repo.EffectivePerms(role), exp: now.Add(h.idents.ttl)}
+	e = identEntry{uname: u.Username, role: u.Role, perms: repo.EffectivePerms(role), pwdVer: u.PwdVer, exp: now.Add(h.idents.ttl)}
 	h.idents.mu.Lock()
 	h.idents.m[uid] = e
 	h.idents.mu.Unlock()

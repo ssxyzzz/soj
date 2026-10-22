@@ -52,6 +52,69 @@ type User struct {
 	Grade        string     `bson:"grade,omitempty"`
 	QQ           string     `bson:"qq,omitempty"`
 	Prefs        *UserPrefs `bson:"prefs,omitempty"`
+	// 密码版本（v0.14）：改密/重置 +1，JWT claims 携带签发时的版本，不一致即 401——
+	// 改密后所有旧 token 立即失效（全端下线）。存量文档缺字段按 0。
+	PwdVer int `bson:"pwdVer,omitempty"`
+	// 登录失败锁定（v0.14）：连续失败达到阈值锁 lockedUntil；落库重启不丢、管理端可见。
+	FailedCount int       `bson:"failedCount,omitempty"`
+	LockedUntil time.Time `bson:"lockedUntil,omitempty"`
+}
+
+// UpdatePassword 修改密码：写新哈希并 pwdVer+1（原子），所有旧 token 随即失效。
+func (r *Repo) UpdatePassword(ctx context.Context, uid int64, passwordHash string) error {
+	res, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{
+		"$set": bson.M{"pwdHash": passwordHash},
+		"$inc": bson.M{"pwdVer": 1},
+	})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// BumpPwdVer 仅递增密码版本（管理员重置密码走 UpdateUser 裸 $set 后补一刀，v0.14）。
+func (r *Repo) BumpPwdVer(ctx context.Context, uid int64) error {
+	_, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$inc": bson.M{"pwdVer": 1}})
+	return err
+}
+
+// RecordLoginFailure 记一次登录失败（原子聚合更新）：failedCount+1；达到 maxFail 时
+// 计数清零并锁定 lockDur。返回更新后的连续失败次数（锁定触发时为 0）与是否处于锁定。
+// ① 锁定时间在 Go 侧算好以字面量传入——更新管道里 $$NOW 不可用（mongo 7 实测报
+// "undefined variable: now"）；② 存量用户文档没有 failedCount 字段，$add 缺失字段
+// 得 null 且比较恒 false，必须 $ifNull 兜底为 0——两处都曾让锁定整体失效，
+// 回归测试见 security_test.go。
+func (r *Repo) RecordLoginFailure(ctx context.Context, uid int64, maxFail int, lockDur time.Duration) (failedCount int, locked bool, err error) {
+	newCount := bson.D{{Key: "$add", Value: bson.A{
+		bson.D{{Key: "$ifNull", Value: bson.A{"$failedCount", 0}}}, 1,
+	}}}
+	hitMax := bson.D{{Key: "$gte", Value: bson.A{newCount, maxFail}}}
+	lockedAt := time.Now().Add(lockDur)
+	var u User
+	err = r.Users.FindOneAndUpdate(ctx, bson.M{"_id": uid}, mongo.Pipeline{
+		{{Key: "$set", Value: bson.D{
+			{Key: "failedCount", Value: bson.D{{Key: "$cond", Value: bson.A{hitMax, 0, newCount}}}},
+			{Key: "lockedUntil", Value: bson.D{{Key: "$cond", Value: bson.A{
+				hitMax,
+				lockedAt,
+				"$lockedUntil",
+			}}}},
+		}}},
+	}, options.FindOneAndUpdate().SetReturnDocument(options.After)).Decode(&u)
+	if err != nil {
+		return 0, false, err
+	}
+	return u.FailedCount, u.LockedUntil.After(time.Now()), nil
+}
+
+// ClearLoginFailures 登录成功后清零失败计数与锁定时间（best-effort，失败不阻断登录）。
+func (r *Repo) ClearLoginFailures(ctx context.Context, uid int64) error {
+	_, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid},
+		bson.M{"$set": bson.M{"failedCount": 0, "lockedUntil": time.Time{}}})
+	return err
 }
 
 func (r *Repo) CreateUser(ctx context.Context, username, passwordHash, nickname, role string) (int64, error) {
@@ -118,6 +181,20 @@ func (r *Repo) CreateUserWithPassword(ctx context.Context, username, password, n
 		return 0, err
 	}
 	return r.CreateUser(ctx, username, hash, nickname, role)
+}
+
+// SyncUnameReferences 改名后同步冗余存储的用户名：提交记录（提交列表与比赛榜单
+// 共用其 uname 字段）与班级成员（成员列表展示）。引用键恒为 uid，这里只修展示名。
+func (r *Repo) SyncUnameReferences(ctx context.Context, uid int64, uname string) error {
+	if _, err := r.Submissions.UpdateMany(ctx,
+		bson.M{"uid": uid},
+		bson.M{"$set": bson.M{"uname": uname}}); err != nil {
+		return err
+	}
+	_, err := r.db.Collection("classmembers").UpdateMany(ctx,
+		bson.M{"uid": uid},
+		bson.M{"$set": bson.M{"uname": uname}})
+	return err
 }
 
 func IsNotFound(err error) bool { return errors.Is(err, mongo.ErrNoDocuments) }

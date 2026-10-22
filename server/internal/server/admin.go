@@ -2,6 +2,8 @@ package server
 
 import (
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -21,7 +23,11 @@ func (h *Handlers) AdminListUsers(c *gin.Context) {
 	}
 	items := make([]gin.H, 0, len(list))
 	for _, u := range list {
-		items = append(items, userJSON(u))
+		j := userJSON(u)
+		if u.LockedUntil.After(time.Now()) {
+			j["locked_until"] = u.LockedUntil // 锁定中（v0.14 登录失败锁定），前端徽章展示
+		}
+		items = append(items, j)
 	}
 	ok(c, gin.H{"list": items, "total": total})
 }
@@ -41,8 +47,8 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "用户名需为 3-32 位字母/数字/下划线")
 		return
 	}
-	if len(req.Password) < 6 || len(req.Password) > 64 {
-		fail(c, http.StatusBadRequest, "密码长度需在 6-64 之间")
+	if msg := passwordProblem(req.Username, req.Password); msg != "" {
+		fail(c, http.StatusBadRequest, msg)
 		return
 	}
 	role := req.Role
@@ -113,7 +119,7 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "用户名需为 3-32 位字母/数字/下划线")
 			return
 		}
-		set["username"] = *req.Username
+		set["uname"] = *req.Username // User 结构体的 bson 字段名是 uname（裸 $set 不走结构体，勿用 API 字段名）
 	}
 	if req.Nickname != nil {
 		nickname := trimTo(*req.Nickname, 32)
@@ -123,9 +129,16 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		}
 		set["nickname"] = nickname
 	}
+	pwdResetUname := "" // 重置密码的审计对象（最终用户名：本请求可能同时改名）
 	if req.Password != nil {
-		if len(*req.Password) < 6 || len(*req.Password) > 64 {
-			fail(c, http.StatusBadRequest, "密码长度需在 6-64 之间")
+		pwdResetUname = ""
+		if req.Username != nil {
+			pwdResetUname = *req.Username
+		} else if u, err := h.repo.GetUserByID(c.Request.Context(), id); err == nil {
+			pwdResetUname = u.Username
+		}
+		if msg := passwordProblem(pwdResetUname, *req.Password); msg != "" {
+			fail(c, http.StatusBadRequest, msg)
 			return
 		}
 		hash, err := auth.HashPassword(*req.Password)
@@ -151,8 +164,23 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "更新失败")
 		return
 	}
-	if req.Role != nil || req.Username != nil {
-		h.idents.flush() // 角色/用户名变更即时生效（不等缓存 TTL）
+	if req.Username != nil {
+		// 冗余 uname（提交记录/班级成员展示名）同步；失败如实上报——用户名本体已生效
+		if err := h.repo.SyncUnameReferences(c.Request.Context(), id, *req.Username); err != nil {
+			fail(c, http.StatusInternalServerError, "用户名已改，但提交记录/班级成员展示名同步失败，请查看日志")
+			return
+		}
+	}
+	if req.Password != nil {
+		// v0.14：重置密码联动 pwdVer+1，该用户全部旧 token 立即失效（防捡到旧登录态继续用）
+		if err := h.repo.BumpPwdVer(c.Request.Context(), id); err != nil {
+			fail(c, http.StatusInternalServerError, "密码已重置，但登录态失效标记写入失败，请查看日志")
+			return
+		}
+		h.securityLog(c, repo.SecPwdResetAdmin, id, pwdResetUname, "管理员重置密码，该账号全部登录态已下线")
+	}
+	if req.Role != nil || req.Username != nil || req.Password != nil {
+		h.idents.flush() // 角色/用户名/密码版本变更即时生效（不等缓存 TTL）
 	}
 	ok(c, gin.H{"updated": id})
 }
@@ -173,7 +201,19 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"data_download_daily_limit": s.DownloadDailyLimit(),
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
+		"icp_number":                s.IcpNumber,
 	})
+}
+
+// GetSiteInfo 站点公开信息（v0.13 收编原 /auth/register-open）：注册开关 + ICP 备案号，
+// 登录页页签显隐与页脚悬挂共用；后续公开站点事实（v0.15 注册验证方式等）并入此处。
+func (h *Handlers) GetSiteInfo(c *gin.Context) {
+	s, err := h.repo.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器内部错误")
+		return
+	}
+	ok(c, gin.H{"register_open": s.RegistrationOpen(), "icp_number": s.IcpNumber})
 }
 
 // GetNotice 首页公告（公开，首页免登录展示）。
@@ -195,6 +235,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		DataDownloadDailyLimit *int    `json:"data_download_daily_limit"`
 		AutocompleteMinLevel   *int    `json:"autocomplete_min_level"`
 		AllowRegister          *bool   `json:"allow_register"`
+		IcpNumber              *string `json:"icp_number"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -236,6 +277,14 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	if req.AllowRegister != nil {
 		s.AllowRegister = req.AllowRegister
 	}
+	if req.IcpNumber != nil {
+		icp := strings.TrimSpace(*req.IcpNumber)
+		if len(icp) > 64 {
+			fail(c, http.StatusBadRequest, "备案号过长（上限 64 字符）")
+			return
+		}
+		s.IcpNumber = icp
+	}
 	if req.BackupGuide != nil {
 		if len(*req.BackupGuide) > 16<<10 {
 			fail(c, http.StatusBadRequest, "备份使用说明过长（上限 16KB）")
@@ -254,5 +303,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"data_download_daily_limit": s.DownloadDailyLimit(),
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
+		"icp_number":                s.IcpNumber,
 	})
 }

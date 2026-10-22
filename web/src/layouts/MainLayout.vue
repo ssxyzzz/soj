@@ -118,7 +118,17 @@ function onCommand(command: string) {
     <el-main class="main">
       <router-view />
     </el-main>
-    <el-footer class="footer">SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统</el-footer>
+    <el-footer class="footer">
+      <span>SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
+      <!-- ICP 备案号（v0.13）：后台「系统设置」配置，空 = 不展示；法规要求链接工信部备案系统 -->
+      <a
+        v-if="site.icpNumber"
+        class="icp"
+        href="https://beian.miit.gov.cn/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >{{ site.icpNumber }}</a>
+    </el-footer>
   </el-container>
 </template>
 
@@ -242,7 +252,18 @@ function onCommand(command: string) {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 16px;
   color: var(--el-text-color-secondary);
   background: var(--el-bg-color-page);
+}
+
+/* 备案号外链：弱化为页脚次要信息，悬停才提色 */
+.icp {
+  color: var(--el-text-color-secondary);
+  text-decoration: none;
+}
+
+.icp:hover {
+  color: var(--el-color-primary);
 }
 </style>

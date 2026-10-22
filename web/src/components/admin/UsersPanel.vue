@@ -394,7 +394,19 @@ defineExpose({ refresh: loadDefaultView })
         </template>
       </el-table-column>
       <el-table-column label="用户名" min-width="160">
-        <template #default="{ row }">{{ row.type === 'user' ? row.username : '' }}</template>
+        <template #default="{ row }">
+          <template v-if="row.type === 'user'">
+            {{ row.username }}
+            <el-tag
+              v-if="row.locked_until && new Date(row.locked_until) > new Date()"
+              type="danger"
+              size="small"
+              class="ml8"
+            >
+              锁定中
+            </el-tag>
+          </template>
+        </template>
       </el-table-column>
       <el-table-column label="昵称" min-width="160">
         <template #default="{ row }">{{ row.type === 'user' ? row.nickname : '' }}</template>
@@ -431,7 +443,7 @@ defineExpose({ refresh: loadDefaultView })
           <el-input v-model="createForm.username" placeholder="3-32 位字母/数字/下划线" />
         </el-form-item>
         <el-form-item label="初始密码" required>
-          <el-input v-model="createForm.password" placeholder="至少 6 位" />
+          <el-input v-model="createForm.password" placeholder="至少 8 位" />
         </el-form-item>
         <el-form-item label="昵称">
           <el-input v-model="createForm.nickname" placeholder="默认与用户名相同" />
@@ -470,7 +482,7 @@ defineExpose({ refresh: loadDefaultView })
             v-model="editForm.password"
             type="password"
             show-password
-            placeholder="至少 6 位；留空表示不修改密码"
+            placeholder="至少 8 位；留空表示不修改密码"
           />
         </el-form-item>
         <el-form-item label="确认新密码">

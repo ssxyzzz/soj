@@ -107,6 +107,15 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		mongo.IndexModel{Keys: bson.D{{Key: "uid", Value: 1}}}); err != nil {
 		return err
 	}
+	// 安全审计日志（v0.14）：at 上 TTL 索引滚动保留 90 天（mongod 后台清扫，无需应用层定时）；
+	// type+at 复合索引供后台按类型筛选
+	if _, err := r.db.Collection("securityLogs").Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "at", Value: 1}},
+			Options: options.Index().SetExpireAfterSeconds(int32((90 * 24 * time.Hour).Seconds()))},
+		{Keys: bson.D{{Key: "type", Value: 1}, {Key: "at", Value: -1}}},
+	}); err != nil {
+		return err
+	}
 
 	// 初始管理员：users 为空时创建 root / sojroot123（root 角色）；
 	// 空用户表同时作为 runMigrations 全新库判定的一环

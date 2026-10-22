@@ -21,6 +21,8 @@ type SystemSettings struct {
 	AutocompleteMinLevel *int `bson:"autocompleteMinLevel,omitempty"`
 	// 是否开放自助注册；nil = 未设置按默认开放（存量部署行为不变）。关闭后建号走用户管理。
 	AllowRegister *bool `bson:"allowRegister,omitempty"`
+	// ICP 备案号（v0.13）：页脚悬挂并链接工信部备案系统；空 = 不展示（未备案部署不显示）。
+	IcpNumber string `bson:"icpNumber"`
 }
 
 const (
@@ -88,6 +90,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"dataDownloadDailyLimit": s.DownloadDailyLimit(),
 			"autocompleteMinLevel":   s.MinAutocompleteLevel(),
 			"allowRegister":          s.RegistrationOpen(),
+			"icpNumber":              s.IcpNumber,
 		}},
 	)
 	return err

@@ -25,11 +25,12 @@ func CORS() gin.HandlerFunc {
 }
 
 // AuthRequired 校验 Bearer Token，并从数据库加载权威身份（用户名/角色/生效权限位，
-// 带缓存）。角色不信任 token 内容，降权即时生效。
+// 带缓存）。角色不信任 token 内容，降权即时生效；token 携带的密码版本（pver）与
+// 库中不一致即 401——改密/管理员重置后所有旧 token 全端下线（v0.14）。
 func AuthRequired(h *Handlers) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-		uid, _, err := auth.ParseToken(token, h.cfg.JWTSecret)
+		uid, _, tokenPwdVer, err := auth.ParseToken(token, h.cfg.JWTSecret)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录或登录已过期"})
 			return
@@ -37,6 +38,10 @@ func AuthRequired(h *Handlers) gin.HandlerFunc {
 		e, ok := h.loadIdent(c.Request.Context(), uid)
 		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "账号状态异常，请重新登录"})
+			return
+		}
+		if e.pwdVer != tokenPwdVer {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "密码已变更，请重新登录"})
 			return
 		}
 		c.Set("uid", uid)
@@ -48,11 +53,12 @@ func AuthRequired(h *Handlers) gin.HandlerFunc {
 }
 
 // AuthOptional 尝试解析登录态，无论成功与否都放行（用于可选登录的公开接口）。
+// pver 不一致（改密后的旧 token）按未登录处理，静默降级。
 func AuthOptional(h *Handlers) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-		if uid, _, err := auth.ParseToken(token, h.cfg.JWTSecret); err == nil {
-			if e, ok := h.loadIdent(c.Request.Context(), uid); ok {
+		if uid, _, tokenPwdVer, err := auth.ParseToken(token, h.cfg.JWTSecret); err == nil {
+			if e, ok := h.loadIdent(c.Request.Context(), uid); ok && e.pwdVer == tokenPwdVer {
 				c.Set("uid", uid)
 				c.Set("uname", e.uname)
 				c.Set("role", e.role)

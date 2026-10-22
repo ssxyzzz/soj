@@ -31,6 +31,9 @@ type Handlers struct {
 	rank    *rankCache
 	limiter *rateLimiter
 	idents  *identCache
+	// IP 限流（v0.14）：global 全 /api、auth 登录注册等，独立滑动窗口；内存态，单进程
+	ipLimitGlobal *ipLimiter
+	ipLimitAuth   *ipLimiter
 
 	leaderMu    sync.Mutex
 	leaderCache map[string]leaderEntry

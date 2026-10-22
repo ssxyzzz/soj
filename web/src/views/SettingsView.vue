@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
 
 import PageShell from '@/components/PageShell.vue'
 import { authApi } from '@/api'
@@ -10,6 +11,7 @@ import { autocompleteAvailable, languageOptions, mergedPrefs } from '@/utils/cod
 
 // 个人设置（v0.4.8）：本人自助字段（昵称/性别/学校/年级/QQ）+ 偏好（默认语言/代码模板）。
 // 昵称是否可改由后端按 user.nickname.edit 权限位现算（can_edit_nickname），默认角色默认开启。
+const router = useRouter()
 const userStore = useUserStore()
 const levels = useLevelsStore()
 levels.ensure() // 补全解锁等级提示（/api/levels 公开配置）
@@ -98,6 +100,42 @@ async function savePrefs() {
 }
 
 onMounted(load)
+
+// ---- 修改密码（v0.14）：旧密码 + 新密码两次确认；成功后全部登录态失效，强制重新登录 ----
+const savingPwd = ref(false)
+const pwdForm = reactive({ old: '', new: '', confirm: '' })
+
+async function changePassword() {
+  if (!pwdForm.old || !pwdForm.new || !pwdForm.confirm) {
+    ElMessage.warning('请完整填写原密码与新密码')
+    return
+  }
+  if (pwdForm.new.length < 8) {
+    ElMessage.warning('新密码至少 8 位')
+    return
+  }
+  if (pwdForm.new !== pwdForm.confirm) {
+    ElMessage.warning('两次输入的新密码不一致')
+    return
+  }
+  if (pwdForm.new === pwdForm.old) {
+    ElMessage.warning('新密码不能与原密码相同')
+    return
+  }
+  savingPwd.value = true
+  try {
+    await authApi.changePassword(pwdForm.old, pwdForm.new)
+    ElMessage.success('密码已修改，全部登录态已失效，请重新登录')
+    userStore.logout()
+    router.push('/login')
+    return // 已跳登录页，不再清表单
+  } finally {
+    savingPwd.value = false
+    pwdForm.old = ''
+    pwdForm.new = ''
+    pwdForm.confirm = ''
+  }
+}
 </script>
 
 <template>
@@ -133,6 +171,40 @@ onMounted(load)
         </el-form-item>
         <el-form-item>
           <el-button type="primary" plain :loading="savingProfile" @click="saveProfile">保存</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-card shadow="never" style="margin-top: 16px">
+      <template #header><span>修改密码</span></template>
+      <el-form label-position="left" label-width="120px" style="max-width: 560px">
+        <el-form-item label="原密码">
+          <el-input v-model="pwdForm.old" type="password" show-password />
+        </el-form-item>
+        <el-form-item label="新密码">
+          <el-input
+            v-model="pwdForm.new"
+            type="password"
+            show-password
+            maxlength="64"
+            placeholder="至少 8 位，不能与用户名相同或包含用户名"
+          />
+        </el-form-item>
+        <el-form-item label="确认新密码">
+          <el-input
+            v-model="pwdForm.confirm"
+            type="password"
+            show-password
+            maxlength="64"
+            placeholder="再输入一次新密码"
+            @keyup.enter="changePassword"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button type="primary" plain :loading="savingPwd" @click="changePassword">修改密码</el-button>
+          <span class="dim" style="margin-left: 8px">
+            修改成功后需重新登录；该账号在其他设备的登录态也会一并失效
+          </span>
         </el-form-item>
       </el-form>
     </el-card>

@@ -4,6 +4,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { adminApi } from '@/api'
+import { useSiteStore } from '@/stores/site'
 
 const rateLimit = ref(3)
 // 每日可下载数据的题目数（0 = 不限制）；作用于拥有「下载数据」权限位的用户
@@ -12,6 +13,8 @@ const dataDownloadLimit = ref(5)
 const autocompleteMinLevel = ref(5)
 // 允许自助注册：关闭后登录页不再出现「注册」入口，建号走用户管理
 const allowRegister = ref(true)
+// ICP 备案号（v0.13）：备案下来后填入，页脚悬挂并链接工信部备案系统；空 = 不展示
+const icpNumber = ref('')
 const savingSettings = ref(false)
 
 onMounted(async () => {
@@ -21,6 +24,7 @@ onMounted(async () => {
     dataDownloadLimit.value = s.data_download_daily_limit
     autocompleteMinLevel.value = s.autocomplete_min_level
     allowRegister.value = s.allow_register
+    icpNumber.value = s.icp_number || ''
   } catch {
     // 加载失败保留默认值展示
   }
@@ -34,8 +38,11 @@ async function saveSettings() {
       data_download_daily_limit: dataDownloadLimit.value,
       autocomplete_min_level: autocompleteMinLevel.value,
       allow_register: allowRegister.value,
+      icp_number: icpNumber.value.trim(),
     })
     ElMessage.success('设置已保存')
+    // 备案号改了页脚要跟着变：重置站点公开状态的进程内缓存（下次 ensure 重拉）
+    useSiteStore().refresh()
   } finally {
     savingSettings.value = false
   }
@@ -70,6 +77,17 @@ async function saveSettings() {
         <el-switch v-model="allowRegister" />
         <span class="dim" style="margin-left: 8px">
           关闭后登录页不再提供注册入口，建号请走「用户管理」；已注册账号不受影响
+        </span>
+      </el-form-item>
+      <el-form-item label="ICP 备案号">
+        <el-input
+          v-model="icpNumber"
+          placeholder="如 皖ICP备2026000000号-1（留空不展示）"
+          maxlength="64"
+          style="max-width: 320px"
+        />
+        <span class="dim" style="margin-left: 8px">
+          备案通过后填入，页脚展示并链接工信部备案系统；留空不展示
         </span>
       </el-form-item>
     </el-form>

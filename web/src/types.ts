@@ -339,6 +339,19 @@ export interface AdminUser {
   username: string
   nickname: string
   role: string
+  locked_until?: string // 锁定中（v0.14 登录失败锁定）才有值，ISO 时间
+}
+
+// ---------- 安全日志（v0.14，root 后台） ----------
+
+export interface SecurityLogItem {
+  at: string
+  type: string // login_success | login_failure | login_locked | password_change | password_reset_admin | rate_limited
+  uid: number
+  username: string
+  ip: string
+  ua: string
+  detail: string
 }
 
 // ---------- 个人设置（v0.4.8） ----------

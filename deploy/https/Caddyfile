@@ -1,0 +1,35 @@
+# SOJ HTTPS 入口（部署在 VPS 上的 Caddy，v0.13）
+#
+# 前提：Caddy 必须是带 alidns 插件的构建（证书走阿里云 DNS-01，不占 80 端口、不受备案拦截影响）。
+#   官网下载页选择：Platform = linux-amd64，Add modules 勾选 github.com/caddy-dns/alidns
+#   https://caddyserver.com/download
+#   （或用 xcaddy：xcaddy build --with github.com/caddy-dns/alidns）
+#
+# 阿里云 AccessKey 通过环境变量注入（勿写进本文件）：
+#   /etc/caddy/alidns.env（chmod 600，内容如下两行）：
+#     ALICLOUD_ACCESS_KEY=LTAI...（RAM 子账号 AccessKey ID，仅授云解析 DNS 权限）
+#     ALICLOUD_SECRET_KEY=...
+#   systemd 单元加：EnvironmentFile=/etc/caddy/alidns.env
+
+{
+	# 证书到期/异常通知邮箱（Let's Encrypt 要求）
+	email admin@example.com
+}
+
+soj.example.com {
+	# DNS-01 验证：证书签发与续期只查阿里云 DNS 记录，不回连服务器端口——
+	# 备案前后、任意端口状态下都能签
+	tls {
+		dns alidns {env.ALICLOUD_ACCESS_KEY} {env.ALICLOUD_SECRET_KEY}
+	}
+
+	# HSTS：强制浏览器后续一律走 HTTPS（上线确认稳定后再放开，见手册）
+	header Strict-Transport-Security "max-age=31536000"
+
+	encode gzip
+
+	# 反代到本机 frps 的 remotePort（现网 frp 配置不动）。
+	# Caddy 在此注入 X-Forwarded-For（学生真实 IP），经 frp 纯 TCP 隧道原样到达 SOJ，
+	# SOJ 侧由 SOJ_TRUSTED_PROXIES 决定信任（docker-compose 已配好私网段）。
+	reverse_proxy 127.0.0.1:8080
+}

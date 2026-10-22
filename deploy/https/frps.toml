@@ -1,0 +1,15 @@
+# frps 参考配置（VPS 侧，v0.13 存档现网拓扑；按实际参数对照，勿直接覆盖现网文件）
+# 绑定地址对外：bindPort 供 frpc 连接；SOJ 流量走 proxies 的 remotePort。
+bindAddr = "0.0.0.0"
+bindPort = 7000
+
+# 鉴权令牌：与 frpc 一致；务必长随机串（弱 token 等于把隧道开放给公网扫描器）
+auth.token = "请改成-长随机串-与frpc一致"
+
+# v0.50+ frpc↔frps 默认已 TLS；force = true 拒绝任何非 TLS 客户端连接
+# （防止降级探测，也挡住旧版客户端明文握手）
+transport.tls.force = true
+
+# HTTP 仪表盘不开（减少暴露面）；需要排障时临时打开并改端口
+# webServer.addr = "127.0.0.1"
+# webServer.port = 7500
