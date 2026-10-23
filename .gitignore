@@ -22,6 +22,10 @@ server/internal/webui/dist/*
 # 本地运行时产生的测试数据（正式数据在卷/服务器上）
 /data/testdata/
 
+# 本地测试题包中转站（data/test：hydro/topscoding 等待导入的 zip 一律放这里，
+# 不入 git、不推服务器——题目的正仓库是 OJ 数据卷不是 git；sync-to-server.sh 同步排除）
+/data/test/
+
 # 日志与系统文件
 *.log
 .DS_Store
