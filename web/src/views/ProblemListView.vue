@@ -199,18 +199,6 @@ onMounted(() => {
           />
           <el-button type="primary" @click="search">搜索</el-button>
           <el-button v-if="keyword" @click="resetSearch">重置</el-button>
-          <el-pagination
-            class="search-pager"
-            background
-            layout="slot, prev, pager, next"
-            :total="total"
-            :page-size="pageSize"
-            :current-page="page"
-            @current-change="onPageChange"
-          >
-            <!-- 计数单位用「题」（EP locale 的「共 N 条」是全局的，波及其他列表，这里走插槽局部改） -->
-            <span class="dim">共 {{ total }} 题</span>
-          </el-pagination>
         </div>
         <!-- 筛选入口行：标签 / 高级筛选两个折叠开关同行，点击展开对应面板、再点收起 -->
         <div class="filter-row">
@@ -336,6 +324,19 @@ stripe
             </template>
           </el-table-column>
         </el-table>
+        <!-- 主列底部翻页（2026-10-23 验收）：居中、控件齐全（首页/上一页/页码/下一页/末页） -->
+        <div class="table-pager">
+          <el-pagination
+            background
+            layout="slot, first, prev, pager, next, last"
+            :total="total"
+            :page-size="pageSize"
+            :current-page="page"
+            @current-change="onPageChange"
+          >
+            <span class="dim">共 {{ total }} 题</span>
+          </el-pagination>
+        </div>
       </el-card>
 
     <template #aside>
@@ -412,8 +413,10 @@ stripe
   flex-wrap: wrap;
 }
 
-.search-pager {
-  margin-left: auto;
+.table-pager {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
 }
 
 .tag-row {
