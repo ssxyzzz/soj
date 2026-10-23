@@ -351,14 +351,12 @@ stripe
           </el-button>
           <el-pagination
             background
-            layout="slot, prev, pager, next"
+            layout="prev, pager, next"
             :total="total"
             :page-size="pageSize"
             :current-page="page"
             @current-change="onPageChange"
-          >
-            <span class="dim">共 {{ total }} 题</span>
-          </el-pagination>
+          />
           <el-button
             class="pg-edge"
             :disabled="page === lastPage"
@@ -368,6 +366,8 @@ stripe
             <el-icon><DArrowRight /></el-icon>
           </el-button>
         </div>
+        <!-- 计数行（2026-10-23 验收）：翻页条下方居中「当前在 x 页 / 共 xx 页 / 共 xx 题」 -->
+        <div class="pager-meta dim">当前在 {{ page }} 页 / 共 {{ lastPage }} 页 / 共 {{ total }} 题</div>
       </el-card>
 
     <template #aside>
@@ -459,6 +459,11 @@ stripe
 /* 自拼的首页/末页按钮：观感对齐 EP 分页的 background 按钮 */
 .pg-edge {
   padding: 8px;
+}
+
+.pager-meta {
+  text-align: center;
+  margin-top: 6px;
 }
 
 .tag-row {
