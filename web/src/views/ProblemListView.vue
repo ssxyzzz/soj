@@ -44,8 +44,9 @@ const loading = ref(false)
 const keyword = ref('')
 const tagSel = ref<number[]>([])
 const diffSel = ref<number[]>([])
-// 高级筛选（v0.12）：难度 + 来源类型/年份收进折叠区，默认收起保持筛选区简洁
+// 筛选折叠（v0.12 高级筛选；标签 2026-10-23 同款化）：入口一行、点击展开对应面板
 const advOpen = ref(false)
+const tagOpen = ref(false)
 const srcTypeSel = ref<string[]>([])
 const yearSel = ref<number[]>([])
 const sourceYears = ref<number[]>([])
@@ -206,14 +207,25 @@ onMounted(() => {
             @current-change="onPageChange"
           />
         </div>
-        <div v-if="tagStore.nodes.length || tagSel.length" class="tag-row">
-          <TagFilter :selected="tagSel" @change="onTagChange" />
+        <!-- 筛选入口行：标签 / 高级筛选两个折叠开关同行，点击展开对应面板、再点收起 -->
+        <div class="filter-row">
+          <div
+            v-if="tagStore.nodes.length || tagSel.length"
+            class="adv-toggle"
+            @click="tagOpen = !tagOpen"
+          >
+            <el-icon class="adv-arrow" :class="{ open: tagOpen }"><ArrowDown /></el-icon>
+            标签
+            <span v-if="!tagOpen && tagSel.length" class="adv-count">{{ tagSel.length }}</span>
+          </div>
+          <div class="adv-toggle" @click="advOpen = !advOpen">
+            <el-icon class="adv-arrow" :class="{ open: advOpen }"><ArrowDown /></el-icon>
+            高级筛选
+            <span v-if="!advOpen && activeAdvCount" class="adv-count">{{ activeAdvCount }}</span>
+          </div>
         </div>
-        <!-- 高级筛选（v0.12）：难度 + 来源类型/年份收进折叠区，收起时角标提示已选数 -->
-        <div class="adv-toggle" @click="advOpen = !advOpen">
-          <el-icon class="adv-arrow" :class="{ open: advOpen }"><ArrowDown /></el-icon>
-          高级筛选
-          <span v-if="!advOpen && activeAdvCount" class="adv-count">{{ activeAdvCount }}</span>
+        <div v-if="tagOpen && (tagStore.nodes.length || tagSel.length)" class="tag-row">
+          <TagFilter :selected="tagSel" @change="onTagChange" />
         </div>
         <div v-show="advOpen" class="adv-panel">
           <div class="diff-row">
@@ -408,7 +420,15 @@ stripe
   margin-bottom: 12px;
 }
 
-/* 高级筛选折叠（v0.12）：文字开关 + 展开面板；难度行样式沿用 */
+/* 筛选入口行（2026-10-23）：标签 / 高级筛选两个折叠开关并排 */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 12px;
+}
+
+/* 折叠开关（v0.12 高级筛选同款）：文字开关 + 展开面板；难度行样式沿用 */
 .adv-toggle {
   display: inline-flex;
   align-items: center;
@@ -416,7 +436,6 @@ stripe
   color: var(--el-color-primary);
   cursor: pointer;
   font-size: var(--soj-fs-body);
-  margin-bottom: 12px;
   user-select: none;
 }
 
