@@ -2,6 +2,7 @@
 // 题库筛选的标签卡片流（与后台 TagsPanel 同款样式与悬停交互，只读版）：
 // 悬停到哪层就展开到哪层（path 悬停路径，移开 180ms 收起），点击卡片切换选中
 // （多选并集、精确匹配）。无编辑/拖拽/新增——选中态 = 层级色实底 + ✓。
+// 每级行前带层级标签（一级/二级/…）；行区滚轮隔离见 onCanvasWheel。
 import { computed, onBeforeUnmount, ref } from 'vue'
 
 import type { TagNode } from '@/types'
@@ -26,6 +27,8 @@ interface TagItem {
 interface TagRow {
   items: TagItem[]
 }
+
+const searching = computed(() => !!search.value.trim())
 
 const rows = computed<TagRow[]>(() => {
   const q = search.value.trim().toLowerCase()
@@ -63,8 +66,15 @@ function lvClass(depth: number): string {
   return `lv-${Math.min(depth + 1, 5)}`
 }
 
+// 行标签：一级/二级/三级…（中文数字到十，更深直书数字）；搜索态单行为「匹配」
+const CN_NUM = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+function rowLabel(depth: number): string {
+  if (searching.value) return '匹配'
+  return depth < CN_NUM.length ? `${CN_NUM[depth]}级` : `${depth + 1}级`
+}
+
 function onCardHover(row: number, node: TagNode) {
-  if (search.value.trim()) return
+  if (searching.value) return
   if (hoverTimer) {
     clearTimeout(hoverTimer)
     hoverTimer = undefined
@@ -87,17 +97,18 @@ function cancelHoverClear() {
   }
 }
 
-// 滚轮横移：竖向滚轮增量映射到横向滚动（当前层级的标签一览）；触摸板横扫 deltaX 优先。
-// 行内有溢出时**整行接管滚轮**——滚到头也不再放行，持续滚动不会带动页面下滑
-// （鼠标停在本行即浏览本行）；行本身没有溢出才不拦截，滚轮交给页面正常滚动。
-function onWheel(e: WheelEvent) {
-  const el = e.currentTarget as HTMLElement
+// 滚轮隔离（2026-10-23 验收定稿口径）：鼠标在标签行区内滚动**一律不带动页面**——
+// 落在哪行就把增量映射到该行横向滚动（触摸板横扫 deltaX 优先）；行内展示完了
+// （无溢出 / 已滚到头）也吞掉事件，绝不外溢给页面滚动条。
+function onCanvasWheel(e: WheelEvent) {
+  e.preventDefault()
+  const line = (e.target as HTMLElement).closest('.tag-line')
+  const el = line?.querySelector<HTMLElement>('.tag-row')
+  if (!el) return
   const max = el.scrollWidth - el.clientWidth
   if (max <= 0) return
-  e.preventDefault()
   const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-  if (delta === 0) return
-  el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
+  if (delta) el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
 }
 
 onBeforeUnmount(() => {
@@ -114,23 +125,26 @@ onBeforeUnmount(() => {
         <slot name="top-right" />
       </div>
     </div>
-    <!-- 每级行独立横向滚动：无滚动条，滚轮只在鼠标所在行拦截+横移；各行各自记位置，
-         行内有溢出即整行接管（滚到头也不带动页面下滑） -->
-    <div class="tag-canvas" @mouseenter="cancelHoverClear">
-      <div v-for="(r, i) in rows" :key="i" class="tag-row" @mouseenter="cancelHoverClear" @wheel="onWheel">
-        <div
-          v-for="item in r.items"
-          :key="item.node.id"
-          class="tag-card"
-          :class="[lvClass(item.depth), { active: selected.has(item.node.id) }]"
-          @click="emit('toggle', item.node.id)"
-          @mouseenter="onCardHover(item.depth, item.node)"
-        >
-          {{ item.node.name }}
-          <span v-if="item.node.children?.length" class="caret">▸</span>
-          <span v-if="selected.has(item.node.id)" class="check">✓</span>
+    <!-- 每级行 = 行标签 + 独立横滚容器；wheel 挂画布层统一路由（见 onCanvasWheel）：
+         行区内滚动永不外溢给页面，鼠标所在行各自横移、各行独立记位置 -->
+    <div class="tag-canvas" @mouseenter="cancelHoverClear" @wheel="onCanvasWheel">
+      <div v-for="(r, i) in rows" :key="i" class="tag-line" @mouseenter="cancelHoverClear">
+        <span class="tag-line-label">{{ rowLabel(i) }}</span>
+        <div class="tag-row">
+          <div
+            v-for="item in r.items"
+            :key="item.node.id"
+            class="tag-card"
+            :class="[lvClass(item.depth), { active: selected.has(item.node.id) }]"
+            @click="emit('toggle', item.node.id)"
+            @mouseenter="onCardHover(item.depth, item.node)"
+          >
+            {{ item.node.name }}
+            <span v-if="item.node.children?.length" class="caret">▸</span>
+            <span v-if="selected.has(item.node.id)" class="check">✓</span>
+          </div>
+          <div v-if="!r.items.length" class="dim">没有匹配的标签</div>
         </div>
-        <div v-if="!r.items.length" class="dim">没有匹配的标签</div>
       </div>
       <!-- 底部两行缓冲：末级展开后鼠标习惯性继续下移查找，进垫片即取消收起计时（见 .tag-flow-pad） -->
       <div class="tag-flow-pad" @mouseenter="cancelHoverClear" />
@@ -175,19 +189,37 @@ onBeforeUnmount(() => {
 .tag-canvas {
   display: flex;
   flex-direction: column;
-  gap: 14px; /* 层级行距（一级/二级……之间） */
+  gap: 12px; /* 层级行距（一级/二级……之间） */
   min-width: 0;
 }
 
-/* 每级一行独立滚动：行内不换行，超出本行宽度即横移（无滚动条，滚轮驱动见 onWheel）；
-   每行各持独立 scrollLeft——滚哪行动哪行，其余行不受影响 */
+/* 每级行 = 左侧层级标签 + 右侧横滚区（标签固定不随行滚动） */
+.tag-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 行标签：汉字间小字距（不用 justify 拉满），行高对齐胶囊中心 */
+.tag-line-label {
+  flex: none;
+  line-height: 26px;
+  font-size: var(--soj-fs-small);
+  color: var(--el-text-color-secondary);
+  letter-spacing: 0.35em;
+  user-select: none;
+}
+
+/* 每级一行独立滚动：行内不换行，超出本行宽度即横移（无滚动条，滚轮驱动见
+   onCanvasWheel）；每行各持独立 scrollLeft——滚哪行动哪行，其余行不受影响 */
 .tag-row {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-wrap: nowrap;
   gap: 8px;
   align-items: flex-start;
-  width: 100%;
-  min-width: 0;
   overflow-x: auto;
   scrollbar-width: none; /* Firefox：隐藏滚动条 */
 }
@@ -197,24 +229,27 @@ onBeforeUnmount(() => {
 }
 
 /* 层级色只来自全局 .lv-1~.lv-5（main.css）：此处不可写 --lv 兜底，
-   scoped 特异度会压过全局，把各层级吞成一级蓝 */
+   scoped 特异度会压过全局，把各层级吞成一级蓝。形状口径 = 列表 FitTags
+   （el-tag small：4px 圆角矩形、浅底描边） */
 .tag-card {
   flex: none; /* 行内不换行模式：卡片不压缩，超出即由本行横移 */
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
-  line-height: 20px;
+  padding: 2px 10px;
+  line-height: 22px;
   background: var(--lv-bg);
   border: 1px solid var(--lv-border);
-  border-radius: 6px;
+  border-radius: var(--el-border-radius-base);
+  color: var(--el-text-color-primary);
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .tag-card:hover {
   border-color: var(--lv);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 /* 选中（筛选生效中）：本层级色实底 + ✓ */

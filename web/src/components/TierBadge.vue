@@ -75,7 +75,9 @@ const stars = computed(() => {
   align-items: center;
   justify-content: center;
   white-space: nowrap;
-  border-radius: 999px;
+  /* 圆角矩形（2026-10-23 验收：难度与等级徽章统一站点 tag 口径，不出胶囊；
+     SOJ 顶栏标识是独立类不受此影响） */
+  border-radius: var(--el-border-radius-base);
   color: #fff;
   font-weight: var(--soj-fw-regular);
   line-height: 1;

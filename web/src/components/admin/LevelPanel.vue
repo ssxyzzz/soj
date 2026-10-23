@@ -216,7 +216,7 @@ function diffChipClass(i: number): Record<string, boolean> {
   align-items: center;
   justify-content: center;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--el-border-radius-base); /* 与全站徽章同口径圆角矩形 */
   color: #fff;
   font-size: var(--soj-fs-small);
   font-weight: var(--soj-fw-regular); /* 徽章字重全局改常规（2026-10-22） */

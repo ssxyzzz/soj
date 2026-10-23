@@ -140,6 +140,15 @@ function onYearChange(ys: (number | string)[]) {
   load()
 }
 
+// 高级筛选一键清空（右端条件生效时展示；只清难度/来源/年份三路，不动关键词与标签）
+function clearAdv() {
+  diffSel.value = []
+  srcTypeSel.value = []
+  yearSel.value = []
+  page.value = 1
+  load()
+}
+
 const solvedCount = ref<number | null>(null)
 const solvedRank = ref<number | null>(null)
 
@@ -214,49 +223,52 @@ onMounted(() => {
             <span class="dim">共 {{ total }} 题</span>
           </el-pagination>
         </div>
-        <!-- 筛选入口行：标签 / 高级筛选两个折叠开关同行，点击展开对应面板、再点收起 -->
+        <!-- 筛选入口行：标签 / 高级筛选 两个胶囊开关并排（展开/有已选均高亮，角标计已选数） -->
         <div class="filter-row">
-          <div
+          <span class="filter-cap">筛选</span>
+          <button
             v-if="tagStore.nodes.length || tagSel.length"
             class="adv-toggle"
+            :class="{ open: tagOpen }"
             @click="tagOpen = !tagOpen"
           >
-            <el-icon class="adv-arrow" :class="{ open: tagOpen }"><ArrowDown /></el-icon>
             标签
-            <span v-if="!tagOpen && tagSel.length" class="adv-count">{{ tagSel.length }}</span>
-          </div>
-          <div class="adv-toggle" @click="advOpen = !advOpen">
-            <el-icon class="adv-arrow" :class="{ open: advOpen }"><ArrowDown /></el-icon>
+            <span v-if="tagSel.length" class="adv-count">{{ tagSel.length }}</span>
+            <el-icon class="adv-arrow" :class="{ open: tagOpen }"><ArrowDown /></el-icon>
+          </button>
+          <button class="adv-toggle" :class="{ open: advOpen }" @click="advOpen = !advOpen">
             高级筛选
-            <span v-if="!advOpen && activeAdvCount" class="adv-count">{{ activeAdvCount }}</span>
-          </div>
+            <span v-if="activeAdvCount" class="adv-count">{{ activeAdvCount }}</span>
+            <el-icon class="adv-arrow" :class="{ open: advOpen }"><ArrowDown /></el-icon>
+          </button>
         </div>
         <div v-if="tagOpen && (tagStore.nodes.length || tagSel.length)" class="tag-row">
           <TagFilter :selected="tagSel" @change="onTagChange" />
         </div>
         <div v-show="advOpen" class="adv-panel">
-          <!-- 三路筛选一字排开（2026-10-23 验收调整）；年份可输入（候选外年份允许手输） -->
+          <!-- 三路筛选一字排开（标签等宽 justify 对齐、统一控件宽）；年份可输入（候选外年份
+               允许手输）；右端条件生效时出一键清空（搜索行的「重置」只在有关键词时展示） -->
           <div class="adv-inline">
-            <span class="dim diff-label">难度</span>
+            <span class="adv-label">难度</span>
             <el-select
               v-model="diffSel"
               multiple
               collapse-tags
               placeholder="全部"
               clearable
-              style="width: 200px"
+              class="adv-select"
               @change="onDiffChange"
             >
               <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
             </el-select>
-            <span class="dim diff-label">来源类型</span>
+            <span class="adv-label">来源类型</span>
             <el-select
               v-model="srcTypeSel"
               multiple
               collapse-tags
               placeholder="全部"
               clearable
-              style="width: 200px"
+              class="adv-select"
               @change="onSrcTypeChange"
             >
               <el-option
@@ -266,7 +278,7 @@ onMounted(() => {
                 :label="label"
               />
             </el-select>
-            <span class="dim diff-label">年份</span>
+            <span class="adv-label">年份</span>
             <el-select
               v-model="yearSel"
               multiple
@@ -276,11 +288,14 @@ onMounted(() => {
               filterable
               allow-create
               default-first-option
-              style="width: 160px"
+              class="adv-select adv-select-year"
               @change="onYearChange"
             >
               <el-option v-for="y in sourceYears" :key="y" :value="y" :label="String(y)" />
             </el-select>
+            <el-button v-if="activeAdvCount" link type="primary" class="adv-clear" @click="clearAdv">
+              清空
+            </el-button>
           </div>
         </div>
         <el-table
@@ -469,36 +484,56 @@ stripe
 .tag-row {
   display: flex;
   align-items: flex-start;
-  padding: 8px 12px;
+  padding: 8px 14px;
   background: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
   margin-bottom: 12px;
 }
 
-/* 筛选入口行（2026-10-23）：标签 / 高级筛选两个折叠开关并排 */
+/* 筛选入口行：「筛选」引导词 + 胶囊开关并排 */
 .filter-row {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 10px;
   margin-bottom: 12px;
 }
 
-/* 折叠开关（v0.12 高级筛选同款）：文字开关 + 展开面板；难度行样式沿用 */
+.filter-cap {
+  font-size: var(--soj-fs-body);
+  color: var(--el-text-color-secondary);
+}
+
+/* 折叠开关（圆角矩形，与站点标签/难度徽章同口径）：白底描边常态，悬停/展开转主色浅底；
+   角标计已选数（有已选即常显） */
 .adv-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  color: var(--el-color-primary);
-  cursor: pointer;
+  gap: 6px;
+  padding: 5px 14px;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
+  background: var(--el-bg-color);
+  color: var(--el-text-color-regular);
   font-size: var(--soj-fs-body);
+  line-height: 20px;
+  cursor: pointer;
   user-select: none;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
 
 .adv-toggle:hover {
-  text-decoration: underline;
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary-light-5);
+}
+
+.adv-toggle.open {
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+  border-color: var(--el-color-primary-light-7);
 }
 
 .adv-arrow {
+  font-size: var(--soj-fs-small);
   transition: transform 0.2s;
 }
 
@@ -506,13 +541,13 @@ stripe
   transform: rotate(180deg);
 }
 
-/* 收起时的已选条件数角标 */
+/* 已选条件数角标 */
 .adv-count {
-  min-width: 18px;
-  height: 18px;
-  line-height: 18px;
+  min-width: 17px;
+  height: 17px;
+  line-height: 17px;
   padding: 0 5px;
-  border-radius: 9px;
+  border-radius: 999px;
   background: var(--el-color-primary);
   color: var(--el-color-white);
   font-size: var(--soj-fs-small);
@@ -520,34 +555,40 @@ stripe
 }
 
 .adv-panel {
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
   margin-bottom: 12px;
 }
 
-/* 难度筛选行（v0.11）：与标签行同节奏 */
-.diff-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.adv-panel .diff-row:last-child {
-  margin-bottom: 2px;
-}
-
-/* 高级筛选一字排开（2026-10-23）：难度/来源/年份同行，窄屏自然折行 */
+/* 高级筛选一字排开：标签等宽 justify（难度/来源类型左右对齐），控件统一宽；窄屏自然折行 */
 .adv-inline {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 8px 10px;
   flex-wrap: wrap;
 }
 
-.diff-label {
+.adv-label {
+  flex: none;
+  width: 4em;
   font-size: var(--soj-fs-body);
+  color: var(--el-text-color-regular);
+  text-align: justify;
+  text-align-last: justify;
+}
+
+.adv-select {
+  width: 200px;
+}
+
+.adv-select-year {
+  width: 150px;
+}
+
+/* 一键清空钉在行尾 */
+.adv-clear {
+  margin-left: auto;
 }
 
 /* 实体名（题名）主色，整行可点击 */
