@@ -440,6 +440,10 @@ export interface BackupStatus {
   mode: 'uninitialized' | 'tier0' | 'tier1'
   last_backup_at: string | null
   last_backup_file: string | null
+  last_db_at?: string | null // 分层备份（v0.15.1）：每日库备最近一次
+  last_db_file?: string | null
+  last_media_at?: string | null // 每周数据卷备最近一次
+  last_media_file?: string | null
   guide?: string // 备份面板使用说明（Markdown，v0.8 起单一事实源；空 = 前端内置默认）
 }
 

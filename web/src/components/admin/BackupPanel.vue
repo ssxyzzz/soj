@@ -19,16 +19,42 @@ const userStore = useUserStore()
 // 清空保存即回退到这里的内容。
 const DEFAULT_BACKUP_GUIDE = `## 备份文件里有什么
 
-整个网站的完整快照：用户账号、题目、提交记录、班级与考试成绩、题面图片。下载到本机的和服务器自动留存的都是加密的（age 格式），没有钥匙谁也打不开。
+## 备份文件里有什么（分层备份）
 
-## 备份建议
+- **每日库备**（soj-backup-db-…）：用户账号、提交记录、班级与考试成绩、题目元数据——天天变的数据，保留 30 份；
+- **每周数据备**（soj-backup-media-…）：测试数据与题面图片——体积大头但很少变，保留 4 份；
+- **面板按钮** = 全量备份（上面两者合一，手动兜底用）。
 
-- 点一次「立即备份」= 本机下载一份 + 服务器自动留一份；
-- 建议每周备份一次，文件多存几处（网盘 + U 盘最稳妥）。
+所有备份都是加密的（age 格式），没有钥匙谁也打不开。
 
-## 恢复
+## 自动备份（服务器上装一次）
 
-网站出问题时，把备份文件放进 soj 目录，按上方命令交给会命令行的人执行。恢复会把整个网站还原到备份那一刻（覆盖现有数据，脚本会再让你确认一次）。
+在服务器上执行一条命令即可开启每天自动备份：
+
+\`\`\`
+cd ~/soj && ./scripts/backup.sh --install-cron
+\`\`\`
+
+装好后每天 04:17 自动库备 + 本地快照，每周日 04:20 数据卷备；日志在 backups/cron.log。
+
+**巡检口径**：本面板上方「每日库备」超过 **25 小时**没更新（红灯）= 自动备份没在跑，上服务器看 cron.log。
+
+## 备份纪律
+
+- 批量导入题目**当天**，手动点一次「立即备份」，把导入窗口纳入备份链；
+- 密文多存一处最稳（网盘 + U 盘）；服务器上还可配置异地副本（--offsite，见脚本注释）。
+
+## 恢复与演练
+
+网站出问题时，把备份文件放进 soj 目录，按上方命令交给会命令行的人执行。恢复会把整个网站还原到备份那一刻（覆盖现有数据，脚本会再让你确认一次）；db 层归档只还原数据库、不动题目数据。
+
+**每季度（或大考前）**拿最近一份备份跑一次校验，确认能解密、结构完整：
+
+\`\`\`
+./scripts/restore.sh <备份文件> --pull-key --verify
+\`\`\`
+
+> 没验证过恢复的备份等于没备份。
 
 ## 在自己的 Windows 电脑上查看备份内容
 
@@ -47,6 +73,13 @@ tar -xf backup.tar
 `
 
 const backupStatus = ref<BackupStatus | null>(null)
+
+// 每日库备红灯：最近一次 db 备份距今超 25 小时（cron 没跑/失败的最直观信号）
+const dbBackupStale = computed(() => {
+  const at = backupStatus.value?.last_db_at
+  if (!at) return false
+  return Date.now() - new Date(at).getTime() > 25 * 3600 * 1000
+})
 const backupLoading = ref(false)
 const backingUp = ref(false)
 const showOfflineKey = ref(false)
@@ -194,6 +227,20 @@ onMounted(loadBackup)
         </span>
         <span v-else class="muted">还没有备份过</span>
       </div>
+      <!-- 分层备份巡检（v0.15.1）：每日库备超 25 小时 = 自动备份没在跑，红灯 -->
+      <div v-if="backupStatus?.last_db_at || backupStatus?.last_media_at" class="tier-times">
+        <span class="muted">
+          每日库备：
+          <template v-if="backupStatus?.last_db_at">{{ new Date(backupStatus.last_db_at).toLocaleString() }}</template>
+          <template v-else>未开启</template>
+        </span>
+        <span class="muted">
+          每周数据备：
+          <template v-if="backupStatus?.last_media_at">{{ new Date(backupStatus.last_media_at).toLocaleString() }}</template>
+          <template v-else>未开启</template>
+        </span>
+        <el-tag v-if="dbBackupStale" type="danger" size="small">库备超 25 小时——自动备份可能没在跑</el-tag>
+      </div>
       <p class="backup-desc">{{ backupModeMeta[backupStatus?.mode ?? 'uninitialized']?.desc }}</p>
       <div v-if="userStore.can('backup.keys') && backupStatus?.mode !== 'tier1'" class="backup-actions">
         <el-button @click="enableOfflineKey">
@@ -298,6 +345,13 @@ onMounted(loadBackup)
 </template>
 
 <style scoped>
+.tier-times {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
 .backup-status {
   display: flex;
   align-items: center;

@@ -56,6 +56,7 @@ services:
     volumes:
       - testdata:/data/testdata
       - uploads:/data/uploads
+      - backup_snaps:/data/snaps # 备份本地硬链接快照（v0.15.1 每日回滚点，不进加密归档）
       - backup_data:/data/backups
       - backup_keys:/data/keys
       - ./data/seed:/data/seed:ro
@@ -68,6 +69,7 @@ services:
 volumes:
   mongo-data:
   testdata:
+  backup_snaps:
   uploads:
   backup_data:
   backup_keys:

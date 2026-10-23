@@ -4,6 +4,7 @@
 # 用法:
 #   ./scripts/restore.sh <soj-backup-*.v1.tar.age> <私钥文件> [--yes]
 #   ./scripts/restore.sh <soj-backup-*.v1.tar.age> --pull-key [--yes]   # Tier 0：私钥从服务器密钥卷取
+#   ./scripts/restore.sh <soj-backup-*.v1.tar.age> --pull-key --verify  # 只解密+完整性校验，不恢复（备份巡检用）
 #   ./scripts/restore.sh <旧版明文备份目录> [--yes]                       # 兼容 v0.4.9 前的目录式备份
 #
 # 注意:
@@ -14,7 +15,14 @@ set -euo pipefail
 
 ARCHIVE=${1:-}
 KEY=${2:-}
-YES=${3:-}
+VERIFY=0
+YES=0
+for arg in "${@:3}"; do
+  case "$arg" in
+    --verify) VERIFY=1 ;;
+    --yes) YES=1 ;;
+  esac
+done
 COMPOSE=${COMPOSE:-docker compose}
 
 [ -n "$ARCHIVE" ] || { echo "用法: $0 <soj-backup-*.v1.tar.age> <私钥文件|--pull-key> [--yes]"; exit 1; }
@@ -57,24 +65,49 @@ else
   exit 1
 fi
 
-[ -f "$WORK/mongo.archive.gz" ] && [ -f "$WORK/testdata.tar.gz" ] \
-  || { echo "!! 归档内缺少 mongo.archive.gz / testdata.tar.gz（版本不符？）"; exit 1; }
-
 echo "归档内容："
 ls -lh "$WORK" | grep -Ev "^total|^d" || true
 
-if [ "$YES" != "--yes" ]; then
+# --verify：只解密 + 完整性校验（gzip/tar 结构），不恢复——备份巡检/演练第一步
+if [ "$VERIFY" = "1" ]; then
+  NEED_DB=0
+  case "$ARCHIVE" in
+    *soj-backup-db-*) NEED_DB=1 ;;
+    *) [ -f "$WORK/mongo.archive.gz" ] && NEED_DB=1 ;;
+  esac
+  if [ "$NEED_DB" = "1" ] && [ ! -f "$WORK/mongo.archive.gz" ]; then
+    echo "!! db 层归档缺少 mongo.archive.gz"; exit 1
+  fi
+  for gz in "$WORK"/*.gz; do
+    [ -e "$gz" ] || continue
+    gzip -t "$gz" || { echo "!! 完整性校验失败: $(basename "$gz")"; exit 1; }
+    echo "gzip 校验通过: $(basename "$gz")"
+  done
+  echo "✅ 归档可解密、结构完整（未执行恢复）"
+  exit 0
+fi
+
+[ -f "$WORK/mongo.archive.gz" ] || [ -f "$WORK/testdata.tar.gz" ] \
+  || { echo "!! 归档内缺少 mongo.archive.gz / testdata.tar.gz（版本不符？）"; exit 1; }
+
+if [ "$YES" != "1" ]; then
   echo ""
   echo "警告：恢复将【覆盖】现有数据库（mongorestore --drop）与测试数据卷。"
   read -r -p "确认恢复？输入 yes 继续: " ANSWER
   [ "$ANSWER" = "yes" ] || { echo "已取消"; exit 1; }
 fi
 
-echo "==> 恢复 MongoDB（--drop 覆盖）"
-$COMPOSE exec -T mongo mongorestore --drop --archive --gzip < "$WORK/mongo.archive.gz"
+if [ -f "$WORK/mongo.archive.gz" ]; then
+  echo "==> 恢复 MongoDB（--drop 覆盖）"
+  $COMPOSE exec -T mongo mongorestore --drop --archive --gzip < "$WORK/mongo.archive.gz"
+fi
 
-echo "==> 恢复测试数据卷"
-$COMPOSE exec -T soj sh -c 'tar -xzf - -C /data/testdata' < "$WORK/testdata.tar.gz"
+if [ -f "$WORK/testdata.tar.gz" ]; then
+  echo "==> 恢复测试数据卷"
+  $COMPOSE exec -T soj sh -c 'tar -xzf - -C /data/testdata' < "$WORK/testdata.tar.gz"
+else
+  echo "==> db 层归档：仅恢复数据库（测试数据卷不动）"
+fi
 
 if [ -f "$WORK/uploads.tar.gz" ]; then
   echo "==> 恢复题面图片"

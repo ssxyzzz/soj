@@ -27,7 +27,8 @@ import (
 func main() {
 	judgeOnly := flag.Bool("judge-only", false, "只运行判题线程池，不启动 HTTP 服务")
 	importDir := flag.String("import", "", "导入一个题目目录后退出")
-	backupRun := flag.Bool("backup-run", false, "执行一次全站加密备份后退出")
+	backupRun := flag.Bool("backup-run", false, "执行一次加密备份后退出")
+	backupTier := flag.String("backup-tier", "all", "备份分层：db=每日库备 | media=每周数据卷 | all=全量")
 	flag.Parse()
 
 	cfg := config.Load()
@@ -60,12 +61,16 @@ func main() {
 	// 备份模式：执行一次全站加密备份后退出（供 scripts/backup.sh 与 cron 调用，
 	// 与管理后台 /admin/backup/run 走 internal/backup 同一模块、同一密钥卷）
 	if *backupRun {
+		if !backup.ValidTier(*backupTier) {
+			log.Fatalf("[backup] 未知分层 %q（可用：db / media / all）", *backupTier)
+		}
 		path, err := backup.Run(ctx, backup.Options{
 			MongoURI:   cfg.MongoURI,
 			DataDir:    cfg.DataDir,
 			UploadsDir: cfg.UploadsDir,
 			BackupDir:  cfg.BackupDir,
 			KeysDir:    cfg.KeysDir,
+			Tier:       *backupTier,
 		})
 		if err != nil {
 			log.Fatalf("[backup] %v", err)
