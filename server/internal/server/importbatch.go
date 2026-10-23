@@ -45,6 +45,7 @@ type batchResult struct {
 type batchImportJob struct {
 	mu        sync.Mutex
 	State     string // running | done | cancelled | failed
+	Phase     string // extracting（解压+识别，total 未定）| importing（逐题导入，total 已定）——v0.18.2
 	Source    string // soj | hydro
 	Total     int
 	Done      int
@@ -58,6 +59,8 @@ type batchImportJob struct {
 	// 已存在则跳过（防导出包重复导回），不存在则以该题号落库（幂等：同包重导全跳过；
 	// 存在即跳过故不可能顶掉既有题）
 	SkipExistingPID bool
+	ExtractDone     int64 // v0.18.2 解压实时进度（已解压字节；快照带出）
+	ExtractTotal    int64 // 解压总字节（预检遍历得出，写第一个条目前已知）
 	cancel          context.CancelFunc // 立马取消：中断在途识别
 	cancelled       bool
 }
@@ -80,6 +83,15 @@ func (j *batchImportJob) isCancelled() bool {
 func (j *batchImportJob) setTotal(n int) {
 	j.mu.Lock()
 	j.Total = n
+	j.Phase = "importing" // total 落定，进入逐题导入阶段
+	j.mu.Unlock()
+}
+
+// setExtract 解压实时进度（每写完一个 zip 条目回调一次；写多读少，直接锁内赋值）
+func (j *batchImportJob) setExtract(done, total int64) {
+	j.mu.Lock()
+	j.ExtractDone = done
+	j.ExtractTotal = total
 	j.mu.Unlock()
 }
 
@@ -114,11 +126,17 @@ func (j *batchImportJob) snapshot() gin.H {
 			skipN++
 		}
 	}
+	// v0.18.2 修复：Results 为 nil 时 append 出 nil 切片，JSON 序列化成 null——前端
+	// results.slice 直接崩渲染（解压全程与终态 failed 都没有任何结果，恰是用户必经帧）。
+	// 恒返回数组。
+	results := make([]batchResult, len(j.Results))
+	copy(results, j.Results)
 	return gin.H{
-		"state": j.State, "source": j.Source, "total": j.Total, "done": j.Done,
+		"state": j.State, "phase": j.Phase, "source": j.Source, "total": j.Total, "done": j.Done,
 		"ok_count": okN, "fail_count": failN, "skip_count": skipN,
-		"results": append([]batchResult(nil), j.Results...),
-		"error":   j.Err, "by": j.ByName,
+		"results": results, "extract_done": j.ExtractDone, "extract_total": j.ExtractTotal,
+		"error": j.Err,
+		"by":    j.ByName,
 		"started_at": j.StartedAt, "ended_at": j.EndedAt,
 	}
 }
@@ -169,7 +187,7 @@ func (h *Handlers) StartImport(c *gin.Context) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	job := &batchImportJob{State: "running", ByUID: uid, ByName: uname, StartedAt: time.Now(), cancel: cancel}
+	job := &batchImportJob{State: "running", Phase: "extracting", ByUID: uid, ByName: uname, StartedAt: time.Now(), cancel: cancel}
 	h.batch = job
 	h.batchMu.Unlock()
 
@@ -255,7 +273,9 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 		maxEntries = 2000
 	}
 	if err := safeExtractZipLimits(zipPath, tmpDir, maxEntries, int64(zipMB)*2<<20, int64(problemMB)<<20,
-		fmt.Sprintf("%dMB", problemMB), fmt.Sprintf("%dMB", zipMB*2)); err != nil {
+		fmt.Sprintf("%dMB", problemMB), fmt.Sprintf("%dMB", zipMB*2), func(done, total int64) {
+			job.setExtract(done, total) // v0.18.2 解压实时进度
+		}); err != nil {
 		job.finish("failed", "题包不合法："+err.Error())
 		return
 	}

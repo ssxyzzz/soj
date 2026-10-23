@@ -230,9 +230,17 @@ export const sourcesApi = {
 
 // 题包导入（v0.15 统一格式）：独立 /import 页按来源（soj|hydro）适配；problem.create 权限
 export const importApi = {
-  upload: (form: FormData) =>
+  upload: (form: FormData, onProgress?: (pct: number) => void) =>
     client
-      .post<ApiResponse<{ started: boolean; source: string }>>('/import', form, { timeout: 0 })
+      .post<ApiResponse<{ started: boolean; source: string }>>('/import', form, {
+        timeout: 0,
+        // v0.18.2：XHR 上传进度（巨型题包上传期不再盲等转圈）
+        onUploadProgress: onProgress
+          ? (e) => {
+              if (e.total) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)))
+            }
+          : undefined,
+      })
       .then((r) => r.data.data),
   status: () => get<BatchImportStatus>('/import/status'),
   cancel: () => post<{ cancel_requested: boolean }>('/import/cancel'),

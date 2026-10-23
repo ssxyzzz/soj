@@ -93,12 +93,18 @@ export interface BatchImportResult {
 // 导入任务进度快照（GET /admin/problems/import/status）
 export interface BatchImportStatus {
   state: 'idle' | 'running' | 'done' | 'cancelled' | 'failed'
+  /** v0.18.2 导入阶段：extracting = 解压+识别中（total 未定，前端出不定态提示）| importing = 逐题导入 */
+  phase?: 'extracting' | 'importing'
+  /** v0.18.2 解压实时进度（字节；extracting 期有值，前端换算百分比） */
+  extract_done?: number
+  extract_total?: number
   total: number
   done: number
   ok_count: number
   fail_count: number
   skip_count: number
-  results: BatchImportResult[]
+  /** 后端恒返回数组（v0.18.2 修复）；类型上保留可空以防御旧后端/异常帧 */
+  results?: BatchImportResult[] | null
   error?: string
   by?: string
   started_at?: string

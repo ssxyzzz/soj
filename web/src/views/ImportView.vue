@@ -3,7 +3,7 @@
 // 第一步选来源（SOJ / Hydro 本期实做；QDUOJ / HOJ 下期置灰），每种来源独立适配器：
 // SOJ = problem.md 定题目目录 + data/ 数据；Hydro = 官方导出包（problem_zh.md 题面 + testdata/）。
 // 上传后原地轮询进度（逐题结果流），取消立马生效（已导入保留）；全站单任务排队。
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
@@ -32,10 +32,22 @@ const defaultHidden = ref(false)
 // 且该题号已存在 → 跳过不导入（防导出包重复导回造成重复题；不覆盖既有题）
 const skipExistingPID = ref(false)
 const starting = ref(false)
+// v0.18.2 上传进度（XHR onUploadProgress 驱动；-1 = 非上传态）
+const uploadPct = ref(-1)
 
 const status = ref<BatchImportStatus>({ state: 'idle', total: 0, done: 0, ok_count: 0, fail_count: 0, skip_count: 0, results: [] })
 const running = computed(() => status.value.state === 'running')
 const finished = computed(() => ['done', 'cancelled', 'failed'].includes(status.value.state))
+// v0.18.2 解压+识别阶段（total 未定，前端出不定态提示而非 0% 假进度；旧后端无 phase 时以 total===0 兜底）
+const extracting = computed(
+  () => running.value && (status.value.phase === 'extracting' || status.value.total === 0),
+)
+// 解压实时百分比（按字节；null = 后端还没报出总量 → 不定态兜底）
+const extractPct = computed(() => {
+  const t = status.value.extract_total ?? 0
+  if (!t) return null
+  return Math.min(100, Math.round(((status.value.extract_done ?? 0) / t) * 100))
+})
 
 let timer: ReturnType<typeof setInterval> | undefined
 let loadSeq = 0
@@ -72,6 +84,12 @@ onMounted(() => {
 
 onBeforeUnmount(stopPolling)
 
+// v0.18.2 终态清空文件列表：表单常驻后 el-upload 的 limit=1 会因残留旧文件拦截新选择
+// （on-exceed 而非 on-change，旧文件被原样再传一遍）。终态 = 上一批已完结，清列表放行新包。
+watch(finished, (done) => {
+  if (done) fileList.value = []
+})
+
 function onZipChange(_file: UploadUserFile, files: UploadUserFile[]) {
   fileList.value = files.slice(-1)
 }
@@ -91,6 +109,7 @@ async function startImport() {
     return
   }
   starting.value = true
+  uploadPct.value = 0
   try {
     const fd = new FormData()
     fd.append('source', source.value)
@@ -98,7 +117,9 @@ async function startImport() {
     if (skipSameTitle.value) fd.append('skip_same_title', '1')
     if (defaultHidden.value) fd.append('default_hidden', '1')
     if (source.value === 'soj' && skipExistingPID.value) fd.append('skip_existing_pid', '1')
-    await importApi.upload(fd)
+    await importApi.upload(fd, (pct) => {
+      uploadPct.value = pct
+    })
     ElMessage.success('导入已开始')
     await refreshStatus()
     ensurePolling()
@@ -106,6 +127,7 @@ async function startImport() {
     // 错误提示由 axios 拦截器统一弹出（如 409 已有任务进行中）
   } finally {
     starting.value = false
+    uploadPct.value = -1
   }
 }
 
@@ -180,14 +202,14 @@ const progressPct = computed(() => {
   return Math.round((s.done / s.total) * 100)
 })
 
-const reversedResults = computed(() => [...status.value.results].reverse())
-
-function resetForNextBatch() {
-  ++loadSeq
-  stopPolling()
-  status.value = { state: 'idle', total: 0, done: 0, ok_count: 0, fail_count: 0, skip_count: 0, results: [] }
-  fileList.value = []
-}
+// v0.18.2 限窗：running 期只渲染最近 50 条——几百题的大包不再每秒整列重渲染
+// （?? [] 防御：任务启动/终态 failed 时后端快照可能没有 results 字段）
+const RESULT_WINDOW = 50
+const reversedResults = computed(() => (status.value.results ?? []).slice(-RESULT_WINDOW).reverse())
+// v0.18.2 终态：全量列出失败/跳过项（成功的靠汇总计数，几百条成功不刷屏）；正序成报告
+const finishedIssues = computed(() =>
+  finished.value ? (status.value.results ?? []).filter((r) => r.status !== 'ok') : [],
+)
 </script>
 
 <template>
@@ -207,8 +229,8 @@ function resetForNextBatch() {
         目录名数字前缀不指定题号，题号一律自动分配。
       </div>
 
-      <!-- 第一步：选来源（每来源独立适配器，不做混合嗅探） -->
-      <div v-if="!running && !finished" class="source-grid">
+      <!-- 第一步：选来源（每来源独立适配器，不做混合嗅探；v0.18.2 表单常驻：终态后直接换包再导） -->
+      <div v-if="!running" class="source-grid">
         <div
           v-for="s in sources"
           :key="s.id"
@@ -224,58 +246,68 @@ function resetForNextBatch() {
         </div>
       </div>
 
-      <template v-if="!finished">
-        <el-upload
-          v-model:file-list="fileList"
-          class="import-drop"
-          drag
-          accept=".zip"
-          :limit="1"
-          :auto-upload="false"
-          :disabled="running"
-          :on-change="onZipChange"
-          :on-remove="onZipRemove"
-        >
-          <div class="drop-hint">
-            <p>{{ running ? '导入进行中，等待完成或取消' : '拖入题包 zip 或点击选择' }}</p>
-            <p class="dim">单题数据 ≤100MB、整包 ≤2GB（root 可在系统设置调整）；题多分批传</p>
-          </div>
-        </el-upload>
+      <el-upload
+        v-model:file-list="fileList"
+        class="import-drop"
+        drag
+        accept=".zip"
+        :limit="1"
+        :auto-upload="false"
+        :disabled="running"
+        :on-change="onZipChange"
+        :on-remove="onZipRemove"
+      >
+        <div class="drop-hint">
+          <p>{{ running ? '导入进行中，等待完成或取消' : '拖入题包 zip 或点击选择' }}</p>
+          <p class="dim">单题数据 ≤100MB、整包 ≤2GB（root 可在系统设置调整）；题多分批传</p>
+        </div>
+      </el-upload>
 
-        <div class="switch-row">
-          <el-switch v-model="skipSameTitle" :disabled="running" />
-          <span>同标题跳过</span>
-          <el-tooltip placement="top" content="开启后题库里已有同标题题的目录直接跳过（迁移场景防手抖重复导）；默认关 = 同标题照样新建新题">
-            <el-icon class="dim"><QuestionFilled /></el-icon>
-          </el-tooltip>
-        </div>
-        <div class="switch-row">
-          <el-switch v-model="defaultHidden" :disabled="running" />
-          <span>导入后默认隐藏</span>
-          <el-tooltip placement="top" content="导入的题默认公开可见；开启后未在 yaml 里声明 hidden 的题一律先隐藏，整理完再放开">
-            <el-icon class="dim"><QuestionFilled /></el-icon>
-          </el-tooltip>
-        </div>
-        <div v-if="source === 'soj'" class="switch-row">
-          <el-switch v-model="skipExistingPID" :disabled="running" />
-          <span>已存在题号跳过</span>
-          <el-tooltip placement="top" content="题库「打包导出」的包目录名带题号前缀（题号_标题）：开启后题号已存在的目录直接跳过（防导出包重复导回造成重复题，不覆盖既有题）；题号不存在则正常导入（自动取新题号）">
-            <el-icon class="dim"><QuestionFilled /></el-icon>
-          </el-tooltip>
-        </div>
+      <div class="switch-row">
+        <el-switch v-model="skipSameTitle" :disabled="running" />
+        <span>同标题跳过</span>
+        <el-tooltip placement="top" content="开启后题库里已有同标题题的目录直接跳过（迁移场景防手抖重复导）；默认关 = 同标题照样新建新题">
+          <el-icon class="dim"><QuestionFilled /></el-icon>
+        </el-tooltip>
+      </div>
+      <div class="switch-row">
+        <el-switch v-model="defaultHidden" :disabled="running" />
+        <span>导入后默认隐藏</span>
+        <el-tooltip placement="top" content="导入的题默认公开可见；开启后未在 yaml 里声明 hidden 的题一律先隐藏，整理完再放开">
+          <el-icon class="dim"><QuestionFilled /></el-icon>
+        </el-tooltip>
+      </div>
+      <div v-if="source === 'soj'" class="switch-row">
+        <el-switch v-model="skipExistingPID" :disabled="running" />
+        <span>已存在题号跳过</span>
+        <el-tooltip placement="top" content="题库「打包导出」的包目录名带题号前缀（题号_标题）：开启后题号已存在的目录直接跳过（防导出包重复导回造成重复题，不覆盖既有题）；题号不存在则正常导入（自动取新题号）">
+          <el-icon class="dim"><QuestionFilled /></el-icon>
+        </el-tooltip>
+      </div>
 
-        <div class="actions">
-          <el-button type="primary" :loading="starting" :disabled="running || !fileList.length" @click="startImport">
-            上传并导入
-          </el-button>
-          <el-button v-if="running" type="warning" plain @click="cancelImport">取消导入</el-button>
-        </div>
-      </template>
+      <!-- v0.18.2 上传实时进度（onUploadProgress；巨型包上传期不再是盲转圈） -->
+      <div v-if="uploadPct >= 0" class="upload-progress">
+        <el-progress :percentage="uploadPct" :stroke-width="8" />
+      </div>
 
-      <!-- 进度与结果流（running 与结束态共用；结束后出汇总报告） -->
+      <div class="actions">
+        <el-button type="primary" :loading="starting" :disabled="running || !fileList.length" @click="startImport">
+          {{ uploadPct >= 0 ? `上传中 ${uploadPct}%` : '上传并导入' }}
+        </el-button>
+        <el-button v-if="running" type="warning" plain @click="cancelImport">取消导入</el-button>
+      </div>
+
+      <!-- 进度与结果流（running 与结束态共用；结束后出汇总报告，表单已恢复可再导） -->
       <div v-if="status.state !== 'idle'" class="progress-block">
-        <el-progress :percentage="progressPct" :status="status.state === 'done' ? 'success' : undefined" />
-        <div v-if="running" class="dim progress-line">
+        <el-progress
+          :percentage="extracting ? (extractPct ?? 0) : progressPct"
+          :indeterminate="extracting && extractPct === null"
+          :status="status.state === 'done' ? 'success' : undefined"
+        />
+        <div v-if="extracting" class="dim progress-line">
+          正在解压题包…{{ extractPct !== null ? ` ${extractPct}%` : '（大包可能需要一两分钟）' }}
+        </div>
+        <div v-else-if="running" class="dim progress-line">
           已导入 {{ status.done }}/{{ status.total }}（成功 {{ status.ok_count }} · 跳过 {{ status.skip_count }} · 失败 {{ status.fail_count }}）<span v-if="status.by">，发起人 {{ status.by }}</span>
         </div>
         <div v-else class="progress-line">
@@ -287,12 +319,24 @@ function resetForNextBatch() {
             <span v-if="status.state === 'cancelled'">（已取消，未导入的目录不再处理）</span>
           </template>
         </div>
-        <div v-if="reversedResults.length" class="result-stream">
+        <!-- 结果流：running = 最近 50 条滚动；终态 = 失败/跳过全量列出（成功靠汇总计数） -->
+        <div v-if="running && reversedResults.length" class="result-stream">
+          <div class="result-stream-head dim">
+            结果流{{ (status.results?.length ?? 0) > RESULT_WINDOW ? `（仅显示最近 ${RESULT_WINDOW} 条 / 共 ${status.results?.length} 条）` : '' }}
+          </div>
           <div v-for="(r, i) in reversedResults" :key="i" class="result-line" :class="resultClass(r.status)">
             {{ resultLine(r) }}
           </div>
         </div>
-        <el-button v-if="finished" text type="primary" @click="resetForNextBatch">再导一批</el-button>
+        <div v-else-if="finished && finishedIssues.length" class="result-stream">
+          <div class="result-stream-head dim">失败 / 跳过（全部列出，共 {{ finishedIssues.length }} 条）</div>
+          <div v-for="(r, i) in finishedIssues" :key="i" class="result-line" :class="resultClass(r.status)">
+            {{ resultLine(r) }}
+          </div>
+        </div>
+        <div v-else-if="finished && status.state !== 'failed'" class="result-stream">
+          <div class="result-line is-ok">全部导入成功，无失败 / 跳过项</div>
+        </div>
       </div>
     </el-card>
 
@@ -393,6 +437,10 @@ function resetForNextBatch() {
   margin-top: 12px;
 }
 
+.upload-progress {
+  margin-top: 14px;
+}
+
 .actions {
   display: flex;
   gap: 8px;
@@ -418,6 +466,11 @@ function resetForNextBatch() {
   border-radius: var(--el-border-radius-base);
   padding: 8px 12px;
   margin-top: 8px;
+}
+
+.result-stream-head {
+  margin-bottom: 4px;
+  font-size: var(--soj-fs-small);
 }
 
 .result-line {

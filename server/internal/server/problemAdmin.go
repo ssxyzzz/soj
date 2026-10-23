@@ -914,21 +914,24 @@ func parsePositiveFloat(s string, def float64) float64 {
 
 // safeExtractZip 把 zip 解压到 dst：拒绝穿越成分、条目数与解压总量超限。
 func safeExtractZip(zipPath, dst string) error {
-	return safeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "20MB", "200MB")
+	return safeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "20MB", "200MB", nil)
 }
 
 // safeExtractZipLimits 参数化限额版（批量导入：整包 GB 级、条目随限额放宽）。
-func safeExtractZipLimits(zipPath, dst string, maxEntries int, maxTotal, maxSingle int64, singleMBHint, totalMBHint string) error {
+// progress（可 nil）：每写完一个条目回调（已解压字节, 总字节）——批量导入用它做解压实时进度。
+func safeExtractZipLimits(zipPath, dst string, maxEntries int, maxTotal, maxSingle int64, singleMBHint, totalMBHint string, progress func(done, total int64)) error {
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return errors.New("不是合法的 zip 文件")
 	}
 	defer zr.Close()
 	dstRoot := filepath.Clean(dst)
-	total := int64(0)
 	if len(zr.File) > maxEntries {
 		return errors.New("压缩包条目过多")
 	}
+	// 预检遍历：路径合法性/单文件/总量限额 + 汇总总字节（进度分母），
+	// 与写盘遍历分离——回调的 total 在写第一个文件前就已知
+	total := int64(0)
 	for _, f := range zr.File {
 		name := f.Name
 		if strings.Contains(name, "..") || strings.HasPrefix(name, "/") || strings.Contains(name, "\\") {
@@ -944,7 +947,13 @@ func safeExtractZipLimits(zipPath, dst string, maxEntries int, maxTotal, maxSing
 		if total > maxTotal {
 			return fmt.Errorf("压缩包解压总量超过 %s", totalMBHint)
 		}
-		dest := filepath.Join(dstRoot, filepath.FromSlash(path.Clean("/"+name)))
+	}
+	done := int64(0)
+	for _, f := range zr.File {
+		if f.Mode().IsDir() {
+			continue
+		}
+		dest := filepath.Join(dstRoot, filepath.FromSlash(path.Clean("/"+f.Name)))
 		if !strings.HasPrefix(dest, dstRoot+string(os.PathSeparator)) {
 			return errors.New("压缩包含非法路径")
 		}
@@ -967,6 +976,10 @@ func safeExtractZipLimits(zipPath, dst string, maxEntries int, maxTotal, maxSing
 		}
 		out.Close()
 		rc.Close()
+		done += int64(f.UncompressedSize64)
+		if progress != nil {
+			progress(done, total)
+		}
 	}
 	return nil
 }
