@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
 
 import { authApi, problemApi, rankApi, sourcesApi } from '@/api'
 import { downloadFile } from '@/api/download'
@@ -40,6 +40,8 @@ const list = ref<ProblemListItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 50
+// 底部完整翻页的末页页码（EP pagination 无 first/last，首页/末页按钮自拼）
+const lastPage = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const loading = ref(false)
 const keyword = ref('')
 const tagSel = ref<number[]>([])
@@ -336,11 +338,20 @@ stripe
             </template>
           </el-table-column>
         </el-table>
-        <!-- 主列底部额外翻页（2026-10-23 验收）：居中、控件齐全（首页/上一页/页码/下一页/末页）；搜索行分页保留 -->
+        <!-- 主列底部额外翻页（2026-10-23 验收）：居中、控件齐全——首页/末页按钮自拼
+             （EP pagination 的 layout 不支持 first/last，写上会被静默忽略）；搜索行分页保留 -->
         <div class="table-pager">
+          <el-button
+            class="pg-edge"
+            :disabled="page === 1"
+            title="第一页"
+            @click="onPageChange(1)"
+          >
+            <el-icon><DArrowLeft /></el-icon>
+          </el-button>
           <el-pagination
             background
-            layout="slot, first, prev, pager, next, last"
+            layout="slot, prev, pager, next"
             :total="total"
             :page-size="pageSize"
             :current-page="page"
@@ -348,6 +359,14 @@ stripe
           >
             <span class="dim">共 {{ total }} 题</span>
           </el-pagination>
+          <el-button
+            class="pg-edge"
+            :disabled="page === lastPage"
+            title="最后一页"
+            @click="onPageChange(lastPage)"
+          >
+            <el-icon><DArrowRight /></el-icon>
+          </el-button>
         </div>
       </el-card>
 
@@ -432,7 +451,14 @@ stripe
 .table-pager {
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 8px;
   margin-top: 16px;
+}
+
+/* 自拼的首页/末页按钮：观感对齐 EP 分页的 background 按钮 */
+.pg-edge {
+  padding: 8px;
 }
 
 .tag-row {
