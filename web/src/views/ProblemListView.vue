@@ -130,8 +130,10 @@ function onSrcTypeChange(ts: string[]) {
   load()
 }
 
-function onYearChange(ys: number[]) {
-  yearSel.value = ys
+function onYearChange(ys: (number | string)[]) {
+  // allow-create 手输的是字符串：归一为整数年份，非法输入（NaN/超界）丢弃、去重
+  const norm = [...new Set(ys.map((v) => Number(v)).filter((v) => Number.isInteger(v) && v >= 1900 && v <= 2100))]
+  yearSel.value = norm
   page.value = 1
   load()
 }
@@ -228,7 +230,8 @@ onMounted(() => {
           <TagFilter :selected="tagSel" @change="onTagChange" />
         </div>
         <div v-show="advOpen" class="adv-panel">
-          <div class="diff-row">
+          <!-- 三路筛选一字排开（2026-10-23 验收调整）；年份可输入（候选外年份允许手输） -->
+          <div class="adv-inline">
             <span class="dim diff-label">难度</span>
             <el-select
               v-model="diffSel"
@@ -236,13 +239,11 @@ onMounted(() => {
               collapse-tags
               placeholder="全部"
               clearable
-              style="width: 220px"
+              style="width: 200px"
               @change="onDiffChange"
             >
               <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
             </el-select>
-          </div>
-          <div class="diff-row">
             <span class="dim diff-label">来源类型</span>
             <el-select
               v-model="srcTypeSel"
@@ -250,7 +251,7 @@ onMounted(() => {
               collapse-tags
               placeholder="全部"
               clearable
-              style="width: 220px"
+              style="width: 200px"
               @change="onSrcTypeChange"
             >
               <el-option
@@ -260,8 +261,6 @@ onMounted(() => {
                 :label="label"
               />
             </el-select>
-          </div>
-          <div class="diff-row">
             <span class="dim diff-label">年份</span>
             <el-select
               v-model="yearSel"
@@ -269,7 +268,10 @@ onMounted(() => {
               collapse-tags
               placeholder="全部"
               clearable
-              style="width: 220px"
+              filterable
+              allow-create
+              default-first-option
+              style="width: 160px"
               @change="onYearChange"
             >
               <el-option v-for="y in sourceYears" :key="y" :value="y" :label="String(y)" />
@@ -481,6 +483,14 @@ stripe
 
 .adv-panel .diff-row:last-child {
   margin-bottom: 2px;
+}
+
+/* 高级筛选一字排开（2026-10-23）：难度/来源/年份同行，窄屏自然折行 */
+.adv-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .diff-label {
