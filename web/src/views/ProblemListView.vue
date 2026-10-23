@@ -58,6 +58,8 @@ const activeAdvCount = computed(
 const canExport = computed(() => userStore.can('problem.data.download'))
 const selected = ref<Set<number>>(new Set())
 const exporting = ref(false)
+// 选择模式：点「打包导出」进入（左侧勾选框出现），导出完成或点「完成选择」退出
+const picking = ref(false)
 // reserve-selection：el-table 跨页保留勾选，selection-change 回调给全量已选行
 function onSelChange(rows: ProblemListItem[]) {
   selected.value = new Set(rows.map((r) => r.id))
@@ -69,6 +71,7 @@ async function exportSelected() {
     const ids = [...selected.value].sort((a, b) => a - b).join(',')
     await downloadFile(`/problems/export?ids=${ids}`, `soj-packages-${selected.value.size}.zip`)
     selected.value = new Set()
+    picking.value = false
   } finally {
     exporting.value = false
   }
@@ -270,7 +273,7 @@ stripe
           @row-click="(row: ProblemListItem) => problemRoute(row)"
           @selection-change="onSelChange"
         >
-          <el-table-column v-if="canExport" type="selection" width="42" reserve-selection :selectable="() => true" />
+          <el-table-column v-if="canExport && picking" type="selection" width="48" reserve-selection :selectable="() => true" />
           <el-table-column prop="id" label="ID" width="100" />
           <el-table-column v-if="userStore.token" label="状态" width="150">
             <template #default="{ row }">
@@ -319,31 +322,37 @@ stripe
       </el-card>
 
     <template #aside>
-      <el-card v-if="canExport" class="aside-card">
-        <template #header><span>打包导出</span></template>
-        <div class="entry-actions">
-          <el-button
-            type="primary"
-            style="width: 100%"
-            :loading="exporting"
-            :disabled="!selected.size"
-            @click="exportSelected"
-          >
-            导出已选（{{ selected.size }}）
-          </el-button>
-          <div v-if="selected.size" class="dim tip">
-            已选 {{ selected.size }} 题；勾选跨翻页/筛选保留，导出为 v0.15 统一格式题包 zip
-          </div>
-          <div v-else class="dim tip">在题目列表勾选后打包导出（目录 = 题号_标题，与单题下载同格式；受每日限额约束）</div>
-        </div>
-      </el-card>
-      <el-card v-if="userStore.can('problem.create')" class="aside-card">
+      <el-card v-if="userStore.can('problem.create') || canExport" class="aside-card">
         <template #header><span>题目管理</span></template>
         <div class="entry-actions">
-          <el-button type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
-          <el-button style="width: 100%" @click="router.push('/import')">导入题目</el-button>
+          <el-button v-if="userStore.can('problem.create')" type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
+          <el-button v-if="userStore.can('problem.create')" style="width: 100%" @click="router.push('/import')">导入题目</el-button>
+          <!-- 打包导出（v0.18.1）：点开进入选择模式（左侧勾选框出现），导出或完成退出 -->
+          <template v-if="canExport">
+            <el-button v-if="!picking" style="width: 100%" @click="picking = true">打包导出</el-button>
+            <template v-else>
+              <el-button
+                type="primary"
+                style="width: 100%"
+                :loading="exporting"
+                :disabled="!selected.size"
+                @click="exportSelected"
+              >
+                导出已选（{{ selected.size }}）
+              </el-button>
+              <el-button
+                style="width: 100%"
+                @click="picking = false; selected = new Set()"
+              >
+                完成选择
+              </el-button>
+            </template>
+          </template>
         </div>
-        <div class="dim tip">新增题在表单里写题面、zip 只收数据/配置；题包（含题面）批量导入走「导入题目」</div>
+        <div class="dim tip">
+          <template v-if="picking">勾选跨翻页/筛选保留；导出目录 = 题号_标题，与单题下载同格式，受每日限额约束</template>
+          <template v-else>新增题在表单里写题面、zip 只收数据/配置；题包（含题面）批量导入走「导入题目」</template>
+        </div>
       </el-card>
 
       <el-card class="aside-card">
@@ -372,6 +381,12 @@ stripe
 </template>
 
 <style scoped>
+/* 打包导出选择模式的勾选框放大（验收反馈：默认太小）——矢量绘制，scale 不糊；
+   行勾选与表头全选一并放大 */
+:deep(.el-table-column--selection .el-checkbox) {
+  transform: scale(1.35);
+}
+
 .search-row {
   display: flex;
   align-items: center;
