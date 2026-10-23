@@ -96,7 +96,6 @@ export interface BatchImportStatus {
   total: number
   done: number
   ok_count: number
-  updated_count: number // 按题号覆盖更新的题数（v0.18.1 覆盖模式）
   fail_count: number
   skip_count: number
   results: BatchImportResult[]
@@ -393,6 +392,20 @@ export interface SecurityLogItem {
   ip: string
   ua: string
   detail: string
+}
+
+// 重复题扫描（v0.18.1）：同「标题+题面」的疑似重复组，只列出不自动删
+export interface DuplicateGroup {
+  title: string
+  preview: string // 题面前 80 字
+  problems: {
+    id: number
+    title: string
+    type: string
+    hidden: boolean
+    created_by: number
+    created_at: string
+  }[]
 }
 
 // ---------- 个人设置（v0.4.8） ----------

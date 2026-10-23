@@ -236,6 +236,8 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.PUT("/tagtree", RequireRoot(), h.AdminReplaceTagTree)
 				// 保存被删拦截后的解绑（一键全部/逐题），同 root 专属
 				adminG.POST("/tagtree/unbind", RequireRoot(), h.AdminUnbindTags)
+				// 重复题扫描（v0.18.1）：按标题+题面双键，只列出供管理员处置
+				adminG.GET("/problems/duplicates", RequirePerm(repo.PermProblemEditAll), h.AdminScanDuplicateProblems)
 
 				// 来源库（v0.12，root）：条目 CRUD + 转为标签；公开建议读走 /sources/meta
 				adminG.GET("/sources", RequireRoot(), h.AdminListSources)

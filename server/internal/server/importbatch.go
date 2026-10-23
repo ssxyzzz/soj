@@ -54,13 +54,12 @@ type batchImportJob struct {
 	ByName    string
 	StartedAt time.Time
 	EndedAt   time.Time
-	// 覆盖模式（v0.18.1「按题号覆盖更新」）：StartImport 时刻的编辑权限快照——
-	// 后台 job 无请求上下文，身份以任务启动时为准（导入耗时分钟级，权限中途变更不追溯）
-	Overwrite bool
-	EditAll   bool
-	EditOwn   bool
-	cancel    context.CancelFunc // 立马取消：中断在途识别
-	cancelled bool
+	// 按题号导入·已存在跳过（v0.18.1 验收调整：不覆盖）：目录名数字前缀 = 目标题号——
+	// 已存在则跳过（防导出包重复导回），不存在则以该题号落库（幂等：同包重导全跳过；
+	// 存在即跳过故不可能顶掉既有题）
+	SkipExistingPID bool
+	cancel          context.CancelFunc // 立马取消：中断在途识别
+	cancelled       bool
 }
 
 func (j *batchImportJob) cancelNow() {
@@ -104,13 +103,11 @@ func (j *batchImportJob) finish(state, errMsg string) {
 func (j *batchImportJob) snapshot() gin.H {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	okN, failN, skipN, updN := 0, 0, 0, 0
+	okN, failN, skipN := 0, 0, 0
 	for _, r := range j.Results {
 		switch r.Status {
 		case "ok":
 			okN++
-		case "updated":
-			updN++
 		case "failed":
 			failN++
 		case "skipped":
@@ -119,7 +116,7 @@ func (j *batchImportJob) snapshot() gin.H {
 	}
 	return gin.H{
 		"state": j.State, "source": j.Source, "total": j.Total, "done": j.Done,
-		"ok_count": okN, "fail_count": failN, "skip_count": skipN, "updated_count": updN,
+		"ok_count": okN, "fail_count": failN, "skip_count": skipN,
 		"results": append([]batchResult(nil), j.Results...),
 		"error":   j.Err, "by": j.ByName,
 		"started_at": j.StartedAt, "ended_at": j.EndedAt,
@@ -203,13 +200,10 @@ func (h *Handlers) StartImport(c *gin.Context) {
 	}
 	skipSame := formValue(form, "skip_same_title") == "1"
 	defaultHidden := formValue(form, "default_hidden") == "1"
-	// 覆盖模式仅 SOJ 源有意义（Hydro 包数字目录是官方包结构，已弃用 ID）
-	overwrite := source == "soj" && formValue(form, "overwrite_by_pid") == "1"
-	if overwrite {
+	// 按题号跳过仅 SOJ 源有意义（Hydro 包数字目录是官方包结构，已弃用 ID）
+	if source == "soj" && formValue(form, "skip_existing_pid") == "1" {
 		job.mu.Lock()
-		job.Overwrite = true
-		job.EditAll = hasPerm(c, repo.PermProblemEditAll)
-		job.EditOwn = hasPerm(c, repo.PermProblemEditOwn)
+		job.SkipExistingPID = true
 		job.mu.Unlock()
 	}
 
@@ -291,29 +285,18 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 		}
 		title := importDirTitle(dir)
 
-		// 覆盖模式（v0.18.1）：目录名带数字前缀 = 覆盖更新原题；无前缀目录仍走新建。
-		// 权限逐题预检——edit.all ∨ edit.own∧属主，与网页编辑同一门禁（root 恒过）；
-		// 前缀题号不存在/无权编辑该题报错跳过，不中断整批。
-		overwrite := job.Overwrite && repo.DirPID(name) > 0
-		if overwrite {
-			pid := repo.DirPID(name)
-			existing, err := h.repo.GetProblem(ctx, pid)
-			if repo.IsNotFound(err) {
-				job.addResult(batchResult{Name: name, Status: "failed", Title: title,
-					Reason: fmt.Sprintf("题号 %d 不存在（覆盖模式不自动新建）", pid)})
-				continue
-			}
-			if err != nil {
-				job.addResult(batchResult{Name: name, Status: "failed", Title: title, Reason: "读取原题失败"})
-				continue
-			}
-			if !(job.EditAll || (job.EditOwn && existing.CreatedBy == uid)) {
-				job.addResult(batchResult{Name: name, Status: "failed", Title: existing.Title,
-					Reason: fmt.Sprintf("无权编辑题 %d（覆盖更新需 problem.edit.all 或为该题创建者）", pid)})
-				continue
+		// 按题号导入·已存在跳过（v0.18.1 验收调整）：前缀题号已存在 → 跳过不覆盖；
+		// 不存在 → 以该题号落库（下方 Importer 认前缀）。无前缀目录恒走自动取号新建。
+		if job.SkipExistingPID {
+			if pid := repo.DirPID(name); pid > 0 {
+				if n, err := h.repo.Problems.CountDocuments(ctx, bson.M{"_id": pid}); err == nil && n > 0 {
+					job.addResult(batchResult{Name: name, Status: "skipped", Title: title,
+						Reason: fmt.Sprintf("题号 %d 已存在，跳过（不覆盖既有题）", pid)})
+					continue
+				}
 			}
 		}
-		if skipSame && !overwrite && title != "" {
+		if skipSame && title != "" {
 			if n, err := h.repo.Problems.CountDocuments(ctx, bson.M{"title": title}); err == nil && n > 0 {
 				job.addResult(batchResult{Name: name, Status: "skipped", Title: title, Reason: "题库已存在同标题题，按开关跳过"})
 				continue
@@ -329,20 +312,16 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 		}
 		pr, err := (&repo.Importer{
 			Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid,
-			IgnoreDirPID:  !job.Overwrite, // 覆盖模式认目录名题号前缀；纯新建维持防顶号
-			Overwrite:     overwrite,
+			// 按题号跳过模式认目录名前缀：不存在则以该号落库（存在已在上方跳过，
+			// 不可能顶号）；纯新建模式维持 v0.15 防顶号口径（前缀忽略、自动取号）
+			IgnoreDirPID:  !job.SkipExistingPID,
 			DefaultHidden: defaultHidden,
 		}).ImportDir(ctx, dir)
 		if err != nil {
 			job.addResult(batchResult{Name: name, Status: "failed", Title: title, Reason: err.Error()})
 			continue
 		}
-		if overwrite {
-			job.addResult(batchResult{Name: name, Status: "updated", PID: pr.ID, Title: pr.Title,
-				Reason: "已覆盖更新（题面/元数据/数据）；数据已变更，历史提交如需复核请手动重测"})
-		} else {
-			job.addResult(batchResult{Name: name, Status: "ok", PID: pr.ID, Title: pr.Title})
-		}
+		job.addResult(batchResult{Name: name, Status: "ok", PID: pr.ID, Title: pr.Title})
 	}
 	job.finish("done", "")
 }

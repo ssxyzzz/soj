@@ -35,6 +35,7 @@ import type {
   RankItem,
   RoleInfo,
   SecurityLogItem,
+  DuplicateGroup,
   Submission,
   SubmissionListResult,
   AdminTagTreeResult,
@@ -363,6 +364,8 @@ export const adminApi = {
       ...(type ? { type } : {}),
       ...(q ? { q } : {}),
     }),
+  // 重复题扫描（v0.18.1，problem.edit.all）：标题+题面双键，只列疑似重复组供处置
+  duplicateProblems: () => get<{ groups: DuplicateGroup[]; total: number }>('/admin/problems/duplicates'),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),

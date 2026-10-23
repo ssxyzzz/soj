@@ -9,6 +9,7 @@ import { useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 
 import BackupPanel from '@/components/admin/BackupPanel.vue'
+import DuplicateProblemsPanel from '@/components/admin/DuplicateProblemsPanel.vue'
 import LevelPanel from '@/components/admin/LevelPanel.vue'
 import NoticePanel from '@/components/admin/NoticePanel.vue'
 import RolesPanel from '@/components/admin/RolesPanel.vue'
@@ -22,28 +23,54 @@ import { useUserStore } from '@/stores/user'
 const userStore = useUserStore()
 const route = useRoute()
 
-const sections = ['users', 'roles', 'tags', 'sources', 'levels', 'security', 'notice', 'settings', 'backup'] as const
+const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'settings', 'backup'] as const
 type Section = (typeof sections)[number]
-const initial = (Array.isArray(route.query.section) ? route.query.section[0] : route.query.section) as Section | undefined
-const section = ref<Section>(initial && sections.includes(initial) ? initial : 'users')
+// 题目管理（v0.18.1 聚合）：标签树 / 来源库 / 重复题扫描三面板同页 tab 切换；
+// tags/sources 旧深链值映射到 problems 的对应子页
+type SubTab = 'tags' | 'sources' | 'duplicates'
+const rawSection = (Array.isArray(route.query.section) ? route.query.section[0] : route.query.section) as string | undefined
+const isLegacySub = rawSection === 'tags' || rawSection === 'sources'
+const section = ref<Section>(
+  rawSection && (sections.includes(rawSection as Section) || isLegacySub) ? 'problems' : 'users',
+)
+const subTab = ref<SubTab>(
+  isLegacySub ? (rawSection as SubTab) : rawSection === 'duplicates' ? 'duplicates' : 'tags',
+)
+// 题目管理入口：root（标签树/来源库）∨ problem.edit.all（重复扫描）
+const canProblemManage = userStore.role === 'root' || userStore.can('problem.edit.all')
+const showTagsTab = userStore.role === 'root'
+const showDuplicatesTab = userStore.can('problem.edit.all')
 
-// 标签树面板草稿的脏状态：切走分区前拦截确认（面板 v-if 销毁，草稿随组件丢失）
+// 标签树面板草稿的脏状态：切走分区/子页前拦截确认（面板 v-if 销毁，草稿随组件丢失）
 const tagsDirty = ref(false)
 
-async function switchSection(target: typeof section.value) {
-  if (section.value === 'tags' && tagsDirty.value && target !== 'tags') {
-    try {
-      await ElMessageBox.confirm('标签树有未保存的修改，离开后将丢失。确定离开？', '未保存的修改', {
-        type: 'warning',
-        confirmButtonText: '离开',
-        cancelButtonText: '留下',
-      })
-    } catch {
-      return
-    }
+async function guardTagsDirty(): Promise<boolean> {
+  if (subTab.value !== 'tags' || !tagsDirty.value) return true
+  try {
+    await ElMessageBox.confirm('标签树有未保存的修改，离开后将丢失。确定离开？', '未保存的修改', {
+      type: 'warning',
+      confirmButtonText: '离开',
+      cancelButtonText: '留下',
+    })
+  } catch {
+    return false
   }
   tagsDirty.value = false
+  return true
+}
+
+async function switchSection(target: typeof section.value) {
+  if (section.value === 'problems' && target !== 'problems') {
+    if (!(await guardTagsDirty())) return
+  }
   section.value = target
+}
+
+async function switchSubTab(target: SubTab) {
+  if (subTab.value === 'tags' && target !== 'tags') {
+    if (!(await guardTagsDirty())) return
+  }
+  subTab.value = target
 }
 </script>
 
@@ -68,22 +95,13 @@ async function switchSection(target: typeof section.value) {
         <span class="nav-sub">权限位 / 自定义角色</span>
       </div>
       <div
-        v-if="userStore.role === 'root'"
+        v-if="canProblemManage"
         class="nav-item"
-        :class="{ active: section === 'tags' }"
-        @click="switchSection('tags')"
+        :class="{ active: section === 'problems' }"
+        @click="switchSection('problems')"
       >
-        <span class="nav-title">标签树</span>
-        <span class="nav-sub">多级标签 / 卡片编辑</span>
-      </div>
-      <div
-        v-if="userStore.role === 'root'"
-        class="nav-item"
-        :class="{ active: section === 'sources' }"
-        @click="switchSection('sources')"
-      >
-        <span class="nav-title">来源库</span>
-        <span class="nav-sub">来源登记 / 转为标签</span>
+        <span class="nav-title">题目管理</span>
+        <span class="nav-sub">标签树 / 来源库 / 重复扫描</span>
       </div>
       <div
         v-if="userStore.role === 'root'"
@@ -133,8 +151,16 @@ async function switchSection(target: typeof section.value) {
     <main class="admin-main">
       <UsersPanel v-if="section === 'users'" />
       <RolesPanel v-else-if="section === 'roles'" />
-      <TagsPanel v-else-if="section === 'tags'" @update:dirty="tagsDirty = $event" />
-      <SourcesPanel v-else-if="section === 'sources'" />
+      <div v-else-if="section === 'problems'" class="problem-manage">
+        <el-tabs :model-value="subTab" @tab-change="switchSubTab as never">
+          <el-tab-pane v-if="showTagsTab" name="tags" label="标签树" />
+          <el-tab-pane v-if="showTagsTab" name="sources" label="来源库" />
+          <el-tab-pane v-if="showDuplicatesTab" name="duplicates" label="重复题扫描" />
+        </el-tabs>
+        <TagsPanel v-if="subTab === 'tags'" @update:dirty="tagsDirty = $event" />
+        <SourcesPanel v-else-if="subTab === 'sources'" />
+        <DuplicateProblemsPanel v-else-if="subTab === 'duplicates'" />
+      </div>
       <LevelPanel v-else-if="section === 'levels'" />
       <NoticePanel v-else-if="section === 'notice'" />
       <SettingsPanel v-else-if="section === 'settings'" />
@@ -213,6 +239,21 @@ async function switchSection(target: typeof section.value) {
 @media (max-width: 992px) {
   .admin-layout {
     flex-direction: column;
+  }
+
+  .problem-manage {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .problem-manage > :deep(.el-tabs) {
+    flex: 0 0 auto;
+  }
+
+  .problem-manage > :deep(.el-card) {
+    flex: 1 1 auto;
   }
 
   .admin-nav {

@@ -28,11 +28,12 @@ const sources: { id: Source | 'qduoj' | 'hoj'; label: string; hint: string; soon
 const fileList = ref<UploadUserFile[]>([])
 const skipSameTitle = ref(false)
 const defaultHidden = ref(false)
-// 按题号覆盖更新（v0.18.1，仅 SOJ 源）：目录名带题号前缀（导出包默认 <题号>_<标题>）→ 原位全量更新
-const overwriteByPID = ref(false)
+// 已存在题号跳过（v0.18.1 验收调整，仅 SOJ 源）：目录名带题号前缀（导出包默认 <题号>_<标题>）
+// 且该题号已存在 → 跳过不导入（防导出包重复导回造成重复题；不覆盖既有题）
+const skipExistingPID = ref(false)
 const starting = ref(false)
 
-const status = ref<BatchImportStatus>({ state: 'idle', total: 0, done: 0, ok_count: 0, updated_count: 0, fail_count: 0, skip_count: 0, results: [] })
+const status = ref<BatchImportStatus>({ state: 'idle', total: 0, done: 0, ok_count: 0, fail_count: 0, skip_count: 0, results: [] })
 const running = computed(() => status.value.state === 'running')
 const finished = computed(() => ['done', 'cancelled', 'failed'].includes(status.value.state))
 
@@ -96,7 +97,7 @@ async function startImport() {
     fd.append('zip', f)
     if (skipSameTitle.value) fd.append('skip_same_title', '1')
     if (defaultHidden.value) fd.append('default_hidden', '1')
-    if (source.value === 'soj' && overwriteByPID.value) fd.append('overwrite_by_pid', '1')
+    if (source.value === 'soj' && skipExistingPID.value) fd.append('skip_existing_pid', '1')
     await importApi.upload(fd)
     ElMessage.success('导入已开始')
     await refreshStatus()
@@ -154,13 +155,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 function resultLine(r: { status: string; name: string; title?: string; pid?: number; reason?: string }): string {
   const who = r.title ? `「${r.title}」` : r.name
   if (r.status === 'ok') return `${r.name} → #${r.pid} ${who} 导入成功`
-  if (r.status === 'updated') return `${r.name} → #${r.pid} ${who} 已覆盖更新（数据已变更，历史提交如需复核请手动重测）`
-  if (r.status === 'skipped') return `${r.name} → ${who} 同标题已存在，跳过`
+  if (r.status === 'skipped') return `${r.name} → ${who} 跳过：${r.reason ?? '同标题已存在'}`
   return `${r.name} → 失败：${r.reason ?? '未知原因'}`
 }
 
 function resultClass(s: string): string {
-  return s === 'ok' || s === 'updated' ? 'is-ok' : s === 'skipped' ? 'is-skip' : 'is-fail'
+  return s === 'ok' ? 'is-ok' : s === 'skipped' ? 'is-skip' : 'is-fail'
 }
 
 const stateLabel = computed(() => {
@@ -185,7 +185,7 @@ const reversedResults = computed(() => [...status.value.results].reverse())
 function resetForNextBatch() {
   ++loadSeq
   stopPolling()
-  status.value = { state: 'idle', total: 0, done: 0, ok_count: 0, updated_count: 0, fail_count: 0, skip_count: 0, results: [] }
+  status.value = { state: 'idle', total: 0, done: 0, ok_count: 0, fail_count: 0, skip_count: 0, results: [] }
   fileList.value = []
 }
 </script>
@@ -257,9 +257,9 @@ function resetForNextBatch() {
           </el-tooltip>
         </div>
         <div v-if="source === 'soj'" class="switch-row">
-          <el-switch v-model="overwriteByPID" :disabled="running" />
-          <span>按题号覆盖更新</span>
-          <el-tooltip placement="top" content="题库「打包导出」的包目录名带题号前缀（题号_标题）：开启后这些题原位覆盖更新——题面/元数据/数据全量替换，题号/题型/创建者不变，提交历史保留（数据变更后旧提交如需复核请手动重测）；无前缀目录仍新建。需对该题有编辑权（edit.all 或为创建者）">
+          <el-switch v-model="skipExistingPID" :disabled="running" />
+          <span>已存在题号跳过</span>
+          <el-tooltip placement="top" content="题库「打包导出」的包目录名带题号前缀（题号_标题）：开启后题号已存在的目录直接跳过（防导出包重复导回造成重复题，不覆盖既有题）；题号不存在则正常导入（自动取新题号）">
             <el-icon class="dim"><QuestionFilled /></el-icon>
           </el-tooltip>
         </div>
@@ -276,14 +276,14 @@ function resetForNextBatch() {
       <div v-if="status.state !== 'idle'" class="progress-block">
         <el-progress :percentage="progressPct" :status="status.state === 'done' ? 'success' : undefined" />
         <div v-if="running" class="dim progress-line">
-          已导入 {{ status.done }}/{{ status.total }}（成功 {{ status.ok_count }}<span v-if="status.updated_count"> · 更新 {{ status.updated_count }}</span> · 跳过 {{ status.skip_count }} · 失败 {{ status.fail_count }}）<span v-if="status.by">，发起人 {{ status.by }}</span>
+          已导入 {{ status.done }}/{{ status.total }}（成功 {{ status.ok_count }} · 跳过 {{ status.skip_count }} · 失败 {{ status.fail_count }}）<span v-if="status.by">，发起人 {{ status.by }}</span>
         </div>
         <div v-else class="progress-line">
           <template v-if="status.state === 'failed'">
             <div class="is-fail">整包失败：{{ status.error || '未知原因' }}</div>
           </template>
           <template v-else>
-            报告：成功 <b class="is-ok">{{ status.ok_count }}</b><span v-if="status.updated_count"> · 更新 <b class="is-ok">{{ status.updated_count }}</b></span> · 跳过 <b class="is-skip">{{ status.skip_count }}</b> · 失败 <b class="is-fail">{{ status.fail_count }}</b>
+            报告：成功 <b class="is-ok">{{ status.ok_count }}</b> · 跳过 <b class="is-skip">{{ status.skip_count }}</b> · 失败 <b class="is-fail">{{ status.fail_count }}</b>
             <span v-if="status.state === 'cancelled'">（已取消，未导入的目录不再处理）</span>
           </template>
         </div>
