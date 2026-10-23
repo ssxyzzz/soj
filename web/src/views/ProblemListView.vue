@@ -202,12 +202,15 @@ onMounted(() => {
           <el-pagination
             class="search-pager"
             background
-            layout="total, prev, pager, next"
+            layout="slot, prev, pager, next"
             :total="total"
             :page-size="pageSize"
             :current-page="page"
             @current-change="onPageChange"
-          />
+          >
+            <!-- 计数单位用「题」（EP locale 的「共 N 条」是全局的，波及其他列表，这里走插槽局部改） -->
+            <span class="dim">共 {{ total }} 题</span>
+          </el-pagination>
         </div>
         <!-- 筛选入口行：标签 / 高级筛选两个折叠开关同行，点击展开对应面板、再点收起 -->
         <div class="filter-row">
