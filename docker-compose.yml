@@ -36,6 +36,7 @@ services:
         web: ./web
     restart: unless-stopped
     environment:
+      TZ: Asia/Shanghai # 容器默认 UTC：备份归档文件名/日志/manifest 时间戳会差 8 小时，对不上「几点几分备份的」
       SOJ_ADDR: ":8080"
       SOJ_MONGO_URI: "mongodb://mongo:27017/?replicaSet=rs0"
       SOJ_MONGO_DB: soj
