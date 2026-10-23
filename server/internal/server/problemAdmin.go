@@ -10,6 +10,7 @@ package server
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -22,7 +23,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -32,10 +35,10 @@ import (
 )
 
 const (
-	maxCreateRequest   = 64 << 20   // 建题/替换请求体上限（数据 zip 走建题页的小包；大包走导入）
-	maxZipEntries      = 2000       // zip 条目数上限
-	maxZipUncompressed = 200 << 20  // zip 解压总量上限（防炸弹）
-	maxZipFile         = 20 << 20   // zip 单文件上限
+	maxCreateRequest   = 64 << 20  // 建题/替换请求体上限（数据 zip 走建题页的小包；大包走导入）
+	maxZipEntries      = 2000      // zip 条目数上限
+	maxZipUncompressed = 200 << 20 // zip 解压总量上限（防炸弹）
+	maxZipFile         = 20 << 20  // zip 单文件上限
 )
 
 // CreateProblem 网页建题（全题型单管道）：表单字段构造临时 SOJ 题目录
@@ -1065,55 +1068,180 @@ func (h *Handlers) DownloadProblemTestdata(c *gin.Context) {
 		"filename": fmt.Sprintf("%d_%s.zip", id, downloadSafeName(p.Title)),
 	}))
 	zw := zip.NewWriter(c.Writer)
-	imp := &repo.Importer{Repo: h.repo}
-	if yb := imp.RenderProblemYAML(c.Request.Context(), p); len(yb) > 0 {
-		if w, err := zw.Create("problem.yaml"); err == nil {
-			_, _ = w.Write(yb)
-		}
-	}
-	if p.Statement != "" {
-		if w, err := zw.Create("problem.md"); err == nil {
-			_, _ = w.Write([]byte(p.Statement))
-		}
-	}
-	if p.IsObjective() {
-		if yb := repo.RenderAnswerYAML(p.Questions); len(yb) > 0 {
-			if w, err := zw.Create("answer.yaml"); err == nil {
-				_, _ = w.Write(yb)
-			}
-		}
-		if md := repo.RenderAnswerMarkdown(p.Questions); len(md) > 0 {
-			if w, err := zw.Create("answer.md"); err == nil {
-				_, _ = w.Write(md)
-			}
-		}
-	}
-	if !p.IsObjective() {
-		if yb := imp.RenderConfigYAML(p); len(yb) > 0 {
-			if w, err := zw.Create("data/config.yaml"); err == nil {
-				_, _ = w.Write(yb)
-			}
-		}
-	}
-	for _, rel := range rels {
-		f, err := h.provider().Open(id, rel)
-		if err != nil {
-			return // 响应已开始，只能截断
-		}
-		w, err := zw.Create(rel)
-		if err == nil {
-			_, err = io.Copy(w, f)
-		}
-		f.Close()
-		if err != nil {
-			return
-		}
+	if err := h.exportProblemInto(c.Request.Context(), zw, p, "", rels); err != nil {
+		return // 响应已开始，只能截断
 	}
 	_ = zw.Close()
 	// 打包已交付后才记账（root 不记账）
 	if role != repo.RoleRoot {
 		if err := h.repo.RecordTestDataDownload(c.Request.Context(), uid, id); err != nil {
 			log.Printf("[data-download] 记录下载失败 uid=%d pid=%d: %v", uid, id, err)
+		}
+	}
+}
+
+// exportProblemInto 把单题的权威导出写进 zip：problem.yaml / problem.md /
+// 客观题 answer.yaml+answer.md / data/config.yaml（按 db 当前值渲染）+ data/ 原名文件。
+// dir 为空 = 单题下载根目录；多题导出传 "<id>_<安全标题>/" 子目录。rels = 该题
+// data/ 文件清单（调用方先 Walk）。写失败返回错误（响应已开始时由调用方截断）。
+func (h *Handlers) exportProblemInto(ctx context.Context, zw *zip.Writer, p *repo.Problem, dir string, rels []string) error {
+	write := func(name string, b []byte) error {
+		w, err := zw.Create(dir + name)
+		if err != nil {
+			return err
+		}
+		_, err = w.Write(b)
+		return err
+	}
+	imp := &repo.Importer{Repo: h.repo}
+	if yb := imp.RenderProblemYAML(ctx, p); len(yb) > 0 {
+		if err := write("problem.yaml", yb); err != nil {
+			return err
+		}
+	}
+	if p.Statement != "" {
+		if err := write("problem.md", []byte(p.Statement)); err != nil {
+			return err
+		}
+	}
+	if p.IsObjective() {
+		if yb := repo.RenderAnswerYAML(p.Questions); len(yb) > 0 {
+			if err := write("answer.yaml", yb); err != nil {
+				return err
+			}
+		}
+		if md := repo.RenderAnswerMarkdown(p.Questions); len(md) > 0 {
+			if err := write("answer.md", md); err != nil {
+				return err
+			}
+		}
+	} else if yb := imp.RenderConfigYAML(p); len(yb) > 0 {
+		if err := write("data/config.yaml", yb); err != nil {
+			return err
+		}
+	}
+	for _, rel := range rels {
+		f, err := h.provider().Open(p.ID, rel)
+		if err != nil {
+			return err
+		}
+		w, err := zw.Create(dir + rel)
+		if err == nil {
+			_, err = io.Copy(w, f)
+		}
+		f.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// parsePositiveIDList 解析逗号分隔的正整数 ID（去重保序、上限 cap），多题导出用。
+func parsePositiveIDList(raw string, cap int) ([]int64, error) {
+	seen := map[int64]bool{}
+	out := make([]int64, 0, 8)
+	for _, part := range strings.Split(raw, ",") {
+		p := strings.TrimSpace(part)
+		if p == "" {
+			continue
+		}
+		id, err := strconv.ParseInt(p, 10, 64)
+		if err != nil || id <= 0 {
+			return nil, fmt.Errorf("ids 需为逗号分隔的正整数题号")
+		}
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("ids 不能为空")
+	}
+	if len(out) > cap {
+		return nil, fmt.Errorf("单次最多导出 %d 题", cap)
+	}
+	return out, nil
+}
+
+// ExportProblems 多题打包导出（v0.18.1）：GET /api/problems/export?ids=1,2,3。
+// 根下每题一个目录（<id>_<安全标题>/），内容与单题「下载数据」同一权威渲染内核。
+// problem.data.download 权限位；每日限额合并预检（选中数 > 当日剩余即拒），
+// 打包交付后按题记账（同题同天去重、root 不限不记账）。题目已删/读失败跳过不中断整批，
+// 无数据的非客观题照常出壳包（多选批量不做单题 404）。
+func (h *Handlers) ExportProblems(c *gin.Context) {
+	ids, err := parsePositiveIDList(c.Query("ids"), 200)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	uid, _, role, _ := currentUser(c)
+	if role != repo.RoleRoot {
+		setting, err := h.repo.GetSystemSettings(c.Request.Context())
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取设置失败")
+			return
+		}
+		if limit := setting.DownloadDailyLimit(); limit > 0 {
+			done, err := h.repo.TestDataDownloadedToday(c.Request.Context(), uid, ids)
+			if err != nil {
+				fail(c, http.StatusInternalServerError, "限额校验失败")
+				return
+			}
+			if remaining := int64(limit) - done; int64(len(ids)) > remaining {
+				fail(c, http.StatusForbidden, fmt.Sprintf(
+					"今日数据下载限额剩 %d 题（上限 %d/天），已选 %d 题，请减少勾选或明日再试",
+					remaining, limit, len(ids)))
+				return
+			}
+		}
+	}
+
+	type problemExport struct {
+		p    *repo.Problem
+		rels []string
+	}
+	entries := make([]problemExport, 0, len(ids))
+	for _, id := range ids {
+		p, err := h.repo.GetProblem(c.Request.Context(), id)
+		if err != nil {
+			continue // 已删/读失败：跳过，不中断整批
+		}
+		var rels []string
+		if err := h.provider().Walk(id, func(rel string) error {
+			if strings.HasPrefix(rel, "data/") {
+				rels = append(rels, rel)
+			}
+			return nil
+		}); err != nil {
+			continue
+		}
+		entries = append(entries, problemExport{p: p, rels: rels})
+	}
+	if len(entries) == 0 {
+		fail(c, http.StatusNotFound, "选中的题目均不存在或已删除")
+		return
+	}
+
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{
+		"filename": fmt.Sprintf("soj-packages-%d-%s.zip", len(entries), time.Now().Format("20060102")),
+	}))
+	zw := zip.NewWriter(c.Writer)
+	exported := make([]int64, 0, len(entries))
+	for _, e := range entries {
+		dir := fmt.Sprintf("%d_%s/", e.p.ID, downloadSafeName(e.p.Title))
+		if err := h.exportProblemInto(c.Request.Context(), zw, e.p, dir, e.rels); err != nil {
+			break // 响应已开始，只能截断
+		}
+		exported = append(exported, e.p.ID)
+	}
+	_ = zw.Close()
+	if role != repo.RoleRoot {
+		for _, id := range exported {
+			if err := h.repo.RecordTestDataDownload(c.Request.Context(), uid, id); err != nil {
+				log.Printf("[data-download] 多题导出记账失败 uid=%d pid=%d: %v", uid, id, err)
+			}
 		}
 	}
 }

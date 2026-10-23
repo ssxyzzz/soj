@@ -150,6 +150,20 @@ func (r *Repo) RecordTestDataDownload(ctx context.Context, uid, pid int64) error
 	return err
 }
 
+// TestDataDownloadedToday 当天已下载的不同题数（exclude 里的题不计——多题打包导出
+// 的合并预检用：选中数与剩余额度比较，选中的题本来就在本次放行范围）。
+func (r *Repo) TestDataDownloadedToday(ctx context.Context, uid int64, exclude []int64) (int64, error) {
+	filter := bson.M{"uid": uid, "day": time.Now().Format("2006-01-02")}
+	if len(exclude) > 0 {
+		filter["pid"] = bson.M{"$nin": exclude}
+	}
+	var vals []int64
+	if err := r.db.Collection("dataDownloads").Distinct(ctx, "pid", filter).Decode(&vals); err != nil {
+		return 0, err
+	}
+	return int64(len(vals)), nil
+}
+
 // BatchImportProblemMBVal 批量导入单题数据上限（MB）：未设置/越界回默认 100。
 func (s *SystemSettings) BatchImportProblemMBVal() int {
 	if s.BatchImportProblemMB == nil || *s.BatchImportProblemMB < 1 {

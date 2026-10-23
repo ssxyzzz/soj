@@ -36,18 +36,18 @@ type Importer struct {
 	CreatorUID int64  // 导入者 uid（0 = 系统/命令行导入，其题目隐藏态仅 root 可改）
 
 	// ---- 表单直传（建题路径权威输入，非零值优先于包内声明）----
-	TagIDs          []int64 // 标签节点 ID
-	Difficulty      int     // 难度 1–10
-	SourceType      string  // 来源类型
-	Source          string
-	Year            int
-	Region          string
-	TimeLimitMS     int // 时限毫秒
-	MemoryLimitKB   int // 内存 KB
-	FileIOName      string // 文件 IO 基名（way → way.in/way.out）
-	Compare         string // exact / tolerant
-	FloatTolerance  float64
-	Hidden          bool  // 显式隐藏态（建题表单无此输入，恒 false；批量走 DefaultHidden）
+	TagIDs         []int64 // 标签节点 ID
+	Difficulty     int     // 难度 1–10
+	SourceType     string  // 来源类型
+	Source         string
+	Year           int
+	Region         string
+	TimeLimitMS    int    // 时限毫秒
+	MemoryLimitKB  int    // 内存 KB
+	FileIOName     string // 文件 IO 基名（way → way.in/way.out）
+	Compare        string // exact / tolerant
+	FloatTolerance float64
+	Hidden         bool // 显式隐藏态（建题表单无此输入，恒 false；批量走 DefaultHidden）
 	// ObjectiveQuestions 网页建客观题直传（含答案的完整定义，非空时优先于包内 questions）。
 	ObjectiveQuestions []ObjectiveQuestion
 	// Checker 表单上传校验器的 data/ 内固定名（非空 = 声明启用；文件不存在则忽略）。
@@ -57,7 +57,16 @@ type Importer struct {
 	IgnoreDirPID bool
 	// DefaultHidden yaml 未声明 hidden 时的缺省值（批量导入「导入后默认隐藏」开关）。
 	DefaultHidden bool
+	// Overwrite 覆盖模式（v0.18.1「按题号覆盖更新」）：目录名数字前缀 = 目标题号，
+	// 更新既有题而不是新建——题面/元数据/数据全量替换，题号/题型/创建者不可变，
+	// hidden 未声明保留库内值；数据落卷前清空旧卷（等价整包替换）。前缀题号不存在
+	// 或题型与库内不符则该题报错（不静默新建）。无数字前缀目录仍走新建。
+	Overwrite bool
 }
+
+// DirPID 从目录名解析数字前缀题号（无前缀返回 0）；server 层覆盖模式预检与
+// Importer 内部（seedPID 同义）共用这一语义。
+func DirPID(name string) int64 { return seedPID(name) }
 
 // seedPID 从目录名解析题号（仅种子播种用）：数字前缀即题号；无前缀返回 0。
 func seedPID(name string) int64 {
@@ -193,6 +202,23 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		return nil, fmt.Errorf("暂不支持题型 %q（当前支持：传统题 default、客观题 objective、函数题 function、交互题 interactive）", meta.Type)
 	}
 
+	// 覆盖模式预检：前缀题号存在 + 题型与库内一致（题型创建后不可更改）。
+	// 权限由调用方（server 层）在进 Importer 前逐题预检——repo 层不掺和身份。
+	var existing *Problem
+	if im.Overwrite && pid != 0 {
+		var err error
+		existing, err = im.Repo.GetProblem(ctx, pid)
+		if IsNotFound(err) {
+			return nil, fmt.Errorf("题号 %d 不存在（覆盖模式不自动新建：确认题号或去掉目录名数字前缀）", pid)
+		}
+		if err != nil {
+			return nil, err
+		}
+		if existing.Type != meta.Type {
+			return nil, fmt.Errorf("题型不可更改：题 %d 库内为 %s，包内为 %s", pid, existing.Type, meta.Type)
+		}
+	}
+
 	// 难度归一：表单 > yaml > 默认 D3
 	d := im.Difficulty
 	if d == 0 {
@@ -225,7 +251,15 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 
 	// 客观题：无 data/；小题定义三源合并（表单直传 > problem.yaml + answer.yaml + answer.md）
 	if meta.Type == TypeObjective {
-		return im.importObjective(ctx, dir, pid, &meta, statement, tagIDs, rawNames)
+		p, err := im.importObjective(ctx, dir, pid, &meta, statement, tagIDs, rawNames)
+		if err != nil {
+			return nil, err
+		}
+		applyOverwriteMeta(p, existing, &meta)
+		if err := im.Repo.UpsertProblem(ctx, p); err != nil {
+			return nil, err
+		}
+		return p, nil
 	}
 
 	// ---- 编程题：data/ 收集 ----
@@ -268,6 +302,14 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		}
 	}
 	store := testdata.NewLocalFS(im.DataDir)
+
+	// 覆盖模式：先清空旧数据卷再写新数据（等价编辑页整包替换——旧文件残留会污染
+	// 测试点清单与 sha 校验）；清卷在全部解析成功之后，解析失败不伤原题。
+	if existing != nil {
+		if err := store.RemoveDir(pid, "data"); err != nil {
+			return nil, fmt.Errorf("清空原数据卷: %w", err)
+		}
+	}
 
 	// 数据对落卷（原名 data/<name>），序号按排序重排 1..N
 	cases := make([]CaseMeta, 0, len(pairs))
@@ -318,24 +360,24 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 
 	// 函数/交互题固定名文件（data/ 内）；校验器声明文件
 	p := &Problem{
-		ID:             pid,
-		Title:          meta.Title,
-		Statement:      string(statement),
-		Type:           meta.Type,
-		Difficulty:     d,
-		SourceType:     meta.SourceType,
-		Source:         meta.Source,
-		Year:           meta.Year,
-		Region:         meta.Region,
-		TimeLimitMS:    msLimit,
-		MemoryLimitKB:  kbLimit,
-		Visibility:     VisibilityPublic,
-		Hidden:         im.effHidden(&meta),
-		CreatedBy:      im.CreatorUID,
-		Tags:           tagIDs,
-		RawTags:        rawNames,
-		Subtasks:       subtasks,
-		Cases:          cases,
+		ID:            pid,
+		Title:         meta.Title,
+		Statement:     string(statement),
+		Type:          meta.Type,
+		Difficulty:    d,
+		SourceType:    meta.SourceType,
+		Source:        meta.Source,
+		Year:          meta.Year,
+		Region:        meta.Region,
+		TimeLimitMS:   msLimit,
+		MemoryLimitKB: kbLimit,
+		Visibility:    VisibilityPublic,
+		Hidden:        im.effHidden(&meta),
+		CreatedBy:     im.CreatorUID,
+		Tags:          tagIDs,
+		RawTags:       rawNames,
+		Subtasks:      subtasks,
+		Cases:         cases,
 	}
 	if err := im.writeTypeFiles(store, p, dir, checkerRel); err != nil {
 		return nil, err
@@ -351,6 +393,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		}
 	}
 	im.applyConfigExtras(p, cfg)
+	applyOverwriteMeta(p, existing, &meta)
 
 	if err := im.Repo.UpsertProblem(ctx, p); err != nil {
 		return nil, err
@@ -529,10 +572,22 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 		RawTags:    rawNames,
 		Cases:      []CaseMeta{},
 	}
-	if err := im.Repo.UpsertProblem(ctx, p); err != nil {
-		return nil, err
-	}
 	return p, nil
+}
+
+// applyOverwriteMeta 覆盖模式的不可变字段回填（UpsertProblem 前调用，existing 为空 = 新建不动）：
+// 创建者与可见性保留库内值；hidden 包内声明则覆盖、未声明保留库内（批量导入的
+// DefaultHidden 开关只对新题生效，覆盖更新不应顺手改既有题的隐藏态）。
+func applyOverwriteMeta(p *Problem, existing *Problem, meta *problemYAML) {
+	if existing == nil {
+		return
+	}
+	p.CreatedBy = existing.CreatedBy
+	p.CreatedAt = existing.CreatedAt
+	p.Visibility = existing.Visibility
+	if meta.Hidden == nil {
+		p.Hidden = existing.Hidden
+	}
 }
 
 func parseAnswerFile(path string) (answerYAML, error) {

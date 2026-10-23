@@ -96,6 +96,7 @@ export interface BatchImportStatus {
   total: number
   done: number
   ok_count: number
+  updated_count: number // 按题号覆盖更新的题数（v0.18.1 覆盖模式）
   fail_count: number
   skip_count: number
   results: BatchImportResult[]

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 
 import { authApi, problemApi, rankApi, sourcesApi } from '@/api'
+import { downloadFile } from '@/api/download'
 import PageShell from '@/components/PageShell.vue'
 import FitTags from '@/components/problem/FitTags.vue'
 import SubStatus from '@/components/SubStatus.vue'
@@ -38,7 +39,7 @@ levels.ensure() // 难度档名（筛选下拉与徽章展示）
 const list = ref<ProblemListItem[]>([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = 20
+const pageSize = 50
 const loading = ref(false)
 const keyword = ref('')
 const tagSel = ref<number[]>([])
@@ -51,6 +52,27 @@ const sourceYears = ref<number[]>([])
 const activeAdvCount = computed(
   () => diffSel.value.length + srcTypeSel.value.length + yearSel.value.length,
 )
+
+// ---- 多题打包导出（v0.18.1）：problem.data.download 权限者可见 ----
+// 勾选跨翻页/跨筛选保留（存 id 集合）；表格翻页后当前页勾选态由 selectableRows 同步回显
+const canExport = computed(() => userStore.can('problem.data.download'))
+const selected = ref<Set<number>>(new Set())
+const exporting = ref(false)
+// reserve-selection：el-table 跨页保留勾选，selection-change 回调给全量已选行
+function onSelChange(rows: ProblemListItem[]) {
+  selected.value = new Set(rows.map((r) => r.id))
+}
+async function exportSelected() {
+  if (!selected.value.size || exporting.value) return
+  exporting.value = true
+  try {
+    const ids = [...selected.value].sort((a, b) => a - b).join(',')
+    await downloadFile(`/problems/export?ids=${ids}`, `soj-packages-${selected.value.size}.zip`)
+    selected.value = new Set()
+  } finally {
+    exporting.value = false
+  }
+}
 
 async function load() {
   loading.value = true
@@ -243,9 +265,12 @@ onMounted(() => {
 stripe
           v-loading="loading"
           :data="list"
+          row-key="id"
           style="cursor: pointer"
           @row-click="(row: ProblemListItem) => problemRoute(row)"
+          @selection-change="onSelChange"
         >
+          <el-table-column v-if="canExport" type="selection" width="42" reserve-selection :selectable="() => true" />
           <el-table-column prop="id" label="ID" width="100" />
           <el-table-column v-if="userStore.token" label="状态" width="150">
             <template #default="{ row }">
@@ -294,6 +319,24 @@ stripe
       </el-card>
 
     <template #aside>
+      <el-card v-if="canExport" class="aside-card">
+        <template #header><span>打包导出</span></template>
+        <div class="entry-actions">
+          <el-button
+            type="primary"
+            style="width: 100%"
+            :loading="exporting"
+            :disabled="!selected.size"
+            @click="exportSelected"
+          >
+            导出已选（{{ selected.size }}）
+          </el-button>
+          <div v-if="selected.size" class="dim tip">
+            已选 {{ selected.size }} 题；勾选跨翻页/筛选保留，导出为 v0.15 统一格式题包 zip
+          </div>
+          <div v-else class="dim tip">在题目列表勾选后打包导出（目录 = 题号_标题，与单题下载同格式；受每日限额约束）</div>
+        </div>
+      </el-card>
       <el-card v-if="userStore.can('problem.create')" class="aside-card">
         <template #header><span>题目管理</span></template>
         <div class="entry-actions">

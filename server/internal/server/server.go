@@ -129,6 +129,9 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)
 			authed.POST("/problems/:id/testdata", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ReplaceProblemTestdata)
 			authed.GET("/problems/:id/testdata/download", RequirePerm(repo.PermProblemDataDownload), h.DownloadProblemTestdata)
+			// 多题打包导出（v0.18.1）：权限位与单题下载同源；与 /problems/:id 参数路由
+			// 同级静态段，gin 树静态优先匹配
+			authed.GET("/problems/export", RequirePerm(repo.PermProblemDataDownload), h.ExportProblems)
 			authed.POST("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateChecker)
 			authed.POST("/problems/:id/function/:file", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateFunctionFile) // driver|template（v0.9.1）
 			authed.DELETE("/problems/:id/function/:file", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveFunctionFile)
