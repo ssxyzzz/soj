@@ -626,6 +626,45 @@ strong {
   padding-right: 0.4em;
 }
 
+/* ---- 样例双列（.md-io）：```input1/```output1 围栏配对 ----
+   utils/md.ts pairIOSamples 在渲染后把紧邻同号围栏包成两列网格（列头「输入 #N/输出
+   #N」取自围栏编号，pre 原节点移入 cell、复制按钮与行号照常工作，行号两列各自计数）。
+   cell min-width:0 是 grid 轨道收缩前提（pre 才能内部横向滚动而非撑破轨道）；
+   pre 移入后外距清零、间距由网格 gap 接管，flex:1 让左右两格等高（对齐洛谷观感）。
+   ≤768px（EP sm 断点）单列堆叠。列头不设色：继承正文颜色（dark 内容主题下同样成立），
+   字号同正文、字重 500（正文 400 上一档，样例标题的提级惯例与站内 strong 一致方向） */
+.soj-md .vditor-reset .md-io {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+  margin: 0.5em 0;
+}
+
+.soj-md .vditor-reset .md-io .md-io-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.soj-md .vditor-reset .md-io .md-io-head {
+  margin: 0.1em 0 0.35em;
+  font-size: var(--soj-fs-rich);
+  font-weight: var(--soj-fw-medium);
+}
+
+.soj-md .vditor-reset .md-io pre {
+  margin: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .soj-md .vditor-reset .md-io {
+    grid-template-columns: 1fr;
+  }
+}
+
 .soj-md.md-light .vditor-reset table th,
 .soj-md.md-light .vditor-reset table td {
   border: 1px solid var(--el-border-color-lighter);

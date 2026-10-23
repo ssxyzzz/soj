@@ -67,8 +67,56 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+// ---- 样例双列（```input1/```output1 围栏 → .md-io 两列网格） ----
+// 规范路径：紧邻的同号 inputN/outputN 围栏配成两列，列头「输入 #N/输出 #N」取自围栏编号。
+// 只认带编号的围栏：无编号 input/output、「输入：」+裸围栏等写法一律不配（普通代码块竖排）。
+// 与复制按钮同一套渲染后 DOM 增强管道（观察者 rAF 去抖里跑）：查看端（Vditor.preview 给
+// el 本身加 .vditor-reset）与编辑端 sv 分屏预览（内容根同为 .vditor-reset）都生效；
+// wysiwyg/ir 编辑面不动 DOM（插节点会污染编辑器文档模型，与复制按钮跳过 wysiwyg 同理）。
+
+const IO_FENCE_RE = /\blanguage-(input|output)(\d+)\b/
+
+/** pre>code 的围栏信息：inputN/outputN（带编号）返回方向与编号，其余 null */
+function ioFenceInfo(code: Element): { dir: 'input' | 'output'; n: string } | null {
+  const m = code.className.match(IO_FENCE_RE)
+  return m ? { dir: m[1] as 'input' | 'output', n: m[2] } : null
+}
+
+function makeIOCell(label: string, pre: HTMLElement): HTMLElement {
+  const cell = document.createElement('div')
+  cell.className = 'md-io-cell'
+  const head = document.createElement('div')
+  head.className = 'md-io-head'
+  head.textContent = label
+  cell.append(head, pre) // append 移动 pre 节点（连同已有复制按钮），不复制
+  return cell
+}
+
+export function pairIOSamples(root: HTMLElement) {
+  root.querySelectorAll('pre > code').forEach((code) => {
+    const pre = code.parentElement
+    if (!pre) return
+    if (pre.closest('.md-io')) return // 已配对（幂等：观察者会因节点移动再次触发）
+    if (pre.closest('.vditor-wysiwyg, .vditor-ir')) return // 编辑面不碰
+    if (!pre.parentElement?.classList.contains('vditor-reset')) return
+    const info = ioFenceInfo(code)
+    if (!info || info.dir !== 'input') return
+    // 只配紧邻下一个兄弟：同号 output；落单/错号/中间隔内容一律维持竖排
+    const nextPre = pre.nextElementSibling
+    if (nextPre?.tagName !== 'PRE') return
+    const nextInfo = ioFenceInfo(nextPre.querySelector(':scope > code') ?? nextPre)
+    if (!nextInfo || nextInfo.dir !== 'output' || nextInfo.n !== info.n) return
+    const wrap = document.createElement('div')
+    wrap.className = 'md-io'
+    pre.before(wrap)
+    wrap.appendChild(makeIOCell('输入 #' + info.n, pre))
+    wrap.appendChild(makeIOCell('输出 #' + nextInfo.n, nextPre as HTMLElement))
+  })
+}
+
 export function bindCopyFeedback(root: HTMLElement): () => void {
   injectCopyButtons(root)
+  pairIOSamples(root)
   let scheduled = false
   const mo = new MutationObserver(() => {
     if (scheduled) return
@@ -76,6 +124,7 @@ export function bindCopyFeedback(root: HTMLElement): () => void {
     requestAnimationFrame(() => {
       scheduled = false
       injectCopyButtons(root)
+      pairIOSamples(root)
     })
   })
   mo.observe(root, { childList: true, subtree: true })
