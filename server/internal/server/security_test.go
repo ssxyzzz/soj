@@ -5,28 +5,27 @@ import (
 	"time"
 )
 
-// passwordProblem（v0.14）：长度 8-64、弱口令黑名单、不得与用户名相同/包含用户名。
+// passwordProblem（v0.14）：长度 8-64、弱口令黑名单。
+// （原「不得与用户名相同/包含用户名」已按需求移除，保留用例锁定该口径）
 func TestPasswordProblem(t *testing.T) {
 	cases := []struct {
-		name     string
-		username string
-		pwd      string
-		wantMsg  bool // 是否应拒绝
+		name    string
+		pwd     string
+		wantMsg bool // 是否应拒绝
 	}{
-		{"过短", "alice", "a1b2c3d", true},
-		{"恰 8 位通过", "alice", "a1b2c3d4", false},
-		{"超长", "alice", string(make([]byte, 65)), true},
-		{"弱口令", "alice", "12345678", true},
-		{"弱口令大小写不敏感", "alice", "Password1", true},
-		{"含用户名", "alice", "xxalice99", true},
-		{"等于用户名", "alice", "alicealice", true},
-		{"正常", "alice", "xk9!vq2m", false},
-		{"用户名空时跳过包含检查", "", "containsanything", false},
+		{"过短", "a1b2c3d", true},
+		{"恰 8 位通过", "a1b2c3d4", false},
+		{"超长", string(make([]byte, 65)), true},
+		{"弱口令", "12345678", true},
+		{"弱口令大小写不敏感", "Password1", true},
+		{"正常", "xk9!vq2m", false},
+		{"与用户名相同已允许", "alicealice", false},
+		{"包含用户名已允许", "xxalice99", false},
 	}
 	for _, tc := range cases {
-		msg := passwordProblem(tc.username, tc.pwd)
+		msg := passwordProblem(tc.pwd)
 		if (msg != "") != tc.wantMsg {
-			t.Errorf("%s: passwordProblem(%q,%q) = %q, 期望拒绝=%v", tc.name, tc.username, tc.pwd, msg, tc.wantMsg)
+			t.Errorf("%s: passwordProblem(%q) = %q, 期望拒绝=%v", tc.name, tc.pwd, msg, tc.wantMsg)
 		}
 	}
 }

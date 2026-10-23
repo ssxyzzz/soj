@@ -47,7 +47,7 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "用户名需为 3-32 位字母/数字/下划线")
 		return
 	}
-	if msg := passwordProblem(req.Username, req.Password); msg != "" {
+	if msg := passwordProblem(req.Password); msg != "" {
 		fail(c, http.StatusBadRequest, msg)
 		return
 	}
@@ -130,14 +130,13 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		set["nickname"] = nickname
 	}
 	pwdResetUname := "" // 重置密码的审计对象（最终用户名：本请求可能同时改名）
+	if req.Username != nil {
+		pwdResetUname = *req.Username
+	} else if u, err := h.repo.GetUserByID(c.Request.Context(), id); err == nil {
+		pwdResetUname = u.Username
+	}
 	if req.Password != nil {
-		pwdResetUname = ""
-		if req.Username != nil {
-			pwdResetUname = *req.Username
-		} else if u, err := h.repo.GetUserByID(c.Request.Context(), id); err == nil {
-			pwdResetUname = u.Username
-		}
-		if msg := passwordProblem(pwdResetUname, *req.Password); msg != "" {
+		if msg := passwordProblem(*req.Password); msg != "" {
 			fail(c, http.StatusBadRequest, msg)
 			return
 		}

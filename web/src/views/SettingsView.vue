@@ -187,7 +187,7 @@ async function changePassword() {
             type="password"
             show-password
             maxlength="64"
-            placeholder="至少 8 位，不能与用户名相同或包含用户名"
+            placeholder="至少 8 位"
           />
         </el-form-item>
         <el-form-item label="确认新密码">

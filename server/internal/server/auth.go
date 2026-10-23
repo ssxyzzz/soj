@@ -36,20 +36,15 @@ var weakPasswords = map[string]struct{}{
 	"66666666": {}, "88888888": {}, "888888888": {}, "iloveyou": {},
 }
 
-// passwordProblem 密码强度（v0.14）：8-64 位、不在弱口令黑名单、不得与用户名相同或
-// 包含用户名。注册/管理员建号/重置/本人改密四处统一调用；通过返回空串。
-func passwordProblem(username, pwd string) string {
+// passwordProblem 密码强度（v0.14）：8-64 位、不在弱口令黑名单。
+// （原「不得与用户名相同或包含用户名」已按需求移除）
+// 注册/管理员建号/重置/本人改密四处统一调用；通过返回空串。
+func passwordProblem(pwd string) string {
 	if len(pwd) < 8 || len(pwd) > 64 {
 		return "密码长度需在 8-64 位之间"
 	}
-	low := strings.ToLower(pwd)
-	if _, bad := weakPasswords[low]; bad {
+	if _, bad := weakPasswords[strings.ToLower(pwd)]; bad {
 		return "密码过于简单（命中常见弱口令），请更换"
-	}
-	if username != "" {
-		if uname := strings.ToLower(username); low == uname || strings.Contains(low, uname) {
-			return "密码不能与用户名相同或包含用户名"
-		}
 	}
 	return ""
 }
@@ -92,7 +87,7 @@ func (h *Handlers) Register(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "用户名需为 3-32 位字母/数字/下划线")
 		return
 	}
-	if msg := passwordProblem(req.Username, req.Password); msg != "" {
+	if msg := passwordProblem(req.Password); msg != "" {
 		fail(c, http.StatusBadRequest, msg)
 		return
 	}
@@ -204,7 +199,7 @@ func (h *Handlers) ChangePassword(c *gin.Context) {
 		return
 	}
 	uid, uname, _, _ := currentUser(c)
-	if msg := passwordProblem(uname, req.NewPassword); msg != "" {
+	if msg := passwordProblem(req.NewPassword); msg != "" {
 		fail(c, http.StatusBadRequest, msg)
 		return
 	}
