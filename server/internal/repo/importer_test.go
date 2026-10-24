@@ -7,8 +7,8 @@ func TestSeedPID(t *testing.T) {
 		name string
 		want int64
 	}{
-		{"1_A_Plus_B", 1},
-		{"6_hidden", 6},
+		{"1_hello_soj", 1},
+		{"5_hidden", 5},
 		{"42_", 42},
 		{"12_only_prefix_12", 12},
 		{"no_prefix", 0},

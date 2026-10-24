@@ -14,6 +14,8 @@ web/public/vditor/
 server/bin/
 *.test
 *.out
+# 种子题答案文件（*.in + *.out 数据对；曾随 *.out 漏提交，全新 clone 播种会缺答案）
+!data/seed/**/*.out
 
 # 前端 embed 产物（构建流程生成，.gitkeep 保留）
 server/internal/webui/dist/*

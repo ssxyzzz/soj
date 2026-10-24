@@ -36,7 +36,7 @@ lint: ## 代码检查：web ESLint + go vet（+ staticcheck 如已安装）
 	cd server && go vet ./...
 	@if command -v staticcheck >/dev/null 2>&1; then cd server && staticcheck ./...; else echo "（未安装 staticcheck，跳过：go install honnef.co/go/tools/cmd/staticcheck@latest）"; fi
 
-import: ## 导入题目目录: make import DIR=data/seed/1_A_Plus_B
+import: ## 导入题目目录: make import DIR=data/seed/1_hello_soj
 	cd server && go run ./cmd/soj -import $(DIR)
 
 # ---------- 本地开发（基础设施用 compose 起，业务代码本机跑） ----------
