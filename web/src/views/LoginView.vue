@@ -136,51 +136,66 @@ async function submitForgot() {
 </script>
 
 <template>
-  <!-- v0.19 登录页（web-design-v3.md §4.2）：全屏居中白卡，无导航；
-       背景透出 body 三层画布（渐变 + 光晕 + 青网格），逻辑与旧版零差异 -->
+  <!-- v3-full 登录页：全屏居中白卡、无导航；页面自带独立画布（spot 中心偏上 + 网格 mask 38%），
+       覆盖全局 body 网格层（自有渐变底不透）；左上返回首页胶囊 -->
   <div class="login-page">
-    <div class="login-card">
-      <div class="login-brand">
-        <span class="brand-mark">S</span>
-        <span class="brand-word">SOJ</span>
-        <span class="login-sub">登录 SOJ，开始你的刷题之旅</span>
-      </div>
-      <div class="tabs">
-        <el-radio-group v-model="mode">
-          <el-radio-button value="login">登录</el-radio-button>
-          <el-radio-button v-if="site.registerOpen" value="register">注册</el-radio-button>
-        </el-radio-group>
-      </div>
-      <el-form label-position="top" @keyup.enter="submit">
-        <el-form-item label="用户名">
-          <el-input v-model="form.username" placeholder="3-32 位字母/数字/下划线" />
-        </el-form-item>
-        <el-form-item v-if="mode === 'register'" label="昵称（可选）">
-          <el-input v-model="form.nickname" placeholder="默认与用户名相同" />
-        </el-form-item>
-        <template v-if="mode === 'register' && emailMode">
-          <el-form-item label="邮箱">
-            <el-input v-model="form.email" placeholder="用于接收验证码" />
-          </el-form-item>
-          <el-form-item label="邮箱验证码">
-            <div class="code-row">
-              <el-input v-model="form.code" placeholder="6 位数字" />
-              <el-button :disabled="regCd.seconds.value > 0" @click="sendRegisterCode">
-                {{ regCd.seconds.value > 0 ? `${regCd.seconds.value}s 后重发` : '获取验证码' }}
-              </el-button>
-            </div>
-          </el-form-item>
-        </template>
-        <el-form-item :label="mode === 'register' ? '密码（至少 8 位）' : '密码'">
-          <el-input v-model="form.password" type="password" show-password placeholder="至少 8 位" />
-        </el-form-item>
-        <el-button type="primary" class="submit" :loading="loading" @click="submit">
-          {{ mode === 'login' ? '登 录' : '注 册' }}
-        </el-button>
-        <div v-if="mode === 'login' && site.passwordResetEnabled" class="forgot-row">
-          <el-link type="primary" :underline="false" @click="openForgot">忘记密码？</el-link>
+    <button class="login-back" type="button" @click="router.push('/')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 6l-6 6 6 6" /></svg>
+      返回首页
+    </button>
+    <div class="login-stage">
+      <div class="login-card">
+        <div class="login-brand">
+          <span class="brand-mark">S</span>
+          <span class="brand-word">SOJ</span>
+          <span class="login-sub">登录 SOJ，开始你的刷题之旅</span>
         </div>
-      </el-form>
+        <div v-if="site.registerOpen" class="seg-row">
+          <div class="soj-seg">
+            <button type="button" :class="{ on: mode === 'login' }" @click="mode = 'login'">登录</button>
+            <button type="button" :class="{ on: mode === 'register' }" @click="mode = 'register'">注册</button>
+          </div>
+        </div>
+        <el-form label-position="top" @keyup.enter="submit">
+          <el-form-item label="用户名 / 昵称">
+            <el-input v-model="form.username" placeholder="请输入用户名" />
+          </el-form-item>
+          <el-form-item v-if="mode === 'register'" label="昵称（可选）">
+            <el-input v-model="form.nickname" placeholder="默认与用户名相同" />
+          </el-form-item>
+          <template v-if="mode === 'register' && emailMode">
+            <el-form-item label="邮箱">
+              <el-input v-model="form.email" placeholder="用于接收验证码" />
+            </el-form-item>
+            <el-form-item label="邮箱验证码">
+              <div class="code-row">
+                <el-input v-model="form.code" placeholder="6 位数字" />
+                <el-button :disabled="regCd.seconds.value > 0" @click="sendRegisterCode">
+                  {{ regCd.seconds.value > 0 ? `${regCd.seconds.value}s 后重发` : '获取验证码' }}
+                </el-button>
+              </div>
+            </el-form-item>
+          </template>
+          <el-form-item :label="mode === 'register' ? '密码（8-64 位，不含弱口令）' : '密码'">
+            <el-input v-model="form.password" type="password" show-password placeholder="至少 8 位" />
+          </el-form-item>
+          <div v-if="mode === 'login'" class="login-row">
+            <span class="dim">验证码登录请联系管理员</span>
+            <el-link v-if="site.passwordResetEnabled" type="primary" :underline="false" @click="openForgot">忘记密码？</el-link>
+          </div>
+          <el-button type="primary" class="submit" :loading="loading" @click="submit">
+            {{ mode === 'login' ? '登 录' : '注 册' }}
+          </el-button>
+          <p v-if="site.registerOpen" class="login-alt">
+            {{ mode === 'login' ? '还没有账号？' : '已有账号？' }}
+            <a @click="mode = mode === 'login' ? 'register' : 'login'">{{ mode === 'login' ? '注册新账号' : '去登录' }}</a>
+          </p>
+        </el-form>
+      </div>
+      <div class="login-foot">
+        SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统<br />
+        <a v-if="site.icpNumber" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ site.icpNumber }}</a>
+      </div>
     </div>
 
     <!-- 忘记密码：用户名/邮箱 → 发码（防枚举统一提示）→ 验证码 + 新密码×2 -->
@@ -213,14 +228,65 @@ async function submitForgot() {
 </template>
 
 <style scoped>
+/* v3-full #scr-login：独立画布——冷白渐变（不透，盖住全局 body 网格层）+ 中心偏上青光晕；
+   网格层在 ::after（mask 椭圆 90% 70% at 50% 38%，与全局 50% 0% 版区分） */
 .login-page {
+  position: relative;
+  min-height: 100vh;
+  background:
+    radial-gradient(520px 340px at 50% 16%, rgba(122, 184, 196, 0.14), transparent 62%),
+    linear-gradient(var(--soj-bg-top), var(--soj-bg-bottom));
+}
+
+.login-page::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(122, 184, 196, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122, 184, 196, 0.11) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 38%, #000 26%, transparent 80%);
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 38%, #000 26%, transparent 80%);
+}
+
+/* v3 .login-back：左上返回首页胶囊（白.8 + blur） */
+.login-back {
+  position: fixed;
+  top: 22px;
+  left: 26px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-ink-2);
+  padding: 8px 16px;
+  border: 1px solid var(--soj-line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.login-back:hover {
+  color: var(--soj-blue);
+  border-color: var(--soj-blue-line);
+}
+
+.login-stage {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 48px 20px;
-  /* v0.19：透出全局三层画布（原 --el-bg-color-page 实底移除） */
-  background: transparent;
 }
 
 .login-card {
@@ -229,7 +295,7 @@ async function submitForgot() {
   background: #fff;
   border: 1px solid var(--soj-line);
   border-radius: 20px;
-  padding: 34px 34px 30px;
+  padding: 36px 34px 30px;
   box-shadow:
     0 1px 2px rgba(11, 31, 69, 0.04),
     0 18px 48px rgba(11, 31, 69, 0.1);
@@ -239,29 +305,29 @@ async function submitForgot() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 11px;
-  margin-bottom: 22px;
+  gap: 12px;
+  margin-bottom: 26px;
   text-align: center;
 }
 
-/* 品牌双色（与顶栏同款；此处独立 scoped 复刻一份，登录页无顶栏上下文） */
+/* 品牌双色（与顶栏同款放大版；此处独立 scoped 复刻一份，登录页无顶栏上下文） */
 .brand-mark {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
   color: #fff;
-  font-size: 18px;
-  font-weight: var(--soj-fw-bold);
+  font-size: 19px;
+  font-weight: var(--soj-fw-heavy);
   box-shadow: 0 8px 20px rgba(36, 85, 218, 0.3);
 }
 
 .brand-word {
-  font-size: 27px;
-  font-weight: var(--soj-fw-bold);
+  font-size: 30px;
+  font-weight: var(--soj-fw-heavy);
   letter-spacing: 1px;
   background: linear-gradient(
     90deg,
@@ -292,44 +358,82 @@ async function submitForgot() {
 }
 
 .login-sub {
-  font-size: var(--soj-fs-small);
-  color: var(--el-text-color-secondary);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
 }
 
-.tabs {
+/* 登录/注册分段：v3 .seg 全局件（居中） */
+.seg-row {
   display: flex;
   justify-content: center;
   margin-bottom: 20px;
 }
 
-/* 分段切换胶囊化（登录/注册） */
-.tabs :deep(.el-radio-button__inner) {
-  border-radius: 0;
-  padding: 9px 26px;
+/* v3 字段口径：label 13/600 ink-2，输入 46 高圆角 12（聚焦环走全局规则） */
+.login-card :deep(.el-form-item__label) {
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-ink-2);
 }
 
-.tabs :deep(.el-radio-button:first-child .el-radio-button__inner) {
-  border-radius: 999px 0 0 999px;
+.login-card :deep(.el-input) {
+  --el-input-height: 46px;
 }
 
-.tabs :deep(.el-radio-button:last-child .el-radio-button__inner) {
-  border-radius: 0 999px 999px 0;
+/* v3 .login-row：左灰提示 + 右忘记密码链接 */
+.login-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--soj-fs-13);
+  margin: 2px 0 14px;
 }
 
+/* v3 .login-btn：48 高胶囊渐变主钮 */
 .submit {
   width: 100%;
-  height: 46px;
-  font-size: var(--soj-fs-section);
+  height: 48px;
+  font-size: var(--soj-fs-16);
+}
+
+.login-alt {
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+}
+
+.login-alt a {
+  color: var(--soj-blue);
+  font-weight: var(--soj-fw-bold);
+  cursor: pointer;
+}
+
+.login-alt a:hover {
+  text-decoration: underline;
+}
+
+/* v3 .login-foot：卡片下方两行 12px 页脚 */
+.login-foot {
+  margin-top: 26px;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+  text-align: center;
+  line-height: 2;
+}
+
+.login-foot a {
+  color: var(--soj-ink-3);
+  text-decoration: none;
+}
+
+.login-foot a:hover {
+  color: var(--soj-blue);
 }
 
 .code-row {
   display: flex;
   gap: 8px;
   width: 100%;
-}
-
-.forgot-row {
-  text-align: right;
-  margin-top: 10px;
 }
 </style>

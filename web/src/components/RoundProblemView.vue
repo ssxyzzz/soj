@@ -12,6 +12,7 @@ import { judgeQueueApi } from '@/api/judgeQueue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import PageShell from '@/components/PageShell.vue'
+import RailCard from '@/components/RailCard.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemInfoCard from '@/components/problem/ProblemInfoCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
@@ -231,35 +232,44 @@ onUnmounted(() => {
 
 <template>
   <div v-loading="loading">
-    <PageShell v-if="round && problem">
+    <PageShell v-if="round && problem" rail-wide>
       <template #standalone>
-        <el-card class="standalone-card" :body-style="{ padding: '10px 20px' }">
+        <el-card class="standalone-card round-head" :body-style="{ padding: '14px 20px' }">
           <div class="sa-head">
-            <div class="sa-time">
-              <span class="sa-title">{{ round.title }}</span>
-              <el-tag size="small" :type="running ? 'success' : 'info'">{{ statusText }}</el-tag>
-              <span class="dim">{{ name }}时间：{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
-              <span v-if="!revealed" class="dim">OI 赛制：赛时只记录提交次数，不出分</span>
+            <div>
+              <div class="sa-time">
+                <span class="sa-title">{{ round.title }}</span>
+                <span class="sub-status" :class="running ? 'blue' : 'gray'"><span class="dot" :class="running ? 'blue' : 'gray'"></span>{{ statusText }}</span>
+                <span class="rtime">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
+                <span v-if="!revealed" class="rtime">OI 赛制：赛时只记录提交次数，不出分</span>
+              </div>
+              <div class="sw-btns">
+                <span class="sw-lab">切题</span>
+                <button
+                  v-for="(p, i) in round.problems"
+                  :key="p.id"
+                  type="button"
+                  class="sw-btn"
+                  :class="{ on: p.id === pid }"
+                  @click="goProblem(p.id)"
+                >
+                  {{ i + 1 }}
+                </button>
+              </div>
             </div>
-            <el-button class="sa-back" @click="router.push(`${roundBase}/${round.id}`)">
+            <el-button class="sa-back" size="small" @click="router.push(`${roundBase}/${round.id}`)">
               <el-icon><ArrowLeft /></el-icon>
               返回{{ name }}
             </el-button>
           </div>
-          <div class="sa-switch">
-            <el-button
-              v-for="(p, i) in round.problems"
-              :key="p.id"
-              :type="p.id === pid ? 'primary' : 'default'"
-              size="small"
-              class="switch-btn"
-              @click="goProblem(p.id)"
-            >
-              {{ i + 1 }}
-            </el-button>
-          </div>
         </el-card>
       </template>
+
+      <!-- v3 面包屑：赛事名 / T{序号} -->
+      <div class="crumbs">
+        <router-link :to="`${roundBase}/${round.id}`">{{ round.title }}</router-link>
+        ／ <span class="mono">T{{ (round.problems?.findIndex((p) => p.id === pid) ?? 0) + 1 }}</span>
+      </div>
 
       <ProblemStatement :problem="problem" :file-io="round.file_io" />
 
@@ -280,15 +290,14 @@ onUnmounted(() => {
 
       <template #aside>
         <!-- 管理卡（题库详情页同款）：编辑直达，免去回题库找原题 -->
-        <el-card v-if="problem.can_edit_statement" class="aside-card">
-          <template #header><span>管理</span></template>
+        <RailCard v-if="problem.can_edit_statement" ov="管理" title="题目维护" class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${pid}/edit`)">编辑题目</el-button>
-            <el-button plain style="width: 100%" :loading="rejudgeRunning" @click="rejudgeAll">批量重测本题</el-button>
+            <el-button style="width: 100%" :loading="rejudgeRunning" @click="rejudgeAll">批量重测本题</el-button>
           </div>
-        </el-card>
+        </RailCard>
 
-        <el-card class="aside-card">
+        <RailCard ov="提交" title="本题操作" class="aside-card">
           <div class="entry-actions">
             <template v-if="showSubmitWays && !isObjective">
               <el-tooltip
@@ -296,7 +305,7 @@ onUnmounted(() => {
                 content="本题暂无数据，无法评测。请联系管理员上传数据"
                 placement="top"
               >
-                <el-button type="primary" plain style="width: 100%" :disabled="!running || noCases" @click="showSubmit = true">
+                <el-button type="primary" style="width: 100%" :disabled="!running || noCases" @click="showSubmit = true">
                   提交
                 </el-button>
               </el-tooltip>
@@ -306,17 +315,18 @@ onUnmounted(() => {
                 content="本题暂无数据，无法评测。请联系管理员上传数据"
                 placement="top"
               >
-                <el-button type="success" plain style="width: 100%" :disabled="!running || noCases" @click="showWorkbench = true">
+                <el-button style="width: 100%" :disabled="!running || noCases" @click="showWorkbench = true">
                   在线编程
                 </el-button>
               </el-tooltip>
             </template>
-            <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
+            <el-button style="width: 100%" @click="openSolutions">题解</el-button>
             <el-button style="width: 100%" @click="showMine = true">我的提交</el-button>
             <el-button v-if="canViewOthers" style="width: 100%" @click="showOthers = true">所有代码</el-button>
-            <div v-if="!running" class="dim center">{{ name }}未在进行中</div>
+            <div v-if="!running" class="hint center">{{ name }}未在进行中</div>
           </div>
-        </el-card>
+          <p v-if="!revealed" class="hint">隐藏期内不出分，「我的提交」仅显示已记录，可查看自己的代码。</p>
+        </RailCard>
 
         <ProblemInfoCard v-if="revealed || canViewOthers" :problem="problem" />
       </template>
@@ -386,7 +396,7 @@ onUnmounted(() => {
             <el-descriptions-item label="提交时间">{{ fmtDate(mineDetail.created_at) }}</el-descriptions-item>
           </el-descriptions>
           <div class="detail-sub">代码</div>
-          <pre class="mono sub-code">{{ mineDetail.code }}</pre>
+          <pre class="soj-codepane mono">{{ mineDetail.code }}</pre>
         </template>
       </el-dialog>
     </template>
@@ -398,6 +408,22 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
+/* v3 .crumbs */
+.crumbs {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+  margin-bottom: 14px;
+}
+
+.crumbs a {
+  color: var(--soj-ink-3);
+  text-decoration: none;
+}
+
+.crumbs a:hover {
+  color: var(--soj-blue);
+}
+
 .sa-head {
   display: flex;
   align-items: flex-start;
@@ -405,9 +431,65 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+/* v3 .rt：赛名 17/800 */
 .sa-title {
-  font-size: var(--soj-fs-page-title);
-  font-weight: var(--soj-fw-emphasis);
+  font-size: 17px;
+  font-weight: var(--soj-fw-heavy);
+  letter-spacing: -0.2px;
+  color: var(--soj-navy);
+}
+
+/* v3 .rtime：12.5px 弱化说明 */
+.rtime {
+  font-size: 12.5px;
+  color: var(--soj-ink-3);
+}
+
+/* v3 .sw-btns：34x32 圆角 10 切题方块钮 */
+.sw-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sw-lab {
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+  margin-right: 2px;
+}
+
+.sw-btn {
+  width: 34px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--soj-line-2);
+  background: var(--el-fill-color-blank);
+  font: inherit;
+  font-weight: var(--soj-fw-bold);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.sw-btn:hover {
+  border-color: var(--soj-blue-line);
+  color: var(--soj-blue);
+}
+
+.sw-btn.on {
+  background: var(--soj-blue);
+  border-color: var(--soj-blue);
+  color: #fff;
+}
+
+.hint {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+  line-height: 1.7;
+  margin: 10px 0 0;
 }
 
 .sa-time {

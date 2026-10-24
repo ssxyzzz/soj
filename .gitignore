@@ -42,3 +42,6 @@ server/internal/webui/dist/*
 !/README*.md
 # 本地联调测试数据（判题样例自容器卷拷贝，不入库）
 server/data/
+
+# 本地插件开发目录（zcode 插件等开发机自建工具，不入库）
+plugins/

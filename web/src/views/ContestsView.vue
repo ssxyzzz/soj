@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { contestApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
+import RailCard from '@/components/RailCard.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
 import { useUserStore } from '@/stores/user'
-import { fmtDate } from '@/utils/format'
+import { fmtShort } from '@/utils/format'
 import type { ContestListItem, PickedProblem } from '@/types'
 
 const router = useRouter()
@@ -30,7 +31,56 @@ const form = ref({
 })
 
 const running = computed(() => list.value.filter((c) => c.status === 'running'))
-const ended = computed(() => list.value.filter((c) => c.status === 'ended'))
+const scheduled = computed(() => list.value.filter((c) => c.status === 'scheduled'))
+
+// v0.19 三期（v3-full 比赛页）：seg 分段过滤 + 横条卡片行（替换双表格）
+const seg = ref<'all' | 'running' | 'scheduled' | 'ended'>('all')
+const segLabel: Record<typeof seg.value, string> = {
+  all: '全部',
+  running: '进行中',
+  scheduled: '即将开始',
+  ended: '已结束',
+}
+const filtered = computed(() =>
+  seg.value === 'all' ? list.value : list.value.filter((c) => c.status === seg.value),
+)
+
+const contestLabel: Record<ContestListItem['status'], string> = {
+  scheduled: '报名中',
+  running: '进行中',
+  ended: '已结束',
+}
+
+// v3 副列「我的赛程 · 下一场」：最近一场未开赛比赛的倒计时（每秒刷新；无待开赛事不渲染卡）
+const now = ref(Date.now())
+let clock: ReturnType<typeof setInterval> | undefined
+const nextContest = computed(() =>
+  [...scheduled.value].sort((a, b) => +new Date(a.start) - +new Date(b.start))[0] ?? null,
+)
+const countdown = computed(() => {
+  const c = nextContest.value
+  if (!c) return ''
+  const ms = +new Date(c.start) - now.value
+  if (ms <= 0) return '即将开赛'
+  const sec = Math.floor(ms / 1000)
+  const days = Math.floor(sec / 86400)
+  const hh = String(Math.floor((sec % 86400) / 3600)).padStart(2, '0')
+  const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0')
+  const ss = String(sec % 60).padStart(2, '0')
+  return days > 0 ? `${days} 天 ${hh} : ${mm} : ${ss}` : `${hh} : ${mm} : ${ss}`
+})
+onMounted(() => {
+  load()
+  clock = setInterval(() => (now.value = Date.now()), 1000)
+})
+
+
+// 行右时间：running 显示结束时间、scheduled 显示开赛时间、ended 显示结束时间
+function whenLine(c: ContestListItem): { main: string; sub: string } {
+  if (c.status === 'running') return { main: `${fmtShort(c.end)} 结束`, sub: '进行中' }
+  if (c.status === 'scheduled') return { main: `${fmtShort(c.start)} 开赛`, sub: '待开赛' }
+  return { main: `${fmtShort(c.end)} 结束`, sub: '已结束' }
+}
 
 async function load() {
   loading.value = true
@@ -72,64 +122,78 @@ async function create() {
   }
 }
 
-function timeRange(c: ContestListItem): string {
-  return `${fmtDate(c.start)} ~ ${fmtDate(c.end)}`
-}
-
 function openContest(c: ContestListItem) {
   router.push(`/contests/${c.id}`)
 }
 
-onMounted(load)
+onUnmounted(() => {
+  if (clock) clearInterval(clock)
+})
+
 </script>
 
 <template>
   <PageShell>
-      <el-card v-loading="loading" class="group">
-        <template #header>
-          <div class="group-head running-head">
-            <span class="dot running-dot" /> 进行中的比赛
-          </div>
-        </template>
-        <el-empty v-if="!running.length" description="当前没有进行中的比赛" :image-size="50" />
-        <el-table stripe v-else :data="running" style="cursor: pointer" @row-click="openContest">
-          <el-table-column prop="title" label="比赛" min-width="220" />
-          <el-table-column label="时间" min-width="280">
-            <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
-          </el-table-column>
-          <el-table-column prop="problem_count" label="题数" width="80" />
-        </el-table>
-      </el-card>
+      <div class="page-head">
+        <div class="kicker">CONTESTS</div>
+        <h1 class="page-title">比赛<small>{{ running.length }} 场进行中 · {{ scheduled.length }} 场待开赛</small></h1>
+      </div>
 
-      <el-card v-loading="loading" class="group">
-        <template #header>
-          <div class="group-head"><span class="dot ended-dot" /> 已结束的比赛</div>
-        </template>
-        <el-empty v-if="!ended.length" description="还没有已结束的比赛" :image-size="50" />
-        <el-table stripe v-else :data="ended" style="cursor: pointer" @row-click="openContest">
-          <el-table-column prop="title" label="比赛" min-width="220" />
-          <el-table-column label="时间" min-width="280">
-            <template #default="{ row }">{{ timeRange(row as ContestListItem) }}</template>
-          </el-table-column>
-          <el-table-column prop="problem_count" label="题数" width="80" />
-        </el-table>
-      </el-card>
+      <!-- v3-full：全局 .soj-seg 分段 + 横条卡片行 -->
+      <div class="soj-seg page-seg">
+        <button
+          v-for="(label, key) in segLabel"
+          :key="key"
+          :class="{ on: seg === key }"
+          @click="seg = key as typeof seg"
+        >
+          {{ label }}
+        </button>
+      </div>
+
+      <div v-loading="loading">
+        <el-empty v-if="!filtered.length" description="这里还没有比赛" :image-size="60" />
+        <div v-else class="crowd">
+          <div v-for="c in filtered" :key="c.id" class="card crow" @click="openContest(c)">
+            <span class="mini-tag" :class="c.status">{{ contestLabel[c.status] }}</span>
+            <div class="grow">
+              <h3>{{ c.title }}</h3>
+              <div class="meta">{{ fmtShort(c.start) }} ~ {{ fmtShort(c.end) }} · {{ c.problem_count }} 题</div>
+            </div>
+            <div class="when">
+              <b>{{ whenLine(c).main }}</b>
+              <span>{{ whenLine(c).sub }}</span>
+            </div>
+            <el-button
+              :type="c.status === 'running' ? 'primary' : 'default'"
+              style="flex: none"
+              @click.stop="openContest(c)"
+            >
+              {{ c.status === 'ended' ? '查看榜单' : c.status === 'scheduled' ? '查看详情' : '进入赛场' }}
+            </el-button>
+          </div>
+        </div>
+      </div>
 
     <template #aside>
-      <el-card v-if="userStore.can('contest.bank.create')" class="aside-card">
-        <template #header><span>管理</span></template>
-        <el-button type="primary" style="width: 100%" @click="showCreate = true">创建主题库比赛</el-button>
-      </el-card>
+      <RailCard v-if="userStore.can('contest.bank.create')" ov="管理" title="赛事管理" class="aside-card">
+        <el-button type="primary" style="width: 100%" @click="showCreate = true">新建比赛</el-button>
+        <p class="hint">从题库挑选赛题成场；创建后可在详情页调整题目与各项设置。</p>
+      </RailCard>
 
-      <el-card class="aside-card">
-        <template #header><span>赛制说明</span></template>
+      <RailCard v-if="nextContest" ov="我的赛程" :title="`下一场 · ${nextContest.title}`" class="aside-card">
+        <div class="soj-countdown">{{ countdown }}</div>
+        <p class="hint center">{{ fmtShort(nextContest.start) }} 开赛</p>
+      </RailCard>
+
+      <RailCard ov="说明" title="赛制与锁题" class="aside-card">
         <div class="dim rule-text">
           <p>· OI 赛制：赛时正常评测但不出分，只记录提交次数；</p>
           <p>· 每题满分 100，按测试点 / 子任务计分；</p>
           <p>· 赛后统一出榜，按总分排名；</p>
           <p>· 比赛期间锁题：请从比赛页提交。</p>
         </div>
-      </el-card>
+      </RailCard>
     </template>
   </PageShell>
 
@@ -186,38 +250,130 @@ onMounted(load)
 </template>
 
 <style scoped>
-.group {
-  margin-bottom: 16px;
+/* 全局 .soj-seg 已接管形态，这里只补页面下边距 */
+.page-seg {
+  margin-bottom: 18px;
 }
 
-.group-head {
+/* v3 横条卡片行 */
+.crowd {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.crow {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: var(--soj-fw-emphasis);
+  gap: 18px;
+  padding: 18px 22px;
+  cursor: pointer;
+  transition:
+    transform 0.18s,
+    box-shadow 0.18s;
 }
 
-.dot {
-  width: 10px;
-  height: 10px;
+.crow:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 4px rgba(11, 31, 69, 0.04),
+    0 16px 40px rgba(11, 31, 69, 0.1);
+}
+
+.crow h3 {
+  font-size: 16px;
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
+  letter-spacing: -0.2px;
+}
+
+.crow .meta {
+  font-size: 13px;
+  color: var(--soj-ink-3);
+  margin-top: 3px;
+}
+
+.crow .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.crow .when {
+  text-align: right;
+  font-size: 12px;
+  color: var(--soj-ink-3);
+  flex: none;
+}
+
+.crow .when b {
+  display: block;
+  font-size: 14px;
+  color: var(--soj-navy);
+  font-weight: 700;
+}
+
+/* 迷你状态点标（v3 mini-tag）：圆点 + 文字浅胶囊 */
+.mini-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex: none;
+}
+
+.mini-tag::before {
+  content: '';
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  display: inline-block;
+  background: currentColor;
+  flex: none;
 }
 
-.running-dot {
-  background: var(--el-color-success);
+.mini-tag.running {
+  background: var(--soj-run-bg);
+  color: var(--soj-run);
 }
 
-.ended-dot {
-  background: var(--el-text-color-placeholder);
+.mini-tag.scheduled {
+  background: var(--soj-tle-bg);
+  color: var(--soj-tle);
 }
 
-.running-head {
-  color: var(--el-color-success-dark-2);
+.mini-tag.ended {
+  background: var(--soj-mut-bg);
+  color: var(--soj-mut);
+}
+
+.hint {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+  line-height: 1.7;
+  margin: 10px 0 0;
+}
+
+.hint.center {
+  text-align: center;
+  margin-top: 8px;
 }
 
 .rule-text p {
   margin: 0 0 6px;
   line-height: 1.6;
+}
+
+@media (max-width: 768px) {
+  .crow {
+    flex-wrap: wrap;
+  }
+
+  .crow .when {
+    text-align: left;
+    width: 100%;
+  }
 }
 </style>

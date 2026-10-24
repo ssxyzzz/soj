@@ -3,7 +3,6 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 
-import PageShell from '@/components/PageShell.vue'
 import { authApi } from '@/api'
 import { verifyApi } from '@/api/verify'
 import { useLevelsStore } from '@/stores/levels'
@@ -238,89 +237,185 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageShell v-loading="loading">
-    <el-card shadow="never">
-      <template #header><span>个人信息</span></template>
-      <el-form label-position="left" label-width="120px" style="max-width: 560px">
-        <el-form-item label="昵称">
-          <div class="nickname-field">
+  <div class="settings-wrap page" v-loading="loading">
+    <div class="page-head">
+      <div class="kicker">SETTINGS</div>
+      <h1 class="page-title">
+        个人设置<small>{{ userStore.nickname || userStore.uid }}<template v-if="userStore.level?.level"> · Lv.{{ userStore.level.level }} {{ levels.nameOf(userStore.level.level) }}</template></small>
+      </h1>
+    </div>
+
+    <!-- 个人信息 -->
+    <el-card shadow="never" class="fcard">
+      <div class="panel-h" style="padding-left: 0"><span class="pt">个人信息</span></div>
+      <div class="fbody">
+        <div class="frow">
+          <span class="fl">昵称<div class="fd">用于榜单、题解等公开页面</div></span>
+          <div class="fctrl">
             <el-input
               v-model="nickname"
               :disabled="!canEditNickname"
               maxlength="32"
               placeholder="用于榜单、题解等公开页面展示"
+              style="width: 320px"
             />
-            <span v-if="!canEditNickname" class="dim">当前角色不允许自行修改昵称，请联系管理员</span>
+            <span v-if="!canEditNickname" class="fd-inline">当前角色不允许自行修改昵称，请联系管理员</span>
           </div>
-        </el-form-item>
-        <el-form-item label="性别">
+        </div>
+        <div class="frow">
+          <span class="fl">性别</span>
           <el-select v-model="profileForm.gender" clearable placeholder="未填写" style="width: 160px">
             <el-option value="男" label="男" />
             <el-option value="女" label="女" />
           </el-select>
-        </el-form-item>
-        <el-form-item label="学校">
-          <el-input v-model="profileForm.school" maxlength="64" placeholder="选填，仅自己可见" />
-        </el-form-item>
-        <el-form-item label="年级">
-          <el-input v-model="profileForm.grade" maxlength="16" placeholder="选填，如：初一 / 高二 / 大一" />
-        </el-form-item>
-        <el-form-item label="QQ">
-          <el-input v-model="profileForm.qq" maxlength="16" placeholder="选填，仅自己可见" />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" plain :loading="savingProfile" @click="saveProfile">保存</el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+        <div class="frow">
+          <span class="fl">学校<div class="fd">仅自己可见</div></span>
+          <el-input v-model="profileForm.school" maxlength="64" placeholder="选填" style="width: 320px" />
+        </div>
+        <div class="frow">
+          <span class="fl">年级</span>
+          <el-input v-model="profileForm.grade" maxlength="16" placeholder="选填，如：初一 / 高二 / 大一" style="width: 320px" />
+        </div>
+        <div class="frow">
+          <span class="fl">QQ<div class="fd">仅自己可见</div></span>
+          <el-input v-model="profileForm.qq" maxlength="16" placeholder="选填" style="width: 320px" />
+        </div>
+        <div class="frow">
+          <span class="fl"></span>
+          <div><el-button type="primary" size="small" :loading="savingProfile" @click="saveProfile">保存个人信息</el-button></div>
+        </div>
+      </div>
     </el-card>
 
-    <el-card shadow="never" style="margin-top: 16px">
-      <template #header><span>修改密码</span></template>
-      <el-form label-position="left" label-width="120px" style="max-width: 560px">
-        <el-form-item label="原密码">
-          <el-input v-model="pwdForm.old" type="password" show-password />
-        </el-form-item>
-        <el-form-item label="新密码">
+    <!-- 修改密码 -->
+    <el-card shadow="never" class="fcard">
+      <div class="panel-h" style="padding-left: 0"><span class="pt">修改密码</span></div>
+      <div class="fbody">
+        <div class="frow">
+          <span class="fl">原密码</span>
+          <el-input v-model="pwdForm.old" type="password" show-password style="width: 320px" />
+        </div>
+        <div class="frow">
+          <span class="fl">新密码<div class="fd">8-64 位，不含弱口令</div></span>
           <el-input
             v-model="pwdForm.new"
             type="password"
             show-password
             maxlength="64"
             placeholder="至少 8 位"
+            style="width: 320px"
           />
-        </el-form-item>
-        <el-form-item label="确认新密码">
-          <el-input
-            v-model="pwdForm.confirm"
-            type="password"
-            show-password
-            maxlength="64"
-            placeholder="再输入一次新密码"
-            @keyup.enter="changePassword"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" plain :loading="savingPwd" @click="changePassword">修改密码</el-button>
-          <span class="dim" style="margin-left: 8px">
-            修改成功后需重新登录；该账号在其他设备的登录态也会一并失效
-          </span>
-        </el-form-item>
-      </el-form>
+        </div>
+        <div class="frow">
+          <span class="fl">确认新密码</span>
+          <div class="fctrl">
+            <el-input
+              v-model="pwdForm.confirm"
+              type="password"
+              show-password
+              maxlength="64"
+              placeholder="再输入一次新密码"
+              style="width: 320px"
+              @keyup.enter="changePassword"
+            />
+            <el-button type="primary" size="small" :loading="savingPwd" @click="changePassword">修改密码</el-button>
+          </div>
+        </div>
+        <div class="frow">
+          <span class="fl"></span>
+          <span class="fd-inline">修改成功后需重新登录；该账号在其他设备的登录态也会一并失效</span>
+        </div>
+      </div>
     </el-card>
 
-    <el-card shadow="never" style="margin-top: 16px">
-      <template #header><span>绑定邮箱</span></template>
-      <el-form label-position="left" label-width="120px" style="max-width: 560px">
-        <el-form-item label="邮箱">
-          <div class="email-row">
+    <!-- 绑定邮箱 -->
+    <el-card shadow="never" class="fcard">
+      <div class="panel-h" style="padding-left: 0">
+        <span class="pt">绑定邮箱</span>
+        <span v-if="email" class="sub-status green"><span class="dot green"></span>已验证</span>
+      </div>
+      <div class="fbody">
+        <div class="frow">
+          <span class="fl">当前邮箱</span>
+          <div class="fctrl">
             <span :class="{ dim: !email }">{{ email || '未绑定' }}</span>
             <el-button size="small" @click="openBind">{{ email ? '换绑' : '绑定' }}</el-button>
           </div>
-          <div class="dim email-tip">
-            绑定后可用于找回密码（需管理员开启）；换绑需验证旧邮箱，换绑成功会向原邮箱发通知
+        </div>
+        <div class="frow">
+          <span class="fl">换绑须知<div class="fd">需旧邮箱或密码验证</div></span>
+          <span class="fd-inline">绑定后可用于找回密码（需管理员开启）；换绑需验证旧邮箱，换绑成功会向原邮箱发通知</span>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 偏好 -->
+    <el-card shadow="never" class="fcard">
+      <div class="panel-h" style="padding-left: 0"><span class="pt">偏好</span></div>
+      <div class="fbody">
+        <div class="frow">
+          <span class="fl">默认语言<div class="fd">提交弹窗与在线编程预填</div></span>
+          <el-select v-model="prefsForm.defaultLang" clearable placeholder="跟随系统默认（C++ 14）" style="width: 320px">
+            <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
+          </el-select>
+        </div>
+        <div class="frow frow-top">
+          <span class="fl">代码模板<div class="fd">留空则提交时全空白</div></span>
+          <div class="tpl">
+            <el-select v-model="tplLang" style="width: 160px">
+              <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
+            </el-select>
+            <el-input
+              v-model="prefsForm.codeTemplates[tplLang]"
+              type="textarea"
+              :rows="8"
+              class="mono"
+              spellcheck="false"
+              placeholder="留空则提交时全空白，由作答者自行编写"
+            />
           </div>
-        </el-form-item>
-      </el-form>
+        </div>
+        <div class="frow">
+          <span class="fl">代码自动补全<div class="fd">Lv.{{ levels.autocompleteMinLevel() }} 档解锁</div></span>
+          <div class="fctrl">
+            <el-switch
+              v-model="prefsForm.autocomplete"
+              :disabled="!autocompleteAvailable()"
+              @change="savePrefs"
+            />
+            <span class="fd-inline">
+              {{
+                autocompleteAvailable()
+                  ? '代码编辑器中的关键字 / 词法补全'
+                  : `达到 Lv.${levels.autocompleteMinLevel()} 后可开启自动补全（老师角色不受限）`
+              }}
+            </span>
+          </div>
+        </div>
+        <div class="frow">
+          <span class="fl">Markdown 编辑模式<div class="fd">题面 / 公告等编辑器默认模式</div></span>
+          <div class="fctrl">
+            <el-radio-group v-model="prefsForm.mdEditMode">
+              <el-radio-button value="wysiwyg">所见即所得</el-radio-button>
+              <el-radio-button value="ir">即时渲染</el-radio-button>
+              <el-radio-button value="sv">分屏预览</el-radio-button>
+            </el-radio-group>
+          </div>
+        </div>
+        <div class="frow">
+          <span class="fl">Markdown 主题<div class="fd">仅作用于编辑器内容区</div></span>
+          <div class="fctrl">
+            <el-select v-model="prefsForm.mdTheme" style="width: 240px">
+              <el-option value="light" label="明亮（站内默认）" />
+              <el-option value="ant-design" label="Ant Design" />
+              <el-option value="dark" label="暗色" />
+              <el-option value="wechat" label="微信" />
+            </el-select>
+            <el-button type="primary" size="small" :loading="savingPrefs" @click="savePrefs">保存偏好</el-button>
+          </div>
+        </div>
+      </div>
     </el-card>
 
     <el-dialog v-model="bindOpen" :title="email ? '换绑邮箱' : '绑定邮箱'" width="440px">
@@ -367,114 +462,51 @@ onMounted(() => {
         <el-button type="primary" :loading="bindLoading" @click="submitBind">绑定</el-button>
       </template>
     </el-dialog>
-
-    <el-card shadow="never" style="margin-top: 16px">
-      <template #header><span>偏好</span></template>
-      <el-form label-position="left" label-width="150px" style="max-width: 640px">
-        <el-form-item label="默认语言">
-          <el-select v-model="prefsForm.defaultLang" clearable placeholder="跟随系统默认（C++ 14）" style="width: 240px">
-            <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="代码模板">
-          <div class="tpl">
-            <el-select v-model="tplLang" style="width: 160px">
-              <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
-            </el-select>
-            <el-input
-              v-model="prefsForm.codeTemplates[tplLang]"
-              type="textarea"
-              :rows="8"
-              class="mono"
-              spellcheck="false"
-              :placeholder="`留空则提交时全空白，由作答者自行编写`"
-            />
-          </div>
-        </el-form-item>
-        <el-form-item label="代码自动补全">
-          <div class="ac-row">
-            <el-switch
-              v-model="prefsForm.autocomplete"
-              :disabled="!autocompleteAvailable()"
-              @change="savePrefs"
-            />
-            <span class="dim">
-              {{
-                autocompleteAvailable()
-                  ? '代码编辑器中的关键字 / 词法补全'
-                  : `达到 Lv.${levels.autocompleteMinLevel()} 后可开启自动补全（老师角色不受限）`
-              }}
-            </span>
-          </div>
-        </el-form-item>
-        <el-form-item label="Markdown 编辑模式">
-          <div class="pref-stack">
-            <el-radio-group v-model="prefsForm.mdEditMode">
-              <el-radio-button value="wysiwyg">所见即所得</el-radio-button>
-              <el-radio-button value="ir">即时渲染</el-radio-button>
-              <el-radio-button value="sv">分屏预览</el-radio-button>
-            </el-radio-group>
-            <span class="dim">题面 / 公告等编辑器的默认模式；编辑器工具栏也可随时切换（自动记住）</span>
-          </div>
-        </el-form-item>
-        <el-form-item label="Markdown 主题">
-          <div class="pref-stack">
-            <el-select v-model="prefsForm.mdTheme" style="width: 240px">
-              <el-option value="light" label="明亮（站内默认）" />
-              <el-option value="ant-design" label="Ant Design" />
-              <el-option value="dark" label="暗色" />
-              <el-option value="wechat" label="微信" />
-            </el-select>
-            <span class="dim">仅作用于编辑器内容区；题目展示等阅读面固定明亮主题</span>
-          </div>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" plain :loading="savingPrefs" @click="savePrefs">保存</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
-
-    <template #aside>
-      <el-card shadow="never">
-        <template #header><span>说明</span></template>
-        <div class="tips">
-          <p>昵称会显示在榜单、题解等公开页面；性别 / 学校 / 年级 / QQ 仅自己可见。</p>
-          <p>默认语言与代码模板会在打开提交弹窗、在线编程时自动预填；切换语言带出对应模板。</p>
-          <p>Markdown 编辑模式与主题跟随账号保存，在编辑器工具栏里切换也会自动同步。</p>
-        </div>
-      </el-card>
-    </template>
-  </PageShell>
+  </div>
 </template>
 
 <style scoped>
+/* v3 settings-wrap：920 单列；fcard 满宽（内部行式表单自带留白） */
+.settings-wrap {
+  max-width: 920px;
+}
+
+.fcard {
+  margin-bottom: 16px;
+}
+
+.fcard :deep(.el-card__body) {
+  padding: 8px 26px 14px;
+}
+
+/* frow 内边距收紧（全局 .frow 基础上适配卡体内距） */
+.fbody .frow {
+  grid-template-columns: 190px minmax(0, 1fr);
+}
+
+.frow-top {
+  align-items: flex-start;
+}
+
+.fctrl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.fd-inline {
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+  line-height: 1.6;
+}
+
 .tpl {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.nickname-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-}
-
-.ac-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Markdown 编辑模式/主题行：说明文字排在控件下方整行展示，不挤压控件 */
-.pref-stack {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  width: 100%;
 }
 
 .email-row {
@@ -484,7 +516,10 @@ onMounted(() => {
   width: 100%;
 }
 
-.email-tip {
-  margin-top: 2px;
+@media (max-width: 640px) {
+  .fbody .frow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 </style>

@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Refresh } from '@element-plus/icons-vue'
+import { ArrowDown } from '@element-plus/icons-vue'
 
 import { submissionApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, fmtSec, statusDesc } from '@/utils/format'
+import { fmtMem, fmtSec, statusDesc, statusMap } from '@/utils/format'
 import type { Submission } from '@/types'
 
 const router = useRouter()
@@ -17,6 +17,39 @@ const page = ref(1)
 const pageSize = 20
 const loading = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
+
+// v3 筛选 chips（后端 v0.19 扩参）：关键词 / 状态 / 语言 / 仅看自己
+const kw = ref('')
+const statusFilter = ref('')
+const langFilter = ref('')
+const mineOnly = ref(false)
+const statusOpen = ref(false)
+const langOpen = ref(false)
+
+// 状态候选（判题终态 + 队列态，取全站状态表）
+const statusOptions = computed(() =>
+  Object.entries(statusMap).map(([value, v]) => ({ value, label: (v as { label: string }).label })),
+)
+
+// 语言候选：从当前页数据归纳（后端无语言字典接口；常见语言固定补齐）
+const langOptions = computed(() => {
+  const seen = new Set(list.value.map((s) => s.language))
+  for (const l of ['cpp', 'c', 'python3']) seen.add(l)
+  return [...seen]
+})
+
+const activeCount = computed(
+  () => (kw.value ? 1 : 0) + (statusFilter.value ? 1 : 0) + (langFilter.value ? 1 : 0) + (mineOnly.value ? 1 : 0),
+)
+
+function resetFilters() {
+  kw.value = ''
+  statusFilter.value = ''
+  langFilter.value = ''
+  mineOnly.value = false
+  page.value = 1
+  load()
+}
 
 // 状态标签点击 → 该评测记录的代码与测试点明细（本页需「查看全部提交」权限，代码可见）
 const showDetail = ref(false)
@@ -30,12 +63,44 @@ function openDetail(id: number) {
 async function load() {
   loading.value = true
   try {
-    const r = await submissionApi.list({ page: page.value, page_size: pageSize })
+    const r = await submissionApi.list({
+      page: page.value,
+      page_size: pageSize,
+      ...(kw.value.trim() ? { kw: kw.value.trim() } : {}),
+      ...(statusFilter.value ? { status: statusFilter.value } : {}),
+      ...(langFilter.value ? { language: langFilter.value } : {}),
+      ...(mineOnly.value ? { mine: true } : {}),
+    })
     list.value = r.list
     total.value = r.total
   } finally {
     loading.value = false
   }
+}
+
+function search() {
+  page.value = 1
+  load()
+}
+
+function pickStatus(v: string) {
+  statusFilter.value = statusFilter.value === v ? '' : v
+  statusOpen.value = false
+  page.value = 1
+  load()
+}
+
+function pickLang(v: string) {
+  langFilter.value = langFilter.value === v ? '' : v
+  langOpen.value = false
+  page.value = 1
+  load()
+}
+
+function toggleMine() {
+  mineOnly.value = !mineOnly.value
+  page.value = 1
+  load()
 }
 
 function onPageChange(p: number) {
@@ -56,15 +121,77 @@ onUnmounted(() => {
 
 <template>
   <PageShell>
-    <el-card>
-      <template #header>
-        <div class="head">
-          <span>提交记录（共 {{ total }} 条）</span>
-          <el-button :icon="Refresh" size="small" @click="load">刷新</el-button>
-        </div>
-      </template>
+    <div class="page-head">
+      <div class="kicker">SUBMISSIONS</div>
+      <h1 class="page-title">
+        提交记录<small>全站 {{ total }} 条 · 点击状态徽章查看逐点评测详情 · 每 5 秒自动刷新</small>
+      </h1>
+    </div>
+
+    <!-- v3 filterbar：搜索胶囊 + 状态/语言/仅看自己 chips -->
+    <div class="filterbar">
+      <label class="soj-input search-pill" @keyup.enter="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <input v-model="kw" placeholder="按题目或提交号搜索" />
+      </label>
+      <button class="soj-sel" :class="{ on: statusOpen || statusFilter }" @click="statusOpen = !statusOpen">
+        状态<template v-if="statusFilter"> · {{ statusMap[statusFilter]?.label ?? statusFilter }}</template>
+        <el-icon class="sel-arrow" :class="{ open: statusOpen }"><ArrowDown /></el-icon>
+      </button>
+      <button class="soj-sel" :class="{ on: langOpen || langFilter }" @click="langOpen = !langOpen">
+        语言<template v-if="langFilter"> · {{ langFilter }}</template>
+        <el-icon class="sel-arrow" :class="{ open: langOpen }"><ArrowDown /></el-icon>
+      </button>
+      <button class="soj-sel" :class="{ on: mineOnly }" @click="toggleMine">仅看自己</button>
+      <el-button v-if="activeCount" link type="primary" @click="resetFilters">清空（{{ activeCount }}）</el-button>
+    </div>
+
+    <!-- 状态/语言候选行（chip 展开） -->
+    <div v-if="statusOpen" class="panel-row">
+      <button
+        v-for="o in statusOptions"
+        :key="o.value"
+        class="soj-sel opt"
+        :class="{ on: statusFilter === o.value }"
+        @click="pickStatus(o.value)"
+      >
+        {{ o.label }}
+      </button>
+    </div>
+    <div v-if="langOpen" class="panel-row">
+      <button
+        v-for="l in langOptions"
+        :key="l"
+        class="soj-sel opt"
+        :class="{ on: langFilter === l }"
+        @click="pickLang(l)"
+      >
+        {{ l }}
+      </button>
+    </div>
+
+    <el-card class="tbl-card">
       <el-table stripe v-loading="loading" :data="list">
-        <el-table-column label="状态" width="140">
+        <el-table-column label="提交号" width="92">
+          <template #default="{ row }">
+            <span class="tlink mono" @click="openDetail(row.id)">#{{ row.id }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="题目" min-width="220">
+          <template #default="{ row }">
+            <span class="tlink" @click="router.push(`/problems/${row.problem_id}`)">
+              P{{ row.problem_id }} {{ row.problem_title }}
+            </span>
+            <el-tag v-if="row.contest_id" size="small" class="ml8">{{ row.contest_title || `比赛#${row.contest_id}` }}</el-tag>
+            <el-tag v-else-if="row.exam_id" size="small" class="ml8">{{ row.exam_title || `考试#${row.exam_id}` }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="username" label="选手" width="120">
+          <template #default="{ row }">
+            <span class="dim">{{ row.username }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="130">
           <template #default="{ row }">
             <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
               <template #content>
@@ -74,37 +201,35 @@ onUnmounted(() => {
                 </div>
               </template>
               <span class="status-tag clickable" @click.stop="openDetail(row.id)">
-                <SubStatus :status="row.status" :score="row.score" />
+                <SubStatus :status="row.status" />
               </span>
             </el-tooltip>
             <span v-else class="status-tag clickable" @click.stop="openDetail(row.id)">
-              <SubStatus :status="row.status" :score="row.score" />
+              <SubStatus :status="row.status" />
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="题目" min-width="200">
+        <el-table-column label="得分" width="72">
           <template #default="{ row }">
-            <el-link type="primary" @click="router.push(`/problems/${row.problem_id}`)">
-              #{{ row.problem_id }} {{ row.problem_title }}
-            </el-link>
-            <el-tag v-if="row.contest_id" size="small" type="success" class="ml8">
-              {{ row.contest_title || `比赛#${row.contest_id}` }}
-            </el-tag>
-            <el-tag v-if="row.exam_id" size="small" type="success" class="ml8">
-              {{ row.exam_title || `考试#${row.exam_id}` }}
-            </el-tag>
+            <span v-if="row.score != null" class="mono">{{ row.score }}</span>
+            <span v-else class="dim">—</span>
           </template>
         </el-table-column>
-        <el-table-column prop="username" label="用户" width="140" />
-        <el-table-column prop="language" label="语言" width="100" />
-        <el-table-column label="总耗时" width="90">
-          <template #default="{ row }">{{ fmtSec(row.time_ms) }}</template>
+        <el-table-column prop="language" label="语言" width="90" />
+        <el-table-column label="耗时" width="92">
+          <template #default="{ row }">
+            <span class="mono">{{ row.time_ms ? fmtSec(row.time_ms) : '—' }}</span>
+          </template>
         </el-table-column>
-        <el-table-column label="总内存" width="100">
-          <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
+        <el-table-column label="内存" width="96">
+          <template #default="{ row }">
+            <span class="mono">{{ row.memory_kb ? fmtMem(row.memory_kb) : '—' }}</span>
+          </template>
         </el-table-column>
-        <el-table-column label="提交时间" width="180">
-          <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+        <el-table-column label="时间" width="80">
+          <template #default="{ row }">
+            <span class="mono dim">{{ (row.created_at ?? '').slice(11, 16) }}</span>
+          </template>
         </el-table-column>
       </el-table>
       <div class="pager">
@@ -119,13 +244,75 @@ onUnmounted(() => {
       </div>
     </el-card>
 
+    <div class="sub-footer">
+      <span>SOJ · 在线判题系统</span>
+      <span>点击提交号查看逐点评测详情</span>
+    </div>
+
     <SubmissionDetailDialog v-model="showDetail" :submission-id="detailId" />
   </PageShell>
 </template>
 
 <style scoped>
-/* 状态标签可点击查看代码与测试点明细（悬停说明样式走全局 .status-tag/.status-tip） */
+/* v3 filterbar：搜索胶囊 250 定宽 + chips */
+.filterbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.search-pill {
+  width: 250px;
+}
+
+.sel-arrow {
+  font-size: var(--soj-fs-12);
+  transition: transform 0.2s;
+}
+
+.sel-arrow.open {
+  transform: rotate(180deg);
+}
+
+/* chip 展开的候选行 */
+.panel-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: var(--el-fill-color-light);
+  border-radius: 14px;
+}
+
+.soj-sel.opt {
+  height: 30px;
+  padding: 0 13px;
+}
+
 .status-tag.clickable {
   cursor: pointer;
+}
+
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-bottom: 2px;
+}
+
+.sub-footer {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--soj-line);
+  font-size: 12.5px;
+  color: var(--soj-ink-3);
 }
 </style>

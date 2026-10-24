@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 昵称 + 等级一体渲染（v0.11）：整个「ssxyz · Lv.10 极境」连名字一起装进一个等级胶囊——
-// 排名页与各成绩表的统一入口。胶囊复用 TierBadge（kind=level，特效/呼吸星跟随后台开关），
+// 排名页与各成绩表的统一入口。胶囊复用 TierBadge（kind=level，v3-full 静态浅色形制），
 // 昵称与「·」经默认插槽进入胶囊内部；无等级时退纯昵称（不带胶囊）。
 import { computed, onMounted } from 'vue'
 
@@ -11,7 +11,7 @@ const props = withDefaults(
   defineProps<{
     name: string
     level?: number | null // 学生等级 1–10；空则只渲染昵称
-    me?: boolean // 本人行：昵称主色加粗
+    me?: boolean // 本人行：昵称主色加粗（Lv.10 渐变实底上改继承白字）
   }>(),
   { level: null, me: false },
 )
@@ -26,10 +26,7 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
 
 <template>
   <TierBadge v-if="level" :tier="tier" kind="level" size="sm" class="unl" :title="fullText">
-    <span
-      class="unl-name"
-      :class="{ 'unl-me': me, 'unl-me-underline': me && tier === 10 && levels.effectsOn(tier) }"
-    >{{ name }}</span>
+    <span class="unl-name" :class="{ 'unl-me': me, 'unl-me-top': me && tier === 10 }">{{ name }}</span>
     <span class="unl-sep">·</span>
     <span class="unl-tier-text">{{ tierText }}</span>
   </TierBadge>
@@ -67,9 +64,9 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
   font-weight: var(--soj-fw-emphasis);
 }
 
-/* 极境彩色渐变胶囊上主色蓝对比度不足：me 高亮退回白字，改下划线标记 */
-.unl-me-underline {
+/* Lv.10 蓝青渐变实底上主色蓝对比度不足：me 高亮退回继承（白）字 */
+.unl-me-top {
   color: inherit;
-  text-decoration: underline;
+  font-weight: var(--soj-fw-bold);
 }
 </style>

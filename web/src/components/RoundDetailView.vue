@@ -12,6 +12,7 @@ import { judgeQueueApi } from '@/api/judgeQueue'
 import EditRoundDialog from '@/components/EditRoundDialog.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import RailCard from '@/components/RailCard.vue'
 import FitTags from '@/components/problem/FitTags.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { buildRoundBoard } from '@/components/score/adapters'
@@ -99,10 +100,20 @@ const statusLabel = computed(() => {
   return round.value ? map[round.value.status] : ''
 })
 
+// v3 countdown 格式：X 天 HH : MM : SS（不足一天只出时分秒）
+function fmtClock(ms: number): string {
+  const sec = Math.max(0, Math.floor(ms / 1000))
+  const days = Math.floor(sec / 86400)
+  const hh = String(Math.floor((sec % 86400) / 3600)).padStart(2, '0')
+  const mm = String(Math.floor((sec % 3600) / 60)).padStart(2, '0')
+  const ss = String(sec % 60).padStart(2, '0')
+  return days > 0 ? `${days} 天 ${hh} : ${mm} : ${ss}` : `${hh} : ${mm} : ${ss}`
+}
+
 const countdownLabel = computed(() => {
   if (!round.value) return ''
-  if (round.value.status === 'scheduled') return fmtDur(new Date(round.value.start).getTime() - now.value)
-  if (round.value.status === 'running') return fmtDur(new Date(round.value.end).getTime() - now.value)
+  if (round.value.status === 'scheduled') return fmtClock(new Date(round.value.start).getTime() - now.value)
+  if (round.value.status === 'running') return fmtClock(new Date(round.value.end).getTime() - now.value)
   return '已结束'
 })
 
@@ -120,6 +131,15 @@ const progressPct = computed(() => {
 })
 
 const problemTotal = computed(() => round.value?.problems?.length ?? 0)
+
+// v3 起止行尾注：进行中 = 已进行 N%；未开始/已结束给状态短语
+const progressHint = computed(() => {
+  const c = round.value
+  if (!c) return ''
+  if (c.status === 'scheduled') return '未开始'
+  if (c.status === 'ended') return '已结束'
+  return `已进行 ${progressPct.value}%`
+})
 
 // 成绩表可见：组织者恒可见；他人需「查看比赛/考试成绩表」权限位（v0.11，root/admin 默认
 // 持有、default 无），且需开启成绩表且结果已发布（关隐藏时赛中实时可见）——与服务端同规则
@@ -148,16 +168,6 @@ const boardVisible = computed(() => {
   if (!c.scoreboard) return false
   return c.published || (c.status === 'running' && !c.hide_during)
 })
-
-function fmtDur(ms: number): string {
-  if (ms <= 0) return '0'
-  const s = Math.floor(ms / 1000)
-  const d = Math.floor(s / 86400)
-  const h = Math.floor((s % 86400) / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  return (d > 0 ? `${d}天` : '') + `${h}小时${m}分${sec}秒`
-}
 
 // 通过率 = AC 提交 / 总提交（与题库同口径）
 function acceptRate(row: { submit_count?: number; accepted_count?: number }): string {
@@ -268,14 +278,14 @@ onUnmounted(() => {
   <div v-loading="loading">
     <PageShell v-if="round">
       <!-- 名称卡：名称 20px + 说明（说明不再单独成卡） -->
-      <el-card>
+      <el-card :body-style="{ padding: '22px 26px' }">
         <div class="round-body">
           <div class="title-row">
             <span class="big-title">{{ round.title }}</span>
-            <el-tag :type="round.status === 'running' ? 'success' : round.status === 'scheduled' ? 'warning' : 'info'">
-              {{ statusLabel }}
-            </el-tag>
-            <el-tag v-if="kind === 'contest'" size="small" type="info">主题库 · 全员</el-tag>
+            <span class="sub-status" :class="round.status === 'running' ? 'blue' : round.status === 'scheduled' ? 'yellow' : 'gray'">
+              <span class="dot" :class="round.status === 'running' ? 'blue' : round.status === 'scheduled' ? 'yellow' : 'gray'"></span>{{ statusLabel }}
+            </span>
+            <el-tag v-if="kind === 'contest'" size="small">主题库 · 全员</el-tag>
           </div>
           <el-alert
             v-if="kind === 'exam' && !round.participant && !userStore.token"
@@ -313,9 +323,7 @@ onUnmounted(() => {
           </el-table-column>
           <el-table-column label="题目" min-width="260">
             <template #default="{ row }">
-              <el-link type="primary" @click="problemRoute(row)">
-                {{ row.title }}
-              </el-link>
+              <span class="tlink" @click="problemRoute(row)">{{ row.title }}</span>
             </template>
           </el-table-column>
           <el-table-column label="标签" min-width="170">
@@ -347,30 +355,21 @@ onUnmounted(() => {
 
       <template #aside>
         <!-- 管理卡（v0.7.4 精简）：编辑说明与三个场景开关并入编辑弹窗，仅剩动作按钮 -->
-        <el-card v-if="round.is_organizer" class="aside-card">
-          <template #header><span>管理</span></template>
+        <RailCard v-if="round.is_organizer" ov="管理" :title="`${name}管理`" class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit('full')">编辑{{ name }}</el-button>
-            <el-button type="success" style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
-            <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">重测本场提交</el-button>
+            <el-button style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
+            <el-button style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">重测本场提交</el-button>
             <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">删除{{ name }}</el-button>
           </div>
-        </el-card>
+        </RailCard>
 
-        <!-- 时间卡（v0.7.2 自主列挪入）：未开赛显示距离开始，开赛显示剩余倒计时与进度 -->
-        <el-card class="aside-card">
-          <template #header><span>时间</span></template>
-          <div class="progress-head">
-            <span class="progress-title">{{ round.status === 'scheduled' ? '距开始' : round.status === 'running' ? '剩余时间' : '赛程' }}</span>
-            <span class="countdown">{{ countdownLabel }}</span>
-          </div>
-          <el-progress
-            :percentage="progressPct"
-            :status="round.status === 'ended' ? 'success' : undefined"
-            :stroke-width="10"
-          />
-          <div class="dim center">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</div>
-        </el-card>
+        <!-- 时间卡（v3：countdown 浅底虚线框 + 渐变进度条 + 起止行） -->
+        <RailCard ov="时间" title="剩余时间" class="aside-card">
+          <div class="soj-countdown">{{ countdownLabel }}</div>
+          <div class="soj-pbar" style="margin-top: 10px"><i :style="{ width: `${progressPct}%` }" /></div>
+          <div class="range dim">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }} · {{ progressHint }}</div>
+        </RailCard>
 
         <ScoreSummaryCard
           v-if="boardVisible"
@@ -431,10 +430,12 @@ onUnmounted(() => {
   margin: 0;
 }
 
-/* 页面名称 20px（v0.7 design.md；token 在 v0.7 统一调整） */
+/* v3-full 实体大标题：藏蓝 28/850（本地 800，比赛/考试名） */
 .big-title {
-  font-size: var(--soj-fs-page-title);
-  font-weight: var(--soj-fw-emphasis);
+  font-size: var(--soj-fs-entity-detail);
+  font-weight: var(--soj-fw-heavy);
+  letter-spacing: -0.5px;
+  color: var(--soj-navy);
 }
 
 .intro {
@@ -457,27 +458,11 @@ onUnmounted(() => {
   margin-top: 8px;
 }
 
-.progress-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
-.progress-title {
-  font-weight: var(--soj-fw-emphasis);
-}
-
-/* 倒计时大字（22/600，强调档） */
-.countdown {
-  font-size: var(--soj-fs-page-title);
-  font-weight: var(--soj-fw-emphasis);
-  color: var(--el-color-primary);
-}
-
-.center {
+/* v3 .tc-range：起止时间行 */
+.range {
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
   text-align: center;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 </style>

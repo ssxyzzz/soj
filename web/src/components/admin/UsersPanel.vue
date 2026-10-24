@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// 用户管理面板（v0.5.4 ② 拆分自 AdminView）：
-// 按角色（权限位组合）分组展示全部用户，每组可点标题收起/展开（学生组默认收起）；
-// 搜索 200ms 防抖自动匹配、点选定位，搜索视图命中的各组自动展开。
-import { computed, onMounted, reactive, ref } from 'vue'
+// 用户管理面板（v3-full 重制）：panel-h（标题 + 搜索胶囊 + 新建）+ 扁平用户表
+// （ID / 用户名 / 昵称 / 角色 role-chip / 操作链接）+ 卡内分页；搜索 300ms 防抖自动刷新。
+// 角色胶囊色：root 红 / admin 橙 / teacher 蓝 / 其余（自定义角色、default）灰。
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
@@ -15,184 +15,68 @@ import type { AdminUser, UserLevelInfo } from '@/types'
 const roleStore = useAdminRolesStore()
 const userStore = useUserStore()
 
-const pageSize = 100
+const pageSize = 20
+const list = ref<AdminUser[]>([])
+const total = ref(0)
+const page = ref(1)
 const keyword = ref('')
-const pinned = ref<AdminUser | null>(null)
 const loading = ref(false)
 
-// 默认视图的组：全部角色按展示顺序（root → admin → 自定义 → default），学生组放在最后
-const defaultViewGroups = computed(() => roleStore.roleGroups)
-
-// 收起的分组：学生组默认收起（人数多、低频管理），其余默认展开
-const collapsedGroups = ref<Set<string>>(new Set(['default']))
-
-// 分组收起仅在默认视图生效：搜索视图命中的各组恒展开（结果一览无遗），
-// 定位视图只有一人——两处分组头不显示折叠箭头、点击不改变收起状态
-const canToggleGroups = computed(() => !pinned.value && !keyword.value.trim())
-
-function toggleGroup(id: string) {
-  if (!canToggleGroups.value) return
-  const next = new Set(collapsedGroups.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  collapsedGroups.value = next
+async function load(p = page.value) {
+  loading.value = true
+  try {
+    const r = await adminApi.listUsers(p, pageSize, keyword.value.trim() || undefined)
+    list.value = r.list
+    total.value = r.total
+    page.value = p
+  } finally {
+    loading.value = false
+  }
 }
 
-// 默认视图按组缓存（每组一次请求，整组展示）
-const defaultGroups = reactive<Record<string, { list: AdminUser[]; total: number }>>({})
-
-// 搜索视图：单次查询（不带角色过滤），前端分组渲染 + 统一分页
-const search = reactive<{ page: number; pageSize: number; total: number; list: AdminUser[] }>({
-  page: 1,
-  pageSize: 100,
-  total: 0,
-  list: [],
+// 搜索 300ms 防抖：回页首重查
+let debounce: ReturnType<typeof setTimeout> | undefined
+watch(keyword, () => {
+  if (debounce) clearTimeout(debounce)
+  debounce = setTimeout(() => load(1), 300)
 })
 
+// v3 role-chip 色映射：root 红 / admin 橙 / teacher 蓝 / 其余灰
+function roleClass(role: string): string {
+  if (role === 'root') return 'role-root'
+  if (role === 'admin') return 'role-admin'
+  if (role === 'teacher') return 'role-teacher'
+  return 'role-user'
+}
+
+// ---- 新建用户 ----
 const showCreate = ref(false)
 const creating = ref(false)
 const createForm = reactive({ username: '', password: '', nickname: '', role: 'default' })
 
-async function loadDefaultView() {
-  loading.value = true
+async function create() {
+  if (!createForm.username || !createForm.password) {
+    ElMessage.warning('请填写用户名和密码')
+    return
+  }
+  creating.value = true
   try {
-    await Promise.all(
-      defaultViewGroups.value.map(async (g) => {
-        const r = await adminApi.listUsers(1, pageSize, undefined, g.id)
-        defaultGroups[g.id] = { list: r.list, total: r.total }
-      }),
+    await adminApi.createUser(
+      createForm.username,
+      createForm.password,
+      createForm.nickname,
+      createForm.role,
     )
+    ElMessage.success('用户已创建')
+    showCreate.value = false
+    createForm.username = ''
+    createForm.password = ''
+    createForm.nickname = ''
+    createForm.role = 'default'
+    await load(1)
   } finally {
-    loading.value = false
+    creating.value = false
   }
-}
-
-// 退出定位回默认视图；有关键词则刷新搜索结果（翻页也走这里）
-async function runSearch(page = 1) {
-  const kw = keyword.value.trim()
-  if (!kw) {
-    pinned.value = null
-    await loadDefaultView()
-    return
-  }
-  loading.value = true
-  try {
-    const r = await adminApi.listUsers(page, search.pageSize, kw)
-    search.page = page
-    search.total = r.total
-    search.list = r.list
-  } finally {
-    loading.value = false
-  }
-}
-
-interface SuggestItem {
-  value: string
-  user: AdminUser
-}
-
-// 自动补全（200ms 防抖由 el-autocomplete 处理）：同一次请求同时喂下拉与表格
-async function suggest(query: string, cb: (items: SuggestItem[]) => void) {
-  const kw = query.trim()
-  if (!kw) {
-    pinned.value = null
-    await loadDefaultView()
-    cb([])
-    return
-  }
-  // 输入变化即退出定位；点选后回填的用户名不触发退出
-  if (pinned.value && kw !== pinned.value.username) pinned.value = null
-  try {
-    const r = await adminApi.listUsers(1, pageSize, kw)
-    search.page = 1
-    search.total = r.total
-    search.list = r.list
-    cb(r.list.slice(0, 20).map((u) => ({ value: u.username, user: u })))
-  } catch {
-    cb([])
-  }
-}
-
-// el-autocomplete 的 select 回调参数是宽松的 Record 类型，这里收窄回 SuggestItem
-function onSelect(item: Record<string, unknown>) {
-  pinned.value = (item as unknown as SuggestItem).user
-}
-
-// ---- 单表行模型：分组行 / 提示行 / 用户行，前端渲染分组 ----
-type UserRow =
-  | { type: 'group'; key: string; id: string; label: string; meta?: string }
-  | { type: 'hint'; key: string; label: string }
-  | ({ type: 'user' } & AdminUser)
-
-const tableRows = computed<UserRow[]>(() => {
-  if (pinned.value) {
-    const u = pinned.value
-    return [
-      { type: 'group', key: `g-${u.role}`, id: u.role, label: `${roleStore.roleName(u.role)}（${u.role}）`, meta: '已定位' },
-      { type: 'user', ...u },
-    ]
-  }
-  const kw = keyword.value.trim()
-  if (kw) {
-    const rows: UserRow[] = []
-    for (const g of roleStore.roleGroups) {
-      const users = search.list.filter((u) => u.role === g.id)
-      if (!users.length) continue
-      rows.push({
-        type: 'group',
-        key: `g-${g.id}`,
-        id: g.id,
-        label: `${g.name}（${g.id}）`,
-        meta: `命中 ${users.length} 人`,
-      })
-      users.forEach((u) => rows.push({ type: 'user', ...u }))
-    }
-    return rows
-  }
-  const rows: UserRow[] = []
-  for (const g of defaultViewGroups.value) {
-    const d = defaultGroups[g.id]
-    if (!d) continue
-    const folded = collapsedGroups.value.has(g.id)
-    rows.push({
-      type: 'group',
-      key: `g-${g.id}`,
-      id: g.id,
-      label: `${g.name}（${g.id}）`,
-      meta: folded ? `共 ${d.total} 人 · 已收起` : `共 ${d.total} 人`,
-    })
-    if (folded) continue
-    if (!d.list.length) rows.push({ type: 'hint', key: `h-${g.id}`, label: '该组暂无用户' })
-    else {
-      d.list.forEach((u) => rows.push({ type: 'user', ...u }))
-      if (d.total > d.list.length)
-        rows.push({
-          type: 'hint',
-          key: `h-${g.id}`,
-          label: `该组共 ${d.total} 人，仅显示前 ${d.list.length} 人，可在上方搜索定位`,
-        })
-    }
-  }
-  return rows
-})
-
-// 分组/提示行跨列：ID 列起跨满 4 列
-function userSpanMethod({ row, columnIndex }: { row: UserRow; columnIndex: number }) {
-  if (row.type !== 'user') {
-    return columnIndex === 0
-      ? { rowspan: 1, colspan: 4 }
-      : { rowspan: 0, colspan: 0 }
-  }
-  return { rowspan: 1, colspan: 1 }
-}
-
-// 行内操作后按当前视图刷新：定位 → 原地更新；搜索 → 重查当前页；默认 → 重拉各组
-async function refreshAfterMutation(userId: number, patch?: Partial<AdminUser>) {
-  if (pinned.value?.id === userId && patch) {
-    pinned.value = { ...pinned.value, ...patch }
-  }
-  if (keyword.value.trim()) await runSearch(search.page)
-  else await loadDefaultView()
 }
 
 // ---- 编辑弹窗：用户名 / 昵称 / 密码 / 确认密码 ----
@@ -287,10 +171,7 @@ async function submitEdit() {
     })
     ElMessage.success('用户信息已修改')
     showEdit.value = false
-    await refreshAfterMutation(editForm.id, {
-      nickname: editForm.nickname.trim(),
-      ...(renamed ? { username: editForm.username.trim() } : {}),
-    })
+    await load(page.value)
   } finally {
     editSaving.value = false
   }
@@ -343,134 +224,79 @@ async function submitXp() {
   }
 }
 
-async function create() {
-  if (!createForm.username || !createForm.password) {
-    ElMessage.warning('请填写用户名和密码')
-    return
-  }
-  creating.value = true
-  try {
-    await adminApi.createUser(
-      createForm.username,
-      createForm.password,
-      createForm.nickname,
-      createForm.role,
-    )
-    ElMessage.success('用户已创建')
-    showCreate.value = false
-    createForm.username = ''
-    createForm.password = ''
-    createForm.nickname = ''
-    createForm.role = 'default'
-    await refreshAfterMutation(0)
-  } finally {
-    creating.value = false
-  }
-}
-
 onMounted(async () => {
   await roleStore.ensure()
-  await loadDefaultView()
+  await load(1)
 })
 
-defineExpose({ refresh: loadDefaultView })
+defineExpose({ refresh: () => load(page.value) })
 </script>
 
 <template>
   <el-card>
-    <template #header>
-      <div class="head">
-        <span>用户管理</span>
+    <!-- v3 panel-h：标题 + 计数 + 右侧搜索胶囊 + 新建 -->
+    <div class="panel-h panel-head">
+      <span class="pt">编辑用户</span>
+      <span class="dim count">共 {{ total }} 人</span>
+      <div class="acts">
+        <label class="soj-input head-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input v-model="keyword" placeholder="搜索用户（用户名 / 昵称）" />
+        </label>
         <el-button type="primary" size="small" @click="showCreate = true">新建用户</el-button>
       </div>
-    </template>
-    <div class="search-row">
-      <el-autocomplete
-        v-model="keyword"
-        :fetch-suggestions="suggest"
-        :debounce="200"
-        clearable
-        placeholder="搜索用户（用户名 / 昵称），输入后自动匹配"
-        class="search-input"
-        @select="onSelect"
-      >
-        <template #default="{ item }">
-          <div class="sug-item">
-            <span class="sug-username">{{ item.user.username }}</span>
-            <span class="sug-nickname">{{ item.user.nickname }}</span>
-            <el-tag size="small" type="info">{{ roleStore.roleName(item.user.role) }}</el-tag>
-          </div>
-        </template>
-      </el-autocomplete>
-      <el-tag v-if="pinned" closable @close="pinned = null">
-        已定位：{{ pinned.username }}（{{ roleStore.roleName(pinned.role) }}）
-      </el-tag>
     </div>
 
-    <el-table
-      v-loading="loading"
-      :data="tableRows"
-      size="small"
-      :span-method="userSpanMethod"
-      class="user-table"
-    >
-      <el-table-column label="ID" width="90">
+    <el-table v-loading="loading" :data="list">
+      <el-table-column label="ID" width="80">
         <template #default="{ row }">
-          <div
-            v-if="row.type === 'group'"
-            class="row-group"
-            :class="{ 'is-toggleable': canToggleGroups }"
-            :title="canToggleGroups ? (collapsedGroups.has(row.id) ? '点击展开该组用户' : '点击收起该组用户') : undefined"
-            @click="toggleGroup(row.id)"
+          <span class="mono dim">{{ row.id }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="username" label="用户名" min-width="150">
+        <template #default="{ row }">
+          <span :class="{ 'username-bold': row.id === userStore.uid }">{{ row.username }}</span>
+          <el-tag
+            v-if="row.locked_until && new Date(row.locked_until) > new Date()"
+            type="danger"
+            size="small"
+            class="ml8"
           >
-            <span v-if="canToggleGroups" class="group-caret">{{ collapsedGroups.has(row.id) ? '▸' : '▾' }}</span>
-            <span>{{ row.label }}</span>
-            <el-tag v-if="row.meta" size="small" type="info" class="ml8">{{ row.meta }}</el-tag>
-          </div>
-          <span v-else-if="row.type === 'hint'" class="row-hint">{{ row.label }}</span>
-          <span v-else>{{ row.id }}</span>
+            锁定中
+          </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="用户名" min-width="160">
+      <el-table-column label="昵称" min-width="150">
         <template #default="{ row }">
-          <template v-if="row.type === 'user'">
-            {{ row.username }}
-            <el-tag
-              v-if="row.locked_until && new Date(row.locked_until) > new Date()"
-              type="danger"
-              size="small"
-              class="ml8"
-            >
-              锁定中
-            </el-tag>
-          </template>
+          <b class="nickname">{{ row.nickname }}</b>
         </template>
       </el-table-column>
-      <el-table-column label="昵称" min-width="160">
-        <template #default="{ row }">{{ row.type === 'user' ? row.nickname : '' }}</template>
-      </el-table-column>
-      <el-table-column label="操作" width="130">
+      <el-table-column label="角色" width="150">
         <template #default="{ row }">
-          <template v-if="row.type === 'user'">
-            <el-button size="small" link type="warning" @click="openEdit(row as AdminUser)">编辑</el-button>
-            <el-button size="small" link type="primary" @click="openXp(row as AdminUser)">经验</el-button>
-          </template>
+          <span class="soj-role-chip" :class="roleClass(row.role)">{{ roleStore.roleName(row.role) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="120">
+        <template #default="{ row }">
+          <el-button size="small" link type="primary" @click="openEdit(row as AdminUser)">编辑</el-button>
+          <el-button size="small" link type="primary" @click="openXp(row as AdminUser)">经验</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <div v-if="!pinned && keyword.trim() && search.total > search.pageSize" class="group-pager">
+    <!-- 卡内分页 -->
+    <div class="pager">
       <el-pagination
         background
-        layout="prev, pager, next"
-        :total="search.total"
-        :page-size="search.pageSize"
-        :current-page="search.page"
-        @current-change="(p: number) => runSearch(p)"
+        layout="prev, pager, next, total"
+        :total="total"
+        :page-size="pageSize"
+        :current-page="page"
+        @current-change="(p: number) => load(p)"
       />
     </div>
     <el-empty
-      v-if="!loading && !tableRows.length"
+      v-if="!loading && !list.length"
       :description="keyword ? `没有匹配「${keyword.trim()}」的用户` : '暂无用户'"
       :image-size="60"
     />
@@ -514,7 +340,6 @@ defineExpose({ refresh: loadDefaultView })
               v-if="isRoot && editForm.email"
               size="small"
               type="danger"
-              plain
               :loading="unbinding"
               @click="unbindEmail"
             >
@@ -582,74 +407,35 @@ defineExpose({ refresh: loadDefaultView })
 </template>
 
 <style scoped>
-.search-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+/* v3 panel-h 头部：标题 + 计数 + 右侧动作（搜索胶囊 + 新建） */
+.panel-head {
+  padding: 16px 20px;
 }
 
-.search-input {
-  width: 360px;
+.head-search {
+  height: 36px;
+  width: 260px;
+  padding: 0 14px;
 }
 
-.sug-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  line-height: 1.6;
+.count {
+  font-size: var(--soj-fs-13);
 }
 
-.sug-username {
-  font-weight: var(--soj-fw-emphasis);
+.username-bold {
+  font-weight: var(--soj-fw-bold);
 }
 
-.sug-nickname {
-  color: var(--el-text-color-secondary);
-  flex: 1 1 auto;
+.nickname {
+  color: var(--soj-navy);
+  font-weight: var(--soj-fw-bold);
 }
 
-/* 单表内的角色分组行 / 提示行 */
-.row-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: var(--soj-fw-emphasis);
-  color: var(--el-text-color-primary);
-  user-select: none;
-}
-
-/* 仅默认视图可折叠：分组头显示手型与悬停反馈 */
-.row-group.is-toggleable {
-  cursor: pointer;
-}
-
-.row-group.is-toggleable:hover {
-  color: var(--el-color-primary);
-}
-
-/* 收起/展开指示：▾ 展开中 / ▸ 已收起 */
-.group-caret {
-  width: 14px;
-  flex: none;
-  text-align: center;
-  color: var(--el-text-color-secondary);
-  font-size: var(--soj-fs-small);
-}
-
-.row-hint {
-  color: var(--el-text-color-secondary);
-}
-
-.user-table :deep(.el-table__row) .row-group,
-.user-table :deep(.el-table__row) .row-hint {
-  padding-left: 2px;
-}
-
-.group-pager {
+.pager {
   display: flex;
   justify-content: flex-end;
-  margin-top: 12px;
+  margin-top: 14px;
+  padding-bottom: 2px;
 }
 
 /* 经验调整弹窗：当前等级徽章 + 经验数字 */

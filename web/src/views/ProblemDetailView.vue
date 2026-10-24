@@ -1,25 +1,29 @@
 <script setup lang="ts">
-// 题目详情（v0.5.4 ② 拆分后主视图）：题面/锁定指引/隐藏开关/右列入口卡 + 提交链路；
-// 题解、我的提交、所有代码三个弹窗拆至 components/problem/*（自治拉数据）；编辑题目为独立路由页。
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+// 题目详情（v3-full 重制）：面包屑 + 画布题面（ProblemStatement）+ 宽副列 356 五卡
+// （题目维护 → 提交本题（内嵌语言选择 + 深色代码框直接提交）→ 题目信息 → 我的提交
+// mini 行卡 → 评测须知）；客观题作答区在主列，弹窗链路（题解/我的提交/所有代码/在线编程）保留。
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { problemApi, submissionApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
+import CodeEditor from '@/components/CodeEditor.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
+import RailCard from '@/components/RailCard.vue'
 import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
 import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
-import SubmitDialog from '@/components/SubmitDialog.vue'
+import SubStatus from '@/components/SubStatus.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemInfoCard from '@/components/problem/ProblemInfoCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import { useUserStore } from '@/stores/user'
-import { isQueueStatus, statusStyle } from '@/utils/format'
-import type { ObjectiveAnswer as ObjAnswer, ProblemDetail } from '@/types'
+import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
+import { fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
+import type { ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,8 +33,7 @@ const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
 let timer: ReturnType<typeof setInterval> | undefined
 
-// 右列：提交 / 在线编程 / 题解 / 我的提交 / 所有代码 五个入口，内容全部进弹窗
-const showSubmit = ref(false)
+// 右列弹窗：在线编程 / 题解 / 我的提交 / 所有代码（提交走副列内嵌编辑器）
 const showWorkbench = ref(false)
 const submitting = ref(false)
 const showMine = ref(false)
@@ -106,21 +109,47 @@ const submitDisabledReason = computed(() => {
   return ''
 })
 
-// 题目信息卡（v0.5.5）：统计 + 标签（共享组件）；比赛/考试做题页同款
-
-// 客观题（v0.9）：提交走作答弹窗，在线编程不适用；函数题（v0.9.1）：模板预填 + 语言锁 C++
+// 客观题（v0.9）：提交走主列作答区，在线编程不适用；函数题（v0.9.1）：模板预填 + 语言锁 C++
 const isObjective = computed(() => problem.value?.type === 'objective')
 const isFunction = computed(() => problem.value?.type === 'function')
 const funcTemplate = computed(() => problem.value?.function?.template_code || '')
 const isInteractive = computed(() => problem.value?.type === 'interactive')
 
-function openSubmitEntry() {
-  if (!userStore.token) {
-    ElMessage.warning('请先登录')
-    router.push({ path: '/login', query: { redirect: route.fullPath } })
+// ---- 副列「提交本题」内嵌编辑器（v3 rail codebox）：语言 + 深色代码框 + 直接提交 ----
+const railLang = ref(defaultLang())
+const railCode = ref('')
+const acOn = computed(() => autocompleteOn())
+
+watch(problem, (p) => {
+  if (!p) return
+  const lock = isFunction.value ? 'cpp' : isInteractive.value ? 'cpp' : undefined
+  if (lock) railLang.value = lock
+  railCode.value = funcTemplate.value || templateFor(railLang.value)
+})
+
+function changeRailLang(l: string) {
+  // 仅在代码还是初始模板（未编辑）时跟随切换，避免覆盖已写的代码
+  if (!railCode.value.trim() || railCode.value === templateFor(railLang.value)) railCode.value = templateFor(l)
+  railLang.value = l
+}
+
+const railLangOptions = computed(() => {
+  if (isFunction.value) return languageOptions.filter((o) => o.value === 'cpp')
+  if (isInteractive.value) return languageOptions.filter((o) => ['cpp', 'c'].includes(o.value))
+  return languageOptions
+})
+
+function railSubmit() {
+  if (submitDisabled.value) {
+    ElMessage.warning(submitDisabledReason.value || '请先登录')
+    if (!userStore.token) router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
-  showSubmit.value = true
+  if (!railCode.value.trim()) {
+    ElMessage.warning('代码不能为空')
+    return
+  }
+  handleSubmit(railLang.value, railCode.value)
 }
 
 function openWorkbenchEntry() {
@@ -140,10 +169,6 @@ function openSolutions() {
   showSolutions.value = true
 }
 
-function openMine() {
-  showMine.value = true
-}
-
 function openOthers() {
   if (!problem.value?.can_view_others) {
     ElMessage.warning('该题拿到满分后可查看他人的代码')
@@ -158,9 +183,9 @@ async function handleSubmit(lang: string, code: string) {
   try {
     const r = await submissionApi.create(problem.value.id, lang, code)
     ElMessage.success(`已提交 #${r.id}，正在判题`)
-    showSubmit.value = false
     showWorkbench.value = false
     mineDialogRef.value?.refresh(1)
+    loadRecentMine()
     startPolling(r.id)
   } catch {
     // 错误提示已由 axios 拦截器统一弹出
@@ -176,14 +201,27 @@ async function handleObjectiveSubmit(answers: ObjAnswer[]) {
   try {
     const r = await submissionApi.createObjective(problem.value.id, answers)
     ElMessage.success(`已提交 #${r.id}`)
-    showSubmit.value = false
     mineDialogRef.value?.refresh(1)
+    loadRecentMine()
     startPolling(r.id)
     await load()
   } catch {
     // 错误提示已由 axios 拦截器统一弹出
   } finally {
     submitting.value = false
+  }
+}
+
+// ---- 副列「我的提交」mini 行卡：近 3 条 + 查看全部 ----
+const recentMine = ref<Submission[]>([])
+
+async function loadRecentMine() {
+  if (!problem.value || !userStore.token) return
+  try {
+    const r = await problemApi.mySubmissions(problem.value.id, 1, 3)
+    recentMine.value = r.list.slice(0, 3)
+  } catch {
+    recentMine.value = []
   }
 }
 
@@ -195,6 +233,7 @@ function startPolling(id: number) {
       if (!isQueueStatus(s.status)) {
         stopPolling()
         mineDialogRef.value?.refresh()
+        loadRecentMine()
         const st = statusStyle(s.status)
         ElMessage.success(`#${id} 判题完成：${st.label}${s.score != null ? ` · ${s.score} 分` : ''}`)
       }
@@ -227,7 +266,10 @@ async function toggleHidden() {
   ElMessage.success(target ? '题目已隐藏，无权限的用户看不到本题' : '已取消隐藏')
 }
 
-onMounted(load)
+onMounted(async () => {
+  await load()
+  loadRecentMine()
+})
 
 onUnmounted(stopPolling)
 </script>
@@ -235,7 +277,13 @@ onUnmounted(stopPolling)
 <template>
   <div v-loading="loading">
     <template v-if="problem">
-      <PageShell>
+      <PageShell rail-wide>
+        <!-- v3 面包屑 -->
+        <div class="crumbs">
+          <router-link to="/problems">题库</router-link>
+          ／ <span class="mono">P{{ problem.id }}</span>
+        </div>
+
         <ProblemStatement :problem="problem">
           <template #extra>
             <el-button
@@ -266,65 +314,75 @@ onUnmounted(stopPolling)
         />
 
         <template #aside>
-        <el-card v-if="problem.can_edit_statement" class="aside-card">
-          <template #header><span>管理</span></template>
+        <RailCard v-if="problem.can_edit_statement" ov="管理" title="题目维护" class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
-            <el-button plain style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
-            <el-button plain style="width: 100%" @click="openPaper">导出试卷</el-button>
+            <el-button style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
+            <el-button style="width: 100%" @click="openPaper">导出试卷</el-button>
           </div>
-        </el-card>
+        </RailCard>
 
-        <el-card class="aside-card">
-          <div class="entry-actions">
-            <el-button
-              v-if="!isObjective"
-              type="primary"
-              plain
-              style="width: 100%"
-              :disabled="submitDisabled"
-              @click="openSubmitEntry"
-            >
-              提交
-            </el-button>
-            <el-button
-              v-if="!isObjective"
-              type="success"
-              plain
-              style="width: 100%"
-              :disabled="submitDisabled"
-              @click="openWorkbenchEntry"
-            >
-              在线编程
-            </el-button>
-            <el-button type="warning" plain style="width: 100%" @click="openSolutions">题解</el-button>
-            <el-button v-if="userStore.token" plain style="width: 100%" @click="openMine">我的提交</el-button>
-            <el-button plain style="width: 100%" @click="openOthers">所有代码</el-button>
-            <div v-if="submitDisabledReason" class="dim center">{{ submitDisabledReason }}</div>
+        <!-- v3「提交本题」：内嵌语言选择 + 深色代码框（偏好模板预填）直接提交；客观题换成操作入口卡 -->
+        <RailCard ov="提交" :title="isObjective ? '本题操作' : '提交本题'" class="aside-card">
+          <template v-if="!isObjective">
+            <el-select :model-value="railLang" style="width: 100%" @change="changeRailLang">
+              <el-option v-for="o in railLangOptions" :key="o.value" :value="o.value" :label="o.label" />
+            </el-select>
+            <CodeEditor
+              v-model="railCode"
+              class="rail-editor"
+              :language="railLang"
+              :autocomplete="acOn"
+              height="220px"
+              placeholder="在此编写或粘贴你的代码"
+            />
+            <div class="entry-actions rail-acts">
+              <el-button type="primary" style="width: 100%" :disabled="submitDisabled" :loading="submitting" @click="railSubmit">
+                提交评测
+              </el-button>
+              <el-button style="width: 100%" :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
+            </div>
+            <div v-if="submitDisabledReason" class="hint center">{{ submitDisabledReason }}</div>
+          </template>
+          <div v-else class="entry-actions">
+            <div v-if="!userStore.token" class="hint center">登录后作答</div>
           </div>
-        </el-card>
+          <div class="entry-links">
+            <el-button link type="primary" @click="openSolutions">题解</el-button>
+            <el-button v-if="userStore.token" link type="primary" @click="showMine = true">我的提交</el-button>
+            <el-button link type="primary" @click="openOthers">所有代码</el-button>
+          </div>
+        </RailCard>
 
         <ProblemInfoCard :problem="problem" />
+
+        <!-- v3「我的提交」mini 行卡：近 3 条 + 查看全部 -->
+        <RailCard v-if="userStore.token" ov="记录" title="我的提交" class="aside-card">
+          <template v-if="recentMine.length">
+            <div v-for="s in recentMine" :key="s.id" class="soj-mini-li" @click="showMine = true">
+              <SubStatus :status="s.status" :score="s.score" />
+              <span class="grow mono">#{{ s.id }}</span>
+              <span class="t mono">{{ s.time_ms ? `${s.time_ms}ms` : fmtShort(s.created_at).split(' ')[1] }}</span>
+            </div>
+            <p class="hint link" @click="showMine = true">查看全部 →</p>
+          </template>
+          <p v-else class="hint">还没有提交过本题。</p>
+        </RailCard>
+
+        <RailCard ov="说明" title="评测须知" class="aside-card">
+          <p class="hint">
+            代码在 go-judge 沙箱中编译运行，全文比对输出；提交间隔受全站限速约束。请勿读写约定之外的文件。
+          </p>
+        </RailCard>
       </template>
     </PageShell>
-
-      <SubmitDialog
-      v-if="!isObjective"
-      v-model="showSubmit"
-      :title="`#${problem.id} ${problem.title}`"
-      :submitting="submitting"
-      :initial-code="isFunction ? funcTemplate : undefined"
-      :lang-only="isFunction ? 'cpp' : isInteractive ? ['cpp', 'c'] : undefined"
-      @submit="handleSubmit"
-    />
-
 
     <CodeWorkbench
       v-model="showWorkbench"
       :title="`#${problem.id} ${problem.title}`"
       :problem="problem"
       :submitting="submitting"
-      :initial-code="isFunction ? funcTemplate : undefined"
+      :initial-code="isFunction ? funcTemplate : railCode || undefined"
       :lang-only="isFunction ? 'cpp' : isInteractive ? ['cpp', 'c'] : undefined"
       @submit="handleSubmit"
     />
@@ -339,7 +397,57 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
+/* v3 .crumbs */
+.crumbs {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+  margin-bottom: 14px;
+}
+
+.crumbs a {
+  color: var(--soj-ink-3);
+  text-decoration: none;
+}
+
+.crumbs a:hover {
+  color: var(--soj-blue);
+}
+
+.rail-editor {
+  margin-top: 10px;
+}
+
+.rail-acts {
+  margin-top: 10px;
+}
+
+/* 三个次要入口一行排（题解/我的提交/所有代码） */
+.entry-links {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.hint {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+  line-height: 1.7;
+  margin: 10px 0 0;
+}
+
+.hint.link {
+  cursor: pointer;
+  color: var(--soj-blue);
+  font-weight: var(--soj-fw-emphasis);
+}
+
 .center {
   text-align: center;
+  margin-top: 8px;
+}
+
+.soj-mini-li {
+  cursor: pointer;
 }
 </style>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// 全站两列骨架：容器 1280px（v0.19 收窄，与 .page 同步），主列自适应 + 右列 320px 固定；
+// 全站两列骨架：容器 1280px（v0.19 收窄，与 .page 同步），主列自适应 + 右列 320px 固定
+// （railWide = 356px，v3-full 题面/赛题详情的宽副列口径）；
 // 可选「独立行」插槽位于两列之上、顶栏之下（比赛/考试做题页的赛程与切题行）。
 // 窄屏（<992px）右列折到主内容下方，信息不丢。未迁移的旧页面继续用各自的 .page 布局。
+withDefaults(defineProps<{ railWide?: boolean }>(), { railWide: false })
 </script>
 
 <template>
@@ -13,7 +15,7 @@
       <div class="main-col">
         <slot />
       </div>
-      <aside v-if="$slots.aside" class="side-col">
+      <aside v-if="$slots.aside" class="side-col" :class="{ wide: railWide }">
         <slot name="aside" />
       </aside>
     </div>
@@ -46,6 +48,12 @@
 .side-col {
   flex: 0 0 320px;
   width: 320px;
+}
+
+/* v3 rail-wide：题目/赛题详情的宽副列 356px */
+.side-col.wide {
+  flex-basis: 356px;
+  width: 356px;
 }
 
 /* 右列纵向堆叠的按钮组居中；重置 Element Plus 相邻按钮的默认左移

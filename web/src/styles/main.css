@@ -97,18 +97,23 @@ body,
   --soj-fs-18: 18px;
   --soj-fs-20: 20px;
   --soj-fs-22: 22px;
+  --soj-fs-28: 28px; /* v3-full：详情实体大标题（比赛/考试/班级/作业） */
   --soj-fs-30: 30px;
-  --soj-fs-32: 32px;
+  --soj-fs-32: 32px; /* v3-full：题面大标题 */
+  --soj-fs-34: 34px; /* v3-full：列表页 page-title */
   --soj-fs-36: 36px;
+  --soj-fs-56: 56px; /* v3-full：首页 hero */
 
   --soj-fw-regular: 400;
   --soj-fw-medium: 500;
   --soj-fw-emphasis: 600;
   --soj-fw-bold: 700;
+  --soj-fw-heavy: 800; /* v3-full 大标题 850 的本地口径（不引 Web 字体，800 视觉等价） */
 
-  /* 语义字号 */
-  --soj-fs-body: var(--soj-fs-14);
-  --soj-fs-nav: var(--soj-fs-16);
+  /* 语义字号：v0.19 三期 body 升 15（v3 界面正文口径；EP 组件经 --el-font-size-base 跟随），
+     表格与富文本单独钉回原档（v3 表格 14 / rich 16） */
+  --soj-fs-body: 15px;
+  --soj-fs-nav: var(--soj-fs-body); /* v3-full：导航 15px */
   --soj-fs-brand: var(--soj-fs-22);
   --soj-fs-tag: var(--soj-fs-14);
   --soj-fs-tag-table: var(--soj-fs-13);
@@ -119,9 +124,11 @@ body,
   --soj-fs-feature-title: calc(var(--soj-fs-14) * 1.17);
   --soj-fs-entity-title: calc(var(--soj-fs-14) * 1.17);
   --soj-fs-card-title: var(--soj-fs-14);
-  --soj-fs-page-title: var(--soj-fs-20);
-  --soj-fs-hero: var(--soj-fs-30);
-  --soj-fs-stat: var(--soj-fs-32);
+  --soj-fs-page-title: var(--soj-fs-34); /* v3-full：34/850（本地 800） */
+  --soj-fs-entity-detail: var(--soj-fs-28); /* 详情页实体大标题 */
+  --soj-fs-prob-title: var(--soj-fs-32); /* 题面大标题 */
+  --soj-fs-hero: var(--soj-fs-56); /* v3-full：56/850（本地 800） */
+  --soj-fs-stat: var(--soj-fs-36);
   --soj-fs-emoji: var(--soj-fs-36);
   --soj-fs-dialog-title: var(--soj-fs-18);
   --soj-fs-result-title: var(--soj-fs-20);
@@ -153,16 +160,41 @@ body,
   /* ---- v0.19 青格蓝调（权威 = web-design-v3.md）：画布 / 色彩 / 圆角 token ----
      主蓝 #1F49BA（simple408.cn 实测），藏蓝文字层级，冷白画布 + 青网格（见 body）。 */
   --soj-navy: #0b1f45;
-  --soj-ink: #22334d;
+  --soj-ink: #10233b;
+  --soj-ink-2: #48607f; /* v3-full 墨色第二层：副文/表单标签 */
+  --soj-ink-3: #8da2bc; /* v3-full 墨色第三层：占位/微文字 */
   --soj-blue: #1f49ba;
   --soj-blue-deep: #1845ad;
   --soj-blue-hi: #2d68ef;
   --soj-blue-lo: #2455da;
   --soj-teal: #16a7d2;
   --soj-blue-soft: rgba(31, 73, 186, 0.08);
+  --soj-blue-line: rgba(31, 73, 186, 0.28); /* v3-full 主蓝 hairline（hover 描边等） */
   --soj-line: rgba(11, 31, 69, 0.08);
+  --soj-line-2: rgba(11, 31, 69, 0.13); /* v3-full 第二层线（控件描边/dashed 分隔） */
+  --soj-bg-top: #fbfdff;
+  --soj-bg-bottom: #f1f6fd;
   --soj-surface-2: #f5f9ff;
   --soj-surface-3: #f0f5fc;
+
+  /* v3-full 状态定值浅底（.sub-status 用；替 color-mix 派生） */
+  --soj-ac: #0e9f6e;
+  --soj-ac-bg: #e7f7ef;
+  --soj-wa: #e02d3c;
+  --soj-wa-bg: #fdecea;
+  --soj-tle: #d98207;
+  --soj-tle-bg: #fcf3e3;
+  --soj-run: #2455da;
+  --soj-run-bg: #eaf0fe;
+  --soj-mut: #7a8ca6;
+  --soj-mut-bg: #f0f4fa;
+
+  /* v3-full 深色代码面（工作台/提交窗/评测详情代码窗/导入日志窗） */
+  --soj-code-bg: #0d1e3c;
+  --soj-code-fg: #c9d8f2;
+  --soj-code-ln: #42598f;
+  --soj-code-cm: #5f7bb6;
+  --soj-code-kw: #7eb3ff;
 
   /* EP 五语义位换血 + color-mix 派生浅阶（EP 约定：light-N ≈ N×10% 向白，
      dark-2 ≈ 20% 向黑）；浅底场景（plain 按钮 / 浅 tag / 选中底）自动跟随 */
@@ -211,12 +243,16 @@ body,
 
   /* 画布基准色（真实三层画布见 body；此值供遮罩/回退等实底场景） */
   --el-bg-color-page: #f4f8fc;
-  /* 圆角：控件 8 / 小控件 5；卡片 16 / 弹窗 20 / 徽章胶囊在组件类覆盖（见下） */
-  --el-border-radius-base: 8px;
+  /* v0.19 三期（对齐 v3-full）：控件默认档 32→40（输入/下拉/按钮主档，v3 文本框口径），
+     small 档（--small）不受影响仍 32 用于表格内与紧凑场景 */
+  --el-component-size: 40px;
+  /* 圆角：控件 12（v3 输入框口径，EP 输入/下拉/分段跟随 base）/ 小控件 5；
+     卡片 16 / 弹窗 20 / 徽章胶囊在组件类覆盖（见下） */
+  --el-border-radius-base: 12px;
   --el-border-radius-small: 5px;
-  /* 边框藏蓝 hairline（替换原 Ant 灰 #d9d9d9 系） */
-  --el-border-color: rgba(11, 31, 69, 0.2);
-  --el-border-color-light: rgba(11, 31, 69, 0.1);
+  /* 边框藏蓝 hairline（v3-full 两层线：.08 分隔线 / .13 控件描边，替换原 Ant 灰 #d9d9d9 系） */
+  --el-border-color: var(--soj-line-2);
+  --el-border-color-light: var(--soj-line);
   --el-border-color-lighter: rgba(11, 31, 69, 0.07);
   --el-border-color-extra-light: rgba(11, 31, 69, 0.05);
   /* 填充藏蓝浅阶（斑马纹/浅底/禁用底全站跟随） */
@@ -228,11 +264,11 @@ body,
   --el-fill-color-darker: #d5e3f4;
   --el-fill-color-blank: #ffffff;
 
-  /* 文字藏蓝墨水（rgba 模型保留，为深色模式铺路） */
-  --el-text-color-primary: rgba(11, 31, 69, 0.9);
-  --el-text-color-regular: rgba(11, 31, 69, 0.72);
-  --el-text-color-secondary: rgba(11, 31, 69, 0.5);
-  --el-text-color-placeholder: rgba(11, 31, 69, 0.32);
+  /* 文字藏蓝墨水（v3-full 定值版：primary=ink / regular=ink / secondary=ink-2 / placeholder=ink-3） */
+  --el-text-color-primary: var(--soj-ink);
+  --el-text-color-regular: var(--soj-ink);
+  --el-text-color-secondary: var(--soj-ink-2);
+  --el-text-color-placeholder: var(--soj-ink-3);
   --el-text-color-disabled: rgba(11, 31, 69, 0.28);
 
   /* 弹层阴影整体柔化（下拉/弹窗/消息跟随） */
@@ -306,11 +342,13 @@ body::after {
 }
 
 /* ---- 表格 v0.19：表头浅蓝灰底 + 藏蓝 700；表体斑马纹走模板 stripe 属性
-   （底色即 --el-fill-color-lighter 冷白，展开行/合并行计数正确）---- */
+   （底色即 --el-fill-color-lighter 冷白，展开行/合并行计数正确）----
+   表格显式钉 14（body 15 后表格跟 v3 表格口径不动）；行高 v3 口径 12px 纵向 */
 .el-table {
   --el-table-header-bg-color: var(--soj-surface-3);
   --el-table-border-color: var(--el-border-color-light);
   --el-table-row-hover-bg-color: var(--soj-surface-2);
+  font-size: var(--soj-fs-14);
   /* EP 自声明在 .el-table 上（:root 覆盖无效）：表头藏蓝 / 表体墨水色 */
   --el-table-header-text-color: var(--soj-navy);
   --el-table-text-color: var(--el-text-color-primary);
@@ -344,6 +382,7 @@ body::after {
 
 .el-table th.el-table__cell > .cell {
   font-weight: var(--soj-fw-bold);
+  font-size: var(--soj-fs-13);
 }
 
 /* 表头竖线（Ant 标志性表头分隔）：每个表头单元格右边框，末列与滚动条占位列不带 */
@@ -369,6 +408,125 @@ body::after {
   overflow-x: clip;
 }
 
+/* ---- v0.19 三期：通用白卡类（.card）----
+   供自绘横条卡/网格卡使用（HomeView 赛事与班级卡、ContestsView 赛事行等不套 el-card 的场景），
+   与 el-card 同一视觉：白底 + hairline + 16px 圆角 + 两层柔影 */
+.card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--soj-line);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(11, 31, 69, 0.04),
+    0 12px 32px rgba(11, 31, 69, 0.06);
+}
+
+/* ---- v0.19 二期：v3 结构性视觉全局件（页头 / 卡片头 / 表格贴边 / 状态胶囊）----
+   与 web-design-v3.md §2 对应：列表页页头（kicker + 藏蓝大标题）、卡片头提级、
+   纯表格卡贴边、表格行留白加大、提交状态胶囊化、副列按钮体量。 */
+
+/* 页头：kicker 渐变小标 + 藏蓝大标题（各列表页顶部） */
+.page-head {
+  margin: 4px 0 20px;
+}
+
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--soj-fs-small);
+  font-weight: var(--soj-fw-bold);
+  letter-spacing: 0.2em;
+  color: var(--soj-blue);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.kicker::before {
+  content: '';
+  width: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--soj-blue-hi), var(--soj-teal));
+}
+
+.page-title {
+  margin: 0;
+  font-size: var(--soj-fs-page-title);
+  font-weight: var(--soj-fw-heavy);
+  letter-spacing: -0.5px;
+  line-height: 1.25;
+  color: var(--soj-navy);
+}
+
+.page-title small {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-medium);
+  letter-spacing: 0;
+  color: var(--soj-ink-3);
+}
+
+/* 卡片头（v3-full card-h/panel-h 口径）：藏蓝 700·15px、无竖条无底边线，
+   头部只给上/左右内边距（下间距由卡体承接）；复杂头（左标题右动作 .head）同样适用 */
+.el-card__header {
+  padding: 16px 20px 0;
+  font-size: 15px;
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
+  border-bottom: 0;
+}
+
+/* 卡体（v3-full card-b：14px 20px 18px；纯表格卡贴边规则见下方 :has 覆盖） */
+.el-card__body {
+  padding: 14px 20px 18px;
+}
+
+/* 表格贴边：卡体唯一子元素是表格时去内边距、随卡片圆角裁切
+   （带筛选/分页等混合内容的卡不匹配，维持内边距） */
+.el-card__body:has(> .el-table:only-child) {
+  padding: 0;
+}
+
+.el-card:has(.el-card__body > .el-table:only-child) {
+  overflow: hidden;
+}
+
+/* 头 + 贴边表格组合：头部补回下间距（对齐 v3 panel-h 16px 20px 口径） */
+.el-card__header:has(+ .el-card__body > .el-table:only-child) {
+  padding-bottom: 14px;
+}
+
+/* 表格留白加大（v3 行高口径 12–13px 级），行更透气；small 表（测试点明细）收半档 */
+.el-table th.el-table__cell,
+.el-table td.el-table__cell {
+  padding: 12px 0;
+}
+
+.el-table .cell {
+  padding: 0 16px;
+}
+
+.el-table--small th.el-table__cell,
+.el-table--small td.el-table__cell {
+  padding: 7px 0;
+}
+
+.el-table--small .cell {
+  padding: 0 12px;
+}
+
+/* 按钮字重 600（v3 胶囊按钮默认档；EP 默认 500） */
+.el-button {
+  font-weight: var(--soj-fw-emphasis);
+}
+
+/* 副列动作组：全宽 40px 高（v3 rail 按钮体量；原 EP 默认 32px 偏小） */
+.entry-actions .el-button {
+  width: 100%;
+  height: 40px;
+}
+
 .mono {
   font-family: var(--font-mono);
 }
@@ -391,62 +549,81 @@ strong {
 }
 
 /* ---- 提交状态小圆灯（CSS 圆点而非 emoji：跨平台尺寸/颜色一致）----
-   灯 + 英文简称 + 同色分数（SubStatus 组件三件套）；色语义：
-   绿=通过 红=答案/运行错 黄=超限类 灰=编译错·排队·系统错 蓝=评测中 */
+   v3-full .st 同款：6px 圆点 + 英文简称 + 同色分数（SubStatus 三件套）外包浅色胶囊底，
+   浅底为 v3 定值（非 color-mix 派生）；色语义：绿=通过 红=答案/运行错 黄=超限类
+   灰=编译错·排队·系统错 蓝=评测中（蓝点带 pulse 脉冲） */
 .dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex: none;
 }
 
 .dot.green {
-  background: var(--el-color-success);
+  background: var(--soj-ac);
 }
 
 .dot.yellow {
-  background: var(--el-color-warning);
+  background: var(--soj-tle);
 }
 
 .dot.red {
-  background: var(--el-color-danger);
+  background: var(--soj-wa);
 }
 
 .dot.blue {
-  background: var(--el-color-primary);
+  background: var(--soj-run);
 }
 
 .dot.gray {
-  background: var(--el-color-info);
+  background: var(--soj-mut);
 }
 
 .sub-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-weight: var(--soj-fw-emphasis);
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-weight: var(--soj-fw-bold);
   font-variant-numeric: tabular-nums;
 }
 
 .sub-status.green {
-  color: var(--el-color-success);
+  color: var(--soj-ac);
+  background: var(--soj-ac-bg);
 }
 
 .sub-status.yellow {
-  color: var(--el-color-warning);
+  color: var(--soj-tle);
+  background: var(--soj-tle-bg);
 }
 
 .sub-status.red {
-  color: var(--el-color-danger);
+  color: var(--soj-wa);
+  background: var(--soj-wa-bg);
 }
 
 .sub-status.blue {
-  color: var(--el-color-primary);
+  color: var(--soj-run);
+  background: var(--soj-run-bg);
+}
+
+/* 评测中：圆点脉冲（v3 .st.run i pulse） */
+.sub-status.blue .dot {
+  animation: sub-pulse 1.1s ease-in-out infinite;
 }
 
 .sub-status.gray {
-  color: var(--el-text-color-secondary);
+  color: var(--soj-mut);
+  background: var(--soj-mut-bg);
+}
+
+@keyframes sub-pulse {
+  50% {
+    opacity: 0.25;
+  }
 }
 
 /* 测试点明细「明细」列：有内容即红字（失败原因/系统级错误） */
@@ -456,36 +633,18 @@ strong {
   word-break: break-all;
 }
 
-/* ---- 标签五级层级色（后台 TagsPanel / 前台 TagChips 卡片流共用）----
-   1 蓝 / 2 绿 / 3 橙 / 4 红 / 5 灰（更深层沿用第五级）；--lv* 由 .lv-N 注入卡片 */
-.lv-1 {
-  --lv: var(--el-color-primary);
-  --lv-bg: var(--el-color-primary-light-9);
-  --lv-border: var(--el-color-primary-light-7);
-}
-
-.lv-2 {
-  --lv: var(--el-color-success);
-  --lv-bg: var(--el-color-success-light-9);
-  --lv-border: var(--el-color-success-light-7);
-}
-
-.lv-3 {
-  --lv: var(--el-color-warning);
-  --lv-bg: var(--el-color-warning-light-9);
-  --lv-border: var(--el-color-warning-light-7);
-}
-
-.lv-4 {
-  --lv: var(--el-color-danger);
-  --lv-bg: var(--el-color-danger-light-9);
-  --lv-border: var(--el-color-danger-light-7);
-}
-
+/* ---- 标签 chip（v3-full tagchip 青系单色）----
+   原五级层级色（1 蓝/2 绿/3 橙/4 红/5 灰）退役：v3 标签不分级配色，全站统一青系
+   （底 rgba(22,167,210,.09) / 边 .24 / 字 #0E7A9C）；--lv* 由 .lv-N 注入卡片，
+   五个类全部指向同一组值，既有模板零改动完成换色 */
+.lv-1,
+.lv-2,
+.lv-3,
+.lv-4,
 .lv-5 {
-  --lv: var(--el-color-info);
-  --lv-bg: var(--el-color-info-light-9);
-  --lv-border: var(--el-color-info-light-7);
+  --lv: #0e7a9c;
+  --lv-bg: rgba(22, 167, 210, 0.09);
+  --lv-border: rgba(22, 167, 210, 0.24);
 }
 
 /* ---- 布局工具类（原各视图 scoped 重复定义，收敛到全局） ---- */
@@ -551,10 +710,24 @@ strong {
   line-height: 1.4;
 }
 
+/* ---- v3-full 按钮三档高度：default 42 / small 34 / large 52（EP 32/24/40 → 全档加大） ---- */
+.el-button {
+  height: 42px;
+  padding: 0 22px;
+}
+
 .el-button--small {
-  font-size: var(--soj-fs-body);
-  height: auto;
-  padding: 5px 11px;
+  --el-button-size: 34px;
+  height: var(--el-button-size);
+  padding: 0 16px;
+  font-size: var(--soj-fs-13);
+}
+
+.el-button--large {
+  --el-button-size: 52px;
+  height: var(--el-button-size);
+  padding: 0 30px;
+  font-size: var(--soj-fs-16);
 }
 
 /* ---- v0.19 按钮形制：全站胶囊 + primary 实心渐变（web-design-v3.md §2.3） ----
@@ -576,16 +749,21 @@ strong {
   --el-button-disabled-border-color: var(--soj-blue-lo);
   background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-blue-lo));
   border-color: var(--soj-blue-lo);
-  box-shadow: 0 6px 16px rgba(36, 85, 218, 0.22);
+  box-shadow: 0 8px 20px rgba(36, 85, 218, 0.28);
+  transition: all 0.18s;
 }
 
-.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
+/* v3-full：主按钮 hover 上浮 1px + 影加深、active 回落微缩 */
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):hover {
   background: linear-gradient(180deg, #3a71f2, #2a5ae2);
   border-color: var(--soj-blue-deep);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 26px rgba(36, 85, 218, 0.36);
 }
 
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):active {
   background: linear-gradient(180deg, var(--soj-blue-lo), var(--soj-blue));
+  transform: translateY(0) scale(0.985);
 }
 
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link).is-disabled {
@@ -594,9 +772,37 @@ strong {
   opacity: 0.55;
 }
 
+/* ---- v3-full ghost 按钮：default 及其余彩色实心（success/warning/info）统一白底描边，
+   hover 蓝边蓝字浅蓝底（彩色实心不在 v3 语汇内，逐视图扫尾换 primary/default，
+   这里先兜底保证任何残留彩色实心不再出现） ---- */
+.el-button:not(.el-button--primary):not(.el-button--danger):not(.el-button--text):not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--el-fill-color-blank);
+  --el-button-border-color: var(--soj-line-2);
+  --el-button-text-color: var(--soj-navy);
+  --el-button-hover-bg-color: var(--soj-blue-soft);
+  --el-button-hover-border-color: var(--soj-blue-line);
+  --el-button-hover-text-color: var(--soj-blue);
+  --el-button-active-bg-color: var(--soj-blue-soft);
+  --el-button-active-border-color: var(--soj-blue-line);
+  --el-button-active-text-color: var(--soj-blue);
+}
+
+/* v3-full 危险动作（删除比赛/考试/退出班级等）：红字红描边幽灵款（v3 无红色实心按钮） */
+.el-button--danger:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--el-fill-color-blank);
+  --el-button-border-color: rgba(224, 45, 60, 0.28);
+  --el-button-text-color: var(--soj-wa);
+  --el-button-hover-bg-color: var(--soj-wa-bg);
+  --el-button-hover-border-color: rgba(224, 45, 60, 0.45);
+  --el-button-hover-text-color: var(--soj-wa);
+  --el-button-active-bg-color: var(--soj-wa-bg);
+  --el-button-active-border-color: rgba(224, 45, 60, 0.45);
+  --el-button-active-text-color: var(--soj-wa);
+}
+
 /* 分页：页钮圆角方块 + 当前页实心主蓝 */
 .el-pagination .el-pager li {
-  border-radius: 8px;
+  border-radius: 10px;
   transition: background-color 0.15s, color 0.15s;
 }
 
@@ -616,7 +822,7 @@ strong {
 .el-pagination .btn-prev,
 .el-pagination .btn-next,
 .el-pagination button.el-pagination__button {
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 /* 表格与描述列表：small 尺寸 EP 硬编码 12-14px，对齐 14 */
@@ -1043,7 +1249,6 @@ samp {
 .el-tag__close {
   font-size: var(--soj-fs-tag-close);
 }
-
 .el-table__expand-icon,
 .el-input__count-inner {
   font-size: var(--soj-fs-small);
@@ -1057,313 +1262,80 @@ samp {
   font-weight: var(--soj-fw-bold);
 }
 
-/* ---- 十阶色轴（v0.11；v2 重制 2026-10-22；v6.2 等级并入浅色 tag 体系）----
-   名字定稿（两字段位，取自王者荣耀段位体系）：青铜/白银/黄金/铂金/钻石/星耀/宗师/王者/传奇/极境。
-   难度徽章 = .diff-*（浅色 tag，10% 浓度）；用户等级徽章 = .ulv-*（浅色 tag，30% 浓度 +
-   光晕/呼吸星逐级递增，极境彩色渐变压轴）；SOJ 顶栏标识 = ulv-tag/ulv-10/ulv-e10（最高等级样式）。
-   色相 token 保留全轴，动画低速低亮度，系统「减少动态效果」时整体关闭。 */
+/* ---- 十阶色轴（v3-full 静态重设计 2026-10-24）----
+   名字定稿（王者荣耀段位体系）：青铜/白银/黄金/铂金/钻石/星耀/宗师/王者/传奇/极境。
+   难度徽章 = .diff-* 与用户等级徽章 = .ulv-* 同轴同形（浅色胶囊，底 11% / 边 25%），
+   第 10 档极境 = 蓝青渐变实底白字。旧特效体系（光晕/呼吸星/流光）已退役。 */
 :root {
-  --soj-tier-1: #4aa27e; /* 青铜 · 铜锈绿 */
-  --soj-tier-2: #93a5b0; /* 白银 · 亮银 */
-  --soj-tier-3: #d9a018; /* 黄金 · 亮金 */
-  --soj-tier-4: #64a8b3; /* 铂金 · 亮铂青 */
-  --soj-tier-5: #56a3ea; /* 钻石 · 亮钻蓝 */
-  --soj-tier-6: #7e3e9e; /* 星耀 · 星紫 */
+  /* v3-full 色轴（2026-10-24 重设计，按名字映射）：青铜铜棕 → 白银银灰 → 黄金琥珀 →
+     铂金铂蓝 → 钻石钻绿 → 星耀星紫 → 宗师烈橙（v3 未指定，沿用） → 王者深紫 →
+     传奇正红（v3 未指定，沿用） → 极境蓝青渐变（.ulv-10/.diff-10 特例实底） */
+  --soj-tier-1: #b4793f; /* 青铜 · 铜棕 */
+  --soj-tier-2: #75868f; /* 白银 · 银灰 */
+  --soj-tier-3: #d99141; /* 黄金 · 琥珀 */
+  --soj-tier-4: #3358b8; /* 铂金 · 铂蓝（字色加深 #2C4EA3） */
+  --soj-tier-5: #237e6b; /* 钻石 · 钻绿（字色加深 #1D6B5B） */
+  --soj-tier-6: #7c3aed; /* 星耀 · 星紫 */
   --soj-tier-7: #ee7e1f; /* 宗师 · 烈橙 */
-  --soj-tier-8: #d4af37; /* 王者 · 鎏金（渐变主色/描边/晕） */
-  --soj-tier-9: #e63946; /* 传奇 · 正红（渐变主色/描边/晕） */
+  --soj-tier-8: #7c3aed; /* 王者 · 深紫（底/边 #7C3AED、字 #6D28D9） */
+  --soj-tier-9: #d64550; /* 传奇 · 正红 */
 }
 
-/* SOJ 顶栏标识：特效开时挂 ulv-tag/ulv-10/ulv-e10（最高等级极境样式，见下方 ulv 族），
-   此处不再保留独立 tier-bg/tier-fx 样式 */
+/* SOJ 顶栏品牌恒为方块 + 流彩字（v3-full：品牌特效态退役，不再挂 ulv 族） */
 
-/* ---- 用户等级徽章浅色族（2026-10-22 v6.2 定稿）：与难度 chips 同体系的浅色 tag ----
-   浓度高一档（底 30% / 边 55% / 字 88% 混深岩灰）；特效全档逐步递增：
-   Lv.2–4 静态光晕（4px/18% → 6px/24% → 8px/30%）→ Lv.5–6 光晕呼吸（Lv.6 加星）→
-   Lv.7–8 强呼吸（Lv.8 星明灭放大）→ Lv.9 强呼吸 + 淡白流光 → 10 极境彩色渐变（蓝紫 300% 流动）
-   + 稍浓白流光 + 白字 + 白星芒 + 深处辉光呼吸。
-   后台特效开关（全局/逐级）关闭 = 不挂 e 类与星，退纯浅色。呼吸 ≥5s，reduced-motion 退静态。 */
-.ulv-1 { --lc: #4aa27e; }
-.ulv-2 { --lc: #7d8f9b; }
-.ulv-3 { --lc: #d9a018; }
-.ulv-4 { --lc: #64a8b3; }
-.ulv-5 { --lc: #56a3ea; }
-.ulv-6 { --lc: #7e3e9e; }
-.ulv-7 { --lc: #ee7e1f; }
-.ulv-8 { --lc: #b8912c; }
-.ulv-9 { --lc: #d64550; }
-.ulv-10 { --lc: #4192de; }
+/* ---- 用户等级徽章（v3-full 静态重设计 2026-10-24）：浅色胶囊，底 11% / 边 25% / 字深一档 ----
+   特效体系（光晕/呼吸星/流光/品牌特效态）整体退役：v3 设计稿全静态，
+   后台特效开关字段保留但前端不再产生视觉差异。Lv.10 极境 = 蓝青渐变实底白字。 */
+.ulv-1 { --lc: #b4793f; --lct: #b4793f; }
+.ulv-2 { --lc: #75868f; --lct: #75868f; }
+.ulv-3 { --lc: #d99141; --lct: #d99141; }
+.ulv-4 { --lc: #3358b8; --lct: #2c4ea3; }
+.ulv-5 { --lc: #237e6b; --lct: #1d6b5b; }
+.ulv-6 { --lc: #7c3aed; --lct: #7c3aed; }
+.ulv-7 { --lc: #ee7e1f; --lct: #ee7e1f; }
+.ulv-8 { --lc: #7c3aed; --lct: #6d28d9; }
+.ulv-9 { --lc: #d64550; --lct: #d64550; }
+.ulv-10 { --lc: #7c3aed; --lct: #6d28d9; }
 
 .ulv-tag {
-  background: color-mix(in srgb, var(--lc) 30%, #ffffff);
-  border: 1px solid color-mix(in srgb, var(--lc) 55%, #ffffff);
-  color: color-mix(in srgb, var(--lc) 88%, #1f2d3d);
+  background: color-mix(in srgb, var(--lc) 11%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--lc) 25%, #ffffff);
+  color: var(--lct);
 }
-.ulv-e2 { box-shadow: 0 0 4px color-mix(in srgb, var(--lc) 18%, transparent); }
-.ulv-e3 { box-shadow: 0 0 6px color-mix(in srgb, var(--lc) 24%, transparent); }
-.ulv-e4 { box-shadow: 0 0 8px color-mix(in srgb, var(--lc) 30%, transparent); }
-.ulv-e5,
-.ulv-e6 { animation: ulv-b1 5s ease-in-out infinite; }
-.ulv-e7,
-.ulv-e8 { animation: ulv-b2 5s ease-in-out infinite; }
-.ulv-e9 { animation: ulv-b2 5s ease-in-out infinite; }
-/* 白流光（Lv.9 淡 / Lv.10 稍浓）：光带缓慢扫过，扫光时呼吸星不受影响 */
-.ulv-e9,
-.ulv-e10 {
-  position: relative;
-  overflow: hidden;
-}
-.ulv-e9::before,
-.ulv-e10::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.25) 50%, transparent 60%);
-  transform: translateX(-130%);
-  pointer-events: none;
-  animation: ulv-sweep 6s ease-in-out infinite;
-}
-.ulv-e10::before {
-  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.4) 50%, transparent 60%);
-}
-/* 极境：彩色渐变（蓝紫 300% 流动）+ 白字 + 深处辉光呼吸 */
-.ulv-e10 {
-  background: linear-gradient(120deg, #4192de, #7d53c9);
-  background-size: 300% 100%;
-  border-color: rgba(255, 255, 255, 0.35);
-  animation:
-    ulv-flow 8s ease-in-out infinite alternate,
-    ulv-brd 5s ease-in-out infinite;
-}
-/* 呼吸星（TierBadge 按 tier 配置数量/大小/位置/错拍；极境为白） */
-.lv-star {
-  position: absolute;
-  line-height: 1;
-  pointer-events: none;
-  font-style: normal;
-  color: color-mix(in srgb, var(--lc) 88%, #1f2d3d);
-  text-shadow: 0 0 3px color-mix(in srgb, var(--lc) 45%, transparent);
-  animation: lv-tw 5s ease-in-out infinite;
-}
-.ulv-e10 .lv-star {
+
+/* Lv.10 极境（v3 tier-10）：蓝青渐变实底 + 白字 + 柔影 */
+.ulv-10.ulv-tag {
+  background: linear-gradient(90deg, #1557b8, #2c5de0 45%, #16a7d2);
+  border-color: transparent;
   color: #fff;
-  text-shadow: 0 0 5px rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 10px rgba(36, 85, 218, 0.35);
 }
 
-@keyframes lv-tw {
-  0%,
-  100% {
-    opacity: 0.3;
-    transform: scale(0.7);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.25);
-  }
-}
-@keyframes ulv-b1 {
-  0%,
-  100% {
-    box-shadow: 0 0 6px color-mix(in srgb, var(--lc) 26%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 10px color-mix(in srgb, var(--lc) 40%, transparent);
-  }
-}
-@keyframes ulv-b2 {
-  0%,
-  100% {
-    box-shadow: 0 0 8px color-mix(in srgb, var(--lc) 34%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 13px color-mix(in srgb, var(--lc) 50%, transparent);
-  }
-}
-@keyframes ulv-flow {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 100% 50%;
-  }
-}
-@keyframes ulv-sweep {
-  0% {
-    transform: translateX(-130%);
-  }
-  55%,
-  100% {
-    transform: translateX(130%);
-  }
-}
-@keyframes ulv-brd {
-  0%,
-  100% {
-    box-shadow: 0 0 8px rgba(94, 106, 190, 0.34);
-  }
-  50% {
-    box-shadow: 0 0 14px rgba(94, 106, 190, 0.52);
-  }
-}
-
-/* ---- 难度徽章浅色 tag 风（2026-10-22 v3 定稿）：与站点标签同浓度 ----
-   1–6 档纯浅色（底 10% 混白/边 32%/字 72% 混深岩灰）；7–9 档渐进微特效
-   （宗师暖光、王者金光+星芒、传奇红光呼吸+星芒）；10 极境暗黑深邃
-   （深空黑蓝底 + 暗紫细边 + 白字幽光 + 深处辉光呼吸 + 白星芒）。
-   等级徽章（tier-bg/fx/static）不受影响；特效走低速（呼吸 ≥5s），reduced-motion 退静态。 */
-.diff-1 { --dc: #4aa27e; }
-.diff-2 { --dc: #7d8f9b; }
-.diff-3 { --dc: #d9a018; }
-.diff-4 { --dc: #64a8b3; }
-.diff-5 { --dc: #56a3ea; }
-.diff-6 { --dc: #7e3e9e; }
-.diff-7 { --dc: #ee7e1f; }
-.diff-8 { --dc: #b8912c; }
-.diff-9 { --dc: #d64550; }
-.diff-10 { --dc: #6073c9; }
+/* ---- 难度徽章（v3-full 静态重设计 2026-10-24）：与等级同轴的浅色胶囊 ----
+   底 11% / 边 25% / 字深一档；第 10 档极境 = 蓝青渐变实底白字（与等级一致）。 */
+.diff-1 { --dc: #b4793f; --dct: #b4793f; }
+.diff-2 { --dc: #75868f; --dct: #75868f; }
+.diff-3 { --dc: #d99141; --dct: #d99141; }
+.diff-4 { --dc: #3358b8; --dct: #2c4ea3; }
+.diff-5 { --dc: #237e6b; --dct: #1d6b5b; }
+.diff-6 { --dc: #7c3aed; --dct: #7c3aed; }
+.diff-7 { --dc: #ee7e1f; --dct: #ee7e1f; }
+.diff-8 { --dc: #7c3aed; --dct: #6d28d9; }
+.diff-9 { --dc: #d64550; --dct: #d64550; }
+.diff-10 { --dc: #7c3aed; --dct: #6d28d9; }
 
 .diff-tag {
-  background: color-mix(in srgb, var(--dc) 10%, #ffffff);
-  border: 1px solid color-mix(in srgb, var(--dc) 32%, #ffffff);
-  color: color-mix(in srgb, var(--dc) 72%, #2c3e50);
-}
-.diff-g7 { box-shadow: 0 0 6px rgba(238, 126, 31, 0.28); }
-.diff-g8 { box-shadow: 0 0 8px rgba(212, 175, 55, 0.32); }
-.diff-g8::after {
-  content: '✦';
-  position: absolute;
-  top: 1px;
-  right: 3px;
-  font-size: 8px;
-  line-height: 1;
-  pointer-events: none;
-  color: #b8912c;
-  text-shadow: 0 0 3px rgba(212, 175, 55, 0.6);
-  animation: tier-twinkle 5s ease-in-out infinite;
-}
-.diff-g9 { box-shadow: 0 0 10px rgba(230, 57, 70, 0.3); animation: diff-breath-red 5s ease-in-out infinite; }
-.diff-g9::after {
-  content: '✦';
-  position: absolute;
-  top: 1px;
-  right: 3px;
-  font-size: 8px;
-  line-height: 1;
-  pointer-events: none;
-  color: #d64550;
-  text-shadow: 0 0 3px rgba(230, 57, 70, 0.6);
-  animation: tier-twinkle 5s ease-in-out infinite;
-}
-.diff-g10 {
-  position: relative;
-  background: linear-gradient(135deg, #262b3a, #10131f);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #e8eaf6;
-  text-shadow: 0 0 6px rgba(120, 130, 220, 0.45);
-  box-shadow: 0 0 12px rgba(94, 106, 190, 0.38);
-  animation: diff-breath-deep 5.5s ease-in-out infinite;
-}
-.diff-g10::after {
-  content: '✦';
-  position: absolute;
-  top: 1px;
-  right: 3px;
-  font-size: 9px;
-  line-height: 1;
-  pointer-events: none;
-  color: #cfd6ff;
-  text-shadow: 0 0 5px rgba(160, 170, 255, 0.9);
-  animation:
-    tier-twinkle 5s ease-in-out infinite,
-    tier-star-pop 5s ease-in-out infinite;
-}
-.diff-g8,
-.diff-g9,
-.diff-g10 {
-  position: relative;
+  background: color-mix(in srgb, var(--dc) 11%, #ffffff);
+  border: 1px solid color-mix(in srgb, var(--dc) 25%, #ffffff);
+  color: var(--dct);
 }
 
-@keyframes diff-breath-red {
-  0%,
-  100% {
-    box-shadow: 0 0 8px rgba(230, 57, 70, 0.24);
-  }
-  50% {
-    box-shadow: 0 0 12px rgba(230, 57, 70, 0.42);
-  }
-}
-@keyframes diff-breath-deep {
-  0%,
-  100% {
-    box-shadow: 0 0 9px rgba(94, 106, 190, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 15px rgba(94, 106, 190, 0.5);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .diff-g8::after,
-  .diff-g9::after,
-  .diff-g10::after {
-    animation: none;
-  }
-  .diff-g9,
-  .diff-g10 {
-    animation: none;
-  }
-}
-
-@keyframes tier-twinkle {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.85);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-@keyframes tier-star-pop {
-  0%,
-  100% {
-    font-size: 9px;
-  }
-  50% {
-    font-size: 12px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ulv-e9::before,
-  .ulv-e10::before,
-  .diff-g8::after,
-  .diff-g9::after,
-  .diff-g10::after,
-  .lv-star {
-    animation: none;
-  }
-  .diff-g8::after,
-  .diff-g9::after,
-  .diff-g10::after,
-  .lv-star {
-    opacity: 1;
-  }
-  .diff-g9,
-  .diff-g10,
-  .ulv-e5,
-  .ulv-e6,
-  .ulv-e7,
-  .ulv-e8,
-  .ulv-e9,
-  .ulv-e10 {
-    animation: none;
-  }
-  .ulv-e10 {
-    background-position: 50% 50%;
-    box-shadow: 0 0 10px rgba(94, 106, 190, 0.4);
-  }
+/* 第 10 档极境：蓝青渐变实底白字（对齐等级 Lv.10） */
+.diff-10.diff-tag {
+  background: linear-gradient(90deg, #1557b8, #2c5de0 45%, #16a7d2);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(36, 85, 218, 0.35);
 }
 
 /* ---- 题型徽章配色（2026-10-22）：特殊题型统一浅蓝族 ----
@@ -1379,9 +1351,9 @@ samp {
    首版因此整体退回 primary 浅蓝灰。此处 .el-tag.ptype-tag 对齐到（0,2,0），
    与 EP 变体平特异度后靠 main.css 恒序（EP→vditor→main.css）后到者胜。 */
 :root {
-  --soj-probtype-bg: #f0f8ff;
-  --soj-probtype-border: #e1f1ff;
-  --soj-probtype-text: #4a76a8;
+  --soj-probtype-bg: rgba(22, 167, 210, 0.09);
+  --soj-probtype-border: rgba(22, 167, 210, 0.24);
+  --soj-probtype-text: #0e7a9c;
 }
 .el-tag.ptype-tag {
   --el-tag-bg-color: var(--soj-probtype-bg);
@@ -1405,4 +1377,473 @@ samp {
 }
 .el-alert.ptype-alert .el-alert__description {
   color: var(--soj-probtype-text);
+}
+
+/* ================================================================
+   v3-full 全局基件（青格蓝调像素级对标批次 · 2026-10-24）
+   设计权威：design-preview/soj-redesign-v3-full.html
+   ================================================================ */
+
+/* ---- 输入聚焦环（v3 input:focus 4px 主蓝浅环，全站 el-input/textarea 跟随） ---- */
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow:
+    0 0 0 1px var(--soj-blue) inset,
+    0 0 0 4px var(--soj-blue-soft) !important;
+}
+
+/* ---- 胶囊搜索 .soj-input（v3 .input：h44 白底胶囊 + 前置图标 + 聚焦环） ---- */
+.soj-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--el-fill-color-blank);
+  border: 1px solid var(--soj-line-2);
+  border-radius: 999px;
+  padding: 0 18px;
+  height: 44px;
+  color: var(--soj-ink-3);
+  transition: all 0.18s;
+}
+
+.soj-input:focus-within {
+  border-color: var(--soj-blue);
+  box-shadow: 0 0 0 4px var(--soj-blue-soft);
+}
+
+.soj-input svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.soj-input input {
+  border: 0;
+  outline: 0;
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: var(--soj-fs-14);
+  color: var(--soj-ink);
+  background: transparent;
+}
+
+.soj-input input::placeholder {
+  color: var(--soj-ink-3);
+}
+
+/* ---- 筛选 chip .soj-sel（v3 .sel：h36 白底描边胶囊，激活蓝底白字） ---- */
+.soj-sel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--soj-line-2);
+  background: var(--el-fill-color-blank);
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-ink-2);
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.soj-sel:hover {
+  border-color: var(--soj-blue-line);
+  color: var(--soj-blue);
+}
+
+.soj-sel.on {
+  background: var(--soj-blue);
+  border-color: var(--soj-blue);
+  color: #fff;
+}
+
+/* ---- 胶囊分段 .soj-seg（v3 .seg：白底描边容器 + 内嵌胶囊按钮，激活实心主蓝带影） ---- */
+.soj-seg {
+  display: inline-flex;
+  background: var(--el-fill-color-blank);
+  border: 1px solid var(--soj-line-2);
+  border-radius: 999px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.soj-seg button {
+  height: 34px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-ink-2);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.soj-seg button:hover {
+  color: var(--soj-blue);
+}
+
+.soj-seg button.on {
+  background: var(--soj-blue);
+  color: #fff;
+  font-weight: var(--soj-fw-bold);
+  box-shadow: 0 4px 12px rgba(36, 85, 218, 0.3);
+}
+
+/* ---- 圆形渐变钮 .soj-orb（v3 .orb：52px 主蓝渐变圆钮，hero 搜索用） ---- */
+.soj-orb {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  color: #fff;
+  background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-blue-lo));
+  box-shadow: 0 8px 18px rgba(36, 85, 218, 0.32);
+  cursor: pointer;
+  transition: transform 0.18s;
+}
+
+.soj-orb:hover {
+  transform: scale(1.06);
+}
+
+/* ---- 标签 chip .soj-tagchip（v3 .tagchip 青系单色：可点击筛选） ---- */
+.soj-tagchip {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgba(22, 167, 210, 0.09);
+  border: 1px solid rgba(22, 167, 210, 0.24);
+  color: #0e7a9c;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-emphasis);
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.soj-tagchip:hover {
+  background: rgba(22, 167, 210, 0.16);
+}
+
+.soj-tagchip.on {
+  background: var(--soj-teal);
+  border-color: var(--soj-teal);
+  color: #fff;
+}
+
+/* ---- 表格链接 .tlink（v3：藏蓝 600，hover 主蓝） ---- */
+.tlink {
+  color: var(--soj-navy);
+  font-weight: var(--soj-fw-emphasis);
+  cursor: pointer;
+  transition: color 0.15s;
+  text-decoration: none;
+}
+
+.tlink:hover {
+  color: var(--soj-blue);
+}
+
+/* ---- 渐变进度条 .soj-pbar（v3 .pbar：8px 胶囊 90° 主蓝→青） ---- */
+.soj-pbar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--soj-surface-3);
+  overflow: hidden;
+}
+
+.soj-pbar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--soj-blue-hi), var(--soj-teal));
+  transition: width 0.3s ease;
+}
+
+/* ---- 倒计时 .soj-countdown（v3 .countdown：浅底 + 虚线主蓝边 + mono 居中） ---- */
+.soj-countdown {
+  font-family: var(--font-mono);
+  font-size: var(--soj-fs-22);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-navy);
+  letter-spacing: 1px;
+  text-align: center;
+  padding: 10px;
+  background: var(--soj-surface-2);
+  border-radius: 12px;
+  border: 1px dashed var(--soj-blue-line);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 数字格 .soj-kv（v3 .kv：2×N 网格，大数字 + 说明） ---- */
+.soj-kv {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.soj-kv .k b {
+  display: block;
+  font-size: var(--soj-fs-22);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
+  letter-spacing: -0.5px;
+  line-height: 1.3;
+}
+
+.soj-kv .k b small {
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+  font-weight: var(--soj-fw-emphasis);
+}
+
+.soj-kv .k span {
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+}
+
+/* ---- 行卡 .soj-mini-li（v3 .mini-li：副列迷你列表行，hover 浅蓝） ---- */
+.soj-mini-li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--soj-fs-13);
+  padding: 9px 12px;
+  border-radius: 12px;
+  transition: background 0.15s;
+}
+
+.soj-mini-li:hover {
+  background: var(--soj-surface-2);
+}
+
+.soj-mini-li .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.soj-mini-li .t {
+  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-12);
+  flex: 0 0 auto;
+}
+
+.soj-mini-li a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.soj-mini-li a:hover {
+  color: var(--soj-blue);
+}
+
+/* ---- 邀请码胶囊 .soj-inv-chip（v3 .inv-chip：虚线主蓝边 mono 居中展示） ---- */
+.soj-inv-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--soj-blue-soft);
+  border: 1px dashed var(--soj-blue-line);
+  font-family: var(--font-mono);
+  font-weight: var(--soj-fw-emphasis);
+  font-size: var(--soj-fs-14);
+  color: var(--soj-blue);
+  letter-spacing: 2px;
+}
+
+/* ---- 角色胶囊 .soj-role-chip（v3 role-chip：root 红 / admin 橙 / teacher 蓝 / 其余灰） ---- */
+.soj-role-chip {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+}
+
+.soj-role-chip.role-root {
+  background: rgba(224, 45, 60, 0.09);
+  color: var(--soj-wa);
+}
+
+.soj-role-chip.role-admin {
+  background: rgba(217, 130, 7, 0.11);
+  color: var(--soj-tle);
+}
+
+.soj-role-chip.role-teacher {
+  background: rgba(31, 73, 186, 0.09);
+  color: var(--soj-blue);
+}
+
+.soj-role-chip.role-user {
+  background: var(--soj-mut-bg);
+  color: var(--soj-mut);
+}
+
+/* ---- 主列卡头 .panel-h（v3 .panel-h：15.5/800 藏蓝 + 右侧动作区） ---- */
+.panel-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+}
+
+.panel-h .pt {
+  font-size: 15.5px;
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
+}
+
+.panel-h .acts {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ---- 行式表单 .frow（v3 .frow：190px 标签列 + 内容列，dashed 分隔） ---- */
+.frow {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 13px 0;
+  border-bottom: 1px dashed var(--soj-line);
+}
+
+.frow:last-child {
+  border-bottom: 0;
+}
+
+.frow .fl {
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-ink-2);
+}
+
+.frow .fl .fd {
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+  font-weight: var(--soj-fw-regular);
+  margin-top: 2px;
+}
+
+/* ---- 深色代码窗 .soj-codepane / 日志窗 .soj-ilog（v3 #0D1E3C 系） ---- */
+.soj-codepane {
+  background: var(--soj-code-bg);
+  border-radius: 14px;
+  padding: 14px 16px;
+  font-family: var(--font-mono);
+  font-size: var(--soj-fs-13);
+  line-height: 1.8;
+  color: var(--soj-code-fg);
+  overflow: auto;
+}
+
+.soj-ilog {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 2;
+  background: var(--soj-code-bg);
+  color: var(--soj-code-fg);
+  border-radius: 14px;
+  padding: 14px 18px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.soj-ilog .is-ok {
+  color: #7bd8ab;
+}
+
+.soj-ilog .is-skip {
+  color: #e8c37a;
+}
+
+.soj-ilog .is-fail {
+  color: #f09a9a;
+}
+
+.soj-ilog .is-dim {
+  color: var(--soj-code-cm);
+}
+
+/* ---- 题面空心题号 .soj-big-no（v3 .big-no：96px mono 描边空心，绝对定位右上） ---- */
+.soj-big-no {
+  position: absolute;
+  right: 0;
+  top: -14px;
+  font-family: var(--font-mono);
+  font-size: 96px;
+  font-weight: var(--soj-fw-emphasis);
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(36, 85, 218, 0.14);
+  user-select: none;
+  letter-spacing: -4px;
+  pointer-events: none;
+}
+
+/* ---- 题目元信息分格条 .soj-prob-meta（v3 .prob-meta：圆角分格横条） ---- */
+.soj-prob-meta {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--soj-line);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  overflow: hidden;
+}
+
+.soj-prob-meta .cell {
+  padding: 11px 20px;
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.soj-prob-meta .cell + .cell {
+  border-left: 1px solid var(--soj-line);
+}
+
+.soj-prob-meta b {
+  color: var(--soj-navy);
+}
+
+/* ---- 表格「我的」行高亮（v3 tr.me：整行淡蓝渐变；el-table 用 row-class-name 挂 .me-row） ---- */
+.el-table .el-table__row.me-row > td.el-table__cell {
+  background: rgba(36, 85, 218, 0.045);
+}
+
+.el-table .el-table__row.me-row:hover > td.el-table__cell {
+  background: rgba(36, 85, 218, 0.07);
+}
+
+/* ---- 窄容器（v3 wrap.narrow 960：排名/首页/导入窄版） ---- */
+.page.narrow {
+  max-width: 960px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sub-status.blue .dot {
+    animation: none;
+  }
 }

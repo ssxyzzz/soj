@@ -1,9 +1,9 @@
 <script setup lang="ts">
-// 题目信息卡（题库详情页与赛事做题页共用）：提交/通过/通过率统计 + 标签浮层。
-// 标签浮层默认只显示「显示标签」入口。悬停即展、移开即收；点击则锁定，
-// 移开后保留 5 秒再收起（再点一次立即收起）。
-import { computed, onUnmounted, ref } from 'vue'
+// 题目信息卡（v3-full 重制，题库详情页与赛事做题页共用）：kv 三格（提交/通过/通过率）+
+// 难度档徽章 + 标签 chips 平铺（弃悬停浮层）+ 来源徽章链。
+import { computed } from 'vue'
 
+import RailCard from '@/components/RailCard.vue'
 import TierBadge from '@/components/TierBadge.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { sourceChain } from '@/utils/source'
@@ -12,6 +12,7 @@ import type { ProblemDetail } from '@/types'
 const props = defineProps<{ problem: ProblemDetail }>()
 
 const tagStore = useTagTreeStore()
+tagStore.ensure()
 
 const tagIds = computed(() => props.problem.tags ?? [])
 
@@ -24,140 +25,64 @@ const acceptRate = computed(() => {
   const pct = ((p.accepted_count ?? 0) / p.submit_count) * 100
   return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
 })
-
-const tagsVisible = ref(false)
-const tagsLatched = ref(false)
-let tagsTimer: ReturnType<typeof setTimeout> | undefined
-
-function openTags() {
-  if (tagsTimer) {
-    clearTimeout(tagsTimer)
-    tagsTimer = undefined
-  }
-  tagsVisible.value = true
-}
-
-function scheduleCloseTags() {
-  if (tagsTimer) clearTimeout(tagsTimer)
-  if (tagsLatched.value) {
-    tagsTimer = setTimeout(() => {
-      tagsVisible.value = false
-      tagsLatched.value = false
-    }, 5000)
-  } else {
-    tagsVisible.value = false
-  }
-}
-
-function toggleTags() {
-  if (tagsLatched.value) {
-    tagsLatched.value = false
-    if (tagsTimer) clearTimeout(tagsTimer)
-    tagsVisible.value = false
-  } else {
-    tagsLatched.value = true
-    openTags()
-  }
-}
-
-onUnmounted(() => {
-  if (tagsTimer) clearTimeout(tagsTimer)
-})
 </script>
 
 <template>
-  <el-card class="aside-card">
-    <template #header><span>题目信息</span></template>
-    <div class="info-stats">
-      <span>提交 <b>{{ problem.submit_count ?? 0 }}</b></span>
-      <span>通过 <b>{{ problem.accepted_count ?? 0 }}</b></span>
-      <span>通过率 <b>{{ acceptRate }}</b></span>
+  <RailCard ov="统计" title="题目信息" class="aside-card">
+    <div class="soj-kv kv3">
+      <div class="k"><b>{{ problem.submit_count ?? 0 }}</b><span>提交</span></div>
+      <div class="k"><b>{{ problem.accepted_count ?? 0 }}</b><span>通过</span></div>
+      <div class="k"><b>{{ acceptRate }}</b><span>通过率</span></div>
     </div>
-    <!-- 难度（v0.11）：静态十阶色轴徽章，位于标签区上方 -->
-    <div class="info-diff">
+    <div class="diff-row">
       <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
+      <span class="hint">难度第 {{ problem.difficulty ?? 3 }} 档</span>
     </div>
-    <div v-if="tagIds.length" class="info-tags">
-      <el-popover :visible="tagsVisible" placement="bottom-start" popper-class="tags-pop">
-        <template #reference>
-          <span
-            class="show-tags"
-            @mouseenter="openTags"
-            @mouseleave="scheduleCloseTags"
-            @click="toggleTags"
-          >
-            显示标签
-          </span>
-        </template>
-        <div class="tags-pop-body" @mouseenter="openTags" @mouseleave="scheduleCloseTags">
-          <el-tag
-            v-for="id in tagIds"
-            :key="id"
-            size="small"
-            class="pop-tag"
-            :class="`lv-${tagStore.levelOf(id)}`"
-          >
-            {{ tagStore.nameOf(id) }}
-          </el-tag>
-        </div>
-      </el-popover>
+    <div v-if="tagIds.length" class="tag-row">
+      <span v-for="id in tagIds" :key="id" class="soj-tagchip chip">{{ tagStore.nameOf(id) }}</span>
     </div>
-    <div v-else class="dim">暂无标签</div>
-    <!-- 来源徽章链（v0.12）：标签下方，与题型徽章同族浅蓝 -->
-    <div v-if="sourceText" class="info-source">
+    <div v-else class="hint">暂无标签</div>
+    <!-- 来源徽章链（v0.12）：标签下方 -->
+    <div v-if="sourceText" class="src-row">
       <el-tag size="small" class="src-tag">{{ sourceText }}</el-tag>
     </div>
-  </el-card>
+  </RailCard>
 </template>
 
 <style scoped>
-.info-stats {
+/* v3：kv 三等分 */
+.kv3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.kv3 .k b {
+  font-size: var(--soj-fs-22);
+}
+
+.diff-row {
   display: flex;
-  gap: 14px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
 }
 
-.info-stats b {
-  font-weight: var(--soj-fw-emphasis);
+.hint {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
 }
 
-.info-diff {
-  margin-top: 10px;
-}
-
-.info-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.info-source {
-  margin-top: 10px;
-}
-
-/* 「显示标签」入口 */
-.show-tags {
-  color: var(--el-color-primary);
-  cursor: pointer;
-  font-size: var(--soj-fs-body);
-}
-
-.show-tags:hover {
-  text-decoration: underline;
-}
-</style>
-
-<style>
-/* 标签浮层（el-popover 挂 body，需非 scoped）：同表格标签栏的五级配色 */
-.tags-pop-body {
+.tag-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  margin-top: 10px;
 }
 
-.tags-pop-body .el-tag {
-  background: var(--lv-bg);
-  border-color: var(--lv-border);
-  color: var(--el-text-color-primary);
+.chip {
+  margin: 2px 4px 2px 0;
+  cursor: default;
+}
+
+.src-row {
+  margin-top: 10px;
 }
 </style>

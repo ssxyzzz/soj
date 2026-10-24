@@ -38,7 +38,10 @@ const allowedLangs = computed(() => {
   return languageOptions.filter((o) => list.includes(o.value))
 })
 const code = ref('')
-const leftPct = ref(50)
+const leftPct = ref(46)
+// v3 wb-title：题号 mono 前缀与题名分色（'#1003 三个数的和' → mono #1003 + 藏蓝题名）
+const titleId = computed(() => `#${props.problem.id}`)
+const titleText = computed(() => props.title.replace(/^#\d+\s*/, ''))
 const divider = ref<HTMLElement>()
 const userStore = useUserStore()
 const acOn = computed(() => autocompleteOn())
@@ -123,7 +126,7 @@ onBeforeUnmount(() => {
   <teleport to="body">
     <div v-if="modelValue" class="workbench">
       <header class="wb-header">
-        <span class="wb-title">{{ title }}</span>
+        <span class="wb-title"><span class="mono wb-no">{{ titleId }}</span> {{ titleText }}</span>
         <div class="wb-actions">
           <el-select :model-value="lang" style="width: 140px" @change="changeLang">
             <el-option v-for="o in allowedLangs" :key="o.value" :value="o.value" :label="o.label" />
@@ -148,8 +151,8 @@ onBeforeUnmount(() => {
             title="编辑器字号（12-48，可输入或 +/- 微调）"
             @change="(n: number | undefined) => n && saveEditorPrefs({ codeFontSize: n })"
           />
-          <el-button type="primary" plain :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
-          <el-button @click="emit('update:modelValue', false)">退出全屏（Esc）</el-button>
+          <el-button type="primary" size="small" :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
+          <el-button size="small" @click="emit('update:modelValue', false)">退出全屏（Esc）</el-button>
         </div>
       </header>
       <div v-if="disabled" class="wb-disabled">{{ disabledReason }}</div>
@@ -181,26 +184,37 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   z-index: 2000;
-  background: var(--el-bg-color);
+  background: var(--soj-bg-bottom);
   display: flex;
   flex-direction: column;
 }
 
+/* v3 wb-header：56 定高毛玻璃（白.9 + blur12） */
 .wb-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--el-border-color-light);
+  gap: 14px;
+  height: 56px;
+  padding: 0 20px;
+  background: rgba(251, 253, 255, 0.9);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--soj-line);
   flex: none;
 }
 
 .wb-title {
-  font-weight: var(--soj-fw-emphasis);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
+  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.wb-title .wb-no {
+  color: var(--soj-blue);
 }
 
 .wb-actions {
@@ -224,7 +238,7 @@ onBeforeUnmount(() => {
 
 .wb-left {
   overflow: auto;
-  padding: 16px 24px;
+  padding: 22px 28px;
   min-width: 0;
 }
 

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -139,16 +140,27 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 
 func (h *Handlers) ListSubmissions(c *gin.Context) {
 	page, pageSize := queryPage(c)
-	var userID, problemID int64
+	f := repo.SubmissionFilter{
+		Status:   c.Query("status"),
+		Language: c.Query("language"),
+		Keyword:  strings.TrimSpace(c.Query("kw")),
+	}
 	if v, err := strconv.ParseInt(c.Query("user_id"), 10, 64); err == nil {
-		userID = v
+		f.UID = v
 	}
 	if v, err := strconv.ParseInt(c.Query("problem_id"), 10, 64); err == nil {
-		problemID = v
+		f.PID = v
+	}
+	// mine=1：仅看自己（当前登录用户；比让前端传 user_id 更防越权枚举）
+	if c.Query("mine") == "1" {
+		uid, _, _, ok := currentUser(c)
+		if ok {
+			f.UID = uid
+		}
 	}
 	// 隐藏期赛事提交的可见性已并入「查看全部提交」权限位（2026-10-16 定稿），
 	// 路由 RequirePerm 把门后这里不再过滤
-	list, total, err := h.repo.ListSubmissions(c.Request.Context(), userID, problemID, page, pageSize)
+	list, total, err := h.repo.ListSubmissions(c.Request.Context(), f, page, pageSize)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取提交记录失败")
 		return

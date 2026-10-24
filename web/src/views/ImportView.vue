@@ -214,12 +214,16 @@ const finishedIssues = computed(() =>
 </script>
 
 <template>
-  <PageShell>
+  <PageShell class="import-shell">
+    <div class="page-head">
+      <div class="kicker">IMPORT</div>
+      <h1 class="page-title">导入题目<small>题包（含题面）统一入口 · 题号一律自动分配</small></h1>
+    </div>
     <el-card>
       <template #header>
-        <div class="head">
-          <span>导入题目</span>
-          <el-tag v-if="running" type="warning" size="small">{{ stateLabel }}（{{ status.done }}/{{ status.total }}）</el-tag>
+        <div class="panel-h step-head">
+          <span class="pt">第一步 · 选择来源</span>
+          <span v-if="running" class="sub-status yellow"><span class="dot yellow"></span>{{ stateLabel }}（{{ status.done }}/{{ status.total }}）</span>
           <el-tag v-else-if="finished" size="small" :type="status.state === 'done' ? 'success' : 'info'">{{ stateLabel }}</el-tag>
         </div>
       </template>
@@ -245,6 +249,12 @@ const finishedIssues = computed(() =>
           </div>
           <div class="source-hint dim">{{ s.hint }}</div>
         </div>
+      </div>
+
+      <div class="panel-h phase-two">
+        <span class="pt-sm">第二步 · 上传与导入</span>
+        <span v-if="fileList[0]" class="dim file-name">{{ fileList[0]?.name }} · {{ ((fileList[0]?.size ?? 0) / 1024 / 1024).toFixed(1) }} MB</span>
+        <el-button v-if="running" size="small" style="margin-left: auto" @click="cancelImport">取消导入</el-button>
       </div>
 
       <el-upload
@@ -286,42 +296,46 @@ const finishedIssues = computed(() =>
         </el-tooltip>
       </div>
 
-      <!-- v0.18.2 上传实时进度（onUploadProgress；巨型包上传期不再是盲转圈） -->
+      <!-- v0.18.2 上传实时进度（onUploadProgress；巨型包上传期不再是盲转圈）+ v3 pbar -->
       <div v-if="uploadPct >= 0" class="upload-progress">
-        <el-progress :percentage="uploadPct" :stroke-width="8" />
+        <div class="soj-pbar"><i :style="{ width: `${uploadPct}%` }" /></div>
+        <div class="pstat"><span>上传中 · {{ uploadPct }}%</span></div>
       </div>
 
       <div class="actions">
         <el-button type="primary" :loading="starting" :disabled="running || !fileList.length" @click="startImport">
           {{ uploadPct >= 0 ? `上传中 ${uploadPct}%` : '上传并导入' }}
         </el-button>
-        <el-button v-if="running" type="warning" plain @click="cancelImport">取消导入</el-button>
       </div>
 
-      <!-- 进度与结果流（running 与结束态共用；结束后出汇总报告，表单已恢复可再导） -->
+      <!-- 进度与结果流（running 与结束态共用；v3 pbar + pstat + 深色日志窗） -->
       <div v-if="status.state !== 'idle'" class="progress-block">
-        <el-progress
-          :percentage="extracting ? (extractPct ?? 0) : progressPct"
-          :indeterminate="extracting && extractPct === null"
-          :status="status.state === 'done' ? 'success' : undefined"
-        />
-        <div v-if="extracting" class="dim progress-line">
-          正在解压题包…{{ extractPct !== null ? ` ${extractPct}%` : '（大包可能需要一两分钟）' }}
+        <div class="soj-pbar">
+          <i
+            :style="{
+              width: `${extracting ? (extractPct ?? 0) : progressPct}%`,
+              opacity: extracting && extractPct === null ? 0.35 : 1,
+            }"
+          />
         </div>
-        <div v-else-if="running" class="dim progress-line">
-          已导入 {{ status.done }}/{{ status.total }}（成功 {{ status.ok_count }} · 跳过 {{ status.skip_count }} · 失败 {{ status.fail_count }}）<span v-if="status.by">，发起人 {{ status.by }}</span>
-        </div>
-        <div v-else class="progress-line">
-          <template v-if="status.state === 'failed'">
-            <div class="is-fail">整包失败：{{ status.error || '未知原因' }}</div>
+        <div class="pstat">
+          <template v-if="extracting">
+            <span>正在解压题包{{ extractPct !== null ? ` · ${extractPct}%` : '…（大包可能需要一两分钟）' }}</span>
+          </template>
+          <template v-else-if="running">
+            <span>解压进度 {{ status.done }} / {{ status.total }} 题 · {{ progressPct }}%</span>
+            <span>成功 {{ status.ok_count }} · 跳过 {{ status.skip_count }} · 失败 {{ status.fail_count }}</span>
+            <span v-if="status.by">发起人 {{ status.by }}</span>
+          </template>
+          <template v-else-if="status.state === 'failed'">
+            <span class="is-fail">整包失败：{{ status.error || '未知原因' }}</span>
           </template>
           <template v-else>
-            报告：成功 <b class="is-ok">{{ status.ok_count }}</b> · 跳过 <b class="is-skip">{{ status.skip_count }}</b> · 失败 <b class="is-fail">{{ status.fail_count }}</b>
-            <span v-if="status.state === 'cancelled'">（已取消，未导入的目录不再处理）</span>
+            <span>报告：成功 {{ status.ok_count }} · 跳过 {{ status.skip_count }} · 失败 {{ status.fail_count }}{{ status.state === 'cancelled' ? '（已取消）' : '' }}</span>
           </template>
         </div>
         <!-- 结果流：running = 最近 50 条滚动；终态 = 失败/跳过全量列出（成功靠汇总计数） -->
-        <div v-if="running && reversedResults.length" class="result-stream">
+        <div v-if="running && reversedResults.length" class="soj-ilog result-stream">
           <div class="result-stream-head dim">
             结果流{{ (status.results?.length ?? 0) > RESULT_WINDOW ? `（仅显示最近 ${RESULT_WINDOW} 条 / 共 ${status.results?.length} 条）` : '' }}
           </div>
@@ -329,13 +343,13 @@ const finishedIssues = computed(() =>
             {{ resultLine(r) }}
           </div>
         </div>
-        <div v-else-if="finished && finishedIssues.length" class="result-stream">
+        <div v-else-if="finished && finishedIssues.length" class="soj-ilog result-stream">
           <div class="result-stream-head dim">失败 / 跳过（全部列出，共 {{ finishedIssues.length }} 条）</div>
           <div v-for="(r, i) in finishedIssues" :key="i" class="result-line" :class="resultClass(r.status)">
             {{ resultLine(r) }}
           </div>
         </div>
-        <div v-else-if="finished && status.state !== 'failed'" class="result-stream">
+        <div v-else-if="finished && status.state !== 'failed'" class="soj-ilog result-stream">
           <div class="result-line is-ok">全部导入成功，无失败 / 跳过项</div>
         </div>
       </div>
@@ -368,8 +382,8 @@ const finishedIssues = computed(() =>
 
 .source-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
   margin-bottom: 14px;
 }
 
@@ -379,21 +393,24 @@ const finishedIssues = computed(() =>
   }
 }
 
+/* v3 源卡片：14px 圆角、主蓝选中态（浅底 + 蓝边），标题藏蓝 700 */
 .source-card {
-  border: 1px solid var(--el-border-color);
-  border-radius: var(--el-border-radius-base);
-  padding: 12px 14px;
+  border: 1px solid rgba(11, 31, 69, 0.13);
+  border-radius: 14px;
+  padding: 14px 16px;
   cursor: pointer;
   transition: all 0.2s;
+  background: var(--el-bg-color);
 }
 
 .source-card:hover {
-  border-color: var(--el-color-primary);
+  border-color: var(--soj-blue);
 }
 
 .source-card.active {
-  border-color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
+  border-color: var(--soj-blue);
+  background: var(--soj-blue-soft);
+  box-shadow: 0 4px 14px rgba(36, 85, 218, 0.12);
 }
 
 .source-card.soon {
@@ -402,7 +419,8 @@ const finishedIssues = computed(() =>
 }
 
 .source-title {
-  font-weight: var(--soj-fw-emphasis);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -500,3 +518,59 @@ const finishedIssues = computed(() =>
   color: var(--el-text-color-primary);
 }
 </style>
+
+/* ---- v3-full 导入页补充 ---- */
+/* 容器 1080（题包日志行宽口径） */
+.import-shell :deep(.page-shell) {
+  max-width: 1080px;
+}
+
+.step-head {
+  padding: 0 0 14px;
+}
+
+.phase-two {
+  padding: 18px 0 10px;
+}
+
+.pt-sm {
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
+}
+
+.file-name {
+  font-size: var(--soj-fs-13);
+}
+
+/* v3 .pstat：进度条下方三段状态行 */
+.pstat {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+}
+
+.pstat .is-ok {
+  color: var(--soj-ac);
+}
+
+.pstat .is-skip {
+  color: var(--soj-tle);
+}
+
+.pstat .is-fail {
+  color: var(--soj-wa);
+}
+
+/* 日志窗内的行色由全局 .soj-ilog 定义；head 行弱化 */
+.soj-ilog .result-stream-head {
+  color: var(--soj-code-cm);
+  margin-bottom: 4px;
+}
+
+.soj-ilog .result-line {
+  line-height: 1.9;
+}

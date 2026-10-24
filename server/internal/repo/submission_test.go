@@ -276,3 +276,98 @@ func TestRejudgePriorities(t *testing.T) {
 		}
 	})
 }
+
+// TestListSubmissionsFilter v0.19 提交筛选：status/language/keyword（数字=提交号、文字=题名）。
+func TestListSubmissionsFilter(t *testing.T) {
+	r := openTestRepo(t)
+	insert(t, r, bson.M{"_id": int64(101), "uid": int64(7), "status": "Accepted", "lang": "cpp", "ptitle": "两个数的和"})
+	insert(t, r, bson.M{"_id": int64(102), "uid": int64(8), "status": "Wrong Answer", "lang": "python3", "ptitle": "三个数的和"})
+	insert(t, r, bson.M{"_id": int64(103), "uid": int64(8), "status": "Accepted", "lang": "cpp", "ptitle": "植树"})
+
+	cases := []struct {
+		name   string
+		f      SubmissionFilter
+		wantID []int64
+	}{
+		{"无过滤", SubmissionFilter{}, []int64{103, 102, 101}},
+		{"状态", SubmissionFilter{Status: "Accepted"}, []int64{103, 101}},
+		{"语言", SubmissionFilter{Language: "python3"}, []int64{102}},
+		{"用户", SubmissionFilter{UID: 8}, []int64{103, 102}},
+		{"组合", SubmissionFilter{UID: 8, Status: "Accepted"}, []int64{103}},
+		{"题名子串", SubmissionFilter{Keyword: "数的和"}, []int64{102, 101}},
+		{"提交号", SubmissionFilter{Keyword: "102"}, []int64{102}},
+		{"空结果", SubmissionFilter{Keyword: "不存在"}, []int64{}},
+	}
+	for _, tc := range cases {
+		list, total, err := r.ListSubmissions(context.Background(), tc.f, 1, 20)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if total != int64(len(tc.wantID)) {
+			t.Errorf("%s: total = %d, want %d", tc.name, total, len(tc.wantID))
+		}
+		got := make([]int64, 0, len(list))
+		for _, s := range list {
+			got = append(got, s.ID)
+		}
+		if len(got) != len(tc.wantID) {
+			t.Fatalf("%s: got %v, want %v", tc.name, got, tc.wantID)
+		}
+		for i := range got {
+			if got[i] != tc.wantID[i] {
+				t.Errorf("%s: got %v, want %v", tc.name, got, tc.wantID)
+				break
+			}
+		}
+	}
+}
+
+// TestMyProblemStats v0.19 我的做题统计：AC 去重题数 / 提交数 / AC 率 / 七天分布。
+func TestMyProblemStats(t *testing.T) {
+	r := openTestRepo(t)
+	now := time.Now()
+	// 题目两条（一条隐藏不计入 total）
+	if _, err := r.Problems.InsertOne(context.Background(), bson.M{"_id": int64(1), "title": "a", "hidden": false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Problems.InsertOne(context.Background(), bson.M{"_id": int64(2), "title": "b", "hidden": false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Problems.InsertOne(context.Background(), bson.M{"_id": int64(3), "title": "c", "hidden": true}); err != nil {
+		t.Fatal(err)
+	}
+	// 提交：题1 两条 AC（去重 1 题）+ 一条 WA；题2 一条 AC；另加一条 8 天前的 AC（不进七天窗）
+	insert(t, r, bson.M{"_id": int64(201), "uid": int64(9), "pid": int64(1), "status": "Accepted"})
+	insert(t, r, bson.M{"_id": int64(202), "uid": int64(9), "pid": int64(1), "status": "Accepted"})
+	insert(t, r, bson.M{"_id": int64(203), "uid": int64(9), "pid": int64(1), "status": "Wrong Answer"})
+	insert(t, r, bson.M{"_id": int64(204), "uid": int64(9), "pid": int64(2), "status": "Accepted"})
+	insert(t, r, bson.M{"_id": int64(205), "uid": int64(9), "pid": int64(1), "status": "Accepted", "createdAt": now.AddDate(0, 0, -8)})
+
+	st, err := r.MyProblemStats(context.Background(), 9)
+	if err != nil {
+		t.Fatalf("MyProblemStats: %v", err)
+	}
+	if st.Solved != 2 {
+		t.Errorf("Solved = %d, want 2", st.Solved)
+	}
+	if st.Total != 2 {
+		t.Errorf("Total = %d, want 2（隐藏题不计）", st.Total)
+	}
+	if st.Submissions != 5 {
+		t.Errorf("Submissions = %d, want 5", st.Submissions)
+	}
+	if st.ACRate != 80 {
+		t.Errorf("ACRate = %v, want 80", st.ACRate)
+	}
+	// 七天窗内 4 条（8 天前那条不计），全部落在今天或近六天之一
+	var sum int64
+	for _, n := range st.Recent7 {
+		sum += n
+	}
+	if sum != 4 {
+		t.Errorf("Recent7 合计 = %d, want 4（8 天前不计入）", sum)
+	}
+	if len(st.Recent7) != 7 {
+		t.Errorf("Recent7 长度 = %d, want 7", len(st.Recent7))
+	}
+}

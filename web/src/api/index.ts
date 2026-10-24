@@ -136,6 +136,15 @@ export const authApi = {
     qq?: string
     prefs?: UserPrefs
   }) => patch<UserProfile>('/me/profile', body),
+  // 我的做题统计（v0.19 题库副列 v3 卡）：AC 题数 / 可见题总数 / 提交数 / AC 率 / 近 7 天分布
+  myProblemStats: () =>
+    get<{
+      solved: number
+      total: number
+      submissions: number
+      ac_rate: number
+      recent7: number[]
+    }>('/me/problem-stats'),
 }
 
 // 站点公开信息（v0.13 收编原 /auth/register-open）：注册开关 + ICP 备案号，
@@ -148,6 +157,21 @@ export const siteApi = {
       register_verify_mode: 'none' | 'email'
       password_reset_enabled: boolean
     }>('/site'),
+  // 公开站点统计（v0.19 首页对齐 v3 预览）：计数 + 平均判题时长 + 今日一题（可空，含标签名）
+  stats: () =>
+    get<{
+      problem_count: number
+      user_count: number
+      today_submissions: number
+      avg_judge_ms: number
+      featured: {
+        id: number
+        title: string
+        difficulty: number
+        accept_rate: number
+        tags: string[] | null
+      } | null
+    }>('/site/stats'),
 }
 
 export const problemApi = {
@@ -268,8 +292,15 @@ export const submissionApi = {
     post<{ id: number }>('/submissions', { problem_id: problemId, answers }),
   get: (id: number) => get<Submission>(`/submissions/${id}`),
   rejudge: (id: number) => post<{ id: number }>(`/submissions/${id}/rejudge`, {}),
-  list: (params: { page: number; page_size: number; problem_id?: number }) =>
-    get<SubmissionListResult>('/submissions', { ...params }),
+  list: (params: {
+    page: number
+    page_size: number
+    problem_id?: number
+    status?: string
+    language?: string
+    mine?: boolean
+    kw?: string
+  }) => get<SubmissionListResult>('/submissions', { ...params }),
 }
 
 export const rankApi = {

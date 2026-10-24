@@ -147,8 +147,11 @@ watch(
   <el-dialog :model-value="modelValue" :title="heading" width="1020" top="4vh" @update:model-value="(v: boolean) => emit('update:modelValue', v)">
     <div v-loading="loading">
       <template v-if="sub">
-        <el-descriptions :column="3" size="small" border class="detail-desc">
-          <el-descriptions-item label="状态">
+        <!-- v3 desc-grid：三列分格条（状态格带重测/取消链接），替 el-descriptions -->
+        <div class="desc-grid">
+          <div class="dcell">
+            状态
+            <b><SubStatus v-if="sub.status" :status="sub.status" :score="sub.score" /></b>
             <el-tooltip v-if="statusDesc(sub.status)" placement="top" effect="light">
               <template #content>
                 <div class="status-tip">
@@ -156,15 +159,14 @@ watch(
                   <div v-if="statusDesc(sub.status)!.cause">常见原因：{{ statusDesc(sub.status)!.cause }}</div>
                 </div>
               </template>
-              <SubStatus :status="sub.status" :score="sub.score" />
+              <span class="lk">说明</span>
             </el-tooltip>
-            <SubStatus v-else :status="sub.status" :score="sub.score" />
             <el-button
               v-if="canRejudge"
               link
               type="primary"
               size="small"
-              class="ml8"
+              class="lk-btn"
               :loading="rejudging || judging"
               :disabled="judging"
               @click="onRejudge"
@@ -174,20 +176,20 @@ watch(
             <el-button
               v-if="canCancel"
               link
-              type="danger"
               size="small"
-              class="ml8"
+              class="lk-btn lk-danger"
               :loading="cancelling"
               @click="onCancel"
             >
               取消评测
             </el-button>
-          </el-descriptions-item>
-          <el-descriptions-item label="语言">{{ sub.language }}</el-descriptions-item>
-          <el-descriptions-item label="总耗时">{{ fmtSec(sub.time_ms) }}</el-descriptions-item>
-          <el-descriptions-item label="总内存">{{ fmtMem(sub.memory_kb) }}</el-descriptions-item>
-          <el-descriptions-item label="提交时间">{{ fmtDate(sub.created_at) }}</el-descriptions-item>
-        </el-descriptions>
+          </div>
+          <div class="dcell">语言<b>{{ sub.language }}</b></div>
+          <div class="dcell">总耗时<b class="mono">{{ fmtSec(sub.time_ms) }}</b></div>
+          <div class="dcell">总内存<b class="mono">{{ fmtMem(sub.memory_kb) }}</b></div>
+          <div class="dcell">提交时间<b class="mono">{{ fmtDate(sub.created_at) }}</b></div>
+          <div class="dcell">选手<b>{{ sub.username }}</b></div>
+        </div>
         <!-- 客观题作答（v0.9）：替代代码区展示所选答案 -->
         <template v-if="sub.is_objective">
           <div class="detail-sub">作答</div>
@@ -206,13 +208,13 @@ watch(
         </template>
         <template v-else>
           <div class="detail-sub">代码</div>
-          <pre class="mono sub-code">{{ sub.code }}</pre>
+          <pre class="soj-codepane mono">{{ sub.code }}</pre>
         </template>
         <template v-if="sub.detail?.length">
           <div class="detail-sub">测试点明细</div>
           <el-table stripe :data="sortedDetail" size="small" border>
             <el-table-column prop="index" label="测试点" width="90" />
-            <el-table-column label="结果">
+            <el-table-column label="结果" width="110">
               <template #default="{ row }">
                 <SubStatus v-if="row.status" :status="row.status" />
               </template>
@@ -229,10 +231,11 @@ watch(
               <template #default="{ row }">{{ row.memory_kb ? fmtMem(row.memory_kb) : '' }}</template>
             </el-table-column>
           </el-table>
+          <p class="foot-hint">常见原因：溢出、数组越界、未处理多组数据；悬停状态徽章可查看说明。</p>
         </template>
         <template v-else-if="sub.error_info">
           <div class="detail-sub">错误信息</div>
-          <pre class="mono sub-code">{{ sub.error_info }}</pre>
+          <pre class="soj-codepane mono">{{ sub.error_info }}</pre>
         </template>
       </template>
     </div>
@@ -247,5 +250,79 @@ watch(
   background: var(--el-fill-color-lighter);
   border-radius: var(--el-border-radius-base);
   line-height: 1.8;
+}
+
+/* v3 .desc-grid：三列分格条（外框 + 内部 border 分隔） */
+.desc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid var(--soj-line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--el-fill-color-blank);
+}
+
+.desc-grid .dcell {
+  padding: 11px 16px;
+  border-left: 1px solid var(--soj-line);
+  border-top: 1px solid var(--soj-line);
+  font-size: 13.5px;
+  color: var(--soj-ink-2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.desc-grid .dcell:nth-child(-n + 3) {
+  border-top: 0;
+}
+
+.desc-grid .dcell:nth-child(3n + 1) {
+  border-left: 0;
+}
+
+.desc-grid b {
+  color: var(--soj-navy);
+  font-weight: var(--soj-fw-bold);
+  margin-left: 6px;
+}
+
+/* 状态格的「说明 / 重测 / 取消评测」小链接 */
+.lk {
+  color: var(--soj-blue);
+  cursor: help;
+  font-weight: var(--soj-fw-emphasis);
+  font-size: var(--soj-fs-12);
+  margin-left: 8px;
+}
+
+.lk-btn {
+  margin-left: 8px;
+}
+
+.lk-danger {
+  color: var(--soj-wa);
+}
+
+.foot-hint {
+  margin: 12px 0 0;
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+}
+
+@media (max-width: 768px) {
+  .desc-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .desc-grid .dcell {
+    border-left: 0;
+    border-top: 1px solid var(--soj-line);
+  }
+
+  .desc-grid .dcell:first-child {
+    border-top: 0;
+  }
 }
 </style>

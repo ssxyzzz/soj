@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 
 import { classApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
+import RailCard from '@/components/RailCard.vue'
 import { useUserStore } from '@/stores/user'
 import { fmtDate } from '@/utils/format'
 import type { ClassCard } from '@/types'
@@ -106,38 +107,37 @@ onMounted(load)
 
 <template>
   <PageShell>
+      <div class="page-head">
+        <div class="kicker">CLASSES</div>
+        <h1 class="page-title">班级<small>邀请码入班 · 作业与考试按班组织</small></h1>
+      </div>
       <el-empty v-if="!loading && !list.length" description="还没有你能看到的班级，用右侧邀请码加入吧" />
       <el-row v-loading="loading" :gutter="16">
         <el-col v-for="c in list" :key="c.id" :xs="24" :sm="12">
-          <el-card class="card" shadow="hover">
+          <el-card class="card clcard" shadow="hover">
             <div class="name-row">
               <h3 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h3>
-              <el-tag v-if="c.private" size="small" type="warning">私密</el-tag>
-              <div class="top-actions">
-                <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口 -->
-                <el-tag v-if="c.owner_id === userStore.uid" size="small" type="success">{{ c.owner_name }}的班</el-tag>
-                <el-tag v-else-if="c.joined" size="small" type="success">已加入</el-tag>
-                <el-button v-else size="small" type="primary" link @click="openJoin(c)">加入</el-button>
-              </div>
+              <span v-if="c.private" class="cl-chip lock">🔒 私密</span>
+              <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口 -->
+              <span v-else-if="c.owner_id === userStore.uid" class="cl-chip joined">{{ c.owner_name }}的班</span>
+              <span v-else-if="c.joined" class="cl-chip joined">✓ 已加入</span>
+              <el-button v-else size="small" type="primary" link @click="openJoin(c)">加入</el-button>
             </div>
             <p class="intro">{{ c.intro || '暂无简介' }}</p>
             <div class="meta">
-              <el-tag size="small" type="info">{{ c.member_count }} 名成员</el-tag>
-              <el-tag size="small" type="info">{{ c.assignment_count }} 个作业</el-tag>
-              <span class="dim">创建于 {{ fmtDate(c.created_at) }}</span>
+              <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDate(c.created_at) }}</span>
             </div>
           </el-card>
         </el-col>
       </el-row>
 
     <template #aside>
-      <el-card v-if="canCreate()" class="aside-card">
-        <template #header><span>管理</span></template>
+      <RailCard v-if="canCreate()" ov="管理" title="班级管理" class="aside-card">
         <el-button type="primary" style="width: 100%" @click="showCreate = true">创建班级</el-button>
-      </el-card>
+        <p class="hint">创建后生成 8 位邀请码，学生凭码入班；公开班级全站可见，私密班级仅成员可见。</p>
+      </RailCard>
 
-      <el-card class="aside-card">
-        <template #header><span>邀请码加入</span></template>
+      <RailCard ov="入口" title="邀请码加入" class="aside-card">
         <div class="entry-actions">
           <el-input
             v-model="joinCode"
@@ -145,9 +145,17 @@ onMounted(load)
             maxlength="8"
             @keyup.enter="joinByCode"
           />
-          <el-button type="primary" plain :loading="joining" style="width: 100%" @click="joinByCode">加入班级</el-button>
+          <el-button :loading="joining" style="width: 100%" @click="joinByCode">加入班级</el-button>
         </div>
-      </el-card>
+      </RailCard>
+
+      <RailCard ov="辅助" title="班级内能做什么" class="aside-card">
+        <p class="hint">老师按周发布作业，题目从题库挑选；作业页统一查看完成情况，客观题自动判分，主观题人工评分。</p>
+      </RailCard>
+
+      <RailCard ov="说明" title="可见性" class="aside-card">
+        <p class="hint">私密班级不出现在全站列表，仅通过邀请码加入；退出班级后历史提交保留。</p>
+      </RailCard>
     </template>
     <el-dialog
       v-model="showJoin"
@@ -158,7 +166,7 @@ onMounted(load)
       <el-input v-model="joinTargetCode" placeholder="请向老师索取邀请码" maxlength="8" @keyup.enter="joinTargetSubmit" />
       <template #footer>
         <el-button @click="showJoin = false">取消</el-button>
-        <el-button type="primary" plain :loading="joiningTarget" @click="joinTargetSubmit">加入</el-button>
+        <el-button type="primary" :loading="joiningTarget" @click="joinTargetSubmit">加入</el-button>
       </template>
     </el-dialog>
   </PageShell>
@@ -197,19 +205,50 @@ onMounted(load)
   flex-wrap: wrap;
 }
 
-/* 实体名（班级名）主色 */
+/* v3 clcard：班级名藏蓝 15.5/800，hover 主蓝 */
 .name {
   margin: 0;
   cursor: pointer;
-  color: var(--el-color-primary);
-  font-size: var(--soj-fs-entity-title);
+  color: var(--soj-navy);
+  font-size: 15.5px;
+  font-weight: var(--soj-fw-heavy);
+}
+
+.name:hover {
+  color: var(--soj-blue);
+}
+
+/* v3 .joined / .lock 胶囊 */
+.cl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
+  padding: 1px 9px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.cl-chip.joined {
+  color: var(--soj-ac);
+  background: var(--soj-ac-bg);
+}
+
+.cl-chip.lock {
+  color: var(--soj-tle);
+  background: var(--soj-tle-bg);
 }
 
 .intro {
-  color: var(--el-text-color-secondary);
-  min-height: 36px;
+  color: var(--soj-ink-2);
   margin: 6px 0 8px;
+  font-size: var(--soj-fs-13);
+  line-height: 1.7;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .meta {
@@ -217,6 +256,16 @@ onMounted(load)
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+  margin-top: 2px;
+}
+
+.hint {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+  line-height: 1.7;
+  margin: 10px 0 0;
 }
 
 .top-actions {

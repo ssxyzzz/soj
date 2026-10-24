@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import RailCard from '@/components/RailCard.vue'
 import UserNameLevel from '@/components/UserNameLevel.vue'
 import type { ScoreBoardView } from './types'
 
@@ -29,10 +30,13 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 </script>
 
 <template>
-  <el-card class="score-summary" shadow="never">
-    <template #header>
+  <RailCard class="score-summary">
+    <template #head>
       <div class="head">
-        <span>{{ title }}</span>
+        <div>
+          <div class="rail-ov-inherit">榜单</div>
+          <div class="rail-t-inherit">{{ title }}</div>
+        </div>
         <span class="actions">
           <el-button
             v-if="canRefresh"
@@ -60,7 +64,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
     <div v-if="!visible" class="empty">{{ emptyText }}</div>
     <div v-else v-loading="loading" class="list">
       <div v-if="!board?.rows.length" class="empty">暂无成绩</div>
-      <!-- 三列：排名（前三勋章）/ 昵称·等级一体 / 分数；点行查看完整成绩表 -->
+      <!-- v3 sum-li：排名（前三勋章）/ 昵称·等级一体 / 分数；点行查看完整成绩表 -->
       <div
         v-for="row in board?.rows ?? []"
         :key="row.uid"
@@ -76,7 +80,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
         <span class="total">{{ row.total }}</span>
       </div>
     </div>
-  </el-card>
+  </RailCard>
 </template>
 <style scoped>
 .head {
@@ -104,12 +108,12 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 
 .row {
   display: grid;
-  /* 三列（v0.11 昵称·等级一体渲染，回归三列）：排名 / 昵称(可截断) / 分数 */
-  grid-template-columns: 28px minmax(0, 1fr) 44px;
-  gap: 6px;
+  /* v3 .sum-li：排名 / 昵称(可截断) / 分数；圆角 10 hover 浅蓝 */
+  grid-template-columns: 24px minmax(0, 1fr) 48px;
+  gap: 10px;
   align-items: center;
-  padding: 3px 4px;
-  border-radius: 4px;
+  padding: 7px 10px;
+  border-radius: 10px;
   cursor: pointer;
 }
 
@@ -118,11 +122,26 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 }
 
 .row:hover {
-  background: var(--el-fill-color-light);
+  background: var(--soj-surface-2);
 }
 
 .row.me {
-  background: var(--el-color-primary-light-9);
+  background: var(--soj-blue-soft);
+}
+
+/* RailCard 头插槽里的 ov/title 沿用 RailCard 同款视觉 */
+.rail-ov-inherit {
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  letter-spacing: 0.16em;
+  color: var(--soj-teal);
+  text-transform: uppercase;
+}
+
+.rail-t-inherit {
+  font-size: 15px;
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
 }
 
 .rank {
@@ -131,9 +150,10 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 }
 
 .total {
-  color: var(--el-color-primary);
-  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-blue);
+  font-weight: var(--soj-fw-bold);
   font-variant-numeric: tabular-nums;
   text-align: right;
+  font-family: var(--font-mono);
 }
 </style>

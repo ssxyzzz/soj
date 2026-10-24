@@ -11,6 +11,7 @@ import MdEditor from '@/components/MdEditor.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import RailCard from '@/components/RailCard.vue'
 import FitTags from '@/components/problem/FitTags.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { buildAssignmentBoard } from '@/components/score/adapters'
@@ -65,6 +66,15 @@ const scoreBoard = computed<ScoreBoardView | null>(() => {
 const scoreTitle = computed(() => (assignment.value ? `成绩表 · ${assignment.value.title}` : '成绩表'))
 
 const problemTotal = computed(() => assignment.value?.problems?.length ?? 0)
+
+// v3「完成情况」卡：成绩表我的行总分；已提交 = 有我方状态的题数
+const myScore = computed(() => {
+  const row = scoreBoard.value?.rows.find((r) => r.uid === myUid.value)
+  return row?.total ?? null
+})
+const mySubmitted = computed(
+  () => (assignment.value?.problems ?? []).filter((p) => p.status || p.submitted).length,
+)
 
 async function load() {
   loading.value = true
@@ -256,9 +266,7 @@ onMounted(() => {
           </el-table-column>
           <el-table-column label="题目" min-width="260">
             <template #default="{ row }">
-              <el-link type="primary" @click="problemRoute(row as AssignmentProblem)">
-                {{ row.title }}
-              </el-link>
+              <span class="tlink" @click="problemRoute(row as AssignmentProblem)">{{ row.title }}</span>
             </template>
           </el-table-column>
           <el-table-column label="标签" min-width="170">
@@ -285,13 +293,26 @@ onMounted(() => {
 
       <template #aside>
         <!-- 管理卡（v0.7.4 精简）：编辑说明与删作业收进编辑弹窗 -->
-        <el-card v-if="assignment.manageable" class="aside-card">
-          <template #header><span>管理</span></template>
+        <RailCard v-if="assignment.manageable" ov="管理" title="作业管理" class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit">编辑作业</el-button>
-            <el-button type="success" style="width: 100%" @click="openAdjust">调整题目</el-button>
+            <el-button style="width: 100%" @click="openAdjust">调整题目</el-button>
           </div>
-        </el-card>
+        </RailCard>
+
+        <!-- v3「完成情况」：我的得分 / 已提交（登录可见） -->
+        <RailCard v-if="userStore.token" ov="说明" title="完成情况" class="aside-card">
+          <div class="soj-kv">
+            <div class="k">
+              <b>{{ myScore ?? '—' }}<small>/{{ problemTotal * 100 }}</small></b>
+              <span>我的得分</span>
+            </div>
+            <div class="k">
+              <b>{{ mySubmitted }}<small>/{{ problemTotal }}</small></b>
+              <span>已提交</span>
+            </div>
+          </div>
+        </RailCard>
 
         <!-- 成绩表：作业始终显示（老师与持「查看班级作业成绩表」者全班，否则只自己——行数由服务端决定） -->
         <ScoreSummaryCard
@@ -320,7 +341,7 @@ onMounted(() => {
       </el-form>
       <template #footer>
         <div class="edit-footer">
-          <el-button type="danger" plain @click="removeAssignment">删作业</el-button>
+          <el-button type="danger" @click="removeAssignment">删作业</el-button>
           <div>
             <el-button @click="showEdit = false">取消</el-button>
             <el-button type="primary" :loading="savingEdit" @click="saveEdit">保存</el-button>
@@ -374,9 +395,12 @@ onMounted(() => {
   margin: 0;
 }
 
+/* v3 实体大标题：藏蓝 26/800（作业名） */
 .big-title {
-  font-size: var(--soj-fs-page-title);
-  font-weight: var(--soj-fw-emphasis);
+  font-size: var(--soj-fs-entity-detail);
+  font-weight: var(--soj-fw-heavy);
+  letter-spacing: -0.3px;
+  color: var(--soj-navy);
 }
 
 .back {

@@ -1,12 +1,12 @@
 <script setup lang="ts">
-// 等级面板（v0.11，root）：等级名称 / 升级阈值 / 衰减系数 / 特效开关。
-// 十阶档数与色轴固定不开放改；特效全局关 = 全站等级徽章退静态
-//（尊重不想炫酷的部署方，开源场景各部署自定）。难度徽章恒静态，不受此面板影响。
-import { onMounted, reactive, ref, watch } from 'vue'
+// 等级面板（v0.11，root）：等级名称 / 升级阈值 / 衰减系数。
+// 十阶档数与色轴固定不开放改。特效开关字段（effects_*）在配置里保留但 UI 已隐藏——
+// v3-full 改版（2026-10-24）等级徽章全静态，开关不再产生视觉差异。
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { adminApi } from '@/api'
-import { DEFAULT_LEVEL_NAMES, LEVEL_STARS, useLevelsStore } from '@/stores/levels'
+import { DEFAULT_LEVEL_NAMES, useLevelsStore } from '@/stores/levels'
 
 const levels = useLevelsStore()
 
@@ -21,17 +21,6 @@ const form = reactive({
   effects_tiers: Array.from({ length: 10 }, () => true),
 })
 const saving = ref(false)
-
-// 全局开关打开时若逐级开关全是关的，自动全选——否则「开了全局没反应」
-//（全局开 ∧ 逐级全关 = 仍然全部静态，等价于没开）
-watch(
-  () => form.effects_enabled,
-  (on) => {
-    if (on && !form.effects_tiers.some((t) => t)) {
-      form.effects_tiers = Array.from({ length: 10 }, () => true)
-    }
-  },
-)
 
 onMounted(async () => {
   try {
@@ -73,42 +62,20 @@ async function save() {
       effects_tiers: [...form.effects_tiers],
     })
     ElMessage.success('等级配置已保存')
-    await levels.reload() // 刷新全局共享配置：排名/顶栏徽章的特效即时跟随
+    await levels.reload() // 刷新全局共享配置：排名/顶栏徽章名称即时跟随
   } finally {
     saving.value = false
   }
 }
 
-// 名称旁的预览 chip 实时反映本面板特效开关的当前状态（未保存也生效）：
-// 特效开 = 浅色 tag + 该档光晕/呼吸星（ulv-*）；关 = 与难度徽章样式完全一致（diff-*）
+// 等级名旁的预览 chip（v3-full 静态浅色胶囊，Lv.10 蓝青渐变实底）
 function chipClass(i: number): Record<string, boolean> {
-  if (!(form.effects_enabled && form.effects_tiers[i])) {
-    const cls: Record<string, boolean> = { 'diff-tag': true, [`diff-${i + 1}`]: true }
-    const fx = ['', '', '', '', '', '', 'diff-g7', 'diff-g8', 'diff-g9', 'diff-g10'][i]
-    if (fx) cls[fx] = true
-    return cls
-  }
-  const cls: Record<string, boolean> = { 'ulv-tag': true, [`ulv-${i + 1}`]: true, [`ulv-e${i + 1}`]: true }
-  return cls
+  return { 'ulv-tag': true, [`ulv-${i + 1}`]: true }
 }
 
-// 预览 chip 的呼吸星（与 TierBadge 同配置，随特效开关显隐）
-function chipStars(i: number): string[] {
-  if (!(form.effects_enabled && form.effects_tiers[i])) return []
-  return (LEVEL_STARS[i + 1] ?? []).map((s) => {
-    let style = `font-size:${s.s}px;animation-delay:${s.d}s;`
-    if (s.t != null) style += `top:${s.t}px;`
-    if (s.l != null) style += `left:${s.l}px;`
-    if (s.r != null) style += `right:${s.r}px;`
-    if (s.b != null) style += `bottom:${s.b}px;`
-    return style
-  })
-}
-
-// 难度名预览 chip：浅色 tag 风 + 后四档渐进微特效（与题库难度徽章同款）
+// 难度名预览 chip（与题库难度徽章同款静态浅色胶囊）
 function diffChipClass(i: number): Record<string, boolean> {
-  const fx = ['', '', '', '', '', '', 'diff-g7', 'diff-g8', 'diff-g9', 'diff-g10'][i]
-  return { 'diff-tag': true, [`diff-${i + 1}`]: true, ...(fx ? { [fx]: true } : {}) }
+  return { 'diff-tag': true, [`diff-${i + 1}`]: true }
 }
 </script>
 
@@ -121,17 +88,10 @@ function diffChipClass(i: number): Record<string, boolean> {
       </div>
     </template>
 
-    <div class="section-title">等级名称（Lv.1–10，站点文案可自定义；色块即特效实时预览，随下方特效开关变化）</div>
+    <div class="section-title">等级名称（Lv.1–10，站点文案可自定义；色块即徽章实时预览）</div>
     <div class="names-grid">
       <div v-for="(label, i) in form.names" :key="i" class="name-cell">
-        <span class="tier-chip" :class="chipClass(i)">
-          Lv.{{ i + 1 }}<i
-            v-for="(s, j) in chipStars(i)"
-            :key="j"
-            class="lv-star"
-            :style="s"
-          >✦</i>
-        </span>
+        <span class="tier-chip" :class="chipClass(i)">Lv.{{ i + 1 }}</span>
         <el-input v-model="form.names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
       </div>
     </div>
@@ -165,23 +125,6 @@ function diffChipClass(i: number): Record<string, boolean> {
       <span class="dim">低 3 级</span>
       <el-input-number v-model="form.decay3" :min="0" :max="1" :step="0.01" :precision="2" :controls="false" />
     </div>
-
-    <div class="section-title">特效开关（等级徽章动画/光效；关闭后该档退静态样式）</div>
-    <div class="effects-row">
-      <el-switch v-model="form.effects_enabled" active-text="全局启用" />
-      <template v-if="form.effects_enabled">
-        <el-checkbox
-          v-for="i in 10"
-          :key="i"
-          v-model="form.effects_tiers[i - 1]"
-          class="effect-check"
-          :disabled="!form.effects_enabled"
-        >
-          Lv.{{ i }}
-        </el-checkbox>
-      </template>
-      <span v-else class="dim">已全局关闭：全站等级徽章显示静态样式（题目难度徽章不受影响，恒为静态）</span>
-    </div>
   </el-card>
 </template>
 
@@ -209,34 +152,16 @@ function diffChipClass(i: number): Record<string, boolean> {
   gap: 8px;
 }
 
+/* 预览 chip：v3-full 静态浅色胶囊（底/边/字由全局 ulv、diff 两族注入），仅定形制 */
 .tier-chip {
-  position: relative;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 10px;
-  border-radius: var(--el-border-radius-base); /* 与全站徽章同口径圆角矩形 */
-  color: #fff;
-  font-size: var(--soj-fs-small);
-  font-weight: var(--soj-fw-regular); /* 徽章字重全局改常规（2026-10-22） */
-}
-
-/* 等级预览 chip（浅色 tag 族）：覆盖 chip 默认白字；极境彩色渐变回白字 */
-.tier-chip.ulv-tag {
-  color: color-mix(in srgb, var(--lc) 88%, #1f2d3d);
-}
-.tier-chip.ulv-e10 {
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-
-/* 难度名预览 chip（浅色 tag 风）：覆盖 chip 默认白字 */
-.tier-chip.diff-tag {
-  color: color-mix(in srgb, var(--dc) 72%, #2c3e50);
-}
-.tier-chip.diff-g10 {
-  color: #e8eaf6;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
 }
 
 .thresholds-grid {
@@ -256,16 +181,5 @@ function diffChipClass(i: number): Record<string, boolean> {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.effects-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-}
-
-.effect-check {
-  margin-right: 0;
 }
 </style>

@@ -8,6 +8,7 @@ import { createAssignment as apiCreateAssignment, dissolveClass, transferClass, 
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import RailCard from '@/components/RailCard.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
 import { fmtDate } from '@/utils/format'
@@ -325,16 +326,16 @@ onMounted(load)
               maxlength="8"
               @keyup.enter="join"
             />
-            <el-button type="primary" plain :loading="joining" @click="join">加入班级</el-button>
+            <el-button type="primary" :loading="joining" @click="join">加入班级</el-button>
           </div>
         </el-card>
 
         <div class="section-switch">
-          <el-radio-group v-model="section" size="large">
-            <el-radio-button value="assignments">作业</el-radio-button>
-            <el-radio-button value="exams">考试</el-radio-button>
-            <el-radio-button v-if="cl.members" value="members">学生</el-radio-button>
-          </el-radio-group>
+          <div class="soj-seg">
+            <button type="button" :class="{ on: section === 'assignments' }" @click="section = 'assignments'">作业</button>
+            <button type="button" :class="{ on: section === 'exams' }" @click="section = 'exams'">考试</button>
+            <button v-if="cl.members" type="button" :class="{ on: section === 'members' }" @click="section = 'members'">学生</button>
+          </div>
         </div>
 
         <el-card>
@@ -432,19 +433,17 @@ stripe
 
       <template #aside>
         <!-- 管理卡在信息卡上方（v0.7.2 验收调整）；v0.7.4 可见性/转让/解散收进编辑班级弹窗 -->
-        <el-card v-if="cl.manageable" class="aside-card">
-          <template #header><span>管理</span></template>
+        <RailCard v-if="cl.manageable" ov="管理" title="班级管理" class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="showCreateAssignment = true">布置作业</el-button>
-            <el-button type="success" style="width: 100%" @click="showExam = true">发起考试</el-button>
-            <el-button type="primary" plain style="width: 100%" @click="openEditClass">编辑班级</el-button>
-            <el-button plain style="width: 100%" @click="copyInvite">复制邀请码：{{ cl.invite_code }}</el-button>
-            <el-button type="warning" plain style="width: 100%" @click="regenInvite">重置邀请码</el-button>
+            <el-button style="width: 100%" @click="showExam = true">发起考试</el-button>
+            <el-button style="width: 100%" @click="openEditClass">编辑班级</el-button>
+            <el-button style="width: 100%" @click="copyInvite">复制邀请码</el-button>
+            <el-button style="width: 100%" @click="regenInvite">重置邀请码</el-button>
             <el-button
               v-if="cl.leaveable"
               :disabled="leaving"
               type="danger"
-              plain
               style="width: 100%"
               title="建班人在班级没有其他成员时可退出"
               @click="leave"
@@ -452,20 +451,28 @@ stripe
               退出班级
             </el-button>
           </div>
-        </el-card>
+        </RailCard>
 
-        <el-card v-else-if="cl.joined && cl.leaveable" class="aside-card">
-          <template #header><span>管理</span></template>
-          <el-button type="danger" plain style="width: 100%" @click="leave">退出班级</el-button>
-        </el-card>
+        <RailCard v-else-if="cl.joined && cl.leaveable" ov="管理" title="班级管理" class="aside-card">
+          <el-button type="danger" style="width: 100%" @click="leave">退出班级</el-button>
+        </RailCard>
 
-        <el-card class="aside-card">
-          <template #header><span>班级信息</span></template>
-          <div class="info-line"><span>成员</span><b>{{ cl.members?.length ?? '—' }}</b></div>
-          <div class="info-line"><span>作业</span><b>{{ assignmentsVisible ? assignments.length : '—' }}</b></div>
-          <div class="info-line"><span>考试</span><b>{{ examsVisible ? exams.length : '—' }}</b></div>
-          <div class="info-line"><span>创建时间</span><b class="small">{{ fmtDate(cl.created_at) }}</b></div>
-        </el-card>
+        <RailCard ov="信息" title="班级信息" class="aside-card">
+          <div class="soj-kv">
+            <div class="k"><b>{{ cl.members?.length ?? '—' }}</b><span>成员</span></div>
+            <div class="k"><b>{{ assignmentsVisible ? assignments.length : '—' }}</b><span>作业</span></div>
+            <div class="k"><b>{{ examsVisible ? exams.length : '—' }}</b><span>考试</span></div>
+            <div class="k"><b class="kv-date">{{ fmtDate(cl.created_at) }}</b><span>创建</span></div>
+          </div>
+          <div class="inv-wrap">
+            <span class="soj-inv-chip">{{ cl.invite_code }}</span>
+          </div>
+          <p class="hint center">邀请码可分享给学生入班，重置后旧码失效</p>
+        </RailCard>
+
+        <RailCard ov="说明" title="可见性" class="aside-card">
+          <p class="hint">私密班仅成员可见；作业与考试加入班级后才能查看和完成。</p>
+        </RailCard>
       </template>
     </PageShell>
 
@@ -579,7 +586,7 @@ stripe
                 :label="`#${m.uid} ${m.username}`"
               />
             </el-select>
-            <el-button type="warning" plain :loading="transferring" :disabled="!transferUid" @click="doTransfer">
+            <el-button type="danger" :loading="transferring" :disabled="!transferUid" @click="doTransfer">
               转让
             </el-button>
           </div>
@@ -589,7 +596,7 @@ stripe
             <div>解散班级</div>
             <div class="dim">班内全部考试与作业一并删除、所有成员移出，不可恢复</div>
           </div>
-          <el-button type="danger" plain :loading="dissolving" @click="dissolve">解散</el-button>
+          <el-button type="danger" :loading="dissolving" @click="dissolve">解散</el-button>
         </div>
       </template>
 
@@ -609,9 +616,12 @@ stripe
   flex-wrap: wrap;
 }
 
+/* v3-full 实体大标题：藏蓝 28/850（本地 800，班级名） */
 .title-row h3 {
-  font-size: var(--soj-fs-page-title);
-  font-weight: var(--soj-fw-emphasis);
+  font-size: var(--soj-fs-entity-detail);
+  font-weight: var(--soj-fw-heavy);
+  letter-spacing: -0.4px;
+  color: var(--soj-navy);
 }
 
 .intro {
@@ -627,6 +637,27 @@ stripe
 
 .section-switch {
   margin: 16px 0;
+}
+
+.inv-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+
+.hint {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+  line-height: 1.7;
+  margin: 8px 0 0;
+}
+
+.hint.center {
+  text-align: center;
+}
+
+.kv-date {
+  font-size: var(--soj-fs-16);
 }
 
 .info-line {

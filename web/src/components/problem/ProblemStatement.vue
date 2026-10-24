@@ -1,18 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fmtSec } from '@/utils/format'
-// 题面主卡：详情页主列与在线编程左栏共用——#id 标题 + 右侧（隐藏标记/时限/内存）+ 可选
-// 文件 IO 提示 + 题面；标题行右侧扩展位走 #extra 插槽（详情页放「主题库隐藏」标记，
-// 顺序：隐藏 → 时间限制 → 空间限制）。
+// 题面（v3-full 重制）：不再套白卡、直接立于画布——面包屑上方由父视图渲染；
+// 结构 = kicker PROBLEM + 右上 96px 描边空心题号 + 32/800 标题（pid 胶囊 + 标题 +
+// 题型 + 难度）+ prob-meta 分格条（时限/内存/通过数/标签）+ 提示区 + 题面正文。
+// 详情页主列、在线编程左栏共用；标题行右侧扩展位走 #extra 插槽（详情页放隐藏开关）。
 import MdView from '@/components/MdView.vue'
-import { Timer, Cpu } from '@element-plus/icons-vue'
-import { fmtMem } from '@/utils/format'
+import TierBadge from '@/components/TierBadge.vue'
+import { useTagTreeStore } from '@/stores/tagtree'
+import { fmtMem, fmtSec } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
 
 const props = defineProps<{
   problem: ProblemDetail
   fileIo?: boolean // 比赛/考试启用文件 IO 时显示提示（做题页主列与在线编程左栏同款）
 }>()
+
+const tagStore = useTagTreeStore()
+tagStore.ensure()
 
 // 客观题（v0.9.3）：整卷题型摘要徽章（全同型给具体类型，混合给「客观题」）
 const isObjective = computed(() => props.problem.type === 'objective')
@@ -27,117 +31,144 @@ const objectiveLabel = computed(() => {
 
 // 函数题/交互题徽章（v0.9.1/v0.9.2）
 const kindLabel = computed(() => {
+  if (props.problem.type === 'objective') return objectiveLabel.value
   if (props.problem.type === 'function') return '函数题'
   if (props.problem.type === 'interactive') return '交互题'
   return ''
 })
+
+// 标签名平铺（prob-meta 标签格；最多 4 枚防溢出）
+const tagNames = computed(() => (props.problem.tags ?? []).slice(0, 4).map((id) => tagStore.nameOf(id)))
+
+// 空心大题号取后四位（P1024 → 1024；三位以内原样）
+const bigNo = computed(() => String(props.problem.id))
 </script>
 
 <template>
-  <el-card>
-    <!-- 题面内容撑满卡片宽度：与下方满宽卡片（作答卡等）左右缘对齐 -->
-    <div class="statement">
-      <div class="title-row">
-        <span class="big-title">#{{ problem.id }} {{ problem.title }}</span>
-        <el-tag v-if="problem.type === 'objective'" size="small" class="kind-tag ptype-tag">
-          {{ objectiveLabel }}
-        </el-tag>
-        <el-tag v-else-if="kindLabel" size="small" class="kind-tag ptype-tag">{{ kindLabel }}</el-tag>
-        <div class="title-extra">
-          <slot name="extra" />
-          <template v-if="!isObjective">
-            <span class="limit" title="时间限制">
-              <el-icon><Timer /></el-icon>{{ fmtSec(problem.time_limit_ms) }}
-            </span>
-            <span class="limit" title="内存限制">
-              <el-icon><Cpu /></el-icon>{{ fmtMem(problem.memory_limit_kb) }}
-            </span>
-          </template>
-        </div>
-      </div>
-      <el-alert
-        v-if="fileIo"
-        type="warning"
-        :closable="false"
-        class="fileio-alert"
-        show-icon
-        title="本题请以文件 IO 方式提交"
-        :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
-      />
-      <!-- 交互题（v0.9.2）：交互方式说明（选手不读输入文件，通过 stdin/stdout 与交互器通信）；
-           ptype-alert = 题型徽章同族浅蓝（main.css） -->
-      <el-alert
-        v-if="problem.type === 'interactive'"
-        type="info"
-        :closable="false"
-        class="fileio-alert ptype-alert"
-        show-icon
-        title="本题为交互题：通过标准输入输出与评测器交互"
-        description="评测器会实时读取你的输出并回应，按题面约定的协议交替读写；不要使用文件读写。仅支持 C / C++。"
-      />
-      <!-- 无测试数据空壳题（v0.6.1 验收反馈）：提示样式与文件 IO 提示同款，分角色文案 -->
-      <el-alert
-        v-if="!isObjective && problem.has_cases === false"
-        type="warning"
-        :closable="false"
-        class="fileio-alert"
-        show-icon
-        title="本题暂无测试数据，不可提交"
-      />
-      <MdView :content="problem.description" />
+  <div class="statement">
+    <div class="prob-head">
+      <span class="soj-big-no">{{ bigNo }}</span>
+      <div class="kicker">PROBLEM</div>
+      <h1 class="prob-title">
+        <span class="pid mono">P{{ problem.id }}</span>
+        <span class="t">{{ problem.title }}</span>
+        <el-tag v-if="kindLabel" size="small" class="kind-tag ptype-tag">{{ kindLabel }}</el-tag>
+        <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
+        <span class="extra"><slot name="extra" /></span>
+      </h1>
     </div>
-  </el-card>
+
+    <!-- v3 prob-meta 分格条：时限/内存/通过数/标签 -->
+    <div class="soj-prob-meta">
+      <template v-if="!isObjective">
+        <div class="cell">时间限制 <b class="mono">{{ fmtSec(problem.time_limit_ms) }}</b></div>
+        <div class="cell">内存限制 <b class="mono">{{ fmtMem(problem.memory_limit_kb) }}</b></div>
+        <div class="cell">
+          <b class="mono">{{ problem.accepted_count ?? 0 }}</b> 通过 ／
+          <b class="mono">{{ problem.submit_count ?? 0 }}</b> 提交
+        </div>
+      </template>
+      <div v-else class="cell">客观题 · <b>{{ problem.questions?.length ?? 0 }}</b> 小题</div>
+      <div v-if="tagNames.length" class="cell">
+        标签
+        <span v-for="n in tagNames" :key="n" class="soj-tagchip meta-chip">{{ n }}</span>
+      </div>
+    </div>
+
+    <el-alert
+      v-if="fileIo"
+      type="warning"
+      :closable="false"
+      class="fileio-alert"
+      show-icon
+      title="本题请以文件 IO 方式提交"
+      :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
+    />
+    <!-- 交互题（v0.9.2）：交互方式说明（选手不读输入文件，通过 stdin/stdout 与交互器通信）；
+         ptype-alert = 题型徽章同族浅青（main.css） -->
+    <el-alert
+      v-if="problem.type === 'interactive'"
+      type="info"
+      :closable="false"
+      class="fileio-alert ptype-alert"
+      show-icon
+      title="本题为交互题：通过标准输入输出与评测器交互"
+      description="评测器会实时读取你的输出并回应，按题面约定的协议交替读写；不要使用文件读写。仅支持 C / C++。"
+    />
+    <!-- 无测试数据空壳题（v0.6.1 验收反馈）：提示样式与文件 IO 提示同款，分角色文案 -->
+    <el-alert
+      v-if="!isObjective && problem.has_cases === false"
+      type="warning"
+      :closable="false"
+      class="fileio-alert"
+      show-icon
+      title="本题暂无测试数据，不可提交"
+    />
+    <MdView :content="problem.description" />
+  </div>
 </template>
 
 <style scoped>
-/* 不限宽：题面随主列撑满卡片（容器 1440 已封顶行宽），避免右侧大片留白 */
-.statement {
-  margin: 0;
+/* v3 .prob-head：kicker + 大标题 + 右上空心题号（绝对定位锚点） */
+.prob-head {
+  position: relative;
+  padding: 6px 0 18px;
 }
 
-.title-row {
+.prob-title {
+  margin: 0;
+  font-size: var(--soj-fs-prob-title);
+  font-weight: var(--soj-fw-heavy);
+  letter-spacing: -0.6px;
+  line-height: 1.3;
+  color: var(--soj-navy);
   display: flex;
   align-items: center;
-  gap: 8px;
-  /* 下方提示（文件 IO/空壳题）与正文的间距 */
-  margin-bottom: 14px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* v3 .pid：mono 主蓝浅底胶囊 */
+.pid {
+  flex: 0 0 auto;
+  font-size: var(--soj-fs-16);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-blue);
+  background: var(--soj-blue-soft);
+  padding: 4px 12px;
+  border-radius: 10px;
+}
+
+.prob-title .t {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .kind-tag {
   flex: 0 0 auto;
 }
 
-/* 页头大标题 22/600：层级顶点 */
-.big-title {
-  font-size: var(--soj-fs-page-title);
-  font-weight: var(--soj-fw-emphasis);
-  line-height: 1.4;
-}
-
-/* 标题行右侧：隐藏标记 + 时限/空间（推到最右，窄屏时随内容换行） */
-.title-extra {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
+/* 右侧扩展位（隐藏开关等）推到行尾 */
+.extra {
   margin-left: auto;
-}
-
-/* 限制项：图标 + 数字 + 单位 */
-.limit {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  color: var(--el-text-color-secondary);
-  font-size: var(--soj-fs-13);
-  white-space: nowrap;
 }
 
-.limit .el-icon {
-  font-size: 15px;
+/* 窄屏收起空心题号（v3 640px 断点同款） */
+@media (max-width: 640px) {
+  .soj-big-no {
+    display: none;
+  }
 }
 
 .fileio-alert {
-  margin-bottom: 16px;
+  margin-top: 16px;
+}
+
+.meta-chip {
+  height: 20px;
+  margin-left: 4px;
+  cursor: default;
 }
 </style>

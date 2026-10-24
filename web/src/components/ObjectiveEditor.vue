@@ -265,7 +265,7 @@ defineExpose({ validate, blankDraft })
         >
           导出 YAML
         </el-button>
-        <el-button size="small" type="primary" plain :icon="Plus" @click="add">添加小题</el-button>
+        <el-button size="small" type="primary" :icon="Plus" @click="add">添加小题</el-button>
       </span>
     </div>
 

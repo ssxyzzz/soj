@@ -3,6 +3,8 @@ package repo
 import (
 	"context"
 	"errors"
+	"regexp"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -384,13 +386,36 @@ func (r *Repo) GetSubmission(ctx context.Context, id int64) (*Submission, error)
 // ListSubmissions 按可选条件（uid/pid，0 表示不过滤）分页查询，不含代码字段。
 // 仅供提交记录总表使用：路由已按「查看全部提交」权限位把门，不再过滤隐藏期赛事提交
 // （2026-10-16 定稿：隐藏期可见性并入权限位）。
-func (r *Repo) ListSubmissions(ctx context.Context, uid, pid int64, page, pageSize int) ([]*Submission, int64, error) {
+// SubmissionFilter 提交列表过滤（v0.19 提交记录页 v3 筛选 chips）：零值字段不过滤。
+type SubmissionFilter struct {
+	UID      int64
+	PID      int64
+	Status   string
+	Language string
+	Keyword  string
+}
+
+func (r *Repo) ListSubmissions(ctx context.Context, f SubmissionFilter, page, pageSize int) ([]*Submission, int64, error) {
 	filter := bson.M{}
-	if uid > 0 {
-		filter["uid"] = uid
+	if f.UID > 0 {
+		filter["uid"] = f.UID
 	}
-	if pid > 0 {
-		filter["pid"] = pid
+	if f.PID > 0 {
+		filter["pid"] = f.PID
+	}
+	if f.Status != "" {
+		filter["status"] = f.Status
+	}
+	if f.Language != "" {
+		filter["lang"] = f.Language
+	}
+	if f.Keyword != "" {
+		// 纯数字按提交号精确命中；否则按题名子串（不区分大小写）
+		if n, err := strconv.ParseInt(f.Keyword, 10, 64); err == nil && n > 0 {
+			filter["_id"] = n
+		} else {
+			filter["ptitle"] = bson.M{"$regex": regexp.QuoteMeta(f.Keyword), "$options": "i"}
+		}
 	}
 	total, err := r.Submissions.CountDocuments(ctx, filter)
 	if err != nil {
@@ -411,6 +436,90 @@ func (r *Repo) ListSubmissions(ctx context.Context, uid, pid int64, page, pageSi
 		return nil, 0, err
 	}
 	return list, total, nil
+}
+
+// MyProblemStats 我的做题统计（v0.19 题库副列 v3 卡）：AC 题数（按题去重）/ 可见题总数 /
+// 提交数 / AC 率（提交条数口径）/ 最近 7 天提交分布（[6 天前 .. 今天]，本地时区）。
+type MyProblemStats struct {
+	Solved      int64   `json:"solved"`
+	Total       int64   `json:"total"`
+	Submissions int64   `json:"submissions"`
+	ACRate      float64 `json:"ac_rate"`
+	Recent7     []int64 `json:"recent7"`
+}
+
+func (r *Repo) MyProblemStats(ctx context.Context, uid int64) (*MyProblemStats, error) {
+	st := &MyProblemStats{Recent7: make([]int64, 7)}
+
+	// 可见题总数
+	total, err := r.Problems.CountDocuments(ctx, bson.M{"hidden": bson.M{"$ne": true}})
+	if err != nil {
+		return nil, err
+	}
+	st.Total = total
+
+	// 提交数与 AC 条数
+	submissions, err := r.Submissions.CountDocuments(ctx, bson.M{"uid": uid})
+	if err != nil {
+		return nil, err
+	}
+	st.Submissions = submissions
+	if submissions > 0 {
+		ac, err := r.Submissions.CountDocuments(ctx, bson.M{"uid": uid, "status": StatusAccepted})
+		if err != nil {
+			return nil, err
+		}
+		st.ACRate = float64(ac) / float64(submissions) * 100
+	}
+
+	// AC 题数（uid + Accepted 按题去重）
+	cur, err := r.Submissions.Aggregate(ctx, mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"uid": uid, "status": StatusAccepted}}},
+		{{Key: "$group", Value: bson.M{"_id": "$pid"}}},
+		{{Key: "$count", Value: "n"}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var cnt []struct {
+		N int64 `bson:"n"`
+	}
+	if err := cur.All(ctx, &cnt); err != nil {
+		return nil, err
+	}
+	if len(cnt) > 0 {
+		st.Solved = cnt[0].N
+	}
+
+	// 最近 7 天提交分布：按本地日期字符串分组，再映射回 [6 天前 .. 今天] 下标
+	now := time.Now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -6)
+	cur, err = r.Submissions.Aggregate(ctx, mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"uid": uid, "createdAt": bson.M{"$gte": dayStart}}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":   bson.M{"$dateToString": bson.M{"format": "%Y-%m-%d", "date": "$createdAt"}},
+			"count": bson.M{"$sum": 1},
+		}}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	var byDay []struct {
+		ID    string `bson:"_id"`
+		Count int64  `bson:"count"`
+	}
+	if err := cur.All(ctx, &byDay); err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int64, len(byDay))
+	for _, d := range byDay {
+		counts[d.ID] = d.Count
+	}
+	for i := 0; i < 7; i++ {
+		day := dayStart.AddDate(0, 0, i)
+		st.Recent7[i] = counts[day.Format("2006-01-02")]
+	}
+	return st, nil
 }
 
 // HasSolved 用户是否在该题拿到过满分（代码可见性解锁判定）。

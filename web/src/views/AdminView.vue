@@ -75,8 +75,14 @@ async function switchSubTab(target: SubTab) {
 </script>
 
 <template>
-  <div class="admin-layout">
+  <div class="admin-wrap">
+    <div class="page-head">
+      <div class="kicker">ADMIN</div>
+      <h1 class="page-title">管理后台<small>{{ userStore.role === 'root' ? 'root · 全部面板可用' : '管理面板' }}</small></h1>
+    </div>
+    <div class="admin-layout">
     <aside class="admin-nav">
+      <div class="anav-eyebrow">面板</div>
       <div
         class="nav-item"
         :class="{ active: section === 'users' }"
@@ -167,61 +173,88 @@ async function switchSubTab(target: SubTab) {
       <BackupPanel v-else-if="section === 'backup'" />
       <SecurityLogsPanel v-else-if="section === 'security'" />
     </main>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.admin-layout {
-  max-width: 1440px;
+/* v3 后台布局：页头（kicker + 大标题）+ 白卡导航列 + 主列，容器 1280 对齐全站 */
+.admin-wrap {
+  max-width: 1280px;
   margin: 0 auto;
+}
+
+.admin-layout {
   display: flex;
-  gap: 24px;
+  gap: 22px;
   /* stretch：主列卡片随左列高度拉伸，两列上沿与下沿对齐；
      不用 sticky——切换分区时内容高度变化会让吸附列来回跳动 */
   align-items: stretch;
 }
 
+/* v3 导航列：整列一张白卡（圆角 16 + hairline + 柔影），条目胶囊态 */
 .admin-nav {
-  flex: 0 0 320px;
-  width: 320px;
+  flex: 0 0 252px;
+  width: 252px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 3px;
+  padding: 10px;
+  background: var(--el-bg-color);
+  border: 1px solid var(--soj-line);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(11, 31, 69, 0.04),
+    0 12px 32px rgba(11, 31, 69, 0.06);
+}
+
+/* v3 .anav-t：11px 大写 eyebrow */
+.anav-eyebrow {
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  letter-spacing: 0.16em;
+  color: var(--soj-ink-3);
+  text-transform: uppercase;
+  padding: 8px 13px 6px;
 }
 
 .nav-item {
-  background: var(--el-color-primary-light-9);
-  border: 1px solid var(--el-color-primary-light-7);
-  border-radius: var(--el-border-radius-base);
-  padding: 14px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .nav-item:hover {
-  border-color: var(--el-color-primary);
+  background: var(--soj-surface-2);
 }
 
 .nav-item.active {
-  background: var(--el-color-primary);
-  border-color: var(--el-color-primary);
+  background: var(--soj-blue-soft);
 }
 
-.nav-item.active .nav-title,
+.nav-item.active .nav-title {
+  color: var(--soj-blue);
+}
+
 .nav-item.active .nav-sub {
-  color: var(--el-color-white);
+  color: var(--soj-blue);
+  opacity: 0.75;
 }
 
 .nav-title {
-  font-weight: var(--soj-fw-emphasis);
-  color: var(--el-text-color-primary);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
+  font-size: 14px;
 }
 
 .nav-sub {
   color: var(--el-text-color-secondary);
+  font-size: var(--soj-fs-small);
 }
 
 .admin-main {

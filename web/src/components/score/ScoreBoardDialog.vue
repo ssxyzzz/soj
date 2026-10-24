@@ -72,7 +72,6 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
           v-if="canExport"
           size="small"
           type="primary"
-          plain
           :loading="exporting"
           @click="emit('export')"
         >
@@ -119,12 +118,15 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
             <ScoreCell
               :cell="cellOf(row as ScoreRowView, p)"
               :can-inspect="board.canInspect"
+              :me="row.uid === myUid"
               @inspect="onInspect(row as ScoreRowView, p)"
             />
           </template>
         </el-table-column>
       </el-table>
       <el-empty v-else description="暂无成绩" :image-size="60" />
+      <!-- v3 图例：分数格色语义 -->
+      <p v-if="board?.rows.length" class="legend">点击分数格可查看该题对应提交；绿色满分 · 黄色部分分 · 红色零分。</p>
     </div>
   </el-dialog>
 </template>
@@ -154,8 +156,14 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
 }
 
 .total {
-  color: var(--el-color-primary);
-  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-blue);
+  font-weight: var(--soj-fw-bold);
   font-variant-numeric: tabular-nums;
+}
+
+.legend {
+  margin: 12px 0 0;
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
 }
 </style>

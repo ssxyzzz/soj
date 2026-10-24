@@ -98,7 +98,7 @@ async function togglePin(s: SolutionItem) {
   >
     <div class="dlg-toolbar">
       <span class="dim">共 {{ solutionsTotal }} 篇</span>
-      <el-button type="primary" plain @click="openWriteSolution">发表题解</el-button>
+      <el-button type="primary" @click="openWriteSolution">发表题解</el-button>
     </div>
     <div v-for="s in solutions" :key="s.id" class="solution-item">
       <div class="solution-meta">
@@ -149,7 +149,7 @@ async function togglePin(s: SolutionItem) {
       <MdEditor v-model="solutionDraft" variant="compact" height="420px" />
       <template #footer>
         <el-button @click="showSolutionEditor = false">取消</el-button>
-        <el-button type="primary" plain @click="saveSolution">发布</el-button>
+        <el-button type="primary" @click="saveSolution">发布</el-button>
       </template>
     </el-dialog>
   </el-dialog>

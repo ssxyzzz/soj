@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { UserFilled } from '@element-plus/icons-vue'
 
+import TierBadge from '@/components/TierBadge.vue'
 import { authApi } from '@/api'
-import UserNameLevel from '@/components/UserNameLevel.vue'
-import { LEVEL_STARS, useLevelsStore } from '@/stores/levels'
+import { useLevelsStore } from '@/stores/levels'
 import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 
@@ -16,31 +15,18 @@ const levels = useLevelsStore()
 const site = useSiteStore()
 
 const active = computed(() => route.path)
+const adminActive = computed(() => route.path.startsWith('/admin'))
 
-// 左上角 SOJ 标识：特效开 = 最高等级（Lv.10 极境）样式——彩色渐变流动胶囊 + 深处辉光呼吸
-// + 四颗错拍白星芒（ulv-tag/ulv-10/ulv-e10 同体系）；后台等级面板特效开关（全局或 Lv.10）
-// 关闭即回落站点主色静态字
-const brandFx = computed(() => levels.effectsOn(10))
-
-// 极境四星（与 LEVEL_STARS[10] 同配置，随胶囊尺寸铺四角）
-const brandStars = computed(() => {
-  if (!brandFx.value) return []
-  return (
-    LEVEL_STARS[10] ?? []
-  ).map((s) => {
-    let style = `font-size:${s.s}px;animation-delay:${s.d}s;`
-    if (s.t != null) style += `top:${s.t}px;`
-    if (s.l != null) style += `left:${s.l}px;`
-    if (s.r != null) style += `right:${s.r}px;`
-    if (s.b != null) style += `bottom:${s.b}px;`
-    return style
-  })
+// 头像首字（v3 .avatar：渐变圆 + 昵称首字；昵称为空兜底「我」）
+const avatarChar = computed(() => {
+  const n = userStore.nickname || '我'
+  return n.slice(0, 1).toUpperCase()
 })
 
 // 登录态下拉取用户偏好（默认语言/模板）与等级（顶栏徽章），供提交弹窗/在线编程消费；
 // 设置页保存后同步更新 store。失败静默（未登录/过期由拦截器统一处理）。
 onMounted(() => {
-  levels.ensure() // 等级名字/特效配置（公开接口，徽章渲染用）
+  levels.ensure() // 等级名字配置（公开接口，徽章渲染用）
   site.ensure() // 注册开关（公开接口，顶栏按钮文案用）
   if (!userStore.token) return
   authApi
@@ -66,25 +52,8 @@ function onCommand(command: string) {
   <el-container class="layout">
     <el-header class="header">
       <div class="header-inner">
-        <!-- 品牌双色（v0.19）：默认 = 渐变方块 + 流彩渐变字；等级特效开（Lv.10 极境）
-             时维持原 ulv 彩色胶囊标识——特效态优先于默认态，两个分支互斥渲染 -->
-        <div
-          v-if="brandFx"
-          :class="['brand', 'brand-fx', 'ulv-tag', 'ulv-10', 'ulv-e10']"
-          @click="router.push('/')"
-        >
-          SOJ<i
-            v-for="(s, i) in brandStars"
-            :key="i"
-            class="lv-star"
-            :style="s"
-          >✦</i>
-        </div>
-        <div
-          v-else
-          class="brand"
-          @click="router.push('/')"
-        >
+        <!-- 品牌（v3-full 恒定形态）：渐变方块 + 流彩渐变字（旧「极境特效胶囊」态已退役） -->
+        <div class="brand" @click="router.push('/')">
           <span class="brand-mark">S</span><span class="brand-word">SOJ</span>
         </div>
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
@@ -95,21 +64,20 @@ function onCommand(command: string) {
           <el-menu-item index="/rank">排名</el-menu-item>
           <el-menu-item v-if="userStore.can('submission.view.all')" index="/submissions">提交记录</el-menu-item>
         </el-menu>
-        <el-menu
-          v-if="userStore.canAdmin"
-          mode="horizontal"
-          router
-          :default-active="active"
-          class="menu menu-admin"
-          :ellipsis="false"
-        >
-          <el-menu-item index="/admin">管理后台</el-menu-item>
-        </el-menu>
+        <router-link v-if="userStore.canAdmin" to="/admin" class="admin-link" :class="{ on: adminActive }">
+          管理后台
+        </router-link>
         <template v-if="userStore.token">
           <el-dropdown class="user-dropdown" @command="onCommand">
-            <span class="username">
-              <span class="user-chip"><el-icon><UserFilled /></el-icon></span>
-              <UserNameLevel :name="userStore.nickname || '已登录'" :level="userStore.level?.level ?? null" />
+            <span class="user-chip">
+              <span class="avatar">{{ avatarChar }}</span>
+              <span class="uname">{{ userStore.nickname || '已登录' }}</span>
+              <TierBadge
+                v-if="userStore.level?.level"
+                :tier="userStore.level.level"
+                kind="level"
+                size="sm"
+              />
             </span>
             <template #dropdown>
             <el-dropdown-menu>
@@ -146,7 +114,7 @@ function onCommand(command: string) {
   min-height: 100vh;
 }
 
-/* v0.19 玻璃顶栏：半透明白 + backdrop blur，sticky 悬浮于画布之上 */
+/* v3-full 玻璃顶栏：半透明白 + backdrop blur，sticky 悬浮于画布之上（底边 .07） */
 .header {
   position: sticky;
   top: 0;
@@ -154,54 +122,50 @@ function onCommand(command: string) {
   background: rgba(251, 253, 255, 0.72);
   -webkit-backdrop-filter: blur(16px) saturate(1.5);
   backdrop-filter: blur(16px) saturate(1.5);
-  border-bottom: 1px solid var(--soj-line);
+  border-bottom: 1px solid rgba(11, 31, 69, 0.07);
   padding: 0;
   height: 64px;
 }
 
-/* 1480px = 1280px 内容列（v0.19 容器收窄，与 PageShell/.page 同步）+ 左右各 24px；
-   再各收 4px（padding 28）做视觉内收——卡片边框浅、有圆角阴影会视觉后退，
-   与内容列严格齐平时顶栏文字观感上会往外凸，故文字比内容列略靠内。
-   必须显式 border-box（默认 content-box 会让 max-width 与 padding 相加） */
+/* v3-full：内容 1280 + 左右 24（对齐 .topnav-in，弃 1328/28 视觉内收口径） */
 .header-inner {
   box-sizing: border-box;
-  max-width: 1328px;
+  max-width: 1280px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 28px;
-  gap: 8px;
+  padding: 0 24px;
+  gap: 6px;
 }
 
-/* 品牌字 22/600 */
 .brand {
   display: inline-flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  margin-right: 14px;
+  margin-right: 18px;
   white-space: nowrap;
 }
 
-/* 品牌双色（v0.19 默认态）：渐变小方块（蓝→青）+ 流彩渐变字（7s 流动，reduced-motion 退静态） */
+/* 品牌双色（v3-full）：34px 渐变方块（蓝→青）+ 24/900 流彩渐变字（7s 流动，reduced-motion 退静态） */
 .brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
   color: #fff;
   font-size: 15px;
-  font-weight: var(--soj-fw-bold);
-  box-shadow: 0 6px 16px rgba(36, 85, 218, 0.3);
+  font-weight: var(--soj-fw-heavy);
+  box-shadow: 0 6px 16px rgba(36, 85, 218, 0.32);
 }
 
 .brand-word {
-  font-size: var(--soj-fs-brand);
-  font-weight: var(--soj-fw-bold);
+  font-size: 24px;
+  font-weight: var(--soj-fw-heavy);
   letter-spacing: 1px;
   background: linear-gradient(
     90deg,
@@ -231,37 +195,21 @@ function onCommand(command: string) {
   }
 }
 
-/* SOJ 极境胶囊（特效开）：模板挂全局 ulv-tag/ulv-10/ulv-e10（最高等级样式——蓝紫彩色
-   渐变流动 + 深处辉光呼吸）+ 四颗 lv-star 白星芒；胶囊基础形状在此补齐；
-   特效关回落上方品牌双色 */
-.brand-fx {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 16px;
-  border-radius: 999px;
-  color: #fff;
-  line-height: 1;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-}
-
 .menu {
   flex: 1;
   border-bottom: none;
   background: transparent;
+  height: 100%;
 }
 
-/* 右侧「管理后台」独立菜单：不参与主菜单的 flex:1 拉伸，紧贴用户名左侧 */
-.menu-admin {
-  flex: 0 0 auto;
-}
-
-/* v0.19 菜单胶囊化：去 EP 横线指示条，active/hover = 主蓝浅底胶囊 + 700 字重；
-   EP 横向菜单项 height/line-height 同源于 --el-menu-horizontal-height(60)，须一并压到 56 居中 */
+/* v3-full 菜单胶囊（.nav-links a：8px 15px、15px 字号，hover/on 浅蓝底）：项高自适应居中 */
 .menu :deep(.el-menu-item) {
-  height: 56px;
-  line-height: 56px;
+  align-self: center;
+  height: auto;
+  line-height: 1.2;
+  padding: 8px 15px;
   border-radius: 999px;
-  margin: 0 2px;
+  margin: 0 1px;
   border-bottom: none;
   transition: background-color 0.18s, color 0.18s;
 }
@@ -279,58 +227,75 @@ function onCommand(command: string) {
   border-bottom: none;
 }
 
-/* 用户名下拉触发器复用 el-menu--horizontal 菜单项（如「管理后台」）的视觉参数：
-   全高 / 基准内边距 20px / 14px 字号 / 菜单文字色 / 悬停浅底，观感与相邻菜单项一致 */
+/* v3-full .admin-link：独立描边胶囊（激活 = 蓝边蓝字浅蓝底），不再借 el-menu 形态 */
+.admin-link {
+  flex: 0 0 auto;
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-ink-2);
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--soj-line-2);
+  text-decoration: none;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+
+.admin-link:hover,
+.admin-link.on {
+  border-color: var(--soj-blue-line);
+  color: var(--soj-blue);
+  background: var(--soj-blue-soft);
+}
+
+/* v3-full .user-chip：白底描边胶囊（渐变圆头像 30px + 昵称 700 + 等级徽章同装一体） */
 .user-dropdown {
   height: 100%;
-}
-
-.username {
-  cursor: pointer;
-  outline: none;
-  height: 100%;
-  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 var(--el-menu-base-level-padding, 20px);
-  color: var(--el-menu-text-color, var(--el-text-color-primary));
-  border-bottom: 2px solid transparent;
-  white-space: nowrap;
-  transition:
-    border-color var(--el-transition-duration, 0.3s),
-    background-color var(--el-transition-duration, 0.3s),
-    color var(--el-transition-duration, 0.3s);
+  outline: none;
 }
 
-.username:hover {
-  background-color: var(--soj-blue-soft);
-  color: var(--soj-blue);
-}
-
-/* 账号圆标：常驻浅主色圆底做视觉锚点；悬停随行整体加深为实心主色 + 图标反白 */
 .user-chip {
-  width: 28px;
-  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 14px 5px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--soj-line);
+  background: var(--el-fill-color-blank);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(11, 31, 69, 0.05);
+  transition: box-shadow 0.18s, border-color 0.18s;
+  outline: none;
+  white-space: nowrap;
+}
+
+.user-chip:hover {
+  border-color: var(--soj-blue-line);
+  box-shadow: 0 2px 8px rgba(11, 31, 69, 0.09);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
-  background: var(--el-color-primary-light-8);
-  color: var(--el-color-primary);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--soj-fs-body);
-  margin-right: 8px;
-  transition:
-    background-color var(--el-transition-duration, 0.3s),
-    color var(--el-transition-duration, 0.3s);
+  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
+  color: #fff;
+  font-weight: var(--soj-fw-bold);
+  font-size: var(--soj-fs-14);
 }
 
-.username:hover .user-chip {
-  background: var(--el-color-primary);
-  color: var(--el-color-white);
+.uname {
+  font-weight: var(--soj-fw-bold);
+  font-size: var(--soj-fs-14);
+  color: var(--soj-navy);
 }
 
-/* v0.19 透明画布：body 三层画布（渐变+光晕+青网格）直接透出，main/footer 不再铺实底 */
+/* 透明画布：body 三层画布（渐变+光晕+青网格）直接透出，main/footer 不再铺实底 */
 .main {
   background: transparent;
 }
@@ -339,18 +304,22 @@ function onCommand(command: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  color: var(--el-text-color-secondary);
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--soj-ink-3);
   background: transparent;
+  /* v3 页脚：hairline 顶边收束页面 */
+  border-top: 1px solid var(--soj-line);
 }
 
 /* 备案号外链：弱化为页脚次要信息，悬停才提色 */
 .icp {
-  color: var(--el-text-color-secondary);
+  color: var(--soj-ink-3);
   text-decoration: none;
 }
 
 .icp:hover {
-  color: var(--el-color-primary);
+  color: var(--soj-blue);
 }
 </style>

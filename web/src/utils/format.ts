@@ -9,7 +9,8 @@ export interface StatusStyle {
 
 // 与后端 internal/model 中的状态常量对应
 // 灯色语义：绿=通过 / 红=答案或运行错误 / 黄=超限类（时/存/输出）/ 灰=编译错误·排队·系统错误 / 蓝=进行中
-const statusMap: Record<string, StatusStyle> = {
+// 状态候选（提交记录筛选 chips 用）：全站状态表原样导出
+export const statusMap: Record<string, StatusStyle> = {
   Pending: { label: '排队中', type: 'info', dot: 'gray', abbr: 'Pending' },
   Judging: { label: '判题中', type: 'warning', dot: 'blue', abbr: 'Judging' },
   CancelRequested: { label: '取消中', type: 'warning', dot: 'blue', abbr: 'Cancel' },
@@ -108,4 +109,12 @@ export function fmtSec(ms?: number | null): string {
 export function fmtDate(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('zh-CN', { hour12: false })
+}
+
+// 短日期（v0.19 首页/比赛行）：MM-DD HH:mm（v3 卡片行时间口径）
+export function fmtShort(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
