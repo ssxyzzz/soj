@@ -29,6 +29,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"golang.org/x/text/encoding/simplifiedchinese"
 	"gopkg.in/yaml.v3"
 
 	"soj/internal/repo"
@@ -917,6 +918,20 @@ func safeExtractZip(zipPath, dst string) error {
 	return safeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "20MB", "200MB", nil)
 }
 
+// zipEntryName 条目名归一：旧式 zip（Windows 资源管理器「发送到压缩文件夹」与
+// 多数中文压缩工具）不设 UTF-8 标志位，文件名是系统 ANSI 字节（中文系统即 GBK），
+// Go 原样透传成非法 UTF-8——目录名整体乱码。标志位缺失时按 GB18030 回退解码，
+// 解码失败（其他码系产物）原样返回、不比现状差。
+func zipEntryName(f *zip.File) string {
+	if !f.NonUTF8 {
+		return f.Name
+	}
+	if dec, err := simplifiedchinese.GB18030.NewDecoder().Bytes([]byte(f.Name)); err == nil {
+		return string(dec)
+	}
+	return f.Name
+}
+
 // safeExtractZipLimits 参数化限额版（批量导入：整包 GB 级、条目随限额放宽）。
 // progress（可 nil）：每写完一个条目回调（已解压字节, 总字节）——批量导入用它做解压实时进度。
 func safeExtractZipLimits(zipPath, dst string, maxEntries int, maxTotal, maxSingle int64, singleMBHint, totalMBHint string, progress func(done, total int64)) error {
@@ -933,7 +948,7 @@ func safeExtractZipLimits(zipPath, dst string, maxEntries int, maxTotal, maxSing
 	// 与写盘遍历分离——回调的 total 在写第一个文件前就已知
 	total := int64(0)
 	for _, f := range zr.File {
-		name := f.Name
+		name := zipEntryName(f)
 		if strings.Contains(name, "..") || strings.HasPrefix(name, "/") || strings.Contains(name, "\\") {
 			return errors.New("压缩包含非法路径")
 		}
@@ -953,7 +968,7 @@ func safeExtractZipLimits(zipPath, dst string, maxEntries int, maxTotal, maxSing
 		if f.Mode().IsDir() {
 			continue
 		}
-		dest := filepath.Join(dstRoot, filepath.FromSlash(path.Clean("/"+f.Name)))
+		dest := filepath.Join(dstRoot, filepath.FromSlash(path.Clean("/"+zipEntryName(f))))
 		if !strings.HasPrefix(dest, dstRoot+string(os.PathSeparator)) {
 			return errors.New("压缩包含非法路径")
 		}

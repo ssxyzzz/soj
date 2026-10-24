@@ -108,12 +108,15 @@ func reconcileTagTree(oldNodes, newNodes []TagNode, nextID func() (int64, error)
 }
 
 // ValidateTagTreeShape 保存前形状校验：名称非空 ≤32 字、同级不重名、
-// 嵌套 ≤32 层、总节点数 ≤500。
+// 嵌套 ≤32 层、总节点数 ≤1000。节点数按树中节点计数（不看 ID 是否已取号，
+// 后台保存时新节点尚无正式号，按 ID 集合计数会被绕过/少计）。
 func ValidateTagTreeShape(nodes []TagNode) error {
+	total := 0
 	var walk func(list []TagNode, depth int) error
 	walk = func(list []TagNode, depth int) error {
 		names := map[string]bool{}
 		for _, n := range list {
+			total++
 			name := strings.TrimSpace(n.Name)
 			if name == "" {
 				return fmt.Errorf("标签名不能为空")
@@ -137,11 +140,8 @@ func ValidateTagTreeShape(nodes []TagNode) error {
 	if err := walk(nodes, 0); err != nil {
 		return err
 	}
-	all := map[int64]bool{}
-	CollectTagIDs(nodes, all)
-	delete(all, 0) // 未取号的新节点不计入上限
-	if len(all) > 500 {
-		return fmt.Errorf("标签总数超过 500（当前 %d）", len(all))
+	if total > 1000 {
+		return fmt.Errorf("标签总数超过 1000（当前 %d）", total)
 	}
 	return nil
 }

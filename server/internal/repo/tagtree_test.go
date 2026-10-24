@@ -1,6 +1,8 @@
 package repo
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -112,5 +114,55 @@ func TestValidateTagTreeShape(t *testing.T) {
 		if (err != nil) != tc.wantErr {
 			t.Fatalf("%s: err = %v, wantErr = %v", tc.name, err, tc.wantErr)
 		}
+	}
+}
+
+// TestTagTreeShapeNodeCap 节点数上限按节点计数：新节点未取号（ID=0）也计入，
+// 不按 ID 集合计数（重复 0 会合并少计、绕过上限）。
+func TestTagTreeShapeNodeCap(t *testing.T) {
+	mk := func(n int) []TagNode {
+		list := make([]TagNode, 0, n)
+		for i := 0; i < n; i++ {
+			id := int64(0) // 奇数位保持未取号，模拟后台保存前的草稿新节点
+			if i%2 == 0 {
+				id = int64(i + 1)
+			}
+			list = append(list, TagNode{ID: id, Name: fmt.Sprintf("标签%d", i)})
+		}
+		return list
+	}
+	if err := ValidateTagTreeShape(mk(1000)); err != nil {
+		t.Fatalf("1000 节点应合法: %v", err)
+	}
+	if err := ValidateTagTreeShape(mk(1001)); err == nil {
+		t.Fatal("1001 节点应超上限")
+	}
+}
+
+// TestAppendTagNodeCap 来源库「转为标签」追加也要过节点数上限（满编拒绝、
+// 未满成功），复用 openTestRepo（本地无 Mongo 自动 skip）。
+func TestAppendTagNodeCap(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+	full := make([]TagNode, 0, 1000)
+	for i := 0; i < 1000; i++ {
+		full = append(full, TagNode{ID: int64(i + 1), Name: fmt.Sprintf("标签%d", i)})
+	}
+	if err := r.ReplaceTagTree(ctx, full); err != nil {
+		t.Fatalf("预置满编树: %v", err)
+	}
+	if _, err := r.AppendTagNode(ctx, 0, "新标签"); err == nil || !strings.Contains(err.Error(), "1000") {
+		t.Fatalf("满编追加应被上限拦截: %v", err)
+	}
+	if err := r.ReplaceTagTree(ctx, full[:999]); err != nil {
+		t.Fatalf("预置 999 节点树: %v", err)
+	}
+	id, err := r.AppendTagNode(ctx, 0, "新标签")
+	if err != nil || id <= 0 {
+		t.Fatalf("未满编追加应成功: id=%d err=%v", id, err)
+	}
+	tree, err := r.GetTagTree(ctx)
+	if err != nil || len(tree) != 1000 {
+		t.Fatalf("追加后应恰为 1000 节点: len=%d err=%v", len(tree), err)
 	}
 }

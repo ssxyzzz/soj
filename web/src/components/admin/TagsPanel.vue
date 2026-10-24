@@ -318,8 +318,8 @@ function commitAdd(fromBlur = false) {
     ElMessage.warning(err)
     return
   }
-  if (total.value >= 500) {
-    ElMessage.warning('标签总数已达上限 500')
+  if (total.value >= 1000) {
+    ElMessage.warning('标签总数已达上限 1000')
     return
   }
   tempId -= 1
@@ -591,8 +591,8 @@ async function onImportFile(ev: Event) {
     ElMessage.warning('文件里没有有效的标签（列：一级~五级，每行一条路径）')
     return
   }
-  if (totalImported > 500) {
-    ElMessage.warning(`导入的标签共 ${totalImported} 个，超出上限 500`)
+  if (totalImported > 1000) {
+    ElMessage.warning(`导入的标签共 ${totalImported} 个，超出上限 1000`)
     return
   }
   const tooLong = roots.flatMap(function walk(n: DraftNode): string[] {

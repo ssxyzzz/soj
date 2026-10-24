@@ -1,9 +1,12 @@
 package server
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 func mkTree(t *testing.T, base string, files map[string]string) {
@@ -92,10 +95,10 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 	t.Run("打包杂物不影响判断且保留", func(t *testing.T) {
 		dir := t.TempDir()
 		mkTree(t, dir, map[string]string{
-			"pkg/cases/1/in":     "1 2\n",
-			"pkg/cases/1/ans":    "3\n",
-			"__MACOSX/pkg/._in":  "\x00\x01",
-			".DS_Store":          "",
+			"pkg/cases/1/in":    "1 2\n",
+			"pkg/cases/1/ans":   "3\n",
+			"__MACOSX/pkg/._in": "\x00\x01",
+			".DS_Store":         "",
 		})
 		if err := unwrapSingleRootDir(dir); err != nil {
 			t.Fatalf("unwrapSingleRootDir: %v", err)
@@ -124,4 +127,53 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 		}
 		mustExist(t, dir, "config.yaml")
 	})
+}
+
+// TestSafeExtractZipGBKNames Windows 资源管理器压缩的中文包回归：条目名 GBK 字节、
+// 无 UTF-8 标志位（卖皮鞋的 GBK 序列含非法 UTF-8 字节，zip writer 恰好不设标志），
+// 解压后目录名应为正常中文；UTF-8 标志位正常的条目不受影响。
+func TestSafeExtractZipGBKNames(t *testing.T) {
+	gbk := func(s string) string {
+		b, err := simplifiedchinese.GB18030.NewEncoder().Bytes([]byte(s))
+		if err != nil {
+			t.Fatalf("gbk encode %q: %v", s, err)
+		}
+		return string(b)
+	}
+	dir := t.TempDir()
+	zipPath := filepath.Join(dir, "pkg.zip")
+	f, err := os.Create(zipPath)
+	if err != nil {
+		t.Fatalf("create zip: %v", err)
+	}
+	zw := zip.NewWriter(f)
+	for _, e := range []struct{ name, body string }{
+		{gbk("1000 卖皮鞋/problem.md"), "题面"},
+		{gbk("1000 卖皮鞋/data/test1.in"), "1\n"},
+		{gbk("1000 卖皮鞋/data/test1.out"), "2\n"},
+		{"1001_两个数的和/problem.md", "题面"}, // 正常 UTF-8 名（带标志位）
+	} {
+		w, err := zw.Create(e.name)
+		if err != nil {
+			t.Fatalf("zip create %q: %v", e.name, err)
+		}
+		if _, err := w.Write([]byte(e.body)); err != nil {
+			t.Fatalf("zip write %q: %v", e.name, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("zip close: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("file close: %v", err)
+	}
+
+	dst := filepath.Join(dir, "out")
+	if err := safeExtractZip(zipPath, dst); err != nil {
+		t.Fatalf("safeExtractZip: %v", err)
+	}
+	mustExist(t, dst, "1000 卖皮鞋/problem.md")
+	mustExist(t, dst, "1000 卖皮鞋/data/test1.in")
+	mustExist(t, dst, "1000 卖皮鞋/data/test1.out")
+	mustExist(t, dst, "1001_两个数的和/problem.md")
 }

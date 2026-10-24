@@ -291,39 +291,43 @@ func (r *Repo) AppendTagNode(ctx context.Context, parentID int64, name string) (
 	if err != nil {
 		return 0, err
 	}
+	var newTree []TagNode
 	if parentID == 0 {
 		for _, n := range tree {
 			if n.Name == name {
 				return 0, fmt.Errorf("根级已存在同名标签「%s」", name)
 			}
 		}
-		if err := r.ReplaceTagTree(ctx, append(tree, TagNode{ID: id, Name: name})); err != nil {
-			return 0, err
-		}
-		return id, nil
-	}
-	var attach func(list []TagNode) ([]TagNode, bool)
-	attach = func(list []TagNode) ([]TagNode, bool) {
-		for i, n := range list {
-			if n.ID == parentID {
-				for _, ch := range n.Children {
-					if ch.Name == name {
-						return nil, false // 同级重名
+		newTree = append(tree, TagNode{ID: id, Name: name})
+	} else {
+		var attach func(list []TagNode) ([]TagNode, bool)
+		attach = func(list []TagNode) ([]TagNode, bool) {
+			for i, n := range list {
+				if n.ID == parentID {
+					for _, ch := range n.Children {
+						if ch.Name == name {
+							return nil, false // 同级重名
+						}
 					}
+					list[i].Children = append(n.Children, TagNode{ID: id, Name: name})
+					return list, true
 				}
-				list[i].Children = append(n.Children, TagNode{ID: id, Name: name})
-				return list, true
+				if ch, ok := attach(n.Children); ok {
+					list[i].Children = ch
+					return list, true
+				}
 			}
-			if ch, ok := attach(n.Children); ok {
-				list[i].Children = ch
-				return list, true
-			}
+			return nil, false
 		}
-		return nil, false
+		attached, ok := attach(tree)
+		if !ok {
+			return 0, fmt.Errorf("父节点 %d 不存在，或同级已存在同名标签「%s」", parentID, name)
+		}
+		newTree = attached
 	}
-	newTree, ok := attach(tree)
-	if !ok {
-		return 0, fmt.Errorf("父节点 %d 不存在，或同级已存在同名标签「%s」", parentID, name)
+	// 追加后整树过形状校验（节点数上限等），与后台整树保存同一套规则
+	if err := ValidateTagTreeShape(newTree); err != nil {
+		return 0, err
 	}
 	if err := r.ReplaceTagTree(ctx, newTree); err != nil {
 		return 0, err
