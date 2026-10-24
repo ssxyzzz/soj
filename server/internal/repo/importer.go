@@ -63,12 +63,21 @@ type Importer struct {
 // 预检与 Importer 内部（seedPID 同义）共用这一语义。
 func DirPID(name string) int64 { return seedPID(name) }
 
-// seedPID 从目录名解析题号（仅种子播种用）：数字前缀即题号；无前缀返回 0。
+// seedPID 从目录名解析数字前缀题号：前导数字串以结尾、下划线或空格收尾才算
+// （1000_标题 导出规范 / 1000 标题 Windows 直接压缩习惯，两种都收）；其余返回 0。
 func seedPID(name string) int64 {
-	if n, err := strconv.ParseInt(strings.SplitN(name, "_", 2)[0], 10, 64); err == nil && n > 0 {
-		return n
+	i := 0
+	for i < len(name) && name[i] >= '0' && name[i] <= '9' {
+		i++
 	}
-	return 0
+	if i == 0 || (i < len(name) && name[i] != '_' && name[i] != ' ') {
+		return 0
+	}
+	n, err := strconv.ParseInt(name[:i], 10, 64)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return n
 }
 
 // dirTitleFallback 无 problem.yaml/title 时的标题：目录名剥掉前导「数字+分隔符」。

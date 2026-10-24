@@ -28,8 +28,9 @@ const sources: { id: Source | 'qduoj' | 'hoj'; label: string; hint: string; soon
 const fileList = ref<UploadUserFile[]>([])
 const skipSameTitle = ref(false)
 const defaultHidden = ref(false)
-// 已存在题号跳过（v0.18.1 验收调整，仅 SOJ 源）：目录名带题号前缀（导出包默认 <题号>_<标题>）
-// 且该题号已存在 → 跳过不导入（防导出包重复导回造成重复题；不覆盖既有题）
+// 已存在题号跳过（v0.18.1 验收调整，仅 SOJ 源）：目录名带题号前缀（题号_标题 /
+// 题号 标题，下划线与空格都认）——开启后按前缀题号落库、已存在则跳过不导入
+// （防导出包重复导回造成重复题；不覆盖既有题）；关闭则忽略前缀、一律自动取号
 const skipExistingPID = ref(false)
 const starting = ref(false)
 // v0.18.2 上传进度（XHR onUploadProgress 驱动；-1 = 非上传态）
@@ -280,7 +281,7 @@ const finishedIssues = computed(() =>
       <div v-if="source === 'soj'" class="switch-row">
         <el-switch v-model="skipExistingPID" :disabled="running" />
         <span>已存在题号跳过</span>
-        <el-tooltip placement="top" content="题库「打包导出」的包目录名带题号前缀（题号_标题）：开启后题号已存在的目录直接跳过（防导出包重复导回造成重复题，不覆盖既有题）；题号不存在则正常导入（自动取新题号）">
+        <el-tooltip placement="top" content="目录名带题号前缀（题号_标题 或 题号 标题，Windows 直接压缩的包多为空格）：开启后按前缀题号落库、已存在的题号直接跳过（防导出包重复导回造成重复题，不覆盖既有题）；关闭则忽略前缀、一律自动取号新建">
           <el-icon class="dim"><QuestionFilled /></el-icon>
         </el-tooltip>
       </div>
