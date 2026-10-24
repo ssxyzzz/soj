@@ -1,0 +1,1595 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOJ · 纸墨重设计预览（浅色）</title>
+<style>
+/* ============================================================
+   SOJ 界面重设计 · 预览稿 v2 ——「纸墨」
+   方向：文房卷面 × 现代版式。暖纸底 / 发丝线 / 朱砂只做重点 /
+        衬线字做标题、等宽字做数据。浅色，暂无深色模式。
+   本文件为静态设计预览：顶部深色工具条是预览器，不属于界面设计。
+   ============================================================ */
+:root{
+  /* 纸与墨 */
+  --paper:#F3EEE1;          /* 页面底：暖纸 */
+  --paper-2:#ECE6D5;        /* 深一度纸：内嵌块 / 滑轨 */
+  --card:#FFFDF6;           /* 卡面 */
+  --card-2:#F9F4E8;         /* 卡面次级 / 表头 / 悬停 */
+  --ink:#241E11;            /* 墨：正文 */
+  --ink-2:#6F654E;          /* 淡墨：次要文字 */
+  --ink-3:#A79C82;          /* 灰墨：占位 / 弱信息 */
+  --line:#E2DAC4;           /* 发丝线 */
+  --line-2:#D2C7A8;         /* 深发丝线 */
+
+  /* 朱砂（品牌色，只做重点：主按钮 / 激活 / 链接 / 印章） */
+  --seal:#B7371F;
+  --seal-deep:#942914;
+  --seal-soft:rgba(183,55,31,.07);
+  --seal-line:rgba(183,55,31,.38);
+
+  /* 判定语义色（与品牌色相互独立） */
+  --ac:#2E7D46;  --ac-bg:rgba(46,125,70,.10);
+  --wa:#B3261E;  --wa-bg:rgba(179,38,30,.09);
+  --tle:#96690A; --tle-bg:rgba(150,105,10,.11);
+  --re:#5B6270;  --re-bg:rgba(91,98,112,.10);
+  --ce:#4A5361;  --ce-bg:rgba(74,83,97,.09);
+  --pend:#8B8268;--pend-bg:rgba(139,130,104,.14);
+
+  /* 难度/等级十档（青铜→极境） */
+  --t1:#A16A43; --t1-bg:rgba(161,106,67,.11);
+  --t2:#7F8894; --t2-bg:rgba(127,136,148,.13);
+  --t3:#A8862B; --t3-bg:rgba(168,134,43,.12);
+  --t4:#3F8F8F; --t4-bg:rgba(63,143,143,.10);
+  --t5:#3E6FC4; --t5-bg:rgba(62,111,196,.10);
+  --t6:#7E57C2; --t6-bg:rgba(126,87,194,.10);
+  --t7:#8E4585; --t7-bg:rgba(142,69,133,.10);
+  --t8:#C25718; --t8-bg:rgba(194,87,24,.10);
+  --t9:#B03A5B; --t9-bg:rgba(176,58,91,.10);
+
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",STSong,"SimSun",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --mono:"JetBrains Mono","Cascadia Code",ui-monospace,Consolas,"SF Mono",monospace;
+
+  --r-card:6px; --r-btn:4px; --r-chip:3px;
+  --shadow:0 1px 0 rgba(36,30,17,.02), 0 10px 28px -22px rgba(36,30,17,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--sans);background:var(--paper);color:var(--ink);
+  font-size:14px;line-height:1.75;-webkit-font-smoothing:antialiased;
+}
+body::before{ /* 纸面顶部一层极浅的暖光 */
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(900px 480px at 20% -8%, rgba(183,55,31,.035), transparent 60%);
+}
+a{color:inherit;text-decoration:none}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+::selection{background:rgba(183,55,31,.16)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:5px;border:2px solid var(--paper)}
+::-webkit-scrollbar-track{background:transparent}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.serif{font-family:var(--serif)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 36px}
+@media (max-width:760px){.wrap{padding:0 18px}}
+
+/* ================= 预览器工具条（深色，非产品设计） ================= */
+.pv{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  background:#211B10;color:#F4EDDC;
+  display:flex;align-items:center;gap:14px;
+  padding:0 18px;height:46px;font-size:12.5px;
+}
+.pv-brand{display:flex;align-items:center;gap:9px;flex:none}
+.pv-brand .dot{width:8px;height:8px;background:var(--seal);border-radius:2px}
+.pv-brand b{font-family:var(--serif);font-size:13.5px;letter-spacing:.08em}
+.pv-brand span{color:#9A8F73}
+.pv-tabs{display:flex;gap:2px;flex:1;overflow-x:auto;scrollbar-width:none}
+.pv-tabs::-webkit-scrollbar{display:none}
+.pv-tabs button{
+  color:#B9AE92;padding:5px 12px;border-radius:4px;white-space:nowrap;
+  font-size:12.5px;transition:all .15s;
+}
+.pv-tabs button:hover{color:#F4EDDC;background:rgba(244,237,220,.08)}
+.pv-tabs button.on{color:#211B10;background:#F4EDDC;font-weight:600}
+.pv-tabs button i{font-style:normal;font-family:var(--mono);font-size:10.5px;opacity:.55;margin-right:5px}
+.pv-note{flex:none;color:#8A7F65;font-size:11.5px;letter-spacing:.05em}
+@media (max-width:960px){.pv-note{display:none}}
+
+/* ================= 报头（产品导航） ================= */
+.mast{
+  position:sticky;top:46px;z-index:100;
+  background:rgba(243,238,225,.92);
+  backdrop-filter:blur(14px) saturate(1.2);
+  -webkit-backdrop-filter:blur(14px) saturate(1.2);
+  border-bottom:1px solid var(--line-2);
+}
+body[data-scr="login"] .mast{display:none}
+body[data-scr="login"] main{padding-top:0}
+.mast-in{display:flex;align-items:center;gap:26px;height:60px}
+.brand{display:flex;align-items:center;gap:11px;flex:none}
+.brand-seal{
+  width:34px;height:34px;border-radius:7px;background:var(--seal);
+  display:grid;place-items:center;color:#FFF6EC;
+  font-family:var(--serif);font-size:19px;font-weight:700;
+  box-shadow:inset 0 0 0 1.5px rgba(255,246,236,.28), 0 2px 6px -3px rgba(148,41,20,.6);
+}
+.brand b{font-family:var(--serif);font-size:19px;letter-spacing:.12em}
+.brand small{display:block;font-size:10.5px;color:var(--ink-3);letter-spacing:.14em;margin-top:-3px}
+.nav{display:flex;gap:2px;flex:1}
+.nav a{
+  position:relative;padding:19px 13px 17px;font-size:13.5px;color:var(--ink-2);
+  letter-spacing:.03em;transition:color .15s;
+}
+.nav a:hover{color:var(--ink)}
+.nav a.on{color:var(--seal);font-weight:600}
+.nav a.on::after{
+  content:"";position:absolute;left:13px;right:13px;bottom:-1px;height:2px;background:var(--seal);
+}
+.mast-act{display:flex;align-items:center;gap:10px;flex:none}
+.icon-btn{
+  display:flex;align-items:center;gap:7px;height:32px;padding:0 12px;
+  border:1px solid var(--line-2);border-radius:var(--r-btn);background:var(--card);
+  color:var(--ink-2);font-size:12.5px;transition:all .15s;
+}
+.icon-btn:hover{border-color:var(--ink-3);color:var(--ink)}
+.icon-btn svg{width:14px;height:14px;flex:none}
+.user-chip{
+  display:flex;align-items:center;gap:9px;padding:4px 12px 4px 5px;
+  border:1px solid var(--line-2);border-radius:var(--r-btn);background:var(--card);
+  transition:all .15s;
+}
+.user-chip:hover{border-color:var(--seal-line)}
+.avatar{
+  width:26px;height:26px;border-radius:6px;flex:none;
+  display:grid;place-items:center;font-family:var(--serif);
+  font-size:13px;font-weight:700;
+}
+.user-chip .uname{font-size:13px;font-weight:600}
+@media (max-width:960px){.nav{display:none}}
+
+/* ================= 屏切换 ================= */
+main{padding-top:34px;padding-bottom:64px}
+.screen{display:none;animation:rise .5s cubic-bezier(.2,.7,.2,1)}
+.screen.on{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+/* ================= 通用原子 ================= */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:22px}
+.page-head h1{font-family:var(--serif);font-size:30px;font-weight:700;letter-spacing:.04em;line-height:1.3}
+.page-head .sub{color:var(--ink-2);font-size:13px;margin-top:4px}
+.page-head .sub b{color:var(--ink);font-weight:600}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);
+  box-shadow:var(--shadow);
+}
+.sec-head{display:flex;align-items:center;gap:11px;margin-bottom:14px}
+.sec-head::before{content:"";width:9px;height:9px;background:var(--seal);flex:none}
+.sec-head h2{font-family:var(--serif);font-size:19px;font-weight:700;letter-spacing:.05em}
+.sec-head .tail{flex:1;height:1px;background:var(--line)}
+.sec-head .more{font-size:12.5px;color:var(--ink-2)}
+.sec-head .more:hover{color:var(--seal)}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  height:36px;padding:0 18px;border-radius:var(--r-btn);
+  font-size:13.5px;font-weight:500;letter-spacing:.03em;transition:all .15s;
+  white-space:nowrap;
+}
+.btn.pri{background:var(--seal);color:#FFF6EC;box-shadow:0 2px 8px -4px rgba(148,41,20,.55)}
+.btn.pri:hover{background:var(--seal-deep)}
+.btn.line{border:1px solid var(--line-2);background:var(--card);color:var(--ink)}
+.btn.line:hover{border-color:var(--ink-3);background:#fff}
+.btn.ghost{color:var(--seal);padding:0 6px}
+.btn.ghost:hover{text-decoration:underline;text-underline-offset:4px}
+.btn.sm{height:29px;padding:0 12px;font-size:12.5px}
+.btn.blk{width:100%}
+.btn svg{width:14px;height:14px}
+
+.chip{
+  display:inline-flex;align-items:center;height:22px;padding:0 8px;
+  border-radius:var(--r-chip);font-size:11.5px;letter-spacing:.02em;
+  background:var(--paper-2);color:var(--ink-2);white-space:nowrap;
+}
+a.chip:hover{background:var(--line);color:var(--ink)}
+.tier{font-weight:600}
+.tier.t1{background:var(--t1-bg);color:var(--t1)}
+.tier.t2{background:var(--t2-bg);color:var(--t2)}
+.tier.t3{background:var(--t3-bg);color:var(--t3)}
+.tier.t4{background:var(--t4-bg);color:var(--t4)}
+.tier.t5{background:var(--t5-bg);color:var(--t5)}
+.tier.t6{background:var(--t6-bg);color:var(--t6)}
+.tier.t7{background:var(--t7-bg);color:var(--t7)}
+.tier.t8{background:var(--t8-bg);color:var(--t8)}
+.tier.t9{background:var(--t9-bg);color:var(--t9)}
+.tier.t10{background:linear-gradient(120deg,#B7371F,#7E57C2 55%,#3E6FC4);color:#FFF6EC}
+
+.vd{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:40px;height:22px;padding:0 7px;border-radius:var(--r-chip);
+  font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.04em;
+}
+.vd.ac{background:var(--ac-bg);color:var(--ac)}
+.vd.wa{background:var(--wa-bg);color:var(--wa)}
+.vd.tle{background:var(--tle-bg);color:var(--tle)}
+.vd.re{background:var(--re-bg);color:var(--re)}
+.vd.ce{background:var(--ce-bg);color:var(--ce)}
+.vd.jg{background:var(--pend-bg);color:var(--pend);animation:blink 1.1s ease-in-out infinite}
+@keyframes blink{50%{opacity:.45}}
+
+.meter{display:inline-block;width:46px;height:4px;background:var(--paper-2);border-radius:2px;overflow:hidden;vertical-align:middle}
+.meter i{display:block;height:100%;background:var(--seal);border-radius:2px}
+
+.field{
+  display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;
+  background:var(--card);border:1px solid var(--line-2);border-radius:var(--r-btn);
+  color:var(--ink-2);font-size:13px;transition:all .15s;min-width:0;
+}
+.field:hover{border-color:var(--ink-3)}
+.field svg{width:14px;height:14px;flex:none;opacity:.7}
+.field input{border:none;outline:none;background:none;font:inherit;color:var(--ink);flex:1;min-width:0}
+.field input::placeholder{color:var(--ink-3)}
+.field.sel{cursor:pointer;user-select:none}
+.field.sel::after{content:"";width:7px;height:7px;flex:none;border-right:1.5px solid var(--ink-2);border-bottom:1.5px solid var(--ink-2);transform:rotate(45deg) translateY(-2px)}
+.qtag{cursor:pointer;transition:all .13s}
+.qtag.on{background:var(--seal);color:#FFF6EC;border-color:var(--seal)}
+
+/* 表格 */
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{
+  text-align:left;font-weight:600;font-size:12px;color:var(--ink-2);
+  letter-spacing:.1em;background:var(--card-2);
+  border-bottom:1px solid var(--line-2);padding:11px 16px;white-space:nowrap;
+}
+.tbl td{border-bottom:1px solid var(--line);padding:13px 16px;vertical-align:middle}
+.tbl tbody tr{transition:background .12s}
+.tbl tbody tr:hover{background:var(--card-2)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* 页脚 */
+.foot{border-top:1px solid var(--line-2);background:var(--paper)}
+body[data-scr="login"] .foot{display:none}
+.foot-in{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:26px 0 30px;font-size:12.5px;color:var(--ink-3);flex-wrap:wrap}
+.foot-in .l{display:flex;align-items:center;gap:10px}
+.foot-in .l .brand-seal{width:22px;height:22px;font-size:12px;border-radius:5px}
+.foot-in a:hover{color:var(--seal)}
+.foot-in .r{display:flex;gap:18px}
+
+/* 提示浮层 */
+.toast{
+  position:fixed;left:50%;bottom:34px;transform:translate(-50%,16px);z-index:300;
+  background:var(--ink);color:#F4EDDC;font-size:13px;padding:9px 18px;border-radius:6px;
+  opacity:0;pointer-events:none;transition:all .3s cubic-bezier(.2,.7,.2,1);
+  box-shadow:0 10px 30px -12px rgba(0,0,0,.5);
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+/* ============================================================
+   屏 1 · 首页
+   ============================================================ */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) 460px;gap:44px;align-items:center;padding:34px 0 40px}
+.hero .kicker{display:flex;align-items:center;gap:10px;font-size:12px;letter-spacing:.3em;color:var(--seal);font-weight:600;margin-bottom:18px}
+.hero .kicker::before{content:"";width:26px;height:1px;background:var(--seal-line)}
+.hero h1{font-family:var(--serif);font-size:41px;font-weight:700;line-height:1.42;letter-spacing:.02em;margin-bottom:16px}
+.hero h1 em{font-style:normal;color:var(--seal);border-bottom:3px solid var(--seal-line);padding-bottom:2px}
+.hero p{color:var(--ink-2);font-size:15px;max-width:44ch;margin-bottom:26px}
+.hero .cta{display:flex;gap:12px}
+.hero .cta .btn{height:42px;padding:0 24px;font-size:14px}
+.hero .fineprint{margin-top:16px;font-size:12.5px;color:var(--ink-3)}
+
+/* 判题台 */
+.judge{overflow:hidden}
+.judge-head{
+  display:flex;align-items:center;gap:9px;padding:13px 18px;
+  border-bottom:1px solid var(--line-2);background:var(--card-2);
+}
+.judge-head .live{width:8px;height:8px;border-radius:50%;background:var(--ac);box-shadow:0 0 0 0 rgba(46,125,70,.5);animation:ping 1.8s infinite}
+@keyframes ping{70%{box-shadow:0 0 0 7px rgba(46,125,70,0)}100%{box-shadow:0 0 0 0 rgba(46,125,70,0)}}
+.judge-head b{font-family:var(--serif);font-size:15px;letter-spacing:.08em}
+.judge-head span{margin-left:auto;font-size:12px;color:var(--ink-3)}
+.judge-col{display:grid;grid-template-columns:52px 1fr 1fr 56px;gap:8px;padding:9px 18px 7px;font-size:11px;color:var(--ink-3);letter-spacing:.12em}
+.judge-list{min-height:238px}
+.judge-row{
+  display:grid;grid-template-columns:52px 1fr 1fr 56px;align-items:center;gap:8px;
+  padding:10px 18px;border-top:1px solid var(--line);font-size:13px;
+  animation:slidein .45s cubic-bezier(.2,.7,.2,1);
+}
+@keyframes slidein{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.judge-row .t{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+.judge-row .u{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.judge-row .p{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.judge-row .p b{color:var(--ink);font-weight:600}
+.judge-foot{
+  display:flex;gap:16px;padding:10px 18px;border-top:1px solid var(--line-2);background:var(--card-2);
+  font-size:11.5px;color:var(--ink-3);
+}
+.judge-foot b{color:var(--ink-2);font-family:var(--mono);font-weight:600}
+
+/* 统计带 */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);margin-bottom:40px}
+.stat{padding:20px 8px 18px;text-align:center;position:relative}
+.stat + .stat::before{content:"";position:absolute;left:0;top:20%;bottom:20%;width:1px;background:var(--line)}
+.stat .v{font-family:var(--serif);font-size:31px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums}
+.stat .v small{font-size:14px;color:var(--ink-3);font-weight:400;margin-left:2px}
+.stat .k{font-size:12px;color:var(--ink-2);letter-spacing:.22em;margin-top:3px}
+
+/* 首页双栏 */
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:32px;align-items:start}
+.h-sec{margin-bottom:36px}
+
+.event{
+  display:flex;gap:18px;align-items:center;padding:18px 20px;margin-bottom:12px;
+  transition:all .15s;
+}
+.event:hover{border-color:var(--seal-line);transform:translateY(-1px);box-shadow:0 14px 30px -22px rgba(36,30,17,.45)}
+.event .stamp{
+  flex:none;width:58px;text-align:center;border-right:1px solid var(--line);padding-right:16px;
+}
+.event .stamp .m{font-family:var(--serif);font-size:24px;font-weight:700;line-height:1.1}
+.event .stamp .d{font-size:11px;color:var(--ink-3);letter-spacing:.1em}
+.event .mid{flex:1;min-width:0}
+.event .mid .line1{display:flex;align-items:center;gap:8px;margin-bottom:2px}
+.event .mid .line1 b{font-family:var(--serif);font-size:16.5px;letter-spacing:.02em}
+.event .mid .line2{font-size:12.5px;color:var(--ink-2);display:flex;gap:14px;flex-wrap:wrap}
+.event .mid .line2 .mono{color:var(--ink-3)}
+.event .prog{flex:none;width:150px}
+.event .prog .bar{height:4px;background:var(--paper-2);border-radius:2px;overflow:hidden;margin-bottom:6px}
+.event .prog .bar i{display:block;height:100%;background:var(--seal);border-radius:2px}
+.event .prog .cap{font-size:11px;color:var(--ink-3);display:flex;justify-content:space-between}
+.badge{
+  display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:var(--r-chip);
+  font-size:11px;font-weight:600;letter-spacing:.06em;flex:none;
+}
+.badge.work{background:rgba(63,143,143,.11);color:var(--t4)}
+.badge.exam{background:var(--seal-soft);color:var(--seal)}
+.badge.contest{background:var(--t5-bg);color:var(--t5)}
+.badge.soon{background:var(--paper-2);color:var(--ink-2)}
+.badge.done{background:var(--paper-2);color:var(--ink-3)}
+
+.fresh{padding:6px 8px}
+.fresh-row{
+  display:grid;grid-template-columns:30px 64px 1fr auto auto;align-items:center;gap:12px;
+  padding:11px 12px;border-radius:var(--r-btn);transition:background .12s;
+}
+.fresh-row:hover{background:var(--card-2)}
+.fresh-row .no{font-family:var(--serif);font-size:13px;color:var(--ink-3)}
+.fresh-row .pid{font-family:var(--mono);font-size:12.5px;color:var(--ink-3)}
+.fresh-row .ti{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fresh-row .ti:hover{color:var(--seal)}
+.fresh-row .rt{font-size:12px;color:var(--ink-3)}
+
+/* 首页右栏 */
+.rail > *{margin-bottom:18px}
+.rail-card{padding:16px 18px}
+.rail-card h3{
+  font-family:var(--serif);font-size:14.5px;letter-spacing:.1em;margin-bottom:12px;
+  display:flex;align-items:center;gap:8px;
+}
+.rail-card h3::before{content:"";width:5px;height:5px;background:var(--seal)}
+.mini-rank-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.mini-rank-row:first-of-type{border-top:none}
+.mini-rank-row .rk{font-family:var(--serif);font-size:13px;color:var(--ink-3);width:16px}
+.mini-rank-row .nm{flex:1;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini-rank-row .xp{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.announce a{
+  display:block;padding:9px 0;border-top:1px solid var(--line);font-size:13px;
+  transition:color .12s;
+}
+.announce a:first-of-type{border-top:none}
+.announce a:hover{color:var(--seal)}
+.announce .dt{font-size:11.5px;color:var(--ink-3);font-family:var(--mono);margin-right:8px}
+.steps{counter-reset:st}
+.step{display:flex;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:13px;color:var(--ink-2)}
+.step:first-of-type{border-top:none}
+.step::before{
+  counter-increment:st;content:counter(st,cjk-ideographic);
+  flex:none;width:22px;height:22px;border:1px solid var(--seal-line);border-radius:50%;
+  display:grid;place-items:center;font-family:var(--serif);font-size:11.5px;color:var(--seal);
+}
+.step b{color:var(--ink);font-weight:600}
+
+@media (max-width:1000px){
+  .hero{grid-template-columns:1fr}
+  .cols{grid-template-columns:1fr}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .stat:nth-child(3)::before{display:none}
+}
+
+/* ============================================================
+   屏 2 · 题库
+   ============================================================ */
+.filter-card{padding:16px 18px;margin-bottom:18px}
+.filter-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.filter-row .field{flex:1;min-width:200px}
+.filter-row .field.sel{flex:none;width:128px}
+.qtags{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;padding-top:13px;border-top:1px dashed var(--line)}
+.qtags .lbl{font-size:12px;color:var(--ink-3);letter-spacing:.1em;align-self:center;margin-right:2px}
+.tblwrap{overflow-x:auto}
+.tbl .st{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:4px;font-size:12px;font-weight:700}
+.st.ac{background:var(--ac-bg);color:var(--ac)}
+.st.wa{background:var(--wa-bg);color:var(--wa)}
+.st.na{background:var(--paper-2);color:var(--ink-3)}
+.ptitle{font-weight:600;font-size:14px}
+.ptitle:hover{color:var(--seal)}
+.ptitle .arrow{opacity:0;font-family:var(--mono);margin-left:6px;transition:opacity .15s}
+.tbl tbody tr:hover .ptitle .arrow{opacity:.6}
+.tbl .tags-cell{display:flex;gap:6px;flex-wrap:wrap}
+.pager{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;font-size:12.5px;color:var(--ink-3)}
+.pager .pages{display:flex;gap:6px}
+.pager .pages button{
+  min-width:30px;height:30px;border:1px solid var(--line-2);border-radius:var(--r-btn);
+  font-family:var(--mono);font-size:12.5px;color:var(--ink-2);transition:all .13s;
+}
+.pager .pages button:hover{border-color:var(--ink-3);color:var(--ink)}
+.pager .pages button.on{background:var(--ink);border-color:var(--ink);color:#F4EDDC}
+.rate-cell{display:flex;align-items:center;gap:9px}
+.rate-cell .num{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);width:38px;text-align:right}
+
+/* ============================================================
+   屏 3 · 题目详情
+   ============================================================ */
+.crumb{font-size:12.5px;color:var(--ink-3);margin-bottom:14px;display:flex;gap:8px;align-items:center}
+.crumb a:hover{color:var(--seal)}
+.crumb .sep{opacity:.5}
+.pd-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:22px}
+.pd-head .pid{font-family:var(--mono);font-size:16px;color:var(--ink-3)}
+.pd-head h1{font-family:var(--serif);font-size:31px;font-weight:700;letter-spacing:.03em}
+.pd-cols{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:32px;align-items:start}
+.stmt{padding:30px 34px 34px}
+.stmt h3{
+  font-family:var(--serif);font-size:17.5px;letter-spacing:.04em;margin:30px 0 12px;
+  display:flex;align-items:baseline;gap:10px;
+}
+.stmt h3:first-child{margin-top:0}
+.stmt h3 .no{font-size:13px;color:var(--seal);font-family:var(--serif)}
+.stmt p{color:#3B3423;margin-bottom:10px;font-size:14.5px}
+.stmt .io{
+  display:grid;grid-template-columns:1fr 1fr;gap:14px;
+}
+.sample{border:1px solid var(--line-2);border-radius:var(--r-btn);overflow:hidden;background:var(--card)}
+.sample .cap{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:7px 12px;background:var(--card-2);border-bottom:1px solid var(--line);
+  font-size:11.5px;color:var(--ink-2);letter-spacing:.1em;
+}
+.sample .cap button{color:var(--ink-3);font-size:11px;letter-spacing:.05em}
+.sample .cap button:hover{color:var(--seal)}
+.sample pre{
+  font-family:var(--mono);font-size:13px;line-height:1.8;padding:12px 14px;
+  white-space:pre-wrap;word-break:break-all;color:var(--ink);
+}
+.stmt .range{
+  border-left:3px solid var(--line-2);background:var(--card-2);
+  padding:12px 16px;border-radius:0 var(--r-btn) var(--r-btn) 0;
+  font-size:13.5px;color:var(--ink-2);
+}
+.stmt .range b{color:var(--ink)}
+.pd-rail > *{margin-bottom:18px}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px dashed var(--line);font-size:13px}
+.info-row:first-of-type{border-top:none}
+.info-row .k{color:var(--ink-2)}
+.info-row .v{font-weight:600}
+.info-row .v.mono{font-weight:500}
+.mysub{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:12.5px}
+.mysub:first-of-type{border-top:none}
+.mysub .sid{font-family:var(--mono);color:var(--ink-3)}
+.mysub .tm{margin-left:auto;color:var(--ink-3);font-size:11.5px}
+.note-card{font-size:12.5px;color:var(--ink-2);background:var(--card-2);border:1px dashed var(--line-2);padding:14px 16px;border-radius:var(--r-card)}
+.note-card b{color:var(--ink)}
+@media (max-width:1000px){.pd-cols{grid-template-columns:1fr}.stmt{padding:22px 20px}}
+
+/* ============================================================
+   屏 4 · 比赛与作业
+   ============================================================ */
+.status-tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--line-2)}
+.status-tabs button{
+  padding:10px 16px;font-size:13.5px;color:var(--ink-2);position:relative;transition:color .13s;
+}
+.status-tabs button:hover{color:var(--ink)}
+.status-tabs button.on{color:var(--seal);font-weight:600}
+.status-tabs button.on::after{content:"";position:absolute;left:12px;right:12px;bottom:-1px;height:2px;background:var(--seal)}
+.status-tabs button i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-left:4px}
+.live-banner{
+  display:flex;align-items:center;gap:26px;padding:22px 26px;margin-bottom:22px;
+  border-left:4px solid var(--seal);
+}
+.live-banner .lb-mid{flex:1;min-width:0}
+.live-banner .line1{display:flex;align-items:center;gap:10px;margin-bottom:3px}
+.live-banner .line1 b{font-family:var(--serif);font-size:20px;letter-spacing:.02em}
+.live-banner .line2{font-size:13px;color:var(--ink-2);display:flex;gap:16px;flex-wrap:wrap}
+.live-banner .count{text-align:right;flex:none}
+.live-banner .count .cd{font-family:var(--mono);font-size:29px;font-weight:600;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.live-banner .count .cap{font-size:11px;color:var(--ink-3);letter-spacing:.2em;margin-top:1px}
+.live-banner .lb-prog{flex:none;width:170px}
+.live-banner .lb-prog .bar{height:5px;background:var(--paper-2);border-radius:3px;overflow:hidden;margin-bottom:6px}
+.live-banner .lb-prog .bar i{display:block;height:100%;background:var(--seal)}
+.live-banner .lb-prog .cap{font-size:11px;color:var(--ink-3);display:flex;justify-content:space-between}
+.ev-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.ev-card{padding:20px 22px;transition:all .15s}
+.ev-card:hover{border-color:var(--seal-line);transform:translateY(-1px);box-shadow:0 14px 30px -22px rgba(36,30,17,.45)}
+.ev-card .top{display:flex;align-items:center;gap:9px;margin-bottom:9px}
+.ev-card h3{font-family:var(--serif);font-size:18px;letter-spacing:.02em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-card h3:hover{color:var(--seal)}
+.ev-card .meta{font-size:12.5px;color:var(--ink-2);display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.ev-card .meta .mono{color:var(--ink-3)}
+.ev-card .bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:12px;border-top:1px solid var(--line)}
+.ev-card .bottom .who{font-size:12px;color:var(--ink-3)}
+.ev-card.dim{opacity:.72}
+.ev-card.dim:hover{opacity:1}
+@media (max-width:900px){.ev-grid{grid-template-columns:1fr}}
+
+/* ============================================================
+   屏 5 · 排名
+   ============================================================ */
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:26px;align-items:end}
+.pod{padding:20px 22px;text-align:center;position:relative}
+.pod.first{padding-top:30px;padding-bottom:26px;border-top:3px solid var(--t3)}
+.pod.second{border-top:3px solid var(--t2)}
+.pod.third{border-top:3px solid var(--t1)}
+.pod .rank-glyph{
+  font-family:var(--serif);font-size:15px;color:var(--ink-3);letter-spacing:.3em;margin-bottom:10px;
+}
+.pod.first .rank-glyph{color:var(--t3)}
+.pod .avatar{width:52px;height:52px;font-size:24px;margin:0 auto 10px;border-radius:12px}
+.pod .nm{font-family:var(--serif);font-size:18px;font-weight:700;letter-spacing:.03em}
+.pod .xp{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);margin:4px 0 10px}
+.pod .ac{font-size:12px;color:var(--ink-3);display:flex;justify-content:center;gap:14px}
+.pod .ac b{font-family:var(--mono);color:var(--ink);font-weight:600}
+.rank-note{
+  display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--ink-2);
+  background:var(--card-2);border:1px dashed var(--line-2);border-radius:var(--r-card);
+  padding:11px 16px;margin-bottom:18px;
+}
+.rank-note::before{content:"※";color:var(--seal);flex:none;font-size:12px}
+.rk-user{display:flex;align-items:center;gap:10px}
+.rk-user .avatar{width:28px;height:28px;font-size:13px;border-radius:7px}
+.rk-user b{font-weight:600}
+.ac-cell{display:flex;align-items:center;gap:10px}
+.ac-cell .n{font-family:var(--mono);font-weight:600}
+.ac-cell .n small{color:var(--ink-3);font-weight:400}
+@media (max-width:900px){.podium{grid-template-columns:1fr}}
+
+/* ============================================================
+   屏 6 · 提交记录
+   ============================================================ */
+.dist{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);padding:13px 18px;border-top:1px solid var(--line);background:var(--card-2)}
+.dist b{font-family:var(--mono);color:var(--ink)}
+.dist .d{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+.lang{font-family:var(--mono);font-size:12px;color:var(--ink-2);background:var(--paper-2);border-radius:var(--r-chip);padding:2px 7px}
+.score-cell{display:flex;align-items:center;gap:9px}
+.score-cell .sc{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);min-width:32px}
+
+/* ============================================================
+   屏 7 · 登录
+   ============================================================ */
+.login-stage{min-height:calc(100vh - 46px);display:grid;place-items:center;padding:60px 20px}
+.login-card{
+  display:grid;grid-template-columns:300px 400px;max-width:100%;
+  border-radius:10px;overflow:hidden;box-shadow:0 30px 70px -40px rgba(36,30,17,.55);
+  border:1px solid var(--line-2);
+}
+.login-art{
+  position:relative;background:linear-gradient(160deg,#B7371F 0%,#8F2712 100%);
+  color:#FFF3E4;padding:34px 30px;display:flex;flex-direction:column;overflow:hidden;
+}
+.login-art::after{
+  content:"";position:absolute;inset:14px;border:1px solid rgba(255,243,228,.3);border-radius:6px;pointer-events:none;
+}
+.login-art .big-seal{
+  width:74px;height:74px;border-radius:14px;background:rgba(255,243,228,.12);
+  border:1.5px solid rgba(255,243,228,.55);
+  display:grid;place-items:center;font-family:var(--serif);font-size:42px;font-weight:700;
+  margin-bottom:26px;box-shadow:inset 0 0 0 4px rgba(183,55,31,.5);
+}
+.login-art .verse{
+  writing-mode:vertical-rl;font-family:var(--serif);font-size:19px;letter-spacing:.42em;
+  line-height:2.3;height:280px;margin:0 auto;
+}
+.login-art .wordmark{margin-top:auto;font-family:var(--serif);letter-spacing:.3em;font-size:13px;opacity:.85}
+.login-form{background:var(--card);padding:40px 42px 34px}
+.login-form h2{font-family:var(--serif);font-size:25px;letter-spacing:.06em;margin-bottom:4px}
+.login-form .sub{font-size:13px;color:var(--ink-2);margin-bottom:26px}
+.lf-field{margin-bottom:16px}
+.lf-field label{display:block;font-size:12px;color:var(--ink-2);letter-spacing:.18em;margin-bottom:7px}
+.lf-field .field{height:42px}
+.lf-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;font-size:12.5px}
+.lf-row a{color:var(--ink-2)}
+.lf-row a:hover{color:var(--seal)}
+.lf-row .keep{display:flex;align-items:center;gap:7px;color:var(--ink-2);cursor:pointer}
+.lf-row .keep .box{width:15px;height:15px;border:1px solid var(--line-2);border-radius:3px;background:var(--card);display:inline-grid;place-items:center}
+.lf-row .keep.on .box{background:var(--seal);border-color:var(--seal);color:#FFF6EC;font-size:10px}
+.login-form .btn.blk{height:44px;font-size:15px;letter-spacing:.24em}
+.lf-foot{margin-top:20px;padding-top:18px;border-top:1px dashed var(--line);font-size:12.5px;color:var(--ink-2);text-align:center}
+.lf-foot a{color:var(--seal);font-weight:600}
+.lf-foot a:hover{text-decoration:underline;text-underline-offset:4px}
+.lf-lock{margin-top:14px;font-size:11.5px;color:var(--ink-3);text-align:center;letter-spacing:.05em}
+@media (max-width:760px){.login-card{grid-template-columns:1fr}.login-art{display:none}}
+
+/* ============================================================
+   屏 8 · 设计说明
+   ============================================================ */
+.spec-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.spec-card{padding:22px 24px}
+.spec-card h3{font-family:var(--serif);font-size:16px;letter-spacing:.08em;margin-bottom:16px;display:flex;gap:9px;align-items:center}
+.spec-card h3::before{content:"";width:7px;height:7px;background:var(--seal)}
+.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.sw{text-align:center;font-size:11px;color:var(--ink-2)}
+.sw .box{height:52px;border-radius:5px;border:1px solid var(--line);margin-bottom:6px;display:grid;place-items:center;font-family:var(--mono);font-size:10.5px;color:rgba(255,255,255,.85)}
+.sw.light .box{color:var(--ink-2)}
+.type-spec .row{display:flex;align-items:baseline;gap:18px;padding:10px 0;border-top:1px solid var(--line);overflow:hidden}
+.type-spec .row:first-of-type{border-top:none}
+.type-spec .tag{font-size:11px;color:var(--ink-3);width:64px;flex:none;letter-spacing:.1em}
+.spec-list li{list-style:none;padding:9px 0 9px 22px;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink-2);position:relative}
+.spec-list li:first-child{border-top:none}
+.spec-list li::before{content:attr(data-n);position:absolute;left:0;top:9px;font-family:var(--serif);color:var(--seal);font-size:12.5px}
+.spec-list b{color:var(--ink)}
+.comp-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.comp-row:first-of-type{border-top:none}
+.comp-row .cap{font-size:11.5px;color:var(--ink-3);width:58px;flex:none;letter-spacing:.08em}
+@media (max-width:900px){.spec-grid{grid-template-columns:1fr}}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none !important;transition:none !important}
+}
+</style>
+</head>
+<body data-scr="home">
+
+<!-- ═══════════ 预览器工具条（非产品设计） ═══════════ -->
+<div class="pv">
+  <div class="pv-brand"><i class="dot"></i><b>SOJ 界面重设计</b><span>纸墨 · 浅色 · 预览稿 v2</span></div>
+  <div class="pv-tabs" id="pvTabs">
+    <button data-go="home" class="on"><i>1</i>首页</button>
+    <button data-go="problems"><i>2</i>题库</button>
+    <button data-go="detail"><i>3</i>题目详情</button>
+    <button data-go="contests"><i>4</i>比赛与作业</button>
+    <button data-go="rank"><i>5</i>排名</button>
+    <button data-go="subs"><i>6</i>提交记录</button>
+    <button data-go="login"><i>7</i>登录</button>
+    <button data-go="spec"><i>8</i>设计说明</button>
+  </div>
+  <div class="pv-note">静态设计预览 · 深色模式暂未包含 · 数字键或方向键切换</div>
+</div>
+
+<!-- ═══════════ 报头 ═══════════ -->
+<header class="mast">
+  <div class="wrap mast-in">
+    <a class="brand" href="#" data-go="home">
+      <span class="brand-seal">判</span>
+      <span><b>SOJ</b><small>在线判题 · 班级与社团</small></span>
+    </a>
+    <nav class="nav">
+      <a data-go="home" class="on">首页</a>
+      <a data-go="problems">题库</a>
+      <a data-go="contests">比赛</a>
+      <a data-toast="「班级」页未包含在本预览中">班级</a>
+      <a data-go="rank">排名</a>
+      <a data-go="subs">提交记录</a>
+    </nav>
+    <div class="mast-act">
+      <button class="icon-btn" data-toast="全站搜索未包含在本预览中">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        搜索
+      </button>
+      <button class="icon-btn" data-toast="「管理后台」未包含在本预览中">管理后台</button>
+      <button class="user-chip" data-toast="个人菜单未包含在本预览中">
+        <span class="avatar" style="background:var(--t2-bg);color:var(--t2)">时</span>
+        <span class="uname">时雨</span>
+        <span class="chip tier t2">白银</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- ═══════════ 屏 1 · 首页 ═══════════ -->
+<section class="screen on" id="scr-home">
+  <div class="hero">
+    <div>
+      <div class="kicker">SOJ · 纸上判题</div>
+      <h1>每一次提交，<br/>都值得<em>一次认真的批改</em>。</h1>
+      <p>面向班级与社团的轻量在线判题：作业即时出分、考试 OI 赛制、主题库比赛与解题排名，都摊在同一张干净的纸面上。</p>
+      <div class="cta">
+        <button class="btn pri" data-go="problems">进入题库
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <button class="btn line" data-go="contests">进行中的考试与比赛</button>
+      </div>
+      <div class="fineprint">支持 C / C++14 / Python3 · 沙箱判题 · 全文与宽容比对 · 自定义 checker</div>
+    </div>
+    <div class="card judge">
+      <div class="judge-head"><span class="live"></span><b>判题队列</b><span>实时</span></div>
+      <div class="judge-col"><span>时间</span><span>提交者</span><span>题目</span><span>结果</span></div>
+      <div class="judge-list" id="judgeList"></div>
+      <div class="judge-foot">
+        <span>今日 <b>214</b> 次</span><span>平均 <b>0.8s</b></span><span>队列 <b>0</b></span><span>判题器 <b>在线</b></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="v">26<small>题</small></div><div class="k">题库</div></div>
+    <div class="stat"><div class="v">3,214<small>次</small></div><div class="k">累计提交</div></div>
+    <div class="stat"><div class="v">86<small>人</small></div><div class="k">注册用户</div></div>
+    <div class="stat"><div class="v">147<small>次</small></div><div class="k">今日 AC</div></div>
+  </div>
+
+  <div class="cols">
+    <div>
+      <div class="h-sec">
+        <div class="sec-head"><h2>正在进行</h2><span class="tail"></span><a class="more" data-go="contests">全部 →</a></div>
+        <div class="card event">
+          <div class="stamp"><div class="m">10·24</div><div class="d">截止 10·26</div></div>
+          <div class="mid">
+            <div class="line1"><span class="badge exam">考试</span><b>初赛模拟 · 第一场</b></div>
+            <div class="line2"><span>初一信息组 · OI 赛制</span><span class="mono">3 题 · 32 人已进入</span><span class="mono cd-inline" data-cd="4512000"></span></div>
+          </div>
+          <div class="prog">
+            <div class="bar"><i style="width:62%"></i></div>
+            <div class="cap"><span>已进行 62%</span><span>01:15:12</span></div>
+          </div>
+        </div>
+        <div class="card event">
+          <div class="stamp"><div class="m">10·22</div><div class="d">截止 10·27</div></div>
+          <div class="mid">
+            <div class="line1"><span class="badge work">作业</span><b>周末刷题 · 循环结构</b></div>
+            <div class="line2"><span>信息社团</span><span class="mono">6 题 · 18/24 人完成</span><span class="mono">即时出分</span></div>
+          </div>
+          <div class="prog">
+            <div class="bar"><i style="width:75%"></i></div>
+            <div class="cap"><span>完成度 75%</span><span>剩 2 天</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="h-sec">
+        <div class="sec-head"><h2>题库上新</h2><span class="tail"></span><a class="more" data-go="problems">全部 →</a></div>
+        <div class="card fresh">
+          <div class="fresh-row"><span class="no">壹</span><span class="pid">#1009</span><a class="ti" data-go="detail">求和</a><span class="chip tier t1">青铜</span><span class="rt mono">2 小时前</span></div>
+          <div class="fresh-row"><span class="no">贰</span><span class="pid">#1008</span><a class="ti" data-go="detail">A+B problem</a><span class="chip tier t1">青铜</span><span class="rt mono">昨天</span></div>
+          <div class="fresh-row"><span class="no">叁</span><span class="pid">#1007</span><a class="ti" data-go="detail">计算长方形的周长及面积（无输入）</a><span class="chip tier t1">青铜</span><span class="rt mono">昨天</span></div>
+          <div class="fresh-row"><span class="no">肆</span><span class="pid">#1006</span><a class="ti" data-go="detail">牧场</a><span class="chip tier t2">白银</span><span class="rt mono">3 天前</span></div>
+          <div class="fresh-row"><span class="no">伍</span><span class="pid">#1005</span><a class="ti" data-go="detail">分梨</a><span class="chip tier t1">青铜</span><span class="rt mono">上周</span></div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="rail">
+      <div class="card rail-card">
+        <h3>今日之星</h3>
+        <div class="mini-rank-row"><span class="rk">壹</span><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t5-bg);color:var(--t5);border-radius:6px">林</span><span class="nm">林小满 <span class="chip tier t5" style="margin-left:5px">钻石</span></span><span class="xp">+820</span></div>
+        <div class="mini-rank-row"><span class="rk">贰</span><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t4-bg);color:var(--t4);border-radius:6px">陈</span><span class="nm">陈一诺 <span class="chip tier t4" style="margin-left:5px">铂金</span></span><span class="xp">+610</span></div>
+        <div class="mini-rank-row"><span class="rk">叁</span><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t4-bg);color:var(--t4);border-radius:6px">周</span><span class="nm">周子墨 <span class="chip tier t4" style="margin-left:5px">铂金</span></span><span class="xp">+540</span></div>
+        <div class="mini-rank-row"><span class="rk">肆</span><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t3-bg);color:var(--t3);border-radius:6px">沈</span><span class="nm">沈星河 <span class="chip tier t3" style="margin-left:5px">黄金</span></span><span class="xp">+465</span></div>
+        <div class="mini-rank-row"><span class="rk">伍</span><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t3-bg);color:var(--t3);border-radius:6px">顾</span><span class="nm">顾念安 <span class="chip tier t3" style="margin-left:5px">黄金</span></span><span class="xp">+380</span></div>
+      </div>
+      <div class="card rail-card announce">
+        <h3>公告</h3>
+        <a><span class="dt">10·24</span>初赛模拟第一场 18:30 开考，请提前 10 分钟入场</a>
+        <a><span class="dt">10·20</span>题库新增「循环结构」专题 6 题，配合本周作业食用</a>
+        <a><span class="dt">10·18</span>判题机例行维护完成，编译等待时间已恢复正常</a>
+      </div>
+      <div class="card rail-card">
+        <h3>新同学三步走</h3>
+        <div class="steps">
+          <div class="step"><span><b>注册账号</b>：右上角登录页一键注册，开放注册中。</span></div>
+          <div class="step"><span><b>题库选题</b>：从青铜难度开始，按标签循序渐进。</span></div>
+          <div class="step"><span><b>提交即判</b>：贴上代码，沙箱秒级批改，AC 即得经验。</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ═══════════ 屏 2 · 题库 ═══════════ -->
+<section class="screen" id="scr-problems">
+  <div class="page-head">
+    <div>
+      <h1>题库</h1>
+      <div class="sub">共 <b>26</b> 题 · 你已通过 <b>3</b> 题，尝试过 <b>4</b> 题</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn line sm" data-toast="「导入题包」未包含在本预览中">导入题包</button>
+      <button class="btn line sm" data-toast="「新建题目」未包含在本预览中">新建题目</button>
+    </div>
+  </div>
+
+  <div class="card filter-card">
+    <div class="filter-row">
+      <div class="field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input placeholder="搜索题号或标题…"/>
+      </div>
+      <div class="field sel">难度：全部</div>
+      <div class="field sel">标签：全部</div>
+      <div class="field sel">状态：全部</div>
+      <div class="field sel">我的：全部</div>
+    </div>
+    <div class="qtags">
+      <span class="lbl">速选</span>
+      <span class="chip qtag on">入门</span>
+      <span class="chip qtag">顺序结构</span>
+      <span class="chip qtag">分支结构</span>
+      <span class="chip qtag">循环结构</span>
+      <span class="chip qtag">数组</span>
+      <span class="chip qtag">字符串</span>
+      <span class="chip qtag">模拟</span>
+      <span class="chip qtag">排序</span>
+      <span class="chip qtag on">我未通过的</span>
+      <span class="chip qtag">我通过的</span>
+    </div>
+  </div>
+
+  <div class="card tblwrap">
+    <table class="tbl">
+      <thead>
+        <tr><th style="width:64px">状态</th><th style="width:76px">题号</th><th>题目</th><th style="width:88px">难度</th><th style="width:200px">标签</th><th style="width:130px">通过率</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="st ac">✓</span></td>
+          <td class="num">#1000</td>
+          <td><a class="ptitle" data-go="detail">卖皮鞋<span class="arrow">→</span></a></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="tags-cell"><span class="chip">顺序结构</span></div></td>
+          <td><div class="rate-cell"><span class="meter"><i style="width:89%"></i></span><span class="num">89%</span></div></td>
+        </tr>
+        <tr>
+          <td><span class="st ac">✓</span></td>
+          <td class="num">#1001</td>
+          <td><a class="ptitle" data-go="detail">两个数的和<span class="arrow">→</span></a></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="tags-cell"><span class="chip">顺序结构</span><span class="chip">模拟</span></div></td>
+          <td><div class="rate-cell"><span class="meter"><i style="width:86%"></i></span><span class="num">86%</span></div></td>
+        </tr>
+        <tr>
+          <td><span class="st wa">✗</span></td>
+          <td class="num">#1002</td>
+          <td><a class="ptitle" data-go="detail">两个数的和II<span class="arrow">→</span></a></td>
+          <td><span class="chip tier t2">白银</span></td>
+          <td><div class="tags-cell"><span class="chip">顺序结构</span><span class="chip">高精度</span></div></td>
+          <td><div class="rate-cell"><span class="meter"><i style="width:41%"></i></span><span class="num">41%</span></div></td>
+        </tr>
+        <tr>
+          <td><span class="st na">·</span></td>
+          <td class="num">#1003</td>
+          <td><a class="ptitle" data-go="detail">三个数的和<span class="arrow">→</span></a></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="tags-cell"><span class="chip">顺序结构</span></div></td>
+          <td><div class="rate-cell"><span class="meter"><i style="width:90%"></i></span><span class="num">90%</span></div></td>
+        </tr>
+        <tr>
+          <td><span class="st na">·</span></td>
+          <td class="num">#1004</td>
+          <td><a class="ptitle" data-go="detail">两个数的乘积<span class="arrow">→</span></a></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="tags-cell"><span class="chip">顺序结构</span></div></td>
+          <td><div class="rate-cell"><span class="meter"><i style="width:88%"></i></span><span class="num">88%</span></div></td>
+        </tr>
+        <tr>
+          <td><span class="st na">·</span></td>
+          <td class="num">#1005</td>
+          <td><a class="ptitle" data-go="detail">分梨<span class="arrow">→</span></a></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="tags-cell"><span class="chip">顺序结构</span><span class="chip">入门</span></div></td>
+          <td><div class="rate-cell"><span class="meter"><i style="width:72%"></i></span><span class="num">72%</span></div></td>
+        </tr>
+        <tr>
+          <td><span class="st ac">✓</span></td>
+          <td class="num">#1008</td>
+          <td><a class="ptitle" data-go="detail">A+B problem<span class="arrow">→</span></a></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="tags-cell"><span class="chip">入门</span></div></td>
+          <td><div class="rate-cell"><span class="meter"><i style="width:95%"></i></span><span class="num">95%</span></div></td>
+        </tr>
+        <tr>
+          <td><span class="st na">·</span></td>
+          <td class="num">#1009</td>
+          <td><a class="ptitle" data-go="detail">求和<span class="arrow">→</span></a></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="tags-cell"><span class="chip">循环结构</span><span class="chip">入门</span></div></td>
+          <td><div class="rate-cell"><span class="meter"><i style="width:81%"></i></span><span class="num">81%</span></div></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="pager">
+      <span>第 1 / 2 页 · 每页 20 题</span>
+      <div class="pages">
+        <button>‹</button><button class="on">1</button><button>2</button><button>›</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 屏 3 · 题目详情 ═══════════ -->
+<section class="screen" id="scr-detail">
+  <div class="crumb"><a data-go="problems">题库</a><span class="sep">/</span><span class="mono">#1005</span><span class="sep">/</span>分梨</div>
+  <div class="pd-head">
+    <span class="pid">#1005</span>
+    <h1>分梨</h1>
+    <span class="chip tier t1">青铜</span>
+    <span class="chip">顺序结构</span>
+    <span class="chip">入门</span>
+  </div>
+
+  <div class="pd-cols">
+    <article class="card stmt">
+      <h3><span class="no">一、</span>题目描述</h3>
+      <p>秋天到了，果园里的梨子熟了。王老师从果园摘回了 <b class="mono">N</b> 个梨，准备分给班上的小朋友们。</p>
+      <p>每位小朋友分得同样多的梨，且每人恰好分 <b class="mono">K</b> 个。王老师想知道：这 <b class="mono">N</b> 个梨最多能分给几位小朋友，分完后还剩下几个梨？</p>
+
+      <h3><span class="no">二、</span>输入格式</h3>
+      <p>一行，两个整数 <b class="mono">N</b> 和 <b class="mono">K</b>，中间用一个空格分隔。</p>
+
+      <h3><span class="no">三、</span>输出格式</h3>
+      <p>一行，两个整数，依次为能分到梨的小朋友人数和剩下的梨的个数，中间用一个空格分隔。</p>
+
+      <h3><span class="no">四、</span>样例</h3>
+      <div class="io" style="margin-bottom:14px">
+        <div class="sample">
+          <div class="cap"><span>样例 1 · 输入</span><button data-toast="已复制到剪贴板">复制</button></div>
+          <pre>10 3</pre>
+        </div>
+        <div class="sample">
+          <div class="cap"><span>样例 1 · 输出</span><button data-toast="已复制到剪贴板">复制</button></div>
+          <pre>3 1</pre>
+        </div>
+      </div>
+      <div class="io">
+        <div class="sample">
+          <div class="cap"><span>样例 2 · 输入</span><button data-toast="已复制到剪贴板">复制</button></div>
+          <pre>100 7</pre>
+        </div>
+        <div class="sample">
+          <div class="cap"><span>样例 2 · 输出</span><button data-toast="已复制到剪贴板">复制</button></div>
+          <pre>14 2</pre>
+        </div>
+      </div>
+
+      <h3><span class="no">五、</span>数据范围与约定</h3>
+      <div class="range">
+        对于 100% 的数据，<b class="mono">1 ≤ N ≤ 10<sup>9</sup></b>，<b class="mono">1 ≤ K ≤ 10<sup>9</sup></b>。<br/>
+        本题采用<b>全文比对</b>：输出须与标准答案完全一致，行末多余空格将被判为错误。
+      </div>
+    </article>
+
+    <aside class="pd-rail">
+      <div class="card rail-card">
+        <h3>教师入口</h3>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <button class="btn line blk sm" data-toast="「编辑题目」未包含在本预览中">编辑题目</button>
+          <div style="display:flex;gap:9px">
+            <button class="btn line sm" style="flex:1" data-toast="「批量重测」未包含在本预览中">批量重测</button>
+            <button class="btn line sm" style="flex:1" data-toast="「下载题包」未包含在本预览中">下载题包</button>
+          </div>
+        </div>
+      </div>
+      <div class="card rail-card">
+        <h3>操作</h3>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <button class="btn pri blk" data-go="subs">提交代码</button>
+          <button class="btn line blk" data-toast="「在线编程」未包含在本预览中">在线编程</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--ink-3);margin-top:10px">在线编程将自动预填本题代码模板</div>
+      </div>
+      <div class="card rail-card">
+        <h3>本题信息</h3>
+        <div class="info-row"><span class="k">时间限制</span><span class="v mono">1.00 s</span></div>
+        <div class="info-row"><span class="k">内存限制</span><span class="v mono">256 MB</span></div>
+        <div class="info-row"><span class="k">判题模式</span><span class="v">全文比对</span></div>
+        <div class="info-row"><span class="k">难度</span><span class="v"><span class="chip tier t1">青铜</span></span></div>
+        <div class="info-row"><span class="k">通过 / 提交</span><span class="v mono">41 / 112</span></div>
+        <div class="info-row" style="display:block">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span class="k">通过率</span><span class="v mono">37%</span></div>
+          <span class="meter" style="width:100%"><i style="width:37%"></i></span>
+        </div>
+        <div class="info-row"><span class="k">创建者</span><span class="v">王老师</span></div>
+      </div>
+      <div class="card rail-card">
+        <h3>我的提交</h3>
+        <div class="mysub"><span class="sid">#2896</span><span class="vd ac">AC</span><span class="mono" style="font-size:12px;color:var(--ink-2)">100 · 4ms</span><span class="tm">3 小时前</span></div>
+        <div class="mysub"><span class="sid">#2890</span><span class="vd wa">WA</span><span class="mono" style="font-size:12px;color:var(--ink-2)">20 · 4ms</span><span class="tm">昨天</span></div>
+        <div class="mysub"><span class="sid">#2884</span><span class="vd tle">TLE</span><span class="mono" style="font-size:12px;color:var(--ink-2)">30 · 1.0s</span><span class="tm">昨天</span></div>
+        <a class="btn ghost sm" style="margin-top:8px" data-go="subs">查看全部 →</a>
+      </div>
+      <div class="note-card">
+        <b>判题说明</b>：提交后由沙箱即时评测；考试期间采用 OI 赛制，考时只记次数不出分，考后统一放榜。
+      </div>
+    </aside>
+  </div>
+</section>
+
+<!-- ═══════════ 屏 4 · 比赛与作业 ═══════════ -->
+<section class="screen" id="scr-contests">
+  <div class="page-head">
+    <div>
+      <h1>比赛与作业</h1>
+      <div class="sub">班级作业即时出分 · 班级考试 OI 赛制 · 主题库比赛</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="btn line sm" data-toast="「新建」未包含在本预览中">新建</button>
+    </div>
+  </div>
+
+  <div class="status-tabs" id="evTabs">
+    <button data-st="live" class="on">进行中<i>3</i></button>
+    <button data-st="soon">未开始<i>2</i></button>
+    <button data-st="done">已结束<i>4</i></button>
+    <button data-st="all">全部<i>9</i></button>
+  </div>
+
+  <div class="card live-banner">
+    <div class="lb-mid">
+      <div class="line1"><span class="badge contest">比赛</span><b>NOIP 模拟赛 · 第二场</b><span class="badge exam" style="height:18px;font-size:10px">OI 赛制</span></div>
+      <div class="line2">
+        <span>全校 · 主题库</span>
+        <span class="mono">4 题 · 32 人已参赛</span>
+        <span class="mono">10·24 18:00 — 21:00</span>
+      </div>
+    </div>
+    <div class="lb-prog">
+      <div class="bar"><i style="width:62%"></i></div>
+      <div class="cap"><span>已进行 62%</span><span>02 题 / 4 题</span></div>
+    </div>
+    <div class="count">
+      <div class="cd" data-cd="4962000">01:22:42</div>
+      <div class="cap">距结束</div>
+    </div>
+    <button class="btn pri" data-toast="「进入比赛」未包含在本预览中">进入</button>
+  </div>
+
+  <div class="ev-grid" id="evGrid">
+    <div class="card ev-card" data-st="live">
+      <div class="top"><span class="badge exam">考试</span><h3>初赛模拟 · 第一场</h3></div>
+      <div class="meta"><span>初一信息组</span><span class="mono">3 题 · OI 赛制</span><span class="mono">10·24 — 10·24</span></div>
+      <div class="bottom">
+        <span class="who mono">32 人已进入</span>
+        <span class="badge exam">进行中 · 01:15 后结束</span>
+      </div>
+    </div>
+    <div class="card ev-card" data-st="live">
+      <div class="top"><span class="badge work">作业</span><h3>周末刷题 · 循环结构</h3></div>
+      <div class="meta"><span>信息社团</span><span class="mono">6 题 · 即时出分</span><span class="mono">10·22 — 10·27</span></div>
+      <div class="bottom">
+        <span class="who mono">18 / 24 人完成</span>
+        <span class="badge work">进行中 · 剩 3 天</span>
+      </div>
+    </div>
+    <div class="card ev-card" data-st="live">
+      <div class="top"><span class="badge work">作业</span><h3>数组专题练习</h3></div>
+      <div class="meta"><span>初二信息组</span><span class="mono">5 题 · 即时出分</span><span class="mono">10·20 — 10·26</span></div>
+      <div class="bottom">
+        <span class="who mono">11 / 19 人完成</span>
+        <span class="badge work">进行中 · 剩 2 天</span>
+      </div>
+    </div>
+    <div class="card ev-card" data-st="soon">
+      <div class="top"><span class="badge exam">考试</span><h3>期中测验 · 顺序与分支</h3></div>
+      <div class="meta"><span>初一信息组</span><span class="mono">3 题 · OI 赛制</span><span class="mono">10·26 18:30 开考</span></div>
+      <div class="bottom">
+        <span class="who mono">名单 32 人</span>
+        <span class="badge soon">未开始</span>
+      </div>
+    </div>
+    <div class="card ev-card" data-st="soon">
+      <div class="top"><span class="badge contest">比赛</span><h3>主题库 · 蓝桥杯基础</h3></div>
+      <div class="meta"><span>全校 · 主题库</span><span class="mono">8 题 · 赛后隐藏 1 天</span><span class="mono">10·28 14:00 开赛</span></div>
+      <div class="bottom">
+        <span class="who mono">已报名 21 人</span>
+        <span class="badge soon">未开始</span>
+      </div>
+    </div>
+    <div class="card ev-card dim" data-st="done">
+      <div class="top"><span class="badge work">作业</span><h3>国庆七天乐</h3></div>
+      <div class="meta"><span>信息社团</span><span class="mono">7 题 · 即时出分</span><span class="mono">10·01 — 10·08</span></div>
+      <div class="bottom">
+        <span class="who mono">22 / 24 人完成</span>
+        <span class="badge done">已结束 · 成绩已发布</span>
+      </div>
+    </div>
+    <div class="card ev-card dim" data-st="done">
+      <div class="top"><span class="badge contest">比赛</span><h3>九月月赛</h3></div>
+      <div class="meta"><span>全校 · 主题库</span><span class="mono">5 题 · OI 赛制</span><span class="mono">09·28 — 09·28</span></div>
+      <div class="bottom">
+        <span class="who mono">28 人参赛</span>
+        <span class="badge done">已结束 · 榜单可查</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 屏 5 · 排名 ═══════════ -->
+<section class="screen" id="scr-rank">
+  <div class="page-head">
+    <div>
+      <h1>排名</h1>
+      <div class="sub">按 AC 题数排序，同数比经验值 · 题库共 <b>26</b> 题</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="field sel" style="width:120px">全部班级</div>
+    </div>
+  </div>
+
+  <div class="podium">
+    <div class="card pod second">
+      <div class="rank-glyph">贰</div>
+      <div class="avatar" style="background:var(--t4-bg);color:var(--t4)">陈</div>
+      <div class="nm">陈一诺</div>
+      <div class="xp">17,440 经验</div>
+      <div class="ac"><span><b>23</b> / 26 AC</span><span>通过率 <b>88%</b></span></div>
+    </div>
+    <div class="card pod first">
+      <div class="rank-glyph">壹 · 今日榜首</div>
+      <div class="avatar" style="background:var(--t5-bg);color:var(--t5)">林</div>
+      <div class="nm">林小满</div>
+      <div class="xp">18,920 经验</div>
+      <div class="ac"><span><b>24</b> / 26 AC</span><span>通过率 <b>92%</b></span></div>
+    </div>
+    <div class="card pod third">
+      <div class="rank-glyph">叁</div>
+      <div class="avatar" style="background:var(--t4-bg);color:var(--t4)">周</div>
+      <div class="nm">周子墨</div>
+      <div class="xp">16,210 经验</div>
+      <div class="ac"><span><b>22</b> / 26 AC</span><span>通过率 <b>85%</b></span></div>
+    </div>
+  </div>
+
+  <div class="rank-note">
+    比赛与考试隐藏期内的成绩不会出现在公开榜单，防止赛中互相推测名次；等级随题目难度加权经验实时聚合，调难度全员等级自动跟随。
+  </div>
+
+  <div class="card tblwrap">
+    <table class="tbl">
+      <thead>
+        <tr><th style="width:56px">名次</th><th>用户</th><th style="width:170px">等级</th><th style="width:190px">AC 题数</th><th style="width:120px">经验值</th><th style="width:100px">通过率</th><th style="width:110px">最近活跃</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num" style="font-family:var(--serif)">壹</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t5-bg);color:var(--t5)">林</span><b>林小满</b></div></td>
+          <td><span class="chip tier t5">钻石</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:92%;background:var(--t5)"></i></span><span class="n">24<small> / 26</small></span></div></td>
+          <td class="num">18,920</td><td class="num">92%</td><td style="color:var(--ink-3);font-size:12.5px">12 分钟前</td>
+        </tr>
+        <tr>
+          <td class="num" style="font-family:var(--serif)">贰</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t4-bg);color:var(--t4)">陈</span><b>陈一诺</b></div></td>
+          <td><span class="chip tier t4">铂金</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:88%;background:var(--t4)"></i></span><span class="n">23<small> / 26</small></span></div></td>
+          <td class="num">17,440</td><td class="num">88%</td><td style="color:var(--ink-3);font-size:12.5px">25 分钟前</td>
+        </tr>
+        <tr>
+          <td class="num" style="font-family:var(--serif)">叁</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t4-bg);color:var(--t4)">周</span><b>周子墨</b></div></td>
+          <td><span class="chip tier t4">铂金</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:85%;background:var(--t4)"></i></span><span class="n">22<small> / 26</small></span></div></td>
+          <td class="num">16,210</td><td class="num">85%</td><td style="color:var(--ink-3);font-size:12.5px">1 小时前</td>
+        </tr>
+        <tr>
+          <td class="num">4</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t3-bg);color:var(--t3)">沈</span><b>沈星河</b></div></td>
+          <td><span class="chip tier t3">黄金</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:77%;background:var(--t3)"></i></span><span class="n">20<small> / 26</small></span></div></td>
+          <td class="num">13,850</td><td class="num">81%</td><td style="color:var(--ink-3);font-size:12.5px">2 小时前</td>
+        </tr>
+        <tr>
+          <td class="num">5</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t3-bg);color:var(--t3)">顾</span><b>顾念安</b></div></td>
+          <td><span class="chip tier t3">黄金</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:73%;background:var(--t3)"></i></span><span class="n">19<small> / 26</small></span></div></td>
+          <td class="num">12,970</td><td class="num">79%</td><td style="color:var(--ink-3);font-size:12.5px">3 小时前</td>
+        </tr>
+        <tr>
+          <td class="num">6</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t2-bg);color:var(--t2)">苏</span><b>苏折月</b></div></td>
+          <td><span class="chip tier t2">白银</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:65%;background:var(--t2)"></i></span><span class="n">17<small> / 26</small></span></div></td>
+          <td class="num">10,540</td><td class="num">74%</td><td style="color:var(--ink-3);font-size:12.5px">5 小时前</td>
+        </tr>
+        <tr>
+          <td class="num">7</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t2-bg);color:var(--t2)">时</span><b>时雨</b><span style="font-size:10.5px;color:var(--seal);border:1px solid var(--seal-line);border-radius:3px;padding:0 4px;margin-left:2px">我</span></div></td>
+          <td><span class="chip tier t2">白银</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:62%;background:var(--t2)"></i></span><span class="n">16<small> / 26</small></span></div></td>
+          <td class="num">9,880</td><td class="num">71%</td><td style="color:var(--ink-3);font-size:12.5px">26 分钟前</td>
+        </tr>
+        <tr>
+          <td class="num">8</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t2-bg);color:var(--t2)">江</span><b>江既白</b></div></td>
+          <td><span class="chip tier t2">白银</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:58%;background:var(--t2)"></i></span><span class="n">15<small> / 26</small></span></div></td>
+          <td class="num">9,120</td><td class="num">69%</td><td style="color:var(--ink-3);font-size:12.5px">昨天</td>
+        </tr>
+        <tr>
+          <td class="num">9</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t1-bg);color:var(--t1)">陆</span><b>陆知行</b></div></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:46%;background:var(--t1)"></i></span><span class="n">12<small> / 26</small></span></div></td>
+          <td class="num">6,340</td><td class="num">63%</td><td style="color:var(--ink-3);font-size:12.5px">昨天</td>
+        </tr>
+        <tr>
+          <td class="num">10</td>
+          <td><div class="rk-user"><span class="avatar" style="background:var(--t1-bg);color:var(--t1)">许</span><b>许清嘉</b></div></td>
+          <td><span class="chip tier t1">青铜</span></td>
+          <td><div class="ac-cell"><span class="meter"><i style="width:38%;background:var(--t1)"></i></span><span class="n">10<small> / 26</small></span></div></td>
+          <td class="num">5,090</td><td class="num">60%</td><td style="color:var(--ink-3);font-size:12.5px">3 天前</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="pager">
+      <span>第 1 / 5 页 · 共 86 人</span>
+      <div class="pages">
+        <button>‹</button><button class="on">1</button><button>2</button><button>3</button><button>›</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 屏 6 · 提交记录 ═══════════ -->
+<section class="screen" id="scr-subs">
+  <div class="page-head">
+    <div>
+      <h1>提交记录</h1>
+      <div class="sub">全站提交流水 · 教师与管理员可见</div>
+    </div>
+  </div>
+
+  <div class="card filter-card">
+    <div class="filter-row">
+      <div class="field sel" style="width:150px">题目：全部</div>
+      <div class="field sel" style="width:130px">结果：全部</div>
+      <div class="field sel" style="width:130px">语言：全部</div>
+      <div class="field">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input placeholder="搜索提交者…"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="card tblwrap">
+    <table class="tbl">
+      <thead>
+        <tr><th style="width:80px">编号</th><th style="width:130px">提交者</th><th>题目</th><th style="width:130px">结果</th><th style="width:96px">语言</th><th style="width:86px">用时</th><th style="width:96px">内存</th><th style="width:110px">提交时间</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="num">#3102</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t5-bg);color:var(--t5)">林</span><b style="font-size:13px">林小满</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1006 牧场</a></td>
+          <td><div class="score-cell"><span class="vd ac">AC</span><span class="sc">100</span></div></td>
+          <td><span class="lang">C++14</span></td><td class="num">12 ms</td><td class="num">640 KB</td><td style="color:var(--ink-3);font-size:12.5px">3 分钟前</td>
+        </tr>
+        <tr>
+          <td class="num">#3101</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t2-bg);color:var(--t2)">时</span><b style="font-size:13px">时雨</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1006 牧场</a></td>
+          <td><div class="score-cell"><span class="vd wa">WA</span><span class="sc">10</span></div></td>
+          <td><span class="lang">C++14</span></td><td class="num">8 ms</td><td class="num">612 KB</td><td style="color:var(--ink-3);font-size:12.5px">9 分钟前</td>
+        </tr>
+        <tr>
+          <td class="num">#3100</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t4-bg);color:var(--t4)">陈</span><b style="font-size:13px">陈一诺</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1005 分梨</a></td>
+          <td><div class="score-cell"><span class="vd ac">AC</span><span class="sc">100</span></div></td>
+          <td><span class="lang">C++14</span></td><td class="num">4 ms</td><td class="num">588 KB</td><td style="color:var(--ink-3);font-size:12.5px">21 分钟前</td>
+        </tr>
+        <tr>
+          <td class="num">#3099</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t4-bg);color:var(--t4)">周</span><b style="font-size:13px">周子墨</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1006 牧场</a></td>
+          <td><div class="score-cell"><span class="vd tle">TLE</span><span class="sc">40</span></div></td>
+          <td><span class="lang">Python3</span></td><td class="num">2.10 s</td><td class="num">31 MB</td><td style="color:var(--ink-3);font-size:12.5px">32 分钟前</td>
+        </tr>
+        <tr>
+          <td class="num">#3098</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t3-bg);color:var(--t3)">沈</span><b style="font-size:13px">沈星河</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1004 两个数的乘积</a></td>
+          <td><div class="score-cell"><span class="vd ac">AC</span><span class="sc">100</span></div></td>
+          <td><span class="lang">C</span></td><td class="num">8 ms</td><td class="num">604 KB</td><td style="color:var(--ink-3);font-size:12.5px">47 分钟前</td>
+        </tr>
+        <tr>
+          <td class="num">#3097</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t3-bg);color:var(--t3)">顾</span><b style="font-size:13px">顾念安</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1005 分梨</a></td>
+          <td><div class="score-cell"><span class="vd wa">WA</span><span class="sc">0</span></div></td>
+          <td><span class="lang">C++14</span></td><td class="num">5 ms</td><td class="num">596 KB</td><td style="color:var(--ink-3);font-size:12.5px">1 小时前</td>
+        </tr>
+        <tr>
+          <td class="num">#3096</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t2-bg);color:var(--t2)">苏</span><b style="font-size:13px">苏折月</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1003 三个数的和</a></td>
+          <td><div class="score-cell"><span class="vd ac">AC</span><span class="sc">100</span></div></td>
+          <td><span class="lang">Python3</span></td><td class="num">36 ms</td><td class="num">8.2 MB</td><td style="color:var(--ink-3);font-size:12.5px">1 小时前</td>
+        </tr>
+        <tr>
+          <td class="num">#3095</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t2-bg);color:var(--t2)">江</span><b style="font-size:13px">江既白</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1006 牧场</a></td>
+          <td><div class="score-cell"><span class="vd re">RE</span><span class="sc">0</span></div></td>
+          <td><span class="lang">C++14</span></td><td class="num">11 ms</td><td class="num">590 KB</td><td style="color:var(--ink-3);font-size:12.5px">2 小时前</td>
+        </tr>
+        <tr>
+          <td class="num">#3094</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t2-bg);color:var(--t2)">温</span><b style="font-size:13px">温叙</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1002 两个数的和II</a></td>
+          <td><div class="score-cell"><span class="vd ce">CE</span><span class="sc">—</span></div></td>
+          <td><span class="lang">C++14</span></td><td class="num">—</td><td class="num">—</td><td style="color:var(--ink-3);font-size:12.5px">2 小时前</td>
+        </tr>
+        <tr>
+          <td class="num">#3093</td>
+          <td><div class="rk-user" style="gap:8px"><span class="avatar" style="width:24px;height:24px;font-size:12px;background:var(--t1-bg);color:var(--t1)">陆</span><b style="font-size:13px">陆知行</b></div></td>
+          <td><a class="ptitle" data-go="detail">#1001 两个数的和</a></td>
+          <td><div class="score-cell"><span class="vd ac">AC</span><span class="sc">100</span></div></td>
+          <td><span class="lang">C++14</span></td><td class="num">4 ms</td><td class="num">580 KB</td><td style="color:var(--ink-3);font-size:12.5px">3 小时前</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="dist">
+      <span>本页 10 条：</span>
+      <span><i class="d" style="background:var(--ac)"></i>AC <b>4</b></span>
+      <span><i class="d" style="background:var(--wa)"></i>WA <b>2</b></span>
+      <span><i class="d" style="background:var(--tle)"></i>TLE <b>1</b></span>
+      <span><i class="d" style="background:var(--re)"></i>RE <b>1</b></span>
+      <span><i class="d" style="background:var(--ce)"></i>CE <b>1</b></span>
+      <span style="margin-left:auto">考试期间提交按 OI 赛制只记次数，考后统一出分</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 屏 7 · 登录 ═══════════ -->
+<section class="screen" id="scr-login">
+  <div class="login-stage">
+    <div class="login-card">
+      <div class="login-art">
+        <div class="big-seal">判</div>
+        <div class="verse">纸上得来终觉浅<br/>绝知此事要躬行</div>
+        <div class="wordmark">SOJ · 在线判题</div>
+      </div>
+      <div class="login-form">
+        <h2>登录 SOJ</h2>
+        <div class="sub">回到你的纸面，继续未完成的题。</div>
+        <div class="lf-field">
+          <label>用户名</label>
+          <div class="field"><input placeholder="用户名或邮箱"/></div>
+        </div>
+        <div class="lf-field">
+          <label>密码</label>
+          <div class="field"><input type="password" placeholder="8–64 位，区分大小写"/></div>
+        </div>
+        <div class="lf-row">
+          <span class="keep on" id="keepBox"><span class="box">✓</span>七天内免登录</span>
+          <a data-toast="「忘记密码」未包含在本预览中">忘记密码？</a>
+        </div>
+        <button class="btn pri blk" data-toast="登录演示：预览稿不包含真实登录">登 录</button>
+        <div class="lf-foot">还没有账号？<a data-toast="「注册」未包含在本预览中">注册开放中 · 前往注册</a></div>
+        <div class="lf-lock">连续 5 次失败将锁定 15 分钟</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 屏 8 · 设计说明 ═══════════ -->
+<section class="screen" id="scr-spec">
+  <div class="page-head">
+    <div>
+      <h1>设计说明</h1>
+      <div class="sub">「纸墨」方向的设计语言速查 · 浅色版</div>
+    </div>
+  </div>
+  <div class="spec-grid">
+    <div class="card spec-card">
+      <h3>色板</h3>
+      <div class="swatches">
+        <div class="sw"><div class="box" style="background:#F3EEE1;border-color:var(--line);color:var(--ink-2)">纸</div>#F3EEE1 纸面</div>
+        <div class="sw"><div class="box" style="background:#FFFDF6;border-color:var(--line);color:var(--ink-2)">卡</div>#FFFDF6 卡面</div>
+        <div class="sw"><div class="box" style="background:#241E11">墨</div>#241E11 墨</div>
+        <div class="sw"><div class="box" style="background:#B7371F">朱砂</div>#B7371F 品牌</div>
+        <div class="sw"><div class="box" style="background:#2E7D46">AC</div>#2E7D46 通过</div>
+        <div class="sw"><div class="box" style="background:#B3261E">WA</div>#B3261E 答案错</div>
+        <div class="sw"><div class="box" style="background:#96690A">TLE</div>#96690A 超时</div>
+        <div class="sw"><div class="box" style="background:#5B6270">RE/CE</div>#5B6270 运行/编译</div>
+      </div>
+    </div>
+    <div class="card spec-card">
+      <h3>字体三级</h3>
+      <div class="type-spec">
+        <div class="row"><span class="tag">标题 · 衬线</span><span class="serif" style="font-size:23px;font-weight:700;letter-spacing:.04em">判题纸墨 · 壹贰叁</span></div>
+        <div class="row"><span class="tag">正文 · 无衬线</span><span style="font-size:14px">面向班级与社团的轻量在线判题系统，正文使用系统无衬线字体。</span></div>
+        <div class="row"><span class="tag">数据 · 等宽</span><span class="mono" style="font-size:14px">#1005 · 1.00 s · 256 MB · 12 ms</span></div>
+      </div>
+    </div>
+    <div class="card spec-card">
+      <h3>判定与等级</h3>
+      <div class="comp-row"><span class="cap">判定</span><span class="vd ac">AC</span><span class="vd wa">WA</span><span class="vd tle">TLE</span><span class="vd re">RE</span><span class="vd ce">CE</span><span class="vd jg">判题中</span></div>
+      <div class="comp-row"><span class="cap">十档等级</span>
+        <span class="chip tier t1">青铜</span><span class="chip tier t2">白银</span><span class="chip tier t3">黄金</span><span class="chip tier t4">铂金</span><span class="chip tier t5">钻石</span><span class="chip tier t6">星耀</span>
+      </div>
+      <div class="comp-row"><span class="cap"></span>
+        <span class="chip tier t7">宗师</span><span class="chip tier t8">王者</span><span class="chip tier t9">传奇</span><span class="chip tier t10">极境</span>
+        <span style="font-size:12px;color:var(--ink-3)">难度档沿用同一命名与配色，浓度更低</span>
+      </div>
+      <div class="comp-row"><span class="cap">进度</span>
+        <span class="meter"><i style="width:37%"></i></span> 37%
+        <span class="meter"><i style="width:72%;background:var(--t4)"></i></span> 72%
+      </div>
+    </div>
+    <div class="card spec-card">
+      <h3>按钮与形状</h3>
+      <div class="comp-row"><span class="cap">按钮</span>
+        <button class="btn pri sm">主操作</button>
+        <button class="btn line sm">次操作</button>
+        <button class="btn ghost sm">文字链</button>
+      </div>
+      <div class="comp-row"><span class="cap">徽章</span>
+        <span class="badge exam">考试</span><span class="badge work">作业</span><span class="badge contest">比赛</span><span class="badge soon">未开始</span><span class="badge done">已结束</span>
+      </div>
+      <div class="comp-row"><span class="cap">圆角</span><span style="font-size:12.5px;color:var(--ink-2)">卡片 6px · 按钮与输入 4px · 徽章 3px —— 收敛的直角感，呼应纸面</span></div>
+    </div>
+    <div class="card spec-card" style="grid-column:1/-1">
+      <h3>版式原则</h3>
+      <ul class="spec-list">
+        <li data-n="一"><b>一张纸面</b>：整站只有「纸 / 卡」两层底色，不使用投影叠投影；层次靠发丝线（1px 暖灰）划分，像试卷的框线。</li>
+        <li data-n="二"><b>朱砂只做重点</b>：品牌红只出现在主按钮、激活态、印章与强调字上；正文与数据一律用墨色系，保证判题语义色（AC/WA/TLE…）不被品牌色淹没。</li>
+        <li data-n="三"><b>衬线做标题，等宽做数据</b>：中文标题用宋体系衬线传达「卷面感」；题号、时限、用时、经验值全部等宽对齐，扫读不跳。</li>
+        <li data-n="四"><b>编号即装饰</b>：区块用「壹贰叁」序号、题目用「一、二、三」分节，以排版细节代替插图装饰；徽章、角标一律矩形小圆角。</li>
+        <li data-n="五"><b>动效克制</b>：只有判题呼吸点、屏切换淡入与行内悬停三处动效，且整体尊重系统「减少动态效果」设置。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ═══════════ 页脚 ═══════════ -->
+<footer class="foot">
+  <div class="wrap foot-in">
+    <div class="l">
+      <span class="brand-seal">判</span>
+      <span>SOJ · 面向班级与社团的轻量在线判题</span>
+    </div>
+    <div class="r">
+      <a data-toast="「帮助」未包含在本预览中">帮助</a>
+      <a data-toast="「关于」未包含在本预览中">关于</a>
+      <a data-toast="备案号为占位示例">京ICP备00000000号-1</a>
+      <span>© 2026 SOJ</span>
+    </div>
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- 屏切换 ---------- */
+var ORDER = ["home","problems","detail","contests","rank","subs","login","spec"];
+var NAV_MAP = {home:"home",problems:"problems",contests:"contests",rank:"rank",subs:"subs"};
+function show(name){
+  var scr = document.getElementById("scr-" + name);
+  if(!scr) return;
+  document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("on"); });
+  scr.classList.add("on");
+  document.body.dataset.scr = name;
+  document.querySelectorAll("#pvTabs button").forEach(function(b){
+    b.classList.toggle("on", b.dataset.go === name);
+  });
+  document.querySelectorAll(".nav a").forEach(function(a){
+    a.classList.toggle("on", a.dataset.go === name);
+  });
+  window.scrollTo({top:0});
+}
+document.addEventListener("click", function(e){
+  var el = e.target.closest("[data-go],[data-toast]");
+  if(!el) return;
+  if(el.dataset.go) show(el.dataset.go);
+  else if(el.dataset.toast) toast(el.dataset.toast);
+});
+document.addEventListener("keydown", function(e){
+  if(e.target.tagName === "INPUT") return;
+  if(e.key >= "1" && e.key <= "8") show(ORDER[+e.key - 1]);
+  else if(e.key === "ArrowRight" || e.key === "ArrowLeft"){
+    var i = ORDER.indexOf(document.body.dataset.scr);
+    var n = (i + (e.key === "ArrowRight" ? 1 : -1) + ORDER.length) % ORDER.length;
+    show(ORDER[n]);
+  }
+});
+
+/* ---------- 提示浮层 ---------- */
+var toastEl = document.getElementById("toast"), toastTimer = null;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 2000);
+}
+
+/* ---------- 首页判题队列（演示动画） ---------- */
+var USERS = [["林","林小满"],["陈","陈一诺"],["周","周子墨"],["沈","沈星河"],["时","时雨"],["顾","顾念安"],["苏","苏折月"],["江","江既白"]];
+var PROBS = ["#1006 牧场","#1005 分梨","#1004 两个数的乘积","#1003 三个数的和","#1001 两个数的和"];
+var VERDICTS = [["ac","AC"],["ac","AC"],["wa","WA"],["tle","TLE"],["ac","AC"],["re","RE"]];
+var judgeList = document.getElementById("judgeList");
+var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function fmtClock(d){
+  return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0") + ":" + String(d.getSeconds()).padStart(2,"0");
+}
+function makeRow(now){
+  var u = USERS[Math.floor(Math.random()*USERS.length)];
+  var p = PROBS[Math.floor(Math.random()*PROBS.length)];
+  var parts = p.split(" ");
+  var div = document.createElement("div");
+  div.className = "judge-row";
+  div.innerHTML = '<span class="t">'+fmtClock(now)+'</span><span class="u">'+u[1]+'</span><span class="p"><b>'+parts[0]+'</b> '+parts[1]+'</span><span class="vd jg">…</span>';
+  return div;
+}
+function settle(row){
+  var v = VERDICTS[Math.floor(Math.random()*VERDICTS.length)];
+  var el = row.querySelector(".vd");
+  if(!el || !el.classList.contains("jg")) return;
+  el.className = "vd " + v[0];
+  el.textContent = v[1];
+}
+if(judgeList){
+  var now = new Date();
+  for(var i = 0; i < 5; i++){
+    var r = makeRow(new Date(now.getTime() - (5 - i) * 42000));
+    if(i > 2) settle(r);
+    judgeList.appendChild(r);
+  }
+  if(!reduceMotion){
+    setInterval(function(){
+      var rows = judgeList.querySelectorAll(".judge-row");
+      var pending = judgeList.querySelector(".vd.jg");
+      if(pending && Math.random() < 0.55){ settle(pending.closest(".judge-row")); return; }
+      var nr = makeRow(new Date());
+      judgeList.insertBefore(nr, rows[0]);
+      if(rows.length >= 5) judgeList.removeChild(rows[rows.length - 1]);
+      setTimeout(function(){ settle(nr); }, 900 + Math.random() * 1400);
+    }, 2300);
+  } else {
+    judgeList.querySelectorAll(".vd.jg").forEach(settle);
+  }
+}
+
+/* ---------- 倒计时（演示值） ---------- */
+var cds = document.querySelectorAll("[data-cd]");
+var deadlines = [];
+cds.forEach(function(el){
+  deadlines.push({ el: el, end: Date.now() + parseInt(el.dataset.cd, 10) });
+});
+function tickCd(){
+  deadlines.forEach(function(d){
+    var s = Math.max(0, Math.floor((d.end - Date.now()) / 1000));
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    d.el.textContent = (h > 0 ? String(h).padStart(2,"0") + ":" : "") + String(m).padStart(2,"0") + ":" + String(sec).padStart(2,"0");
+  });
+}
+if(deadlines.length && !reduceMotion){ tickCd(); setInterval(tickCd, 1000); }
+else if(deadlines.length){ tickCd(); }
+
+/* ---------- 速选标签开关 ---------- */
+document.querySelectorAll(".qtag").forEach(function(t){
+  t.addEventListener("click", function(){ t.classList.toggle("on"); });
+});
+
+/* ---------- 比赛状态页签 ---------- */
+document.querySelectorAll("#evTabs button").forEach(function(b){
+  b.addEventListener("click", function(){
+    document.querySelectorAll("#evTabs button").forEach(function(x){ x.classList.remove("on"); });
+    b.classList.add("on");
+    var st = b.dataset.st;
+    document.querySelectorAll("#evGrid .ev-card").forEach(function(c){
+      c.style.display = (st === "all" || c.dataset.st === st) ? "" : "none";
+    });
+    document.querySelector(".live-banner").style.display = (st === "all" || st === "live") ? "" : "none";
+  });
+});
+
+/* ---------- 登录「七天内免登录」 ---------- */
+var keep = document.getElementById("keepBox");
+if(keep) keep.addEventListener("click", function(){ keep.classList.toggle("on"); });
+</script>
+</body>
+</html>

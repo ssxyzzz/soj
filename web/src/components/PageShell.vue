@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 全站两列骨架：容器 1440px，主列自适应 + 右列 320px 固定；
+// 全站两列骨架：容器 1280px（v0.19 收窄，与 .page 同步），主列自适应 + 右列 320px 固定；
 // 可选「独立行」插槽位于两列之上、顶栏之下（比赛/考试做题页的赛程与切题行）。
 // 窄屏（<992px）右列折到主内容下方，信息不丢。未迁移的旧页面继续用各自的 .page 布局。
 </script>
@@ -22,7 +22,7 @@
 
 <style scoped>
 .page-shell {
-  max-width: 1440px;
+  max-width: 1280px;
   margin: 0 auto;
 }
 
@@ -39,6 +39,8 @@
 .main-col {
   flex: 1 1 auto;
   min-width: 0;
+  /* 同 .page：el-row gutter 负边距防外溢（clip 不建滚动容器，弹层均 teleport） */
+  overflow-x: clip;
 }
 
 .side-col {

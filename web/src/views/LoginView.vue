@@ -136,16 +136,21 @@ async function submitForgot() {
 </script>
 
 <template>
+  <!-- v0.19 登录页（web-design-v3.md §4.2）：全屏居中白卡，无导航；
+       背景透出 body 三层画布（渐变 + 光晕 + 青网格），逻辑与旧版零差异 -->
   <div class="login-page">
-    <el-card class="card">
-      <template #header>
-        <div class="tabs">
-          <el-radio-group v-model="mode">
-            <el-radio-button value="login">登录</el-radio-button>
-            <el-radio-button v-if="site.registerOpen" value="register">注册</el-radio-button>
-          </el-radio-group>
-        </div>
-      </template>
+    <div class="login-card">
+      <div class="login-brand">
+        <span class="brand-mark">S</span>
+        <span class="brand-word">SOJ</span>
+        <span class="login-sub">登录 SOJ，开始你的刷题之旅</span>
+      </div>
+      <div class="tabs">
+        <el-radio-group v-model="mode">
+          <el-radio-button value="login">登录</el-radio-button>
+          <el-radio-button v-if="site.registerOpen" value="register">注册</el-radio-button>
+        </el-radio-group>
+      </div>
       <el-form label-position="top" @keyup.enter="submit">
         <el-form-item label="用户名">
           <el-input v-model="form.username" placeholder="3-32 位字母/数字/下划线" />
@@ -169,14 +174,14 @@ async function submitForgot() {
         <el-form-item :label="mode === 'register' ? '密码（至少 8 位）' : '密码'">
           <el-input v-model="form.password" type="password" show-password placeholder="至少 8 位" />
         </el-form-item>
-        <el-button type="primary" plain class="submit" :loading="loading" @click="submit">
-          {{ mode === 'login' ? '登录' : '注册' }}
+        <el-button type="primary" class="submit" :loading="loading" @click="submit">
+          {{ mode === 'login' ? '登 录' : '注 册' }}
         </el-button>
         <div v-if="mode === 'login' && site.passwordResetEnabled" class="forgot-row">
           <el-link type="primary" :underline="false" @click="openForgot">忘记密码？</el-link>
         </div>
       </el-form>
-    </el-card>
+    </div>
 
     <!-- 忘记密码：用户名/邮箱 → 发码（防枚举统一提示）→ 验证码 + 新密码×2 -->
     <el-dialog v-model="fpOpen" title="找回密码" width="420px">
@@ -213,19 +218,108 @@ async function submitForgot() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--el-bg-color-page);
+  padding: 48px 20px;
+  /* v0.19：透出全局三层画布（原 --el-bg-color-page 实底移除） */
+  background: transparent;
 }
 
-.card {
-  width: 380px;
+.login-card {
+  width: 400px;
+  max-width: 100%;
+  background: #fff;
+  border: 1px solid var(--soj-line);
+  border-radius: 20px;
+  padding: 34px 34px 30px;
+  box-shadow:
+    0 1px 2px rgba(11, 31, 69, 0.04),
+    0 18px 48px rgba(11, 31, 69, 0.1);
+}
+
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+/* 品牌双色（与顶栏同款；此处独立 scoped 复刻一份，登录页无顶栏上下文） */
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
+  color: #fff;
+  font-size: 18px;
+  font-weight: var(--soj-fw-bold);
+  box-shadow: 0 8px 20px rgba(36, 85, 218, 0.3);
+}
+
+.brand-word {
+  font-size: 27px;
+  font-weight: var(--soj-fw-bold);
+  letter-spacing: 1px;
+  background: linear-gradient(
+    90deg,
+    #16a7d2 0%,
+    #1557b8 25%,
+    #2c5de0 50%,
+    #16a7d2 75%,
+    #1557b8 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: brand-flow 7s linear infinite;
+}
+
+@keyframes brand-flow {
+  to {
+    background-position: 220% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-word {
+    animation: none;
+    background-position: 50% 0;
+  }
+}
+
+.login-sub {
+  font-size: var(--soj-fs-small);
+  color: var(--el-text-color-secondary);
 }
 
 .tabs {
-  text-align: center;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+/* 分段切换胶囊化（登录/注册） */
+.tabs :deep(.el-radio-button__inner) {
+  border-radius: 0;
+  padding: 9px 26px;
+}
+
+.tabs :deep(.el-radio-button:first-child .el-radio-button__inner) {
+  border-radius: 999px 0 0 999px;
+}
+
+.tabs :deep(.el-radio-button:last-child .el-radio-button__inner) {
+  border-radius: 0 999px 999px 0;
 }
 
 .submit {
   width: 100%;
+  height: 46px;
+  font-size: var(--soj-fs-section);
 }
 
 .code-row {

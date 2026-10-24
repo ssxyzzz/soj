@@ -66,9 +66,11 @@ function onCommand(command: string) {
   <el-container class="layout">
     <el-header class="header">
       <div class="header-inner">
+        <!-- 品牌双色（v0.19）：默认 = 渐变方块 + 流彩渐变字；等级特效开（Lv.10 极境）
+             时维持原 ulv 彩色胶囊标识——特效态优先于默认态，两个分支互斥渲染 -->
         <div
-          class="brand"
-          :class="brandFx ? ['brand', 'brand-fx', 'ulv-tag', 'ulv-10', 'ulv-e10'] : ['brand']"
+          v-if="brandFx"
+          :class="['brand', 'brand-fx', 'ulv-tag', 'ulv-10', 'ulv-e10']"
           @click="router.push('/')"
         >
           SOJ<i
@@ -77,6 +79,13 @@ function onCommand(command: string) {
             class="lv-star"
             :style="s"
           >✦</i>
+        </div>
+        <div
+          v-else
+          class="brand"
+          @click="router.push('/')"
+        >
+          <span class="brand-mark">S</span><span class="brand-word">SOJ</span>
         </div>
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
@@ -137,41 +146,94 @@ function onCommand(command: string) {
   min-height: 100vh;
 }
 
+/* v0.19 玻璃顶栏：半透明白 + backdrop blur，sticky 悬浮于画布之上 */
 .header {
-  background: var(--el-bg-color);
-  border-bottom: 1px solid var(--el-border-color-light);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(251, 253, 255, 0.72);
+  -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  backdrop-filter: blur(16px) saturate(1.5);
+  border-bottom: 1px solid var(--soj-line);
   padding: 0;
-  height: 60px;
+  height: 64px;
 }
 
-/* 1480px = 1440px 内容列 + 左右各 20px 内边距；再各收 4px（padding 24）做视觉内收——
-   卡片边框浅、有圆角阴影会视觉后退，而 SOJ 加粗蓝字和 CJK 用户名边缘更实，
-   与内容列严格齐平时顶栏文字观感上会往外凸，故文字比内容列略靠内 4px。
-   必须显式 border-box（默认 content-box 会让 max-width 与 padding 相加，左右各多出 20px） */
+/* 1480px = 1280px 内容列（v0.19 容器收窄，与 PageShell/.page 同步）+ 左右各 24px；
+   再各收 4px（padding 28）做视觉内收——卡片边框浅、有圆角阴影会视觉后退，
+   与内容列严格齐平时顶栏文字观感上会往外凸，故文字比内容列略靠内。
+   必须显式 border-box（默认 content-box 会让 max-width 与 padding 相加） */
 .header-inner {
   box-sizing: border-box;
-  max-width: 1480px;
+  max-width: 1328px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 24px;
+  padding: 0 28px;
   gap: 8px;
 }
 
 /* 品牌字 22/600 */
 .brand {
-  font-size: var(--soj-fs-brand);
-  font-weight: var(--soj-fw-emphasis);
-  color: var(--el-color-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   cursor: pointer;
-  margin-right: 16px;
-  letter-spacing: 2px;
+  margin-right: 14px;
+  white-space: nowrap;
+}
+
+/* 品牌双色（v0.19 默认态）：渐变小方块（蓝→青）+ 流彩渐变字（7s 流动，reduced-motion 退静态） */
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
+  color: #fff;
+  font-size: 15px;
+  font-weight: var(--soj-fw-bold);
+  box-shadow: 0 6px 16px rgba(36, 85, 218, 0.3);
+}
+
+.brand-word {
+  font-size: var(--soj-fs-brand);
+  font-weight: var(--soj-fw-bold);
+  letter-spacing: 1px;
+  background: linear-gradient(
+    90deg,
+    #16a7d2 0%,
+    #1557b8 25%,
+    #2c5de0 50%,
+    #16a7d2 75%,
+    #1557b8 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: brand-flow 7s linear infinite;
+}
+
+@keyframes brand-flow {
+  to {
+    background-position: 220% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-word {
+    animation: none;
+    background-position: 50% 0;
+  }
 }
 
 /* SOJ 极境胶囊（特效开）：模板挂全局 ulv-tag/ulv-10/ulv-e10（最高等级样式——蓝紫彩色
    渐变流动 + 深处辉光呼吸）+ 四颗 lv-star 白星芒；胶囊基础形状在此补齐；
-   特效关回落上方主色静态字 */
+   特效关回落上方品牌双色 */
 .brand-fx {
   display: inline-flex;
   align-items: center;
@@ -185,11 +247,36 @@ function onCommand(command: string) {
 .menu {
   flex: 1;
   border-bottom: none;
+  background: transparent;
 }
 
 /* 右侧「管理后台」独立菜单：不参与主菜单的 flex:1 拉伸，紧贴用户名左侧 */
 .menu-admin {
   flex: 0 0 auto;
+}
+
+/* v0.19 菜单胶囊化：去 EP 横线指示条，active/hover = 主蓝浅底胶囊 + 700 字重；
+   EP 横向菜单项 height/line-height 同源于 --el-menu-horizontal-height(60)，须一并压到 56 居中 */
+.menu :deep(.el-menu-item) {
+  height: 56px;
+  line-height: 56px;
+  border-radius: 999px;
+  margin: 0 2px;
+  border-bottom: none;
+  transition: background-color 0.18s, color 0.18s;
+}
+
+.menu :deep(.el-menu-item:hover),
+.menu :deep(.el-menu-item:focus) {
+  background-color: var(--soj-blue-soft);
+  border-bottom: none;
+}
+
+.menu :deep(.el-menu-item.is-active) {
+  background-color: var(--soj-blue-soft);
+  color: var(--soj-blue);
+  font-weight: var(--soj-fw-bold);
+  border-bottom: none;
 }
 
 /* 用户名下拉触发器复用 el-menu--horizontal 菜单项（如「管理后台」）的视觉参数：
@@ -217,8 +304,8 @@ function onCommand(command: string) {
 }
 
 .username:hover {
-  background-color: var(--el-menu-hover-bg-color, var(--el-color-primary-light-9));
-  color: var(--el-color-primary);
+  background-color: var(--soj-blue-soft);
+  color: var(--soj-blue);
 }
 
 /* 账号圆标：常驻浅主色圆底做视觉锚点；悬停随行整体加深为实心主色 + 图标反白 */
@@ -243,9 +330,9 @@ function onCommand(command: string) {
   color: var(--el-color-white);
 }
 
-/* 画布与 body 同源（--el-bg-color-page） */
+/* v0.19 透明画布：body 三层画布（渐变+光晕+青网格）直接透出，main/footer 不再铺实底 */
 .main {
-  background: var(--el-bg-color-page);
+  background: transparent;
 }
 
 .footer {
@@ -254,7 +341,7 @@ function onCommand(command: string) {
   justify-content: center;
   gap: 16px;
   color: var(--el-text-color-secondary);
-  background: var(--el-bg-color-page);
+  background: transparent;
 }
 
 /* 备案号外链：弱化为页脚次要信息，悬停才提色 */

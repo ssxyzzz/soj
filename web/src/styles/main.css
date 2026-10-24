@@ -1,4 +1,9 @@
 /* ============================================================
+   SOJ 全局样式
+   ------------------------------------------------------------
+   v0.19 青格蓝调换血（权威 = web-design-v3.md）：色彩 / 圆角 / 画布 / 组件
+   形制全面重定（主蓝 #1F49BA、藏蓝层级、青网格画布、胶囊控件、卡片柔影），
+   下文字号/字重 token 表（v0.6.3）不受影响、整体保留。
    SOJ 字号/字重 token 表（v0.6.3）
    ------------------------------------------------------------
    唯一改值入口：:root 的 --soj-fs-* 与 --soj-fw-*。
@@ -132,8 +137,11 @@ body,
   /* 组件字重 400（Ant：强调只靠 600 档与颜色） */
   --el-font-weight-primary: var(--soj-fw-regular);
   --el-font-size-base: var(--soj-fs-body);
-  /* CJK 先行，理由见 body 注释；main.css 在 EP 之后加载，:root 同级覆盖恒胜 */
+  /* CJK 先行，理由见 body 注释；main.css 在 EP 之后加载，:root 同级覆盖恒胜。
+     v0.19 首插 Noto Sans SC（青格蓝调参考站同款，仅本地字体、不引 Web 字体；
+     它本身是 CJK 字体，不破坏「CJK 先行」纪律，未安装时回落 PingFang/雅黑） */
   --el-font-family:
+    'Noto Sans SC',
     'PingFang SC',
     'Hiragino Sans GB',
     'Microsoft YaHei',
@@ -142,29 +150,96 @@ body,
     Arial,
     sans-serif;
 
-  /* ---- Ant 对齐：画布 / 圆角 / 边框 / 填充 ---- */
-  /* 画布 Ant colorBgLayout #f5f5f5，卡片/弹窗纯白从背景浮出；组件面 --el-bg-color 不动 */
-  --el-bg-color-page: #f5f5f5;
-  /* 圆角：控件 6 / 卡片与弹窗 8 / 小控件 4。base/small 是 EP 的 :root 级变量，此处有效；
-     卡片/弹窗/tag/popover 的专属变量 EP 声明在组件类上（元素自身声明压过 :root 继承），
-     必须在组件类覆盖——见下方各块 */
-  --el-border-radius-base: 6px;
-  --el-border-radius-small: 4px;
-  /* 边框 Ant 两档：控件 #d9d9d9（colorBorder）/ 分隔线 #f0f0f0（colorSplit） */
-  --el-border-color: #d9d9d9;
-  --el-border-color-light: #f0f0f0;
-  --el-border-color-lighter: #f0f0f0;
-  --el-border-color-extra-light: #f5f5f5;
-  /* 填充 Ant 中性梯度：#f0f0f0 > #f5f5f5 > #fafafa（lighter 即 EP 默认，斑马纹同值） */
-  --el-fill-color: #f0f0f0;
-  --el-fill-color-light: #f5f5f5;
+  /* ---- v0.19 青格蓝调（权威 = web-design-v3.md）：画布 / 色彩 / 圆角 token ----
+     主蓝 #1F49BA（simple408.cn 实测），藏蓝文字层级，冷白画布 + 青网格（见 body）。 */
+  --soj-navy: #0b1f45;
+  --soj-ink: #22334d;
+  --soj-blue: #1f49ba;
+  --soj-blue-deep: #1845ad;
+  --soj-blue-hi: #2d68ef;
+  --soj-blue-lo: #2455da;
+  --soj-teal: #16a7d2;
+  --soj-blue-soft: rgba(31, 73, 186, 0.08);
+  --soj-line: rgba(11, 31, 69, 0.08);
+  --soj-surface-2: #f5f9ff;
+  --soj-surface-3: #f0f5fc;
 
-  /* 文字色阶 rgba 墨水模型（Ant 同款），为深色模式铺路 */
-  --el-text-color-primary: rgba(0, 0, 0, 0.88);
-  --el-text-color-regular: rgba(0, 0, 0, 0.65);
-  --el-text-color-secondary: rgba(0, 0, 0, 0.45);
-  --el-text-color-placeholder: rgba(0, 0, 0, 0.25);
-  --el-text-color-disabled: rgba(0, 0, 0, 0.25);
+  /* EP 五语义位换血 + color-mix 派生浅阶（EP 约定：light-N ≈ N×10% 向白，
+     dark-2 ≈ 20% 向黑）；浅底场景（plain 按钮 / 浅 tag / 选中底）自动跟随 */
+  --el-color-primary: #1f49ba;
+  --el-color-primary-light-3: color-mix(in srgb, #1f49ba 70%, #ffffff);
+  --el-color-primary-light-5: color-mix(in srgb, #1f49ba 50%, #ffffff);
+  --el-color-primary-light-7: color-mix(in srgb, #1f49ba 30%, #ffffff);
+  --el-color-primary-light-8: color-mix(in srgb, #1f49ba 20%, #ffffff);
+  --el-color-primary-light-9: color-mix(in srgb, #1f49ba 10%, #ffffff);
+  --el-color-primary-dark-2: color-mix(in srgb, #1f49ba 80%, #000000);
+  --el-color-success: #0e9f6e;
+  --el-color-success-light-3: color-mix(in srgb, #0e9f6e 70%, #ffffff);
+  --el-color-success-light-5: color-mix(in srgb, #0e9f6e 50%, #ffffff);
+  --el-color-success-light-7: color-mix(in srgb, #0e9f6e 30%, #ffffff);
+  --el-color-success-light-8: color-mix(in srgb, #0e9f6e 20%, #ffffff);
+  --el-color-success-light-9: color-mix(in srgb, #0e9f6e 10%, #ffffff);
+  --el-color-success-dark-2: color-mix(in srgb, #0e9f6e 80%, #000000);
+  --el-color-warning: #d98207;
+  --el-color-warning-light-3: color-mix(in srgb, #d98207 70%, #ffffff);
+  --el-color-warning-light-5: color-mix(in srgb, #d98207 50%, #ffffff);
+  --el-color-warning-light-7: color-mix(in srgb, #d98207 30%, #ffffff);
+  --el-color-warning-light-8: color-mix(in srgb, #d98207 20%, #ffffff);
+  --el-color-warning-light-9: color-mix(in srgb, #d98207 10%, #ffffff);
+  --el-color-warning-dark-2: color-mix(in srgb, #d98207 80%, #000000);
+  --el-color-danger: #e02d3c;
+  --el-color-danger-light-3: color-mix(in srgb, #e02d3c 70%, #ffffff);
+  --el-color-danger-light-5: color-mix(in srgb, #e02d3c 50%, #ffffff);
+  --el-color-danger-light-7: color-mix(in srgb, #e02d3c 30%, #ffffff);
+  --el-color-danger-light-8: color-mix(in srgb, #e02d3c 20%, #ffffff);
+  --el-color-danger-light-9: color-mix(in srgb, #e02d3c 10%, #ffffff);
+  --el-color-danger-dark-2: color-mix(in srgb, #e02d3c 80%, #000000);
+  --el-color-error: #e02d3c;
+  --el-color-error-light-3: color-mix(in srgb, #e02d3c 70%, #ffffff);
+  --el-color-error-light-5: color-mix(in srgb, #e02d3c 50%, #ffffff);
+  --el-color-error-light-7: color-mix(in srgb, #e02d3c 30%, #ffffff);
+  --el-color-error-light-8: color-mix(in srgb, #e02d3c 20%, #ffffff);
+  --el-color-error-light-9: color-mix(in srgb, #e02d3c 10%, #ffffff);
+  --el-color-error-dark-2: color-mix(in srgb, #e02d3c 80%, #000000);
+  --el-color-info: #7a8ca6;
+  --el-color-info-light-3: color-mix(in srgb, #7a8ca6 70%, #ffffff);
+  --el-color-info-light-5: color-mix(in srgb, #7a8ca6 50%, #ffffff);
+  --el-color-info-light-7: color-mix(in srgb, #7a8ca6 30%, #ffffff);
+  --el-color-info-light-8: color-mix(in srgb, #7a8ca6 20%, #ffffff);
+  --el-color-info-light-9: color-mix(in srgb, #7a8ca6 10%, #ffffff);
+  --el-color-info-dark-2: color-mix(in srgb, #7a8ca6 80%, #000000);
+
+  /* 画布基准色（真实三层画布见 body；此值供遮罩/回退等实底场景） */
+  --el-bg-color-page: #f4f8fc;
+  /* 圆角：控件 8 / 小控件 5；卡片 16 / 弹窗 20 / 徽章胶囊在组件类覆盖（见下） */
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 5px;
+  /* 边框藏蓝 hairline（替换原 Ant 灰 #d9d9d9 系） */
+  --el-border-color: rgba(11, 31, 69, 0.2);
+  --el-border-color-light: rgba(11, 31, 69, 0.1);
+  --el-border-color-lighter: rgba(11, 31, 69, 0.07);
+  --el-border-color-extra-light: rgba(11, 31, 69, 0.05);
+  /* 填充藏蓝浅阶（斑马纹/浅底/禁用底全站跟随） */
+  --el-fill-color: #e9f0f9;
+  --el-fill-color-light: #f2f7fd;
+  --el-fill-color-lighter: #f7fafd;
+  --el-fill-color-extra-light: #fafcfe;
+  --el-fill-color-dark: #dfe9f6;
+  --el-fill-color-darker: #d5e3f4;
+  --el-fill-color-blank: #ffffff;
+
+  /* 文字藏蓝墨水（rgba 模型保留，为深色模式铺路） */
+  --el-text-color-primary: rgba(11, 31, 69, 0.9);
+  --el-text-color-regular: rgba(11, 31, 69, 0.72);
+  --el-text-color-secondary: rgba(11, 31, 69, 0.5);
+  --el-text-color-placeholder: rgba(11, 31, 69, 0.32);
+  --el-text-color-disabled: rgba(11, 31, 69, 0.28);
+
+  /* 弹层阴影整体柔化（下拉/弹窗/消息跟随） */
+  --el-box-shadow: 0 12px 32px 4px rgba(11, 31, 69, 0.08), 0 8px 20px rgba(11, 31, 69, 0.06);
+  --el-box-shadow-light: 0 2px 12px rgba(11, 31, 69, 0.08);
+  --el-box-shadow-lighter: 0 1px 6px rgba(11, 31, 69, 0.06);
+  --el-box-shadow-dark: 0 16px 48px 8px rgba(11, 31, 69, 0.14);
 
 }
 
@@ -178,9 +253,10 @@ body {
      汉字分裂；② 'Helvetica Neue' 在前——装了 Adobe/Office 的 Windows 也有
      Helvetica Neue，同样分裂。唯 CJK 先行可保证拉丁与汉字必然同字体：
      Windows 落雅黑、Mac 落 PingFang、Linux 落 sans-serif，全平台零偏移；
-     代价仅 Mac 拉丁从 Helvetica Neue 换 PingFang 拉丁字形。EP --el-font-family
-     同步覆盖（见下 :root）。 */
+     代价仅 Mac 拉丁从 Helvetica Neue 换 PingFang 拉丁字形。
+     v0.19 首插 'Noto Sans SC'（CJK 字体，纪律不破；仅本地字体，未安装自动跳过）。 */
   font-family:
+    'Noto Sans SC',
     'PingFang SC',
     'Hiragino Sans GB',
     'Microsoft YaHei',
@@ -188,23 +264,55 @@ body {
     'Helvetica Neue',
     Arial,
     sans-serif;
-  background-color: var(--el-bg-color-page);
+  /* v0.19 三层画布（web-design-v3.md §3）：冷白纵向渐变（固定视口）+
+     顶部中央青光晕 + 右上蓝光晕；青色网格层在 body::after（负 z 索引沉底） */
+  background:
+    radial-gradient(520px 340px at 50% 10%, rgba(122, 184, 196, 0.14), transparent 62%),
+    radial-gradient(760px 420px at 90% 6%, rgba(36, 85, 218, 0.05), transparent 60%),
+    linear-gradient(#fbfdff, #f1f6fd);
+  background-attachment: fixed;
   color: var(--el-text-color-primary);
 }
 
-/* 卡片扁平化：默认无阴影，靠边框与画布分层；浮起场景用 shadow="hover" */
-.el-card.is-always-shadow {
-  box-shadow: none;
+/* v0.19 青网格画布层：44px 格距 1px 双向线，径向渐隐（顶部实、往下淡出至 78% 高度）
+   ——工程图纸质感但不过量；z-index:-1 沉在内容之下、body 渐变之上，不参与交互 */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(122, 184, 196, 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(122, 184, 196, 0.11) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(ellipse 100% 72% at 50% 0%, #000 24%, transparent 78%);
+  mask-image: radial-gradient(ellipse 100% 72% at 50% 0%, #000 24%, transparent 78%);
 }
 
-/* ---- 表格 Ant 化：表头 #fafafa 底 + 竖线；表体斑马纹走模板 stripe 属性
-   （底色即 --el-fill-color-lighter #fafafa，展开行/合并行计数正确）---- */
+/* v0.19 卡片：细 hairline 边 + 两层柔影（替换 Ant 扁平无边，卡片从画布浮出） */
+.el-card,
+.el-card.is-always-shadow {
+  box-shadow:
+    0 1px 2px rgba(11, 31, 69, 0.04),
+    0 12px 32px rgba(11, 31, 69, 0.06);
+}
+
+.el-card.is-hover-shadow:hover,
+.el-card.is-hover-shadow:focus {
+  box-shadow:
+    0 1px 2px rgba(11, 31, 69, 0.04),
+    0 16px 40px rgba(11, 31, 69, 0.1);
+}
+
+/* ---- 表格 v0.19：表头浅蓝灰底 + 藏蓝 700；表体斑马纹走模板 stripe 属性
+   （底色即 --el-fill-color-lighter 冷白，展开行/合并行计数正确）---- */
 .el-table {
-  --el-table-header-bg-color: var(--el-fill-color-lighter);
+  --el-table-header-bg-color: var(--soj-surface-3);
   --el-table-border-color: var(--el-border-color-light);
-  --el-table-row-hover-bg-color: var(--el-fill-color-light);
-  /* EP 自声明在 .el-table 上（:root 覆盖无效）：表体/表头文字升 primary 黑 */
-  --el-table-header-text-color: var(--el-text-color-primary);
+  --el-table-row-hover-bg-color: var(--soj-surface-2);
+  /* EP 自声明在 .el-table 上（:root 覆盖无效）：表头藏蓝 / 表体墨水色 */
+  --el-table-header-text-color: var(--soj-navy);
   --el-table-text-color: var(--el-text-color-primary);
 }
 
@@ -213,26 +321,29 @@ body {
   font-size: var(--soj-fs-tag-table);
 }
 
-/* 卡片/弹窗/messagebox 圆角 8（EP 自声明在组件类上，须在此覆盖） */
+/* 卡片/弹窗/messagebox 圆角（v0.19：卡 16 / 弹窗 20 / 确认框 16；
+   EP 自声明在组件类上，须在此覆盖） */
 .el-card {
-  --el-card-border-radius: 8px;
+  --el-card-border-radius: 16px;
+  --el-card-border-color: var(--soj-line);
 }
 
 .el-dialog {
-  --el-dialog-border-radius: 8px;
+  --el-dialog-border-radius: 20px;
+  box-shadow: 0 24px 80px rgba(11, 31, 69, 0.22);
 }
 
 .el-message-box {
-  --el-messagebox-border-radius: 8px;
+  --el-messagebox-border-radius: 16px;
 }
 
-/* 弹层圆角 6（同上：组件类级覆盖） */
+/* 弹层圆角（同上：组件类级覆盖） */
 .el-popover {
-  --el-popover-border-radius: 6px;
+  --el-popover-border-radius: 12px;
 }
 
 .el-table th.el-table__cell > .cell {
-  font-weight: var(--soj-fw-emphasis);
+  font-weight: var(--soj-fw-bold);
 }
 
 /* 表头竖线（Ant 标志性表头分隔）：每个表头单元格右边框，末列与滚动条占位列不带 */
@@ -247,10 +358,15 @@ body {
 }
 
 .page {
-  max-width: 1440px;
+  /* v0.19 容器收窄（1440 → 1280，与 PageShell 同步；窄容器更精致，见 web-design-v3.md §4.4） */
+  max-width: 1280px;
   margin: 0 auto;
-  /* 左右不留内边距：与 PageShell（1440px 容器 + el-main 20px 内边距）左右边缘对齐 */
+  /* 左右不留内边距：与 PageShell（1280px 容器 + el-main 20px 内边距）左右边缘对齐 */
   padding: 16px 0;
+  /* el-row :gutter 的负向外边距（-gutter/2）会顶出无横向内边距的容器 8px——
+     视口 1288–1320px 区间出现横向滚动条；clip 不建滚动容器/不裁内部滚动
+     （el-table 自身 overflow 弹层均 teleport 到 body），卡片实际起点在容器边界，视觉零差异 */
+  overflow-x: clip;
 }
 
 .mono {
@@ -425,12 +541,13 @@ strong {
   margin: 0 0 8px;
 }
 
-/* el-tag 与小号按钮字号 14（EP 默认 12 偏小）；tag 圆角 6 为组件类级覆盖 */
+/* el-tag 与小号按钮字号 14（EP 默认 12 偏小）；
+   v0.19 tag 圆角回归胶囊 999（推翻 2026-10-23 矩形化决策，见 web-design-v3.md §2.3） */
 .el-tag {
-  --el-tag-border-radius: 6px;
+  --el-tag-border-radius: 999px;
   font-size: var(--soj-fs-tag);
   height: auto;
-  padding: 2px 8px;
+  padding: 2px 10px;
   line-height: 1.4;
 }
 
@@ -438,6 +555,68 @@ strong {
   font-size: var(--soj-fs-body);
   height: auto;
   padding: 5px 11px;
+}
+
+/* ---- v0.19 按钮形制：全站胶囊 + primary 实心渐变（web-design-v3.md §2.3） ----
+   胶囊作用于所有尺寸/变体（EP 默认圆角 = base 8，此处组件类级覆盖）；
+   渐变仅实心 primary——plain / text / link 走 EP 变量自动跟随新主色。
+   变量组（bg/hover/active/disabled）同步覆盖，保证 loading 圈、禁用态与文字色一致。 */
+.el-button {
+  border-radius: 999px;
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link) {
+  --el-button-bg-color: var(--soj-blue-lo);
+  --el-button-border-color: var(--soj-blue-lo);
+  --el-button-hover-bg-color: var(--soj-blue-deep);
+  --el-button-hover-border-color: var(--soj-blue-deep);
+  --el-button-active-bg-color: #13398f;
+  --el-button-active-border-color: #13398f;
+  --el-button-disabled-bg-color: var(--soj-blue-lo);
+  --el-button-disabled-border-color: var(--soj-blue-lo);
+  background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-blue-lo));
+  border-color: var(--soj-blue-lo);
+  box-shadow: 0 6px 16px rgba(36, 85, 218, 0.22);
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):hover {
+  background: linear-gradient(180deg, #3a71f2, #2a5ae2);
+  border-color: var(--soj-blue-deep);
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link):active {
+  background: linear-gradient(180deg, var(--soj-blue-lo), var(--soj-blue));
+}
+
+.el-button--primary:not(.is-plain):not(.is-text):not(.is-link).is-disabled {
+  background: var(--soj-blue-lo);
+  box-shadow: none;
+  opacity: 0.55;
+}
+
+/* 分页：页钮圆角方块 + 当前页实心主蓝 */
+.el-pagination .el-pager li {
+  border-radius: 8px;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.el-pagination .el-pager li:hover {
+  color: var(--soj-blue);
+}
+
+.el-pagination .el-pager li.is-active {
+  background: var(--soj-blue);
+  color: #fff;
+}
+
+.el-pagination .el-pager li.is-active:hover {
+  color: #fff;
+}
+
+.el-pagination .btn-prev,
+.el-pagination .btn-next,
+.el-pagination button.el-pagination__button {
+  border-radius: 8px;
 }
 
 /* 表格与描述列表：small 尺寸 EP 硬编码 12-14px，对齐 14 */
@@ -456,8 +635,10 @@ strong {
    注意：Vditor 的 index.css 与 content-theme CSS 是运行时加载的，靠特异度压制而非顺序 ——
    .soj-md .vditor-reset 为 (0,2,0)，行内 code 规则为 (0,4,1)，压过主题的 (0,3,1) */
 .soj-md .vditor-reset {
-  /* CJK 先行，理由见 body 注释（行盒基线按实际用到字体集合的最大 ascent 定位） */
+  /* CJK 先行，理由见 body 注释（行盒基线按实际用到字体集合的最大 ascent 定位）；
+     v0.19 首插 Noto Sans SC 同 body */
   font-family:
+    'Noto Sans SC',
     'PingFang SC',
     'Hiragino Sans GB',
     'Microsoft YaHei',

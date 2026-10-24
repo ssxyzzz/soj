@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOJ · 界面重设计预览</title>
+<style>
+/* ============================================================
+   SOJ — 界面重设计预览（简约清新 · 浅色）
+   设计语言：白绿基调 · 扁平轻阴影 · 少渐变多留白
+   布局：左主列承载页面主线，右副列承载个人/上下文信息
+   ============================================================ */
+:root{
+  --bg:#F6F9F7;
+  --surface:#FFFFFF;
+  --surface-2:#F9FBF9;
+  --ink:#1A2620;
+  --ink-2:#4A5A52;
+  --ink-3:#8CA096;
+  --line:rgba(26,38,32,.08);
+  --line-strong:rgba(26,38,32,.13);
+
+  --primary:#0F9D76;
+  --primary-deep:#0C8A67;
+  --primary-soft:rgba(15,157,118,.09);
+  --primary-line:rgba(15,157,118,.28);
+
+  --ac:#0F9D76;   --ac-bg:rgba(15,157,118,.10);
+  --tle:#D99141;  --tle-bg:rgba(217,145,65,.10);
+
+  --t-bronze:#B4793F; --t-bronze-bg:rgba(180,121,63,.11);
+  --t-silver:#75868F; --t-silver-bg:rgba(117,134,143,.12);
+  --t-gold:#B08D24;   --t-gold-bg:rgba(176,141,36,.11);
+  --t-plat:#2FA79B;   --t-plat-bg:rgba(47,167,155,.10);
+  --t-dia:#5B8DEF;    --t-dia-bg:rgba(91,141,239,.10);
+
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif;
+  --mono:"Cascadia Code","JetBrains Mono",ui-monospace,"SF Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font);background:var(--bg);color:var(--ink);
+  font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased;
+  padding-bottom:110px;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:radial-gradient(760px 420px at 24% -10%, rgba(15,157,118,.07), transparent 62%);
+}
+a{color:inherit;text-decoration:none}
+::selection{background:rgba(15,157,118,.16)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.hl{color:var(--primary)}
+.wrap{max-width:1120px;margin:0 auto;padding:0 32px}
+.screen{display:none;animation:fadeUp .45s cubic-bezier(.2,.7,.2,1)}
+.screen.on{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+
+/* ---------------- 顶部导航 ---------------- */
+.nav-dock{position:sticky;top:14px;z-index:50;max-width:1120px;margin:14px auto 0;padding:0 32px}
+.nav{
+  display:flex;align-items:center;gap:28px;
+  background:rgba(255,255,255,.82);backdrop-filter:blur(16px) saturate(1.3);
+  -webkit-backdrop-filter:blur(16px) saturate(1.3);
+  border:1px solid var(--line);border-radius:16px;
+  box-shadow:0 1px 2px rgba(26,38,32,.03);
+  padding:10px 18px;
+}
+.brand{display:flex;align-items:center;gap:11px;flex:none}
+.brand-mark{
+  width:36px;height:36px;border-radius:12px;background:var(--primary);
+  display:grid;place-items:center;color:#fff;
+}
+.brand-mark svg{width:19px;height:19px}
+.brand b{font-size:17px;letter-spacing:.03em}
+.nav-links{display:flex;gap:4px;flex:1;justify-content:center}
+.nav-links a{
+  padding:8px 15px;border-radius:10px;font-size:13.5px;font-weight:500;color:var(--ink-2);
+  transition:all .18s;white-space:nowrap;
+}
+.nav-links a:hover{background:rgba(26,38,32,.045);color:var(--ink)}
+.nav-links a.cur{color:var(--primary-deep);background:var(--primary-soft);font-weight:600}
+.user-chip{
+  display:flex;align-items:center;gap:9px;padding:5px 13px 5px 6px;border-radius:12px;
+  border:1px solid var(--line);background:var(--surface);cursor:pointer;transition:all .18s;flex:none;
+}
+.user-chip:hover{border-color:var(--primary-line)}
+.avatar{
+  width:27px;height:27px;border-radius:9px;background:var(--primary);color:#fff;
+  display:grid;place-items:center;font-size:12px;font-weight:700;flex:none;
+}
+.user-chip .uname{font-size:13px;font-weight:600}
+
+/* ---------------- 主列 + 副列骨架 ---------------- */
+.cols{
+  display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;
+  align-items:start;padding:42px 0 52px;
+}
+.cols.wide-rail{grid-template-columns:minmax(0,1fr) 400px}
+.main{display:flex;flex-direction:column;gap:20px;min-width:0}
+.rail{position:sticky;top:86px;display:flex;flex-direction:column;gap:16px}
+
+/* ---------------- 通用组件 ---------------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgba(26,38,32,.03)}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:11px 24px;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;
+  border:1px solid transparent;transition:all .2s;font-family:var(--font);
+}
+.btn svg{width:16px;height:16px}
+.btn-primary{
+  background:var(--primary);color:#fff;
+  box-shadow:0 6px 16px -8px rgba(15,157,118,.55);
+}
+.btn-primary:hover{background:var(--primary-deep);transform:translateY(-1px)}
+.bar{height:5px;border-radius:5px;background:rgba(26,38,32,.07);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:5px;background:var(--primary)}
+.diff{
+  display:inline-flex;align-items:center;gap:6px;padding:3.5px 11px;border-radius:999px;
+  font-size:11.5px;font-weight:700;flex:none;
+}
+.diff .cdot{width:7px;height:7px;border-radius:50%;display:inline-block}
+
+/* 主列页面头 */
+.p-head h1{font-size:27px;font-weight:700;letter-spacing:-.02em}
+.p-head .cnt{font-size:12.5px;color:var(--ink-3);font-family:var(--mono);margin-top:4px}
+.p-head-row{display:flex;align-items:flex-end;gap:22px}
+.searchbar{
+  margin-left:auto;display:flex;align-items:center;gap:10px;width:100%;max-width:340px;
+  background:var(--surface);border:1px solid var(--line-strong);border-radius:12px;padding:10px 15px;
+  transition:all .2s;
+}
+.searchbar:focus-within{border-color:var(--primary);box-shadow:0 0 0 4px var(--primary-soft)}
+.searchbar svg{width:15px;height:15px;color:var(--ink-3);flex:none}
+.searchbar input{border:none;outline:none;flex:1;font-size:13.5px;font-family:var(--font);background:transparent;color:var(--ink)}
+
+/* ---------------- 副列组件 ---------------- */
+.rail-card{padding:20px 22px}
+.rc-h{font-size:13.5px;font-weight:700;margin-bottom:12px}
+.f-lab{font-size:10.5px;font-family:var(--mono);letter-spacing:.16em;color:var(--ink-3);font-weight:700;margin:14px 0 8px}
+.f-lab:first-of-type{margin-top:0}
+.f-wrap{display:flex;flex-wrap:wrap;gap:7px}
+.fchip{
+  padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;
+  border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);transition:all .18s;white-space:nowrap;
+}
+.fchip:hover{border-color:var(--primary-line);color:var(--primary-deep)}
+.fchip.on{background:var(--primary-soft);border-color:var(--primary-line);color:var(--primary-deep)}
+.fchip .cdot{width:6.5px;height:6.5px;border-radius:50%;display:inline-block;margin-right:5px;vertical-align:1px}
+
+/* 我的卡片 */
+.pf-top{display:flex;align-items:center;gap:12px}
+.pf-top .avatar{width:44px;height:44px;border-radius:14px;font-size:16px}
+.pf-top b{font-size:15px;display:block;line-height:1.3}
+.lvl{
+  display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;
+  padding:2px 8px;border-radius:7px;background:var(--primary-soft);color:var(--primary-deep);margin-top:3px;
+}
+.pf-bar-t{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3);margin:16px 0 6px}
+.pf-bar-t b{color:var(--ink);font-family:var(--mono)}
+.pf-kv{display:flex;margin-top:16px;border-top:1px dashed var(--line);padding-top:13px}
+.pf-kv>div{flex:1;text-align:center}
+.pf-kv>div+div{border-left:1px solid var(--line)}
+.pf-kv b{font-size:15.5px;font-family:var(--mono);font-weight:700;display:block;letter-spacing:-.02em}
+.pf-kv span{font-size:10px;color:var(--ink-3);font-family:var(--mono);letter-spacing:.06em}
+
+/* 公告 */
+.ann{display:flex;gap:10px;align-items:baseline;padding:8.5px 0;border-top:1px dashed var(--line);font-size:13px;color:var(--ink-2);cursor:pointer;transition:color .15s}
+.ann:first-of-type{border-top:none}
+.ann:hover{color:var(--primary-deep)}
+.ann .d{font-family:var(--mono);font-size:11px;color:var(--ink-3);flex:none}
+
+/* 判题机状态一行 */
+.st-line{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11.5px;color:var(--ink-2);padding:14px 22px}
+.gdot{width:8px;height:8px;border-radius:50%;background:var(--ac);flex:none;animation:gpulse 2.4s infinite}
+@keyframes gpulse{0%,100%{box-shadow:0 0 0 3px rgba(15,157,118,.14)}50%{box-shadow:0 0 0 6px rgba(15,157,118,.05)}}
+
+/* 键值行 */
+.kvs .kv-r{display:flex;justify-content:space-between;align-items:center;padding:8.5px 0;border-top:1px dashed var(--line);font-size:13px}
+.kvs .kv-r:first-child{border-top:none;padding-top:0}
+.kv-r span{color:var(--ink-3)}
+.kv-r b{font-family:var(--mono);font-weight:700}
+
+/* 排行副列 */
+.myrank{display:flex;align-items:baseline;gap:10px}
+.myrank>b{font-size:30px;font-weight:700;letter-spacing:-.02em;color:var(--primary-deep)}
+.myrank .up{color:var(--ac);font-size:12.5px;font-weight:700}
+.myrank .rt{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.t3{display:flex;align-items:center;gap:11px;padding:10px 0;border-top:1px dashed var(--line);font-size:13px}
+.t3:first-of-type{border-top:none;padding-top:2px}
+.t3 .m{font-family:var(--mono);font-weight:800;width:20px;font-size:13.5px;flex:none}
+.t3 b{font-weight:600}
+.t3 .r{margin-left:auto;font-family:var(--mono);font-weight:700;font-size:12.5px}
+
+/* ---------------- 首页主列 ---------------- */
+.hero h1{font-size:34px;line-height:1.3;font-weight:700;letter-spacing:-.02em;margin-bottom:12px}
+.hero .sub{font-size:14.5px;color:var(--ink-2);max-width:30em;margin-bottom:22px}
+.console{border-radius:16px;background:var(--surface);border:1px solid var(--line);overflow:hidden}
+.console-bar{
+  display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--line);
+  background:var(--surface-2);
+}
+.console-bar .wd{width:10px;height:10px;border-radius:50%}
+.console-bar .t{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-left:8px;letter-spacing:.05em}
+.console-body{padding:16px 22px 20px;font-family:var(--mono);font-size:12.8px;line-height:2.1}
+.console-body .cmd .p{color:var(--primary-deep);font-weight:700}
+.log{display:flex;align-items:center;gap:10px;color:var(--ink-2)}
+.log .ms{margin-left:auto;color:var(--ink-3);font-size:11.5px}
+.verdict{
+  display:inline-flex;align-items:center;gap:10px;margin-top:11px;padding:9px 16px;border-radius:12px;
+  background:var(--ac-bg);border:1px solid var(--primary-line);color:var(--primary-deep);font-weight:700;font-size:13px;
+}
+.verdict .score{font-size:14px}
+
+.stat-strip{display:grid;grid-template-columns:repeat(4,1fr)}
+.st{padding:20px 8px;text-align:center;border-left:1px solid var(--line)}
+.st:first-child{border-left:none}
+.st b{display:block;font-size:25px;font-weight:700;letter-spacing:-.03em;font-family:var(--mono);color:var(--primary-deep)}
+.st span{font-size:11.5px;color:var(--ink-3);font-family:var(--mono);letter-spacing:.08em}
+
+.panel-head{display:flex;align-items:center;gap:12px;padding:18px 24px 4px}
+.panel-head h2{font-size:15.5px;font-weight:700}
+.panel-head .more{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--primary-deep)}
+.contest-item{display:flex;align-items:center;gap:16px;padding:14px 24px;border-top:1px solid var(--line);transition:background .18s;cursor:pointer}
+.contest-item:first-of-type{margin-top:6px}
+.contest-item:hover{background:var(--surface-2)}
+.contest-item .date{
+  width:48px;height:48px;border-radius:13px;background:var(--primary-soft);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;flex:none;
+}
+.contest-item .date b{font-size:15px;font-family:var(--mono);color:var(--primary-deep);line-height:1.1}
+.contest-item .date span{font-size:9px;font-family:var(--mono);color:var(--ink-3);letter-spacing:.08em}
+.contest-item .ci-t{font-weight:600;font-size:14px}
+.contest-item .ci-m{font-size:12px;color:var(--ink-3);font-family:var(--mono);margin-top:2px}
+.contest-item .lnk{margin-left:auto;font-size:13px;font-weight:600;color:var(--primary-deep);white-space:nowrap}
+
+/* ---------------- 题库主列 ---------------- */
+.plist{overflow:hidden}
+.prow{
+  display:flex;align-items:center;gap:18px;padding:14px 24px;border-top:1px solid var(--line);
+  transition:background .18s;cursor:pointer;
+}
+.prow:first-child{border-top:none}
+.prow:hover{background:var(--surface-2)}
+.pstatus{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;flex:none}
+.pstatus svg{width:14px;height:14px}
+.pstatus.done{background:var(--ac-bg);color:var(--ac)}
+.pstatus.todo{background:rgba(26,38,32,.05);color:var(--ink-3)}
+.prow .pid{font-family:var(--mono);font-size:12.5px;font-weight:700;color:var(--ink-3);width:54px;flex:none}
+.prow .pt{flex:1;font-size:14.5px;font-weight:500}
+
+/* ---------------- 题目详情主列 ---------------- */
+.crumb{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)}
+.crumb b{color:var(--primary-deep);font-family:var(--mono);font-weight:700}
+.ptitle-row{display:flex;align-items:center;gap:16px;padding:10px 0 4px}
+.ptitle-row h1{font-size:26px;font-weight:700;letter-spacing:-.02em}
+.statement{padding:28px 32px 32px}
+.statement section{margin-bottom:26px}
+.statement section:last-child{margin-bottom:0}
+.sec-h{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;margin-bottom:12px}
+.sec-h::before{content:"";width:4px;height:15px;border-radius:3px;background:var(--primary)}
+.statement p{font-size:14px;color:var(--ink-2)}
+.statement p + p{margin-top:8px}
+.samples{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.sample{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2)}
+.sample .sh{padding:8px 14px;border-bottom:1px solid var(--line);font-size:11.5px;font-weight:700;color:var(--ink-2);background:var(--surface)}
+.sample pre{font-family:var(--mono);font-size:12.5px;line-height:1.9;padding:14px 16px;color:var(--ink);white-space:pre-wrap;min-height:76px}
+.hint-box{
+  border:1px dashed rgba(217,145,65,.5);background:var(--tle-bg);border-radius:12px;padding:15px 18px;
+  font-size:13.5px;color:var(--ink-2);
+}
+.hint-box b{color:var(--tle)}
+
+/* 提交面板（详情副列） */
+.submit-card{overflow:hidden}
+.lang-seg{display:flex;gap:5px;padding:18px 20px 0}
+.lang{
+  flex:1;text-align:center;padding:8px 4px;border-radius:10px;font-family:var(--mono);font-size:11.5px;
+  font-weight:600;border:1px solid var(--line);color:var(--ink-3);cursor:pointer;transition:all .15s;background:var(--surface);
+}
+.lang:hover{color:var(--primary-deep)}
+.lang.on{background:var(--primary-soft);border-color:var(--primary-line);color:var(--primary-deep)}
+.editor{margin:14px 20px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2)}
+.editor .ed-bar{
+  display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--surface);
+  border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--ink-3);
+}
+.editor .ed-bar .edt{display:flex;gap:5px;align-items:center}
+.editor .ed-bar .edt i{width:9px;height:9px;border-radius:50%;display:block}
+.editor .ed-bar .fn{margin-left:6px}
+.code{padding:11px 0;font-family:var(--mono);font-size:12px;line-height:1.85;overflow:hidden}
+.code .ln{display:flex}
+.code .no{width:34px;flex:none;text-align:right;padding-right:13px;color:rgba(26,38,32,.22);user-select:none;font-size:10.5px;line-height:inherit}
+.tk-k{color:#0F766E;font-weight:600}.tk-t{color:#3873B3}.tk-f{color:#0369A1}
+.tk-n{color:#B45309}.tk-c{color:#9DB0A7;font-style:italic}
+.submit-foot{padding:16px 20px 20px}
+.submit-foot .btn{width:100%;padding:12.5px}
+
+/* ---------------- 排行榜主列 ---------------- */
+.rank-tabs{display:flex;gap:7px}
+.rtable{width:100%;border-collapse:collapse}
+.rtable th{
+  text-align:left;font-size:11px;font-family:var(--mono);letter-spacing:.12em;color:var(--ink-3);
+  font-weight:600;padding:14px 22px;border-top:1px solid var(--line);background:var(--surface-2);
+}
+.rtable th:first-child{border-top:none;border-radius:16px 0 0 0}
+.rtable th:last-child{border-top:none;border-radius:0 16px 0 0}
+.rtable td{padding:13px 22px;border-top:1px solid var(--line);font-size:13.5px;vertical-align:middle}
+.rtable tr.me td{background:var(--primary-soft)}
+.rtable .rk{font-family:var(--mono);font-weight:700;width:70px}
+.rtable .rk .up{color:var(--ac);font-size:11px;margin-left:5px}
+.rtable .rk .dn{color:#E05D6A;font-size:11px;margin-left:5px}
+.ru{display:flex;align-items:center;gap:11px}
+.ru .fav2{width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;flex:none}
+.ru b{font-size:13.5px;font-weight:600}
+.rtable .num{font-family:var(--mono);font-weight:600}
+.rtable .rating{font-family:var(--mono);font-weight:800;font-size:14px;letter-spacing:-.02em;color:var(--primary-deep)}
+
+/* ---------------- 页脚 / dock ---------------- */
+.footer{padding:26px 0 8px;text-align:center;font-size:12px;color:var(--ink-3);font-family:var(--mono);letter-spacing:.04em}
+.preview-dock{
+  position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:100;
+  display:flex;align-items:center;gap:4px;padding:6px;
+  background:rgba(255,255,255,.88);backdrop-filter:blur(16px) saturate(1.3);
+  border:1px solid var(--line-strong);border-radius:14px;box-shadow:0 1px 2px rgba(26,38,32,.04);
+}
+.pd-btn{
+  display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:10px;border:none;background:none;
+  font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:pointer;transition:all .18s;font-family:var(--font);
+}
+.pd-btn .kn{font-family:var(--mono);font-size:9.5px;opacity:.55}
+.pd-btn:hover{background:rgba(26,38,32,.05);color:var(--ink)}
+.pd-btn.on{background:var(--primary);color:#fff}
+.pd-btn.on .kn{opacity:.8}
+
+@media (max-width:1080px){
+  .cols,.cols.wide-rail{grid-template-columns:1fr}
+  .rail{position:static}
+  .hero h1{font-size:29px}
+  .stat-strip{grid-template-columns:repeat(2,1fr)}
+  .st:nth-child(3){border-left:none}
+  .nav-links{display:none}
+  .p-head-row{flex-wrap:wrap}
+  .searchbar{max-width:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ================= 导航 ================= -->
+<div class="nav-dock">
+  <nav class="nav">
+    <div class="brand">
+      <div class="brand-mark"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <b>SOJ</b>
+    </div>
+    <div class="nav-links">
+      <a class="cur" href="#" data-go="home">首页</a>
+      <a href="#" data-go="problems">题库</a>
+      <a href="#" data-go="home">比赛</a>
+      <a href="#" data-go="home">班级</a>
+      <a href="#" data-go="rank">排名</a>
+      <a href="#" data-go="home">提交记录</a>
+    </div>
+    <div class="user-chip"><div class="avatar">R</div><span class="uname">root</span></div>
+  </nav>
+</div>
+
+<!-- ==================================================== 首页 ==================================================== -->
+<main class="screen on" id="scr-home">
+  <div class="wrap">
+    <div class="cols">
+      <!-- 主列 -->
+      <div class="main">
+        <div class="hero">
+          <h1>每一次提交，<br/>都有<span class="hl">清晰的回响</span></h1>
+          <p class="sub">沙箱判题、逐数据点反馈、班级作业与实时排行——一个干净清爽的在线判题系统。</p>
+          <button class="btn btn-primary">
+            <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            开始刷题
+          </button>
+        </div>
+
+        <div class="console">
+          <div class="console-bar">
+            <i class="wd" style="background:#F9C4C4"></i><i class="wd" style="background:#F6E3AE"></i><i class="wd" style="background:#BFEAD6"></i>
+            <span class="t">submission #12048</span>
+          </div>
+          <div class="console-body">
+            <div class="cmd"><span class="p">soj</span> submit P1042 --lang cpp17</div>
+            <div class="log">编译 + 运行 12/12 数据点<span class="ms">440 ms</span></div>
+            <div class="verdict">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              ACCEPTED<span class="score mono">100 / 100</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card stat-strip">
+          <div class="st"><b>128</b><span>题目</span></div>
+          <div class="st"><b>12,408</b><span>提交</span></div>
+          <div class="st"><b>62.4%</b><span>AC 率</span></div>
+          <div class="st"><b>87</b><span>在线</span></div>
+        </div>
+
+        <div class="card">
+          <div class="panel-head"><h2>近期比赛</h2><a class="more" href="#" data-go="home">全部 →</a></div>
+          <div class="contest-item">
+            <div class="date"><b>02</b><span>NOV</span></div>
+            <div>
+              <div class="ci-t">十周年 · 校内选拔赛</div>
+              <div class="ci-m">OI 赛制 · 4 题 · 240 min · 86 人已报名</div>
+            </div>
+            <a class="lnk">报名</a>
+          </div>
+          <div class="contest-item">
+            <div class="date"><b>09</b><span>NOV</span></div>
+            <div>
+              <div class="ci-t">新人周赛 Round #42</div>
+              <div class="ci-m">ICPC 赛制 · 6 题 · 120 min · 34 人已报名</div>
+            </div>
+            <a class="lnk">报名</a>
+          </div>
+          <div class="contest-item">
+            <div class="date"><b>26</b><span>OCT</span></div>
+            <div>
+              <div class="ci-t">班级练习 · 动态规划专题</div>
+              <div class="ci-m">进行中 · 剩余 01:42:18</div>
+            </div>
+            <span class="lnk" style="color:var(--tle)">LIVE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 副列 -->
+      <aside class="rail">
+        <div class="card rail-card">
+          <div class="pf-top">
+            <div class="avatar">R</div>
+            <div><b>root</b><span class="lvl">Lv.10 极域</span></div>
+          </div>
+          <div class="pf-bar-t"><span>已解决</span><b>78 / 128</b></div>
+          <div class="bar"><i style="width:61%"></i></div>
+          <div class="pf-kv">
+            <div><b>#12</b><span>排名</span></div>
+            <div><b>12 天</b><span>连续 AC</span></div>
+            <div><b>2,190</b><span>RATING</span></div>
+          </div>
+        </div>
+
+        <div class="card rail-card">
+          <div class="rc-h">公告</div>
+          <a class="ann"><span class="d">10.28</span>题库新增 6 题 · 含 DP 专题</a>
+          <a class="ann"><span class="d">11.02</span>十周年选拔赛开始报名</a>
+        </div>
+
+        <div class="card st-line"><i class="gdot"></i>判题机在线 · 4 workers · 队列 0</div>
+      </aside>
+    </div>
+  </div>
+  <div class="wrap"><div class="footer">SOJ · Gin + Vue 3 + MongoDB + go-judge · 界面重设计预览（清新浅色）</div></div>
+</main>
+
+<!-- ==================================================== 题库 ==================================================== -->
+<main class="screen" id="scr-problems">
+  <div class="wrap">
+    <div class="cols">
+      <!-- 主列 -->
+      <div class="main">
+        <div class="p-head-row">
+          <div class="p-head">
+            <h1>题库</h1>
+            <div class="cnt">128 题</div>
+          </div>
+          <div class="searchbar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input placeholder="搜索标题或题号…" />
+          </div>
+        </div>
+
+        <div class="card plist">
+          <div class="prow">
+            <i class="pstatus done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i>
+            <span class="pid">P1001</span><span class="pt">卖皮鞋</span>
+            <span class="diff" style="color:var(--t-bronze);background:var(--t-bronze-bg)"><i class="cdot" style="background:var(--t-bronze)"></i>青铜</span>
+          </div>
+          <div class="prow">
+            <i class="pstatus done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i>
+            <span class="pid">P1002</span><span class="pt">两个数的和</span>
+            <span class="diff" style="color:var(--t-bronze);background:var(--t-bronze-bg)"><i class="cdot" style="background:var(--t-bronze)"></i>青铜</span>
+          </div>
+          <div class="prow">
+            <i class="pstatus done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i>
+            <span class="pid">P1007</span><span class="pt">牧场</span>
+            <span class="diff" style="color:var(--t-silver);background:var(--t-silver-bg)"><i class="cdot" style="background:var(--t-silver)"></i>白银</span>
+          </div>
+          <div class="prow">
+            <i class="pstatus done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></i>
+            <span class="pid">P1016</span><span class="pt">火柴棒三角形问题</span>
+            <span class="diff" style="color:var(--t-silver);background:var(--t-silver-bg)"><i class="cdot" style="background:var(--t-silver)"></i>白银</span>
+          </div>
+          <div class="prow">
+            <i class="pstatus todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></i>
+            <span class="pid">P1027</span><span class="pt">数人数</span>
+            <span class="diff" style="color:var(--t-gold);background:var(--t-gold-bg)"><i class="cdot" style="background:var(--t-gold)"></i>黄金</span>
+          </div>
+          <div class="prow">
+            <i class="pstatus todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></i>
+            <span class="pid">P1038</span><span class="pt">植树（tree）</span>
+            <span class="diff" style="color:var(--t-gold);background:var(--t-gold-bg)"><i class="cdot" style="background:var(--t-gold)"></i>黄金</span>
+          </div>
+          <div class="prow">
+            <i class="pstatus todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></i>
+            <span class="pid">P1042</span><span class="pt">区间最值查询（RMQ）</span>
+            <span class="diff" style="color:var(--t-gold);background:var(--t-gold-bg)"><i class="cdot" style="background:var(--t-gold)"></i>黄金</span>
+          </div>
+          <div class="prow">
+            <i class="pstatus todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></i>
+            <span class="pid">P1051</span><span class="pt">最小生成树计数</span>
+            <span class="diff" style="color:var(--t-plat);background:var(--t-plat-bg)"><i class="cdot" style="background:var(--t-plat)"></i>铂金</span>
+          </div>
+          <div class="prow">
+            <i class="pstatus todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></i>
+            <span class="pid">P1064</span><span class="pt">弦图的完美消除序列</span>
+            <span class="diff" style="color:var(--t-dia);background:var(--t-dia-bg)"><i class="cdot" style="background:var(--t-dia)"></i>钻石</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 副列 -->
+      <aside class="rail">
+        <div class="card rail-card">
+          <div class="rc-h">筛选</div>
+          <div class="f-lab">难度</div>
+          <div class="f-wrap">
+            <span class="fchip on">全部</span>
+            <span class="fchip"><i class="cdot" style="background:var(--t-bronze)"></i>青铜</span>
+            <span class="fchip"><i class="cdot" style="background:var(--t-silver)"></i>白银</span>
+            <span class="fchip"><i class="cdot" style="background:var(--t-gold)"></i>黄金</span>
+            <span class="fchip"><i class="cdot" style="background:var(--t-plat)"></i>铂金</span>
+            <span class="fchip"><i class="cdot" style="background:var(--t-dia)"></i>钻石</span>
+          </div>
+          <div class="f-lab">标签</div>
+          <div class="f-wrap">
+            <span class="fchip">模拟</span>
+            <span class="fchip on">动态规划</span>
+            <span class="fchip">图论</span>
+            <span class="fchip">数据结构</span>
+            <span class="fchip">数学</span>
+          </div>
+          <div class="f-lab">状态</div>
+          <div class="f-wrap">
+            <span class="fchip on">全部</span>
+            <span class="fchip">已做</span>
+            <span class="fchip">未做</span>
+          </div>
+        </div>
+
+        <div class="card rail-card">
+          <div class="rc-h">我的进度</div>
+          <div class="kvs">
+            <div class="kv-r"><span>已解决</span><b>78 / 128</b></div>
+            <div class="kv-r"><span>当前排名</span><b>#12</b></div>
+            <div class="kv-r"><span>连续 AC</span><b>12 天</b></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="wrap"><div class="footer">SOJ · 界面重设计预览（清新浅色）</div></div>
+</main>
+
+<!-- ==================================================== 题目详情 ==================================================== -->
+<main class="screen" id="scr-detail">
+  <div class="wrap">
+    <div class="cols wide-rail">
+      <!-- 主列 -->
+      <div class="main">
+        <div class="crumb">题库 / <b>P1042</b></div>
+        <div class="ptitle-row">
+          <h1>区间最值查询<span style="color:var(--ink-3);font-weight:600">（RMQ）</span></h1>
+          <span class="diff" style="color:var(--t-gold);background:var(--t-gold-bg);font-size:12px;padding:5px 14px"><i class="cdot" style="background:var(--t-gold)"></i>黄金</span>
+        </div>
+
+        <article class="card statement">
+          <section>
+            <div class="sec-h">题目描述</div>
+            <p>给定一个长度为 <b class="mono">n</b> 的整数序列 <b class="mono">a₁, a₂, …, aₙ</b>，以及 <b class="mono">q</b> 次询问。每次询问给出区间 <b class="mono">[l, r]</b>，你需要回答该区间内的最大值。</p>
+            <p>序列元素在两次询问之间不会发生变化。为了获得满分，请设计一个 <b class="mono">O((n + q) log n)</b> 或更优的算法。</p>
+          </section>
+          <section>
+            <div class="sec-h">输入格式</div>
+            <p>第一行两个整数 <b class="mono">n, q</b>（1 ≤ n, q ≤ 2×10⁵）。<br/>第二行 <b class="mono">n</b> 个整数，第 <b class="mono">i</b> 个表示 <b class="mono">aᵢ</b>（|aᵢ| ≤ 10⁹）。<br/>接下来 <b class="mono">q</b> 行，每行两个整数 <b class="mono">l, r</b>（1 ≤ l ≤ r ≤ n）。</p>
+          </section>
+          <section>
+            <div class="sec-h">输出格式</div>
+            <p>对每次询问输出一行一个整数，表示区间最大值。</p>
+          </section>
+          <section>
+            <div class="sec-h">样例</div>
+            <div class="samples">
+              <div class="sample">
+                <div class="sh">样例输入 #1</div>
+                <pre>5 3
+1 -2 7 5 -9
+2 4
+1 5
+3 3</pre>
+              </div>
+              <div class="sample">
+                <div class="sh">样例输出 #1</div>
+                <pre>7
+7
+7</pre>
+              </div>
+            </div>
+          </section>
+          <section>
+            <div class="sec-h">提示</div>
+            <div class="hint-box"><b>Hint ·</b> 线段树与 Sparse Table 均可通过本题；使用 cin/cout 时请注意关闭流同步。</div>
+          </section>
+        </article>
+      </div>
+
+      <!-- 副列：题目信息 + 提交 -->
+      <aside class="rail">
+        <div class="card rail-card">
+          <div class="rc-h">题目信息</div>
+          <div class="kvs">
+            <div class="kv-r"><span>时间限制</span><b>1.00 s</b></div>
+            <div class="kv-r"><span>内存限制</span><b>256 MB</b></div>
+            <div class="kv-r"><span>通过率</span><b style="color:var(--ac)">38.7%</b></div>
+            <div class="kv-r"><span>提交次数</span><b>1,204</b></div>
+          </div>
+        </div>
+
+        <div class="card submit-card">
+          <div class="lang-seg">
+            <span class="lang on">C++17</span><span class="lang">C++20</span><span class="lang">Py3</span><span class="lang">Java</span>
+          </div>
+          <div class="editor">
+            <div class="ed-bar">
+              <span class="edt"><i style="background:#F9C4C4"></i><i style="background:#F6E3AE"></i><i style="background:#BFEAD6"></i></span>
+              <span class="fn">solution.cpp</span>
+            </div>
+            <div class="code">
+              <div class="ln"><span class="no">1</span><span><span class="tk-c">#include &lt;bits/stdc++.h&gt;</span></span></div>
+              <div class="ln"><span class="no">2</span><span><span class="tk-k">using namespace</span> std;</span></div>
+              <div class="ln"><span class="no">3</span><span>&nbsp;</span></div>
+              <div class="ln"><span class="no">4</span><span><span class="tk-t">int</span> n, q, a[<span class="tk-n">200005</span>];</span></div>
+              <div class="ln"><span class="no">5</span><span><span class="tk-k">struct</span> <span class="tk-t">SegTree</span> {</span></div>
+              <div class="ln"><span class="no">6</span><span>&nbsp;&nbsp;<span class="tk-t">long long</span> mx[<span class="tk-n">800005</span>];</span></div>
+              <div class="ln"><span class="no">7</span><span>&nbsp;&nbsp;<span class="tk-k">void</span> <span class="tk-f">build</span>(<span class="tk-t">int</span> p, <span class="tk-t">int</span> l, <span class="tk-t">int</span> r) {</span></div>
+              <div class="ln"><span class="no">8</span><span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="tk-k">if</span> (l == r) { mx[p] = a[l]; <span class="tk-k">return</span>; }</span></div>
+              <div class="ln"><span class="no">9</span><span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="tk-t">int</span> mid = (l + r) / <span class="tk-n">2</span>;</span></div>
+              <div class="ln"><span class="no">10</span><span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="tk-f">build</span>(p*<span class="tk-n">2</span>, l, mid);</span></div>
+              <div class="ln"><span class="no">11</span><span>&nbsp;&nbsp;&nbsp;&nbsp;<span class="tk-f">build</span>(p*<span class="tk-n">2</span>+<span class="tk-n">1</span>, mid+<span class="tk-n">1</span>, r);</span></div>
+              <div class="ln"><span class="no">12</span><span>&nbsp;&nbsp;&nbsp;&nbsp;mx[p] = <span class="tk-f">max</span>(mx[p*<span class="tk-n">2</span>], mx[p*<span class="tk-n">2</span>+<span class="tk-n">1</span>]);</span></div>
+              <div class="ln"><span class="no">13</span><span>&nbsp;&nbsp;}</span></div>
+              <div class="ln"><span class="no">14</span><span>};</span></div>
+            </div>
+          </div>
+          <div class="submit-foot">
+            <button class="btn btn-primary">
+              <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              提交评测
+            </button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="wrap"><div class="footer">SOJ · 界面重设计预览（清新浅色）</div></div>
+</main>
+
+<!-- ==================================================== 排行榜 ==================================================== -->
+<main class="screen" id="scr-rank">
+  <div class="wrap">
+    <div class="cols">
+      <!-- 主列 -->
+      <div class="main">
+        <div class="p-head-row">
+          <div class="p-head">
+            <h1>排行榜</h1>
+            <div class="cnt">342 名选手 · 每 30 秒刷新</div>
+          </div>
+          <div class="rank-tabs" style="margin-left:auto">
+            <span class="fchip on">总榜</span><span class="fchip">本赛季</span><span class="fchip">我的班级</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <table class="rtable">
+            <thead>
+              <tr><th>RANK</th><th>选手</th><th>AC</th><th>提交</th><th>通过率</th><th>RATING</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="rk">#1</td>
+                <td><div class="ru"><i class="fav2" style="background:#E0B24C">星</i><b>星野</b></div></td>
+                <td class="num">121</td><td class="num">198</td><td class="num">61.1%</td>
+                <td class="rating">2,684</td>
+              </tr>
+              <tr>
+                <td class="rk">#2</td>
+                <td><div class="ru"><i class="fav2" style="background:#9FB0B8">M</i><b>Mikasa</b></div></td>
+                <td class="num">106</td><td class="num">181</td><td class="num">58.6%</td>
+                <td class="rating">2,410</td>
+              </tr>
+              <tr>
+                <td class="rk">#3</td>
+                <td><div class="ru"><i class="fav2" style="background:#C98B5E">辰</i><b>辰砂</b></div></td>
+                <td class="num">98</td><td class="num">164</td><td class="num">59.8%</td>
+                <td class="rating">2,355</td>
+              </tr>
+              <tr class="me">
+                <td class="rk" style="color:var(--primary-deep)">#6<span class="up">▲3</span></td>
+                <td><div class="ru"><i class="fav2" style="background:var(--primary)">R</i><b>root <span style="font-size:11px;color:var(--primary-deep)">· 我</span></b></div></td>
+                <td class="num">78</td><td class="num">131</td><td class="num">59.5%</td>
+                <td class="rating">2,190</td>
+              </tr>
+              <tr>
+                <td class="rk">#7<span class="up">▲1</span></td>
+                <td><div class="ru"><i class="fav2" style="background:#5BAFC9">K</i><b>Kirito</b></div></td>
+                <td class="num">76</td><td class="num">140</td><td class="num">54.3%</td>
+                <td class="rating">2,158</td>
+              </tr>
+              <tr>
+                <td class="rk">#8<span class="dn">▼2</span></td>
+                <td><div class="ru"><i class="fav2" style="background:#7FA88C">芦</i><b>芦苇</b></div></td>
+                <td class="num">71</td><td class="num">128</td><td class="num">55.5%</td>
+                <td class="rating">2,122</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 副列 -->
+      <aside class="rail">
+        <div class="card rail-card">
+          <div class="rc-h">我的排名</div>
+          <div class="myrank"><b>#6</b><span class="up">▲3</span><span class="rt">RATING 2,190</span></div>
+          <div class="kvs" style="margin-top:10px">
+            <div class="kv-r"><span>AC</span><b>78</b></div>
+            <div class="kv-r"><span>提交</span><b>131</b></div>
+            <div class="kv-r"><span>通过率</span><b>59.5%</b></div>
+          </div>
+        </div>
+
+        <div class="card rail-card">
+          <div class="rc-h">TOP 3</div>
+          <div class="t3"><span class="m" style="color:#D9A93C">1</span><b>星野</b><span class="r">2,684</span></div>
+          <div class="t3"><span class="m" style="color:#8FA1AA">2</span><b>Mikasa</b><span class="r">2,410</span></div>
+          <div class="t3"><span class="m" style="color:#C98B5E">3</span><b>辰砂</b><span class="r">2,355</span></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+  <div class="wrap"><div class="footer">SOJ · 界面重设计预览（清新浅色）</div></div>
+</main>
+
+<!-- ================= 预览切换 Dock ================= -->
+<div class="preview-dock" role="tablist">
+  <button class="pd-btn on" data-scr="home"><span class="kn">1</span>首页</button>
+  <button class="pd-btn" data-scr="problems"><span class="kn">2</span>题库</button>
+  <button class="pd-btn" data-scr="detail"><span class="kn">3</span>题目详情</button>
+  <button class="pd-btn" data-scr="rank"><span class="kn">4</span>排行榜</button>
+</div>
+
+<script>
+const scrns = document.querySelectorAll(".screen");
+function go(name){
+  scrns.forEach(s => s.classList.toggle("on", s.id === "scr-" + name));
+  document.querySelectorAll(".pd-btn").forEach(b => b.classList.toggle("on", b.dataset.scr === name));
+  const navName = name === "detail" ? "problems" : name;
+  document.querySelectorAll(".nav-links a").forEach(a => a.classList.toggle("cur", a.dataset.go === navName));
+  window.scrollTo({top:0, behavior:"instant"});
+}
+document.querySelectorAll(".pd-btn").forEach(b => b.addEventListener("click", () => go(b.dataset.scr)));
+document.querySelectorAll("[data-go]").forEach(a => a.addEventListener("click", e => { e.preventDefault(); go(a.dataset.go); }));
+document.addEventListener("keydown", e => {
+  const map = {"1":"home","2":"problems","3":"detail","4":"rank"};
+  if (map[e.key] && !/input|textarea/i.test(document.activeElement.tagName)) go(map[e.key]);
+});
+</script>
+</body>
+</html>

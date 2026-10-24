@@ -1,0 +1,898 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SOJ · 界面重设计预览 v2 · 纸墨靛青</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+/* ==================================================================
+   SOJ 界面重设计预览 v2 —— 「纸墨 · 靛青」
+   方向：暖纸底 + 墨色正文 + 靛青点缀 + 朱印品牌章
+   语言：衬线大标题 / 细线分隔 / 方角小圆角 / 墨色主按钮
+   布局：顶部导航；首页·排名·提交记录单列，其余主列+副列
+        （副列顺序：管理入口 → 重要信息 → 辅助信息 → 说明）
+   仅浅色。
+   ================================================================== */
+:root{
+  --paper:#F6F4ED;
+  --surface:#FDFCF8;
+  --surface-2:#F3F1E8;
+  --ink:#1D1B15;
+  --ink-2:#57543F;
+  --ink-3:#97927C;
+  --line:#E6E2D3;
+  --line-2:#D7D2BF;
+
+  --indigo:#2F44C0;
+  --indigo-deep:#24369E;
+  --indigo-soft:rgba(47,68,192,.07);
+  --indigo-line:rgba(47,68,192,.32);
+  --seal:#C03D22;              /* 朱印，仅品牌章使用 */
+
+  --ac:#2E7D4F;   --ac-bg:#E8F1EA;  --ac-line:rgba(46,125,79,.30);
+  --wa:#B93A2B;   --wa-bg:#F7E8E4;  --wa-line:rgba(185,58,43,.30);
+  --tle:#9A6E15;  --tle-bg:#F6EEDA;  --tle-line:rgba(154,110,21,.32);
+  --mut:#7B7664;  --mut-bg:#F0EEE4;  --mut-line:rgba(123,118,100,.32);
+
+  --d-bronze:#8A5A33; --d-bronze-bg:rgba(138,90,51,.10);
+  --d-silver:#66757F; --d-silver-bg:rgba(102,117,127,.12);
+  --d-gold:#96741B;   --d-gold-bg:rgba(150,116,27,.11);
+  --d-plat:#237E6B;   --d-plat-bg:rgba(35,126,107,.10);
+  --d-dia:#3358B8;    --d-dia-bg:rgba(51,88,184,.10);
+
+  --font:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono","Cascadia Code",ui-monospace,Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font);background:var(--paper);color:var(--ink);
+  font-size:14px;line-height:1.75;-webkit-font-smoothing:antialiased;
+  padding-bottom:118px;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(880px 460px at 78% -12%, rgba(47,68,192,.055), transparent 62%),
+    radial-gradient(700px 380px at 6% 4%, rgba(192,61,34,.028), transparent 58%);
+}
+a{color:inherit;text-decoration:none}
+button{font-family:var(--font)}
+::selection{background:rgba(47,68,192,.16)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.wrap{max-width:1200px;margin:0 auto;padding:0 28px}
+.wrap.narrow{max-width:1080px}
+
+/* ---------------- 顶部导航 ---------------- */
+.topnav{
+  position:sticky;top:0;z-index:40;
+  background:rgba(253,252,248,.94);
+  backdrop-filter:blur(10px) saturate(1.2);-webkit-backdrop-filter:blur(10px) saturate(1.2);
+  border-bottom:1px solid var(--line-2);
+}
+.topnav-in{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:30px;height:62px;padding:0 28px}
+.brand{display:flex;align-items:center;gap:10px;flex:none}
+.seal{
+  width:27px;height:27px;border-radius:6px;background:var(--seal);color:#FBF5EC;
+  display:grid;place-items:center;font-family:var(--serif);font-size:15px;font-weight:900;
+  box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.30), 0 1px 2px rgba(29,27,21,.18);
+}
+.brand-name{font-family:var(--serif);font-weight:900;font-size:19px;letter-spacing:.10em}
+.nav-links{display:flex;flex:1;justify-content:center}
+.nav-links a{
+  position:relative;padding:20px 3px;margin:0 13px;
+  font-size:13.5px;font-weight:500;color:var(--ink-2);white-space:nowrap;transition:color .15s;
+}
+.nav-links a:hover{color:var(--ink)}
+.nav-links a.on{color:var(--ink);font-weight:600}
+.nav-links a.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--indigo)}
+.nav-right{display:flex;align-items:center;gap:18px;flex:none}
+.admin-link{font-size:13px;color:var(--ink-2)}
+.admin-link:hover{color:var(--indigo)}
+.user-chip{display:flex;align-items:center;gap:8px;cursor:pointer}
+.avatar{
+  width:29px;height:29px;border-radius:8px;background:var(--ink);color:#FBF9F1;
+  display:grid;place-items:center;font-size:12.5px;font-weight:700;font-family:var(--serif);
+}
+.user-chip .uname{font-size:13px;font-weight:600}
+.tier{
+  display:inline-flex;align-items:center;gap:4px;padding:1.5px 8px;border-radius:4px;
+  font-size:11px;font-weight:700;color:#fff;
+  background:linear-gradient(115deg,#2F44C0,#6A38C2 55%,#A8339E);
+  box-shadow:0 0 0 1px rgba(47,68,192,.25);
+}
+
+/* ---------------- 页面骨架 ---------------- */
+.screen{display:none;animation:fadeUp .4s cubic-bezier(.2,.7,.2,1)}
+.screen.on{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 316px;gap:26px;align-items:start;padding:34px 0 60px}
+.cols.rail-wide{grid-template-columns:minmax(0,1fr) 344px}
+.main{min-width:0}
+.rail{position:sticky;top:84px;display:flex;flex-direction:column;gap:14px}
+.rail-b{display:flex;flex-direction:column;gap:14px}
+
+.page-head{padding:6px 0 0}
+.page-kicker{font-size:11px;letter-spacing:.26em;color:var(--ink-3);font-weight:600}
+.page-title{font-family:var(--serif);font-size:27px;font-weight:900;line-height:1.35;margin-top:4px}
+.page-title small{font-family:var(--font);font-size:13px;font-weight:500;color:var(--ink-3);margin-left:12px;letter-spacing:0}
+.drule{margin-top:14px;border-top:2.5px solid var(--ink)}
+.drule::after{content:"";display:block;border-top:1px solid var(--line-2);margin-top:3px}
+
+/* ---------------- 卡片 ---------------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:9px}
+.card-h{padding:14px 17px 0}
+.card-b{padding:13px 17px 16px}
+.ov{font-size:10.5px;letter-spacing:.24em;color:var(--ink-3);font-weight:700}
+.card-t{font-family:var(--serif);font-size:16.5px;font-weight:700;margin-top:3px;line-height:1.4}
+.hint{font-size:12px;line-height:1.8;color:var(--ink-3);margin-top:10px}
+
+/* ---------------- 按钮 ---------------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:9px 18px;border-radius:7px;font-size:13.5px;font-weight:600;cursor:pointer;
+  border:1px solid transparent;transition:all .16s;line-height:1.4;
+}
+.btn svg{width:15px;height:15px;flex:none}
+.btn-ink{background:var(--ink);color:#FBF9F1}
+.btn-ink:hover{background:#000;transform:translateY(-1px);box-shadow:0 5px 14px -6px rgba(29,27,21,.5)}
+.btn-ghost{background:transparent;border-color:var(--line-2);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--ink);background:rgba(29,27,21,.03)}
+.btn-indigo{background:transparent;border-color:var(--indigo-line);color:var(--indigo)}
+.btn-indigo:hover{background:var(--indigo-soft);border-color:var(--indigo)}
+.btn-block{width:100%}
+.btn-sm{padding:6.5px 13px;font-size:12.5px;border-radius:6px}
+.btn-lg{padding:11.5px 26px;font-size:14.5px}
+
+/* ---------------- 表格 ---------------- */
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{
+  font-size:11px;letter-spacing:.14em;color:var(--ink-3);font-weight:600;text-align:left;
+  padding:11px 14px;border-bottom:1px solid var(--line-2);white-space:nowrap;background:var(--surface-2);
+}
+.tbl th:first-child{border-radius:6px 0 0 0}
+.tbl th:last-child{border-radius:0 6px 0 0}
+.tbl td{padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+.tbl tbody tr{transition:background .12s}
+.tbl tbody tr:hover{background:rgba(29,27,21,.024)}
+.tbl tbody tr.me{background:var(--indigo-soft)}
+.tbl .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tlink{font-weight:600}
+.tlink:hover{color:var(--indigo)}
+.dim{color:var(--ink-3)}
+
+/* ---------------- 徽章 ---------------- */
+.st{display:inline-flex;align-items:center;gap:6px;padding:2.5px 9px;border-radius:4px;font-size:12px;font-weight:600;border:1px solid;white-space:nowrap}
+.st i{width:6px;height:6px;border-radius:1.5px;background:currentColor;flex:none}
+.st.ac{color:var(--ac);background:var(--ac-bg);border-color:var(--ac-line)}
+.st.wa{color:var(--wa);background:var(--wa-bg);border-color:var(--wa-line)}
+.st.tle{color:var(--tle);background:var(--tle-bg);border-color:var(--tle-line)}
+.st.mut{color:var(--mut);background:var(--mut-bg);border-color:var(--mut-line)}
+.st.run{color:var(--indigo);background:var(--indigo-soft);border-color:var(--indigo-line)}
+.st.run i{animation:blink 1.1s infinite}
+@keyframes blink{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.st.run i{animation:none}}
+
+.diff{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:4px;font-size:12px;font-weight:600;border:1px solid var(--line)}
+.diff i{width:6px;height:6px;border-radius:1.5px;background:currentColor}
+.diff.d1{color:var(--d-bronze);background:var(--d-bronze-bg);border-color:rgba(138,90,51,.25)}
+.diff.d2{color:var(--d-silver);background:var(--d-silver-bg);border-color:rgba(102,117,127,.28)}
+.diff.d3{color:var(--d-gold);background:var(--d-gold-bg);border-color:rgba(150,116,27,.28)}
+.diff.d4{color:var(--d-plat);background:var(--d-plat-bg);border-color:rgba(35,126,107,.26)}
+.diff.d5{color:var(--d-dia);background:var(--d-dia-bg);border-color:rgba(51,88,184,.26)}
+.diff.d9{color:#fff;border-color:transparent;background:linear-gradient(115deg,#2F44C0,#6A38C2 55%,#A8339E)}
+
+.tagchip{
+  display:inline-block;padding:1.5px 8px;border-radius:4px;font-size:11.5px;color:var(--ink-2);
+  background:var(--surface-2);border:1px solid var(--line);margin:0 3px 3px 0;
+}
+.tagchip:hover{color:var(--indigo);border-color:var(--indigo-line);background:var(--indigo-soft);cursor:pointer}
+
+/* ---------------- 表单控件 ---------------- */
+.input{
+  display:flex;align-items:center;gap:9px;background:var(--surface);
+  border:1px solid var(--line-2);border-radius:7px;padding:0 13px;height:38px;transition:border-color .15s;
+}
+.input:focus-within{border-color:var(--indigo);box-shadow:0 0 0 3px rgba(47,68,192,.10)}
+.input svg{width:15px;height:15px;color:var(--ink-3);flex:none}
+.input input,.input select{
+  border:0;outline:0;background:transparent;width:100%;font-size:13.5px;color:var(--ink);font-family:var(--font);
+}
+.input select{cursor:pointer;appearance:none}
+.sel{display:flex;align-items:center;gap:7px;border:1px solid var(--line-2);border-radius:7px;background:var(--surface);height:38px;padding:0 12px;font-size:13px;color:var(--ink-2);cursor:pointer;transition:all .15s;white-space:nowrap}
+.sel:hover{border-color:var(--ink)}
+.sel.on{border-color:var(--indigo);color:var(--indigo);background:var(--indigo-soft)}
+.sel b{font-weight:600}
+
+/* ---------------- 首页 ---------------- */
+.announce{
+  display:flex;align-items:center;gap:14px;margin-top:26px;
+  background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--indigo);
+  border-radius:8px;padding:11px 18px;font-size:13px;color:var(--ink-2);
+}
+.announce .ov{flex:none;color:var(--indigo)}
+.announce a{margin-left:auto;color:var(--indigo);font-weight:600;white-space:nowrap;font-size:12.5px}
+.hero{text-align:center;padding:58px 0 8px}
+.hero .kicker{font-size:11.5px;letter-spacing:.34em;color:var(--ink-3);font-weight:600}
+.hero h1{font-family:var(--serif);font-size:42px;font-weight:900;letter-spacing:.02em;margin:14px 0 10px;line-height:1.35}
+.hero h1 em{font-style:normal;color:var(--indigo)}
+.hero .sub{font-size:14.5px;color:var(--ink-2);max-width:560px;margin:0 auto}
+.hero-search{display:flex;gap:10px;justify-content:center;margin:26px 0 0}
+.hero-search .input{width:400px;height:46px;border-radius:8px}
+.hero-btns{display:flex;gap:10px;justify-content:center;margin-top:12px}
+.statline{
+  display:flex;justify-content:center;margin-top:40px;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);
+  padding:18px 0;
+}
+.statline .cell{padding:0 44px;border-left:1px solid var(--line)}
+.statline .cell:first-child{border-left:0}
+.statline b{display:block;font-family:var(--serif);font-size:24px;font-weight:900;line-height:1.3}
+.statline span{font-size:12px;color:var(--ink-3);letter-spacing:.08em}
+.dotd{
+  display:flex;align-items:center;gap:18px;margin-top:26px;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 22px;
+}
+.dotd .ov{color:var(--indigo)}
+.dotd .pd{font-family:var(--serif);font-size:17px;font-weight:700}
+.dotd .meta{font-size:12.5px;color:var(--ink-3)}
+.dotd a{margin-left:auto;flex:none}
+.home-sec{margin-top:34px}
+.home-sec-h{display:flex;align-items:baseline;gap:12px;margin-bottom:14px}
+.home-sec-h h2{font-family:var(--serif);font-size:19px;font-weight:900}
+.home-sec-h a{margin-left:auto;font-size:12.5px;color:var(--ink-3)}
+.home-sec-h a:hover{color:var(--indigo)}
+.contest-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.ccard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:all .18s}
+.ccard:hover{border-color:var(--line-2);transform:translateY(-2px);box-shadow:0 10px 24px -18px rgba(29,27,21,.35)}
+.ccard h3{font-family:var(--serif);font-size:16.5px;font-weight:700;line-height:1.5}
+.ccard .meta{font-size:12.5px;color:var(--ink-3);line-height:1.9}
+.ccard .btn{margin-top:auto;align-self:flex-start}
+.footer{margin-top:64px;border-top:1px solid var(--line-2);padding:20px 0 8px;display:flex;justify-content:space-between;font-size:12px;color:var(--ink-3)}
+
+/* ---------------- 工具条 / 分页 ---------------- */
+.toolbar{display:flex;gap:10px;align-items:center;margin:18px 0 14px;flex-wrap:wrap}
+.toolbar .input.grow{flex:1;min-width:220px}
+.table-card{overflow:hidden}
+.pager{display:flex;align-items:center;gap:6px;justify-content:flex-end;padding:14px 4px 2px;font-size:13px;color:var(--ink-3)}
+.pager button{
+  min-width:30px;height:30px;border-radius:6px;border:1px solid var(--line-2);background:var(--surface);
+  cursor:pointer;font-size:12.5px;color:var(--ink-2);
+}
+.pager button.cur{background:var(--ink);color:#FBF9F1;border-color:var(--ink)}
+.pager button:hover:not(.cur){border-color:var(--ink)}
+
+/* ---------------- 副列小组件 ---------------- */
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.kv .k{background:var(--surface);padding:11px 13px}
+.kv b{display:block;font-family:var(--serif);font-size:19px;font-weight:900;line-height:1.35}
+.kv span{font-size:11px;color:var(--ink-3);letter-spacing:.05em}
+.spark{display:flex;align-items:flex-end;gap:5px;height:44px;margin-top:12px}
+.spark i{flex:1;border-radius:2px 2px 0 0;background:var(--indigo-line);min-height:3px}
+.spark i.hi{background:var(--indigo)}
+.mini-li{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.mini-li:last-child{border-bottom:0;padding-bottom:0}
+.mini-li:first-child{padding-top:0}
+.mini-li .grow{flex:1;min-width:0}
+.mini-li a{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-li .t{color:var(--ink-3);font-size:11.5px;flex:none}
+.btngroup{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* ---------------- 题目详情 ---------------- */
+.crumbs{font-size:12.5px;color:var(--ink-3);margin-bottom:6px}
+.crumbs a:hover{color:var(--indigo)}
+.prob-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.prob-head .pid{font-family:var(--mono);font-weight:700;color:var(--ink-3);font-size:15px}
+.prob-head h1{font-family:var(--serif);font-size:25px;font-weight:900}
+.prob-meta{display:flex;gap:0;margin-top:14px;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);padding:11px 0;flex-wrap:wrap}
+.prob-meta .cell{padding:0 20px;border-left:1px solid var(--line);font-size:12.5px;color:var(--ink-2)}
+.prob-meta .cell:first-child{border-left:0;padding-left:2px}
+.prob-meta b{font-weight:600;color:var(--ink)}
+.md h2{font-family:var(--serif);font-size:17.5px;font-weight:900;margin:26px 0 10px;display:flex;align-items:center;gap:10px}
+.md h2::before{content:"";width:8px;height:8px;background:var(--indigo);border-radius:1.5px;flex:none}
+.md p{font-size:14px;color:var(--ink-2);margin:8px 0}
+.md .io{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.codeblk{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#F5F3EA}
+.codeblk-h{display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);background:var(--surface-2);font-size:11.5px;color:var(--ink-3);letter-spacing:.08em;font-weight:600}
+.codeblk-h button{margin-left:auto;border:0;background:none;font-size:11.5px;color:var(--indigo);cursor:pointer;font-weight:600}
+.codeblk pre{font-family:var(--mono);font-size:12.5px;line-height:1.8;padding:11px 14px;color:#3B382E;white-space:pre-wrap}
+.note{background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--ink-3);border-radius:6px;padding:10px 14px;font-size:12.5px;color:var(--ink-2)}
+.codebox{
+  border:1px solid var(--line-2);border-radius:8px;background:#F7F5EC;
+  font-family:var(--mono);font-size:12px;line-height:1.75;padding:11px 13px;color:#4A473C;height:128px;overflow:hidden;
+}
+.codebox .ln{color:var(--ink-3);margin-right:12px;user-select:none}
+
+/* ---------------- 比赛 ---------------- */
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:3px;margin:18px 0 14px}
+.seg button{border:0;background:none;padding:6.5px 16px;border-radius:6px;font-size:13px;color:var(--ink-2);cursor:pointer;font-weight:500}
+.seg button.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(29,27,21,.10)}
+.crow{display:flex;align-items:center;gap:18px;padding:17px 20px;background:var(--surface);border:1px solid var(--line);border-radius:10px;margin-bottom:12px;transition:all .16s}
+.crow:hover{border-color:var(--line-2);box-shadow:0 8px 22px -18px rgba(29,27,21,.4)}
+.crow .grow{flex:1;min-width:0}
+.crow h3{font-family:var(--serif);font-size:16.5px;font-weight:700;margin-bottom:3px}
+.crow .meta{font-size:12.5px;color:var(--ink-3)}
+.crow .when{text-align:right;font-size:12px;color:var(--ink-3);line-height:1.8;flex:none}
+.crow .when b{display:block;font-family:var(--mono);font-size:13px;color:var(--ink)}
+.countdown{font-family:var(--mono);font-size:21px;font-weight:700;color:var(--indigo);letter-spacing:.02em}
+
+/* ---------------- 排名 ---------------- */
+.podium{display:grid;grid-template-columns:1fr 1.12fr 1fr;gap:14px;align-items:end;margin:22px 0 18px}
+.pcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px;text-align:center}
+.pcard.p1{border-top:3px solid var(--indigo);padding-bottom:26px}
+.pcard .rank-no{font-family:var(--serif);font-size:30px;font-weight:900;line-height:1.2;color:var(--ink-3)}
+.pcard.p1 .rank-no{color:var(--indigo)}
+.pcard .pav{width:52px;height:52px;border-radius:14px;margin:8px auto 8px;display:grid;place-items:center;font-family:var(--serif);font-weight:900;font-size:20px;color:#FBF9F1}
+.pcard .pname{font-weight:700;font-size:14.5px}
+.pcard .psolved{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);margin-top:3px}
+.pcard .psolved b{color:var(--ink);font-size:15px}
+
+/* ---------------- 提交记录 ---------------- */
+.filterbar{display:flex;gap:10px;margin:18px 0 14px;flex-wrap:wrap}
+
+/* ---------------- 预览导航 Dock ---------------- */
+.dock{
+  position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:60;
+  display:flex;align-items:center;gap:4px;
+  background:var(--ink);color:#EDEADF;border-radius:12px;padding:8px 10px;
+  box-shadow:0 14px 34px -12px rgba(29,27,21,.55);
+}
+.dock .lab{font-size:10.5px;letter-spacing:.2em;color:#B9B4A0;padding:0 10px 0 8px;font-weight:700}
+.dock button{
+  border:0;background:none;color:#EDEADF;font-size:12.5px;padding:6px 12px;border-radius:7px;cursor:pointer;
+  font-weight:500;white-space:nowrap;transition:all .14s;font-family:var(--font);
+}
+.dock button i{font-style:normal;font-family:var(--mono);font-size:10px;color:#8F8B77;margin-right:5px}
+.dock button:hover{background:rgba(255,255,255,.12)}
+.dock button.on{background:var(--paper);color:var(--ink);font-weight:700}
+.dock button.on i{color:var(--indigo)}
+
+@media (max-width:1000px){
+  .cols,.cols.rail-wide{grid-template-columns:1fr}
+  .rail{position:static}
+  .contest-grid{grid-template-columns:1fr}
+  .podium{grid-template-columns:1fr}
+  .statline .cell{padding:0 18px}
+  .nav-links{display:none}
+  .hero h1{font-size:30px}
+  .md .io{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ 顶部导航 ============ -->
+<header class="topnav">
+  <div class="topnav-in">
+    <a class="brand" href="#" data-go="home">
+      <span class="seal">判</span>
+      <span class="brand-name">SOJ</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#" data-go="home" class="on" id="nav-home">首页</a>
+      <a href="#" data-go="problems" id="nav-problems">题库</a>
+      <a href="#" data-go="contests" id="nav-contests">比赛</a>
+      <a href="#">班级</a>
+      <a href="#" data-go="rank" id="nav-rank">排名</a>
+      <a href="#" data-go="subs" id="nav-subs">提交记录</a>
+    </nav>
+    <div class="nav-right">
+      <a class="admin-link" href="#">管理后台</a>
+      <div class="user-chip">
+        <span class="avatar">R</span>
+        <span class="uname">root</span>
+        <span class="tier">✦ Lv.10 极境</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ================================================== 首页（单列） -->
+<main class="screen on" id="scr-home">
+  <div class="wrap narrow">
+    <div class="announce">
+      <span class="ov">公告</span>
+      <span>「国庆杯程序设计赛」报名通道已开启，10 月 28 日 19:00 准时开赛，支持组队参加。</span>
+      <a href="#" data-go="contests">查看赛事 →</a>
+    </div>
+
+    <section class="hero">
+      <div class="kicker">SANDBOX JUDGED · INSTANT SCORED</div>
+      <h1>把每一次提交，<br />都变成一次<em>成长</em>。</h1>
+      <p class="sub">面向班级与社团的轻量 Online Judge —— 提交代码、沙箱判题、即时出分；作业、考试、比赛、排名，一站俱全。</p>
+      <div class="hero-search">
+        <label class="input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input placeholder="搜索题号或关键词，回车直达" />
+        </label>
+        <button class="btn btn-ink btn-lg" data-go="problems">开始刷题</button>
+      </div>
+      <div class="hero-btns">
+        <button class="btn btn-ghost" data-go="rank">查看排名</button>
+        <button class="btn btn-ghost">进入班级</button>
+      </div>
+    </section>
+
+    <div class="statline">
+      <div class="cell"><b>26</b><span>收录题目</span></div>
+      <div class="cell"><b>132</b><span>注册选手</span></div>
+      <div class="cell"><b>342</b><span>今日提交</span></div>
+      <div class="cell"><b>1.8<small style="font-size:13px">s</small></b><span>平均判题时长</span></div>
+    </div>
+
+    <div class="dotd">
+      <div>
+        <span class="ov">今日一题 · 10 月 24 日</span>
+        <div class="pd">P1015 植树（tree）</div>
+        <div class="meta"><span class="diff d3"><i></i>黄金</span>&ensp;通过率 47% &ensp;·&ensp;标签 树 / DFS</div>
+      </div>
+      <button class="btn btn-indigo" data-go="detail">去做这道题</button>
+    </div>
+
+    <section class="home-sec">
+      <div class="home-sec-h"><h2>最近赛事</h2><a href="#" data-go="contests">全部赛事 →</a></div>
+      <div class="contest-grid">
+        <div class="ccard">
+          <span class="st run" style="align-self:flex-start"><i></i>进行中</span>
+          <h3>国庆杯程序设计赛</h3>
+          <div class="meta">OI 赛制 · 5 题 · 3 小时<br />已进行 1:18 · 128 人参赛</div>
+          <button class="btn btn-indigo btn-sm">进入赛场</button>
+        </div>
+        <div class="ccard">
+          <span class="st tle" style="align-self:flex-start"><i></i>即将开始</span>
+          <h3>周赛 #48</h3>
+          <div class="meta">IO 赛制 · 4 题 · 2 小时<br />10-27（周一）19:00 开赛</div>
+          <button class="btn btn-ghost btn-sm">预约提醒</button>
+        </div>
+        <div class="ccard">
+          <span class="st mut" style="align-self:flex-start"><i></i>已结束</span>
+          <h3>新生练习赛 · 第三场</h3>
+          <div class="meta">10-19 结束 · 86 人参赛<br />榜首：林间有雾（5/5）</div>
+          <button class="btn btn-ghost btn-sm">查看榜单</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <span>SOJ · 在线判题系统</span>
+      <span>界面重设计预览 v2 · 纸墨靛青 · 仅浅色</span>
+    </div>
+  </div>
+</main>
+
+<!-- ================================================== 题库（主+副） -->
+<main class="screen" id="scr-problems">
+  <div class="wrap">
+    <div class="cols">
+      <div class="main">
+        <div class="page-head">
+          <div class="page-kicker">PROBLEM SET</div>
+          <h1 class="page-title">题库<small>共 26 题 · 你已解决 3 题</small></h1>
+          <div class="drule"></div>
+        </div>
+
+        <div class="toolbar">
+          <label class="input grow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input placeholder="搜索标题关键词或题号" />
+          </label>
+          <span class="sel on"><b>标签</b> · 2</span>
+          <span class="sel">难度</span>
+          <span class="sel">状态</span>
+          <span class="sel">高级筛选</span>
+        </div>
+
+        <div class="card table-card">
+          <table class="tbl">
+            <thead><tr>
+              <th style="width:74px">题号</th><th>题目</th><th style="width:92px">难度</th>
+              <th style="width:200px">标签</th><th style="width:86px">通过率</th><th style="width:96px">我的状态</th>
+            </tr></thead>
+            <tbody>
+              <tr><td class="num dim">P1000</td><td><a class="tlink" href="#" data-go="detail">卖皮鞋</a></td><td><span class="diff d1"><i></i>青铜</span></td><td class="dim">—</td><td class="num">92%</td><td><span class="st ac"><i></i>已通过</span></td></tr>
+              <tr><td class="num dim">P1001</td><td><a class="tlink" href="#" data-go="detail">两个数的和</a></td><td><span class="diff d1"><i></i>青铜</span></td><td><span class="tagchip">入门</span></td><td class="num">87%</td><td><span class="st ac"><i></i>已通过</span></td></tr>
+              <tr><td class="num dim">P1002</td><td><a class="tlink" href="#" data-go="detail">两个数的和 II</a></td><td><span class="diff d2"><i></i>白银</span></td><td><span class="tagchip">双指针</span></td><td class="num">64%</td><td class="dim">未做</td></tr>
+              <tr><td class="num dim">P1003</td><td><a class="tlink" href="#" data-go="detail">三个数的和</a></td><td><span class="diff d3"><i></i>黄金</span></td><td><span class="tagchip">枚举</span><span class="tagchip">双指针</span></td><td class="num">41%</td><td><span class="st wa"><i></i>未通过</span></td></tr>
+              <tr><td class="num dim">P1005</td><td><a class="tlink" href="#" data-go="detail">分割</a></td><td><span class="diff d2"><i></i>白银</span></td><td class="dim">—</td><td class="num">58%</td><td class="dim">未做</td></tr>
+              <tr><td class="num dim">P1015</td><td><a class="tlink" href="#" data-go="detail">植树（tree）</a></td><td><span class="diff d3"><i></i>黄金</span></td><td><span class="tagchip">树</span><span class="tagchip">DFS</span></td><td class="num">47%</td><td class="dim">未做</td></tr>
+              <tr><td class="num dim">P1018</td><td><a class="tlink" href="#" data-go="detail">A+B problem</a></td><td><span class="diff d1"><i></i>青铜</span></td><td class="dim">—</td><td class="num">95%</td><td><span class="st ac"><i></i>已通过</span></td></tr>
+              <tr><td class="num dim">P1021</td><td><a class="tlink" href="#" data-go="detail">火柴棒三角形问题</a></td><td><span class="diff d2"><i></i>白银</span></td><td><span class="tagchip">枚举</span></td><td class="num">71%</td><td class="dim">未做</td></tr>
+              <tr><td class="num dim">P1024</td><td><a class="tlink" href="#" data-go="detail">[2020 肥西县小学组] 小明签到</a></td><td><span class="diff d1"><i></i>青铜</span></td><td class="dim">—</td><td class="num">89%</td><td class="dim">未做</td></tr>
+              <tr><td class="num dim">P1026</td><td><a class="tlink" href="#" data-go="detail">成绩</a></td><td><span class="diff d3"><i></i>黄金</span></td><td><span class="tagchip">模拟</span></td><td class="num">55%</td><td class="dim">未做</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <span style="margin-right:auto">第 1 / 3 页</span>
+          <button>‹</button><button class="cur">1</button><button>2</button><button>3</button><button>›</button>
+        </div>
+      </div>
+
+      <aside class="rail">
+        <div class="card">
+          <div class="card-h"><div class="ov">管理</div><div class="card-t">题目管理</div></div>
+          <div class="card-b">
+            <div class="btngroup" style="grid-template-columns:1fr">
+              <button class="btn btn-ink btn-block">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新增题目
+              </button>
+              <button class="btn btn-ghost btn-block">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>导入题目
+              </button>
+              <button class="btn btn-ghost btn-block">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3m0 12 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>打包导出
+              </button>
+            </div>
+            <p class="hint">新增题目在表单里写题面，zip 只收数据与配置；题包（含题面）批量导入走「导入题目」。</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">我的</div><div class="card-t">数据概览</div></div>
+          <div class="card-b">
+            <div class="kv">
+              <div class="k"><b>3<small style="font-size:12px;color:var(--ink-3)">/26</small></b><span>已解决</span></div>
+              <div class="k"><b>#7</b><span>全站排名</span></div>
+              <div class="k"><b>46</b><span>提交次数</span></div>
+              <div class="k"><b>62%</b><span>AC 率</span></div>
+            </div>
+            <div class="spark" title="最近七天提交">
+              <i style="height:30%"></i><i style="height:55%"></i><i style="height:20%"></i><i style="height:70%"></i><i class="hi" style="height:100%"></i><i style="height:45%"></i><i style="height:62%"></i>
+            </div>
+            <p class="hint" style="margin-top:8px">最近七天提交 · 周五 12 次最多</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">筛选</div><div class="card-t">常用标签</div></div>
+          <div class="card-b">
+            <span class="tagchip">模拟</span><span class="tagchip">枚举</span><span class="tagchip">排序</span><span class="tagchip">树</span><span class="tagchip">DP</span><span class="tagchip">前缀和</span><span class="tagchip">二分</span><span class="tagchip">递归</span><span class="tagchip">字符串</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">说明</div><div class="card-t">关于题库</div></div>
+          <div class="card-b"><p class="hint" style="margin-top:0">难度共十档，锚点对齐 NOI 大纲与教学进度；隐藏题目对普通选手不可见，不计入榜单与排名。</p></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<!-- ================================================== 题目详情（主+副） -->
+<main class="screen" id="scr-detail">
+  <div class="wrap">
+    <div class="cols rail-wide">
+      <div class="main">
+        <div class="crumbs"><a href="#" data-go="problems">题库</a> ／ <span class="mono">P1001</span></div>
+        <div class="prob-head">
+          <span class="pid">P1001</span>
+          <h1>两个数的和</h1>
+          <span class="diff d2"><i></i>白银</span>
+          <span class="st ac"><i></i>已通过</span>
+        </div>
+        <div class="prob-meta">
+          <div class="cell">时间限制 <b class="mono">1.00 s</b></div>
+          <div class="cell">内存限制 <b class="mono">256 MB</b></div>
+          <div class="cell"><b class="mono">89</b> 通过 ／ <b class="mono">231</b> 提交</div>
+          <div class="cell">标签 <span class="tagchip">入门</span><span class="tagchip">模拟</span></div>
+        </div>
+
+        <article class="md">
+          <h2>题目描述</h2>
+          <p>输入两个整数 <b class="mono">a</b> 与 <b class="mono">b</b>，输出它们的和。</p>
+          <p>对于 100% 的数据，<span class="mono">0 ≤ a, b ≤ 10<sup>9</sup></span>。</p>
+          <h2>输入格式</h2>
+          <p>一行，两个整数 <b class="mono">a</b>、<b class="mono">b</b>，以空格分隔。</p>
+          <h2>输出格式</h2>
+          <p>一行，一个整数，表示 <b class="mono">a + b</b> 的结果。</p>
+          <h2>样例</h2>
+          <div class="io">
+            <div class="codeblk">
+              <div class="codeblk-h">样例输入 #1<button data-copy>复制</button></div>
+              <pre>1 2</pre>
+            </div>
+            <div class="codeblk">
+              <div class="codeblk-h">样例输出 #1<button data-copy>复制</button></div>
+              <pre>3</pre>
+            </div>
+          </div>
+          <h2>提示</h2>
+          <div class="note">注意结果可能超过 <span class="mono">int</span> 的表示范围，请使用 64 位整数。</div>
+        </article>
+      </div>
+
+      <aside class="rail">
+        <div class="card">
+          <div class="card-h"><div class="ov">管理</div><div class="card-t">题目维护</div></div>
+          <div class="card-b">
+            <div class="btngroup">
+              <button class="btn btn-ghost btn-sm">编辑题目</button>
+              <button class="btn btn-ghost btn-sm">数据管理</button>
+              <button class="btn btn-ghost btn-sm">导出题包</button>
+              <button class="btn btn-ghost btn-sm">加入试卷</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">提交</div><div class="card-t">提交本题</div></div>
+          <div class="card-b">
+            <label class="input" style="height:36px">
+              <select><option>C++14（g++ 13，-O2）</option><option>C++20</option><option>Python 3.11</option><option>C（gcc 13）</option></select>
+            </label>
+            <div class="codebox" style="margin-top:10px"><span class="ln">1</span>#include &lt;bits/stdc++.h&gt;<br /><span class="ln">2</span>int main(){<br /><span class="ln">3</span>&nbsp;&nbsp;long long a,b;<br /><span class="ln">4</span>&nbsp;&nbsp;std::cin&gt;&gt;a&gt;&gt;b;<br /><span class="ln">5</span>&nbsp;&nbsp;std::cout&lt;&lt;a+b;<br /><span class="ln">6</span>}</div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+              <button class="btn btn-ink btn-block">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>提交评测
+              </button>
+              <button class="btn btn-ghost btn-block">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg>在线编程
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">记录</div><div class="card-t">我的提交</div></div>
+          <div class="card-b">
+            <div class="mini-li"><span class="st ac"><i></i>AC</span><div class="grow"><a href="#" data-go="subs">#s2341</a></div><span class="t mono">12 ms</span></div>
+            <div class="mini-li"><span class="st wa"><i></i>WA</span><div class="grow"><a href="#" data-go="subs">#s2338</a></div><span class="t mono">8 ms</span></div>
+            <div class="mini-li"><span class="st mut"><i></i>CE</span><div class="grow"><a href="#" data-go="subs">#s2331</a></div><span class="t">10-22</span></div>
+            <p class="hint"><a href="#" data-go="subs" style="color:var(--indigo);font-weight:600">查看全部 14 条 →</a></p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">说明</div><div class="card-t">评测须知</div></div>
+          <div class="card-b"><p class="hint" style="margin-top:0">本题采用全文比对；代码将在 go-judge 沙箱中编译运行，请勿读写约定之外的文件。</p></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<!-- ================================================== 比赛（主+副） -->
+<main class="screen" id="scr-contests">
+  <div class="wrap">
+    <div class="cols">
+      <div class="main">
+        <div class="page-head">
+          <div class="page-kicker">CONTESTS</div>
+          <h1 class="page-title">比赛<small>1 场进行中 · 2 场待开赛</small></h1>
+          <div class="drule"></div>
+        </div>
+
+        <div class="seg">
+          <button class="on">全部</button><button>进行中</button><button>即将开始</button><button>已结束</button>
+        </div>
+
+        <div class="crow">
+          <span class="st run"><i></i>进行中</span>
+          <div class="grow">
+            <h3>国庆杯程序设计赛</h3>
+            <div class="meta">OI 赛制 · 5 题 · 3 小时 · 128 人参赛 · 赛后隐藏 24 小时</div>
+          </div>
+          <div class="when"><b>已进行 1:18:42</b>结束于今日 22:00</div>
+          <button class="btn btn-indigo">进入赛场</button>
+        </div>
+        <div class="crow">
+          <span class="st tle"><i></i>报名中</span>
+          <div class="grow">
+            <h3>周赛 #48</h3>
+            <div class="meta">IO 赛制 · 4 题 · 2 小时 · 已报名 41 人</div>
+          </div>
+          <div class="when"><b>10-27（周一）19:00</b>距开赛 2 天 14 小时</div>
+          <button class="btn btn-ghost">预约提醒</button>
+        </div>
+        <div class="crow">
+          <span class="st tle"><i></i>报名中</span>
+          <div class="grow">
+            <h3>期中模拟 · 提高组</h3>
+            <div class="meta">OI 赛制 · 6 题 · 3.5 小时 · 已报名 57 人</div>
+          </div>
+          <div class="when"><b>11-02（周日）14:00</b>距开赛 8 天</div>
+          <button class="btn btn-indigo">立即报名</button>
+        </div>
+        <div class="crow">
+          <span class="st mut"><i></i>已结束</span>
+          <div class="grow">
+            <h3>新生练习赛 · 第三场</h3>
+            <div class="meta">IO 赛制 · 5 题 · 86 人参赛 · 榜首 林间有雾（5/5）</div>
+          </div>
+          <div class="when"><b>10-19 18:30</b>已结束 5 天</div>
+          <button class="btn btn-ghost">查看榜单</button>
+        </div>
+        <div class="crow">
+          <span class="st mut"><i></i>已结束</span>
+          <div class="grow">
+            <h3>国庆杯 · 热身赛</h3>
+            <div class="meta">IO 赛制 · 3 题 · 102 人参赛</div>
+          </div>
+          <div class="when"><b>10-12 19:00</b>已结束 12 天</div>
+          <button class="btn btn-ghost">查看榜单</button>
+        </div>
+      </div>
+
+      <aside class="rail">
+        <div class="card">
+          <div class="card-h"><div class="ov">管理</div><div class="card-t">赛事管理</div></div>
+          <div class="card-b">
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn btn-ink btn-block">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>新建比赛
+              </button>
+              <button class="btn btn-ghost btn-block">从题库挑选赛题</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">我的赛程</div><div class="card-t">下一场 · 周赛 #48</div></div>
+          <div class="card-b">
+            <div class="countdown">2 天 14 : 08 : 33</div>
+            <p class="hint" style="margin-top:6px">10-27（周一）19:00 开赛 · 我已预约提醒</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">辅助</div><div class="card-t">我报名的赛事</div></div>
+          <div class="card-b">
+            <div class="mini-li"><span class="st tle"><i></i>待开赛</span><div class="grow"><a href="#">周赛 #48</a></div><span class="t">10-27</span></div>
+            <div class="mini-li"><span class="st tle"><i></i>待开赛</span><div class="grow"><a href="#">期中模拟 · 提高组</a></div><span class="t">11-02</span></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><div class="ov">说明</div><div class="card-t">赛制与锁题</div></div>
+          <div class="card-b"><p class="hint" style="margin-top:0">OI 赛制赛中不出分、赛后统一出榜；比赛进行中对应题目全站锁题，提交指引到赛事页。</p></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</main>
+
+<!-- ================================================== 排名（单列） -->
+<main class="screen" id="scr-rank">
+  <div class="wrap narrow">
+    <div class="page-head">
+      <div class="page-kicker">LEADERBOARD</div>
+      <h1 class="page-title">解题排名<small>按通过题数排序 · 前 50 名</small></h1>
+      <div class="drule"></div>
+    </div>
+
+    <div class="podium">
+      <div class="pcard">
+        <div class="rank-no">2</div>
+        <div class="pav" style="background:#5A6B4F">雾</div>
+        <div class="pname">林间有雾</div>
+        <div class="psolved">解题 <b>21</b> · 最近 10-23</div>
+      </div>
+      <div class="pcard p1">
+        <div class="rank-no">1</div>
+        <div class="pav" style="background:var(--indigo)">一</div>
+        <div class="pname">一尺之间</div>
+        <div class="psolved">解题 <b>23</b> · 最近 10-24</div>
+      </div>
+      <div class="pcard">
+        <div class="rank-no">3</div>
+        <div class="pav" style="background:#8A5A33">递</div>
+        <div class="pname">递归到天明</div>
+        <div class="psolved">解题 <b>19</b> · 最近 10-22</div>
+      </div>
+    </div>
+
+    <div class="card table-card">
+      <table class="tbl">
+        <thead><tr>
+          <th style="width:78px">排名</th><th>选手</th><th style="width:150px">等级</th><th style="width:100px">解题数</th><th style="width:110px">最近 AC</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="num">4</td><td><b>backpack</b> <span class="dim">@backpack</span></td><td><span class="tier" style="opacity:.85">✦ Lv.8 王者</span></td><td class="num">18</td><td class="num dim">10-24</td></tr>
+          <tr><td class="num">5</td><td><b>CSP 选手小王</b> <span class="dim">@xiaowang</span></td><td><span class="tier" style="opacity:.85">✦ Lv.7 星耀</span></td><td class="num">16</td><td class="num dim">10-23</td></tr>
+          <tr><td class="num">6</td><td><b>南风知我意</b> <span class="dim">@nanfeng</span></td><td><span class="tier" style="opacity:.85">✦ Lv.7 星耀</span></td><td class="num">14</td><td class="num dim">10-24</td></tr>
+          <tr class="me"><td class="num">7</td><td><b>root</b> <span class="dim">@root · 我</span></td><td><span class="tier">✦ Lv.10 极境</span></td><td class="num">3</td><td class="num dim">10-24</td></tr>
+          <tr><td class="num">8</td><td><b>月落乌啼</b> <span class="dim">@moonfall</span></td><td><span class="tier" style="opacity:.85">✦ Lv.6 钻石</span></td><td class="num">12</td><td class="num dim">10-21</td></tr>
+          <tr><td class="num">9</td><td><b>打表过样例</b> <span class="dim">@daBiao</span></td><td><span class="tier" style="opacity:.85">✦ Lv.6 钻石</span></td><td class="num">11</td><td class="num dim">10-19</td></tr>
+          <tr><td class="num">10</td><td><b>橙子味的风</b> <span class="dim">@orange</span></td><td><span class="tier" style="opacity:.85">✦ Lv.5 铂金</span></td><td class="num">9</td><td class="num dim">10-18</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pager"><span style="margin-right:auto">每页 20 名</span><button>‹</button><button class="cur">1</button><button>2</button><button>3</button><button>›</button></div>
+
+    <div class="footer"><span>SOJ · 在线判题系统</span><span>等级实时聚合，调整难度全员等级自动跟随</span></div>
+  </div>
+</main>
+
+<!-- ================================================== 提交记录（单列） -->
+<main class="screen" id="scr-subs">
+  <div class="wrap">
+    <div class="page-head">
+      <div class="page-kicker">SUBMISSIONS</div>
+      <h1 class="page-title">提交记录<small>全站 1,284 条 · 今日 342 条</small></h1>
+      <div class="drule"></div>
+    </div>
+
+    <div class="filterbar">
+      <label class="input" style="width:240px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input placeholder="按题目或提交号搜索" />
+      </label>
+      <span class="sel">状态</span>
+      <span class="sel">语言</span>
+      <span class="sel">时间范围</span>
+      <span class="sel on"><b>仅看自己</b></span>
+    </div>
+
+    <div class="card table-card">
+      <table class="tbl">
+        <thead><tr>
+          <th style="width:86px">提交号</th><th>题目</th><th style="width:130px">选手</th><th style="width:106px">状态</th>
+          <th style="width:80px">得分</th><th style="width:90px">语言</th><th style="width:84px">耗时</th><th style="width:90px">内存</th><th style="width:110px">时间</th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2348</a></td><td><a class="tlink" href="#" data-go="detail">P1003 三个数的和</a></td><td class="dim">林间有雾</td><td><span class="st run"><i></i>评测中</span></td><td class="num">—</td><td>C++14</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">14:32</td></tr>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2347</a></td><td><a class="tlink" href="#" data-go="detail">P1000 卖皮鞋</a></td><td class="dim">CSP 选手小王</td><td><span class="st ac"><i></i>AC</span></td><td class="num">100</td><td>C++14</td><td class="num">3 ms</td><td class="num">2.1 MB</td><td class="num dim">14:29</td></tr>
+          <tr class="me"><td class="num dim"><a class="tlink" href="#">#s2346</a></td><td><a class="tlink" href="#" data-go="detail">P1001 两个数的和</a></td><td class="dim">root</td><td><span class="st ac"><i></i>AC</span></td><td class="num">100</td><td>C++14</td><td class="num">2 ms</td><td class="num">2.0 MB</td><td class="num dim">14:21</td></tr>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2345</a></td><td><a class="tlink" href="#" data-go="detail">P1015 植树（tree）</a></td><td class="dim">backpack</td><td><span class="st tle"><i></i>TLE</span></td><td class="num">60</td><td>Python3</td><td class="num">&gt;1.00 s</td><td class="num">9.8 MB</td><td class="num dim">14:17</td></tr>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2344</a></td><td><a class="tlink" href="#" data-go="detail">P1003 三个数的和</a></td><td class="dim">南风知我意</td><td><span class="st wa"><i></i>WA</span></td><td class="num">40</td><td>C++14</td><td class="num">18 ms</td><td class="num">3.4 MB</td><td class="num dim">14:12</td></tr>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2343</a></td><td><a class="tlink" href="#" data-go="detail">P1021 火柴棒三角形问题</a></td><td class="dim">月落乌啼</td><td><span class="st mut"><i></i>CE</span></td><td class="num">—</td><td>C++17</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">14:05</td></tr>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2342</a></td><td><a class="tlink" href="#" data-go="detail">P1005 分割</a></td><td class="dim">打表过样例</td><td><span class="st wa"><i></i>RE</span></td><td class="num">0</td><td>C++14</td><td class="num">6 ms</td><td class="num">2.2 MB</td><td class="num dim">13:58</td></tr>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2341</a></td><td><a class="tlink" href="#" data-go="detail">P1001 两个数的和</a></td><td class="dim">root</td><td><span class="st ac"><i></i>AC</span></td><td class="num">100</td><td>C++14</td><td class="num">2 ms</td><td class="num">2.0 MB</td><td class="num dim">13:40</td></tr>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2340</a></td><td><a class="tlink" href="#" data-go="detail">P1018 A+B problem</a></td><td class="dim">橙子味的风</td><td><span class="st ac"><i></i>AC</span></td><td class="num">100</td><td>Python3</td><td class="num">21 ms</td><td class="num">8.9 MB</td><td class="num dim">13:37</td></tr>
+          <tr><td class="num dim"><a class="tlink" href="#">#s2339</a></td><td><a class="tlink" href="#" data-go="detail">P1026 成绩</a></td><td class="dim">一尺之间</td><td><span class="st ac"><i></i>AC</span></td><td class="num">100</td><td>C++14</td><td class="num">7 ms</td><td class="num">3.1 MB</td><td class="num dim">13:22</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pager"><span style="margin-right:auto">第 1 / 129 页</span><button>‹</button><button class="cur">1</button><button>2</button><button>3</button><button>›</button></div>
+
+    <div class="footer"><span>SOJ · 在线判题系统</span><span>点击提交号查看逐点评测详情</span></div>
+  </div>
+</main>
+
+<!-- ============ 预览导航 Dock ============ -->
+<div class="dock">
+  <span class="lab">设计预览</span>
+  <button data-go="home" class="on"><i>1</i>首页</button>
+  <button data-go="problems"><i>2</i>题库</button>
+  <button data-go="detail"><i>3</i>题目详情</button>
+  <button data-go="contests"><i>4</i>比赛</button>
+  <button data-go="rank"><i>5</i>排名</button>
+  <button data-go="subs"><i>6</i>提交记录</button>
+</div>
+
+<script>
+var SCREENS=["home","problems","detail","contests","rank","subs"];
+function go(name){
+  SCREENS.forEach(function(n){
+    document.getElementById("scr-"+n).classList.toggle("on", n===name);
+    var nav=document.getElementById("nav-"+n);
+    if(nav) nav.classList.toggle("on", n===name);
+  });
+  document.querySelectorAll(".dock button").forEach(function(b){
+    b.classList.toggle("on", b.getAttribute("data-go")===name);
+  });
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+document.querySelectorAll("[data-go]").forEach(function(el){
+  el.addEventListener("click",function(e){e.preventDefault();go(el.getAttribute("data-go"));});
+});
+document.querySelectorAll("[data-copy]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var pre=b.closest(".codeblk").querySelector("pre");
+    var txt=pre?pre.textContent:"";
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt);}
+    b.textContent="已复制";setTimeout(function(){b.textContent="复制";},1200);
+  });
+});
+window.addEventListener("keydown",function(e){
+  if(e.target.closest("input,textarea,select"))return;
+  var i="123456".indexOf(e.key);
+  if(i>=0)go(SCREENS[i]);
+});
+</script>
+</body>
+</html>

@@ -75,9 +75,9 @@ const stars = computed(() => {
   align-items: center;
   justify-content: center;
   white-space: nowrap;
-  /* 圆角矩形（2026-10-23 验收：难度与等级徽章统一站点 tag 口径，不出胶囊；
-     SOJ 顶栏标识是独立类不受此影响） */
-  border-radius: var(--el-border-radius-base);
+  /* v0.19 胶囊回归（web-design-v3.md §2.3，推翻 2026-10-23 矩形化决策）：
+     全站徽章与按钮/tag 同形制；SOJ 顶栏品牌胶囊不受影响 */
+  border-radius: 999px;
   color: #fff;
   font-weight: var(--soj-fw-regular);
   line-height: 1;
