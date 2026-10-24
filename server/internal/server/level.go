@@ -152,6 +152,11 @@ func (h *Handlers) levelBadgeInfo(c *gin.Context, uid int64) gin.H {
 
 // autocompleteAllowed 自动补全门槛：当前等级 ≥ 系统设置阈值（默认 Lv.5）。
 func (h *Handlers) autocompleteAllowed(c *gin.Context, uid int64) bool {
+	// 老师角色（root/admin）不受限，门槛面向学生——与前端 autocompleteAvailable
+	// 同口径；漏掉豁免时低等级 admin 保存偏好会被 400 拦死（开关在前端可点开）。
+	if _, _, role, ok := currentUser(c); ok && (role == repo.RoleRoot || role == repo.RoleAdmin) {
+		return true
+	}
 	s, err := h.repo.GetSystemSettings(c.Request.Context())
 	if err != nil {
 		return false

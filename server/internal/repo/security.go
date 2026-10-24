@@ -32,12 +32,15 @@ const (
 	SecLoginLocked   = "login_locked"
 	SecPwdChange     = "password_change"
 	SecPwdResetAdmin = "password_reset_admin"
+	SecPwdReset      = "password_reset" // v0.16：找回密码自助重置
+	SecEmailBind     = "email_bind"     // v0.16：绑定/换绑邮箱
+	SecEmailUnbind   = "email_unbind"   // v0.16：root 解绑邮箱
 	SecRateLimited   = "rate_limited"
 )
 
 var SecurityLogTypes = []string{
 	SecLoginSuccess, SecLoginFailure, SecLoginLocked,
-	SecPwdChange, SecPwdResetAdmin, SecRateLimited,
+	SecPwdChange, SecPwdResetAdmin, SecPwdReset, SecEmailBind, SecEmailUnbind, SecRateLimited,
 }
 
 func (r *Repo) AddSecurityLog(ctx context.Context, e SecurityLog) error {
@@ -67,7 +70,7 @@ func (r *Repo) ListSecurityLogs(ctx context.Context, page, pageSize int, typ, q 
 		options.Find().
 			SetSort(bson.D{{Key: "at", Value: -1}}).
 			SetLimit(int64(pageSize)).
-			SetSkip(int64((page - 1) * pageSize)))
+			SetSkip(int64((page-1)*pageSize)))
 	if err != nil {
 		return nil, 0, err
 	}

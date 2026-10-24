@@ -6,6 +6,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
+import { verifyApi } from '@/api/verify'
 import TierBadge from '@/components/TierBadge.vue'
 import { useAdminRolesStore } from '@/stores/adminRoles'
 import { useUserStore } from '@/stores/user'
@@ -197,18 +198,55 @@ async function refreshAfterMutation(userId: number, patch?: Partial<AdminUser>) 
 // ---- 编辑弹窗：用户名 / 昵称 / 密码 / 确认密码 ----
 // 用户名是登录身份标识：持有 user.username.edit 权限位（默认仅 root）才可改，其余只读展示
 const canRename = computed(() => userStore.can('user.username.edit'))
+// 绑定邮箱解绑（v0.16）：root 硬编码（后端 RequireRoot）
+const isRoot = computed(() => userStore.role === 'root')
 const showEdit = ref(false)
 const editSaving = ref(false)
-const editForm = reactive({ id: 0, username: '', originUsername: '', nickname: '', password: '', confirm: '' })
+const unbinding = ref(false)
+// email/phone：绑定信息（v0.16），后端用户列表下发；AdminUser 类型不含，就地扩展
+const editForm = reactive({
+  id: 0,
+  username: '',
+  originUsername: '',
+  nickname: '',
+  password: '',
+  confirm: '',
+  email: '',
+  phone: '',
+})
 
-function openEdit(row: AdminUser) {
+function openEdit(row: AdminUser & { email?: string; phone?: string }) {
   editForm.id = row.id
   editForm.username = row.username
   editForm.originUsername = row.username
   editForm.nickname = row.nickname ?? ''
   editForm.password = ''
   editForm.confirm = ''
+  editForm.email = row.email ?? ''
+  editForm.phone = row.phone ?? ''
   showEdit.value = true
+}
+
+async function unbindEmail() {
+  try {
+    await ElMessageBox.confirm(
+      `确认解绑用户 ${editForm.originUsername} 的邮箱 ${editForm.email}？（学生换邮箱场景，解绑后可重新绑定）`,
+      '解绑邮箱',
+      { type: 'warning', confirmButtonText: '解绑', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  unbinding.value = true
+  try {
+    await verifyApi.adminUnbindEmail(editForm.id)
+    editForm.email = ''
+    ElMessage.success('邮箱已解绑')
+  } catch {
+    // 拦截器统一提示
+  } finally {
+    unbinding.value = false
+  }
 }
 
 async function submitEdit() {
@@ -467,6 +505,23 @@ defineExpose({ refresh: loadDefaultView })
 
     <el-dialog v-model="showEdit" :title="`编辑 · ${editForm.originUsername}`" width="520">
       <el-form label-position="top">
+        <el-form-item label="绑定信息">
+          <div class="bind-row">
+            <span :class="{ dim: !editForm.email }">
+              邮箱：{{ editForm.email || '未绑定' }}<template v-if="editForm.phone"> · 手机：{{ editForm.phone }}</template>
+            </span>
+            <el-button
+              v-if="isRoot && editForm.email"
+              size="small"
+              type="danger"
+              plain
+              :loading="unbinding"
+              @click="unbindEmail"
+            >
+              解绑
+            </el-button>
+          </div>
+        </el-form-item>
         <el-form-item label="用户名">
           <el-input
             v-model="editForm.username"
@@ -603,6 +658,15 @@ defineExpose({ refresh: loadDefaultView })
   align-items: center;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+/* 绑定信息行（v0.16）：信息在左、root 解绑按钮在右 */
+.bind-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
 }
 
 .xp-nums b {

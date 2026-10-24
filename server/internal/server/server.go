@@ -35,6 +35,15 @@ func Run(ctx context.Context, deps *Deps) {
 	if cfg.JWTSecret == "soj-dev-secret-change-me" || cfg.JWTSecret == "soj-dev-secret" {
 		log.Println("[web] 警告: SOJ_JWT_SECRET 为开发默认值，生产环境务必更换为随机长字符串")
 	}
+	// 邮件通道（v0.16）：smtp 通道开着但配置不全拒绝启动（验证码发不出去等于把
+	// 注册/找回功能打成半残，早失败好过线上排查）
+	if s, err := deps.Repo.GetSystemSettings(ctx); err == nil {
+		if s.MailChannelVal() == repo.MailChannelSMTP && !s.SMTP.Ready() {
+			log.Fatal("[web] 邮件通道为 smtp 但配置不完整（主机/端口/发件人），请在后台补全或先切回 log 通道")
+		}
+	} else {
+		log.Printf("[web] 警告: 启动时读取系统设置失败，跳过邮件通道校验: %v", err)
+	}
 	if os.Getenv("SOJ_DEBUG") == "" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -71,11 +80,16 @@ func Run(ctx context.Context, deps *Deps) {
 		authLimit := h.rateLimit("auth")
 		api.POST("/auth/register", authLimit, h.Register)
 		// 站点公开信息（v0.13 收编原 /auth/register-open）：注册开关 + ICP 备案号，
-		// 登录页页签显隐与页脚悬挂共用；后续公开站点事实（v0.15 注册验证方式等）也归这里
+		// 登录页页签显隐与页脚悬挂共用；v0.16 并入注册验证方式与找回开关
 		api.GET("/site", h.GetSiteInfo)
 		api.POST("/auth/login", authLimit, h.Login)
 		// 本人修改密码（v0.14）：旧密码 + 新密码（前端二次确认），成功后全端下线
 		api.POST("/auth/password", AuthRequired(h), h.ChangePassword)
+		// 邮箱验证码与自助找回（v0.16）：发码公开（注册/找回），bind 分支要登录态——
+		// 挂 AuthOptional 由 handler 按用途校验；发码/重置同属爆破面，纳入认证类 IP 限流
+		api.POST("/auth/email/code", authLimit, AuthOptional(h), h.EmailCode)
+		api.POST("/auth/password/reset", authLimit, h.PasswordReset)
+		api.POST("/auth/email/bind", AuthRequired(h), h.EmailBind)
 		api.GET("/me", AuthRequired(h), h.Me)
 
 		api.GET("/problems", AuthOptional(h), h.ListProblems)
@@ -217,6 +231,8 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.GET("/users", RequirePerm(repo.PermAdminUserManage), h.AdminListUsers)
 				adminG.POST("/users", RequirePerm(repo.PermAdminUserManage), h.AdminCreateUser)
 				adminG.PATCH("/users/:id", RequirePerm(repo.PermAdminUserManage), h.AdminUpdateUser)
+				// 解绑邮箱（v0.16）：root 硬编码（学生换邮箱场景，不设权限位）
+				adminG.DELETE("/users/:id/email", RequireRoot(), h.AdminUnbindEmail)
 				adminG.GET("/settings", RequirePerm(repo.PermAdminSettings), h.GetSettings)
 				adminG.PUT("/settings", RequirePerm(repo.PermAdminSettings), h.UpdateSettings)
 				// 角色读取放宽到用户管理员（改角色下拉需要角色清单）；增删改硬编码 root 不下放

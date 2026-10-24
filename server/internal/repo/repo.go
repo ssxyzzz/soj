@@ -94,6 +94,23 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if err != nil {
 		return err
 	}
+	// 绑定邮箱/手机（v0.16）：sparse 唯一——多数用户无邮箱（字段缺省）不占号，非空必唯一
+	if _, err := r.Users.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
+		{Keys: bson.D{{Key: "phone", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
+	}); err != nil {
+		return err
+	}
+	// 邮箱验证码（v0.16）：目标+时间取最新有效码；purgeAt TTL 自动清扫（保留 25h 供频控计数）
+	if _, err := r.db.Collection("verifyCodes").Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "purpose", Value: 1}, {Key: "target", Value: 1}, {Key: "createdAt", Value: -1}}},
+		{Keys: bson.D{{Key: "ip", Value: 1}, {Key: "createdAt", Value: -1}}},
+		{Keys: bson.D{{Key: "createdAt", Value: 1}}},
+		{Keys: bson.D{{Key: "purgeAt", Value: 1}},
+			Options: options.Index().SetExpireAfterSeconds(0)},
+	}); err != nil {
+		return err
+	}
 	// 数据包下载记账（v0.8.3）：每日限额按 (uid, day) 数不同题；同题同天重复下载去重
 	_, err = r.db.Collection("dataDownloads").Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "day", Value: 1}}},
@@ -536,7 +553,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		if inserted {
-			log.Printf("[boot] 空标签树已注入默认两级树（defaultTagsV1）")
+			log.Printf("[boot] 空标签树已注入默认标签树（defaultTagsV1）")
 		}
 	}
 	return nil

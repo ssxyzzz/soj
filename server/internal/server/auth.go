@@ -50,7 +50,7 @@ func passwordProblem(pwd string) string {
 }
 
 func userJSON(u *repo.User) gin.H {
-	return gin.H{"id": u.ID, "username": u.Username, "nickname": u.Nickname, "role": u.Role}
+	return gin.H{"id": u.ID, "username": u.Username, "nickname": u.Nickname, "role": u.Role, "email": u.Email}
 }
 
 // userWithPermsJSON 登录态响应用：附生效权限位（root 展开为全目录，前端据此显隐入口）。
@@ -78,6 +78,8 @@ func (h *Handlers) Register(c *gin.Context) {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
 		Nickname string `json:"nickname"`
+		Email    string `json:"email"` // 注册验证方式 = email 时必填（带验证码）
+		Code     string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数不完整")
@@ -89,6 +91,30 @@ func (h *Handlers) Register(c *gin.Context) {
 	}
 	if msg := passwordProblem(req.Password); msg != "" {
 		fail(c, http.StatusBadRequest, msg)
+		return
+	}
+	// 邮箱验证注册（v0.16）：验证码先于建号校验；mode=none 时拒收邮箱字段
+	//（未经验证的邮箱不落库，防伪绑定）
+	email := ""
+	if s.RegisterVerifyModeVal() == repo.RegisterVerifyEmail {
+		email = NormalizeEmail(req.Email)
+		if !emailRE.MatchString(email) || len(email) > 254 {
+			fail(c, http.StatusBadRequest, "邮箱格式不正确")
+			return
+		}
+		if _, err := h.repo.GetUserByEmail(c.Request.Context(), email); err == nil {
+			fail(c, http.StatusBadRequest, "该邮箱已被注册")
+			return
+		} else if !repo.IsNotFound(err) {
+			fail(c, http.StatusInternalServerError, "服务器内部错误")
+			return
+		}
+		if msg := h.verifyCode(c, repo.VerifyPurposeRegister, email, req.Code); msg != "" {
+			fail(c, http.StatusBadRequest, msg)
+			return
+		}
+	} else if req.Email != "" {
+		fail(c, http.StatusBadRequest, "当前注册无需邮箱，请留空")
 		return
 	}
 	nickname := req.Nickname
@@ -105,7 +131,12 @@ func (h *Handlers) Register(c *gin.Context) {
 		return
 	}
 
-	uid, err := h.repo.CreateUserWithPassword(ctx, req.Username, req.Password, nickname, repo.RoleDefault)
+	var uid int64
+	if email != "" {
+		uid, err = h.repo.CreateUserWithEmail(ctx, req.Username, req.Password, nickname, repo.RoleDefault, email)
+	} else {
+		uid, err = h.repo.CreateUserWithPassword(ctx, req.Username, req.Password, nickname, repo.RoleDefault)
+	}
 	if err != nil {
 		if isDupKey(err) {
 			fail(c, http.StatusBadRequest, "用户名已存在")
@@ -119,7 +150,7 @@ func (h *Handlers) Register(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
-	u := &repo.User{ID: uid, Username: req.Username, Nickname: nickname, Role: repo.RoleDefault}
+	u := &repo.User{ID: uid, Username: req.Username, Nickname: nickname, Role: repo.RoleDefault, Email: email}
 	ok(c, gin.H{"token": token, "user": h.userWithPermsJSON(c.Request.Context(), u)})
 }
 
@@ -224,6 +255,10 @@ func (h *Handlers) ChangePassword(c *gin.Context) {
 	}
 	h.idents.flush() // 缓存里的 pwdVer 立即失效，旧 token 全端 401
 	h.securityLog(c, repo.SecPwdChange, uid, uname, "本人修改密码，全部登录态已下线")
+	if s, _ := h.repo.GetSystemSettings(ctx); s != nil && u.Email != "" {
+		h.notifyEmailAsync(s, u.Email, "密码已被修改",
+			map[string]string{"username": uname, "action": "的登录密码已在个人设置中修改"})
+	}
 	ok(c, gin.H{"changed": true})
 }
 

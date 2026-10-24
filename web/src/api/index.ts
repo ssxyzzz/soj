@@ -88,7 +88,8 @@ async function get<T>(url: string, params?: Record<string, unknown>): Promise<T>
   return resp.data.data
 }
 
-async function post<T>(url: string, body?: unknown): Promise<T> {
+// post/del 导出（v0.16）：验证码一族接口（api/verify.ts）复用同一 axios 实例与拦截器
+export async function post<T>(url: string, body?: unknown): Promise<T> {
   const resp = await client.post<ApiResponse<T>>(url, body)
   return resp.data.data
 }
@@ -103,7 +104,7 @@ async function patch<T>(url: string, body?: unknown): Promise<T> {
   return resp.data.data
 }
 
-async function del<T>(url: string): Promise<T> {
+export async function del<T>(url: string): Promise<T> {
   const resp = await client.delete<ApiResponse<T>>(url)
   return resp.data.data
 }
@@ -111,8 +112,15 @@ async function del<T>(url: string): Promise<T> {
 export const authApi = {
   login: (username: string, password: string) =>
     post<LoginResult>('/auth/login', { username, password }),
-  register: (username: string, password: string, nickname: string) =>
-    post<LoginResult>('/auth/register', { username, password, nickname }),
+  // 注册（v0.16）：注册验证方式 = email 时带邮箱与验证码（后端校验并落库 email）
+  register: (username: string, password: string, nickname: string, email?: string, code?: string) =>
+    post<LoginResult>('/auth/register', {
+      username,
+      password,
+      nickname,
+      ...(email !== undefined ? { email } : {}),
+      ...(code !== undefined ? { code } : {}),
+    }),
   me: () => get<{ id: number; username: string; nickname: string; role: string; perms: string[] }>('/me'),
   // 本人修改密码（v0.14）：验旧密码后落库并 pwdVer+1，全部登录态（含当前）立即失效，
   // 成功后前端主动登出跳登录页；新密码二次确认在 UI 层做
@@ -131,9 +139,15 @@ export const authApi = {
 }
 
 // 站点公开信息（v0.13 收编原 /auth/register-open）：注册开关 + ICP 备案号，
-// 登录页页签显隐与页脚悬挂共用；后续公开站点事实（v0.15 注册验证方式等）并入此处
+// 登录页页签显隐与页脚悬挂共用；v0.16 并入注册验证方式与找回开关（登录页邮箱验证码/忘记密码入口）
 export const siteApi = {
-  info: () => get<{ register_open: boolean; icp_number: string }>('/site'),
+  info: () =>
+    get<{
+      register_open: boolean
+      icp_number: string
+      register_verify_mode: 'none' | 'email'
+      password_reset_enabled: boolean
+    }>('/site'),
 }
 
 export const problemApi = {
@@ -325,6 +339,18 @@ export const adminApi = {
       icp_number: string
       batch_import_problem_mb: number
       batch_import_zip_mb: number
+      // 邮箱通道（v0.16）
+      mail_channel: 'log' | 'smtp'
+      smtp_host: string
+      smtp_port: number
+      smtp_username: string
+      smtp_password: string
+      smtp_from: string
+      register_verify_mode: 'none' | 'email'
+      password_reset_enabled: boolean
+      tpl_register: string
+      tpl_reset: string
+      tpl_notify: string
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
@@ -336,6 +362,17 @@ export const adminApi = {
     icp_number?: string
     batch_import_problem_mb?: number
     batch_import_zip_mb?: number
+    mail_channel?: 'log' | 'smtp'
+    smtp_host?: string
+    smtp_port?: number
+    smtp_username?: string
+    smtp_password?: string
+    smtp_from?: string
+    register_verify_mode?: 'none' | 'email'
+    password_reset_enabled?: boolean
+    tpl_register?: string
+    tpl_reset?: string
+    tpl_notify?: string
   }) =>
     put<{
       rate_limit_per_minute: number
@@ -347,6 +384,17 @@ export const adminApi = {
       icp_number: string
       batch_import_problem_mb: number
       batch_import_zip_mb: number
+      mail_channel: 'log' | 'smtp'
+      smtp_host: string
+      smtp_port: number
+      smtp_username: string
+      smtp_password: string
+      smtp_from: string
+      register_verify_mode: 'none' | 'email'
+      password_reset_enabled: boolean
+      tpl_register: string
+      tpl_reset: string
+      tpl_notify: string
     }>('/admin/settings', patch),
   // 等级面板（v0.11，root）
   getLevelConfig: () => get<{ config: AdminLevelConfig }>('/admin/levelconfig'),

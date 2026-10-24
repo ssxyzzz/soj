@@ -27,9 +27,34 @@ func (h *Handlers) AdminListUsers(c *gin.Context) {
 		if u.LockedUntil.After(time.Now()) {
 			j["locked_until"] = u.LockedUntil // 锁定中（v0.14 登录失败锁定），前端徽章展示
 		}
+		j["phone"] = u.Phone // 绑定信息（v0.16）：管理端可见；phone 未启用 UI，仅落库展示
 		items = append(items, j)
 	}
 	ok(c, gin.H{"list": items, "total": total})
+}
+
+// AdminUnbindEmail 解绑用户邮箱（root 硬编码，学生换邮箱场景；v0.16）。
+func (h *Handlers) AdminUnbindEmail(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	u, err := h.repo.GetUserByID(c.Request.Context(), id)
+	if err != nil {
+		fail(c, http.StatusNotFound, "用户不存在")
+		return
+	}
+	if u.Email == "" {
+		fail(c, http.StatusBadRequest, "该用户未绑定邮箱")
+		return
+	}
+	if err := h.repo.UnbindEmail(c.Request.Context(), id); err != nil {
+		fail(c, http.StatusInternalServerError, "解绑失败")
+		return
+	}
+	_, uname, _, _ := currentUser(c)
+	h.securityLog(c, repo.SecEmailUnbind, id, u.Username, "root "+uname+" 解绑邮箱 "+u.Email)
+	ok(c, gin.H{"unbound": true})
 }
 
 func (h *Handlers) AdminCreateUser(c *gin.Context) {
@@ -177,6 +202,13 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			return
 		}
 		h.securityLog(c, repo.SecPwdResetAdmin, id, pwdResetUname, "管理员重置密码，该账号全部登录态已下线")
+		// v0.16：改密通知原邮箱（防盗号无感知；依赖 smtp 通道，log 模式跳过）
+		if s, _ := h.repo.GetSystemSettings(c.Request.Context()); s != nil {
+			if u, err := h.repo.GetUserByID(c.Request.Context(), id); err == nil && u.Email != "" {
+				h.notifyEmailAsync(s, u.Email, "密码已被重置",
+					map[string]string{"username": pwdResetUname, "action": "的登录密码已被管理员重置"})
+			}
+		}
 	}
 	if req.Role != nil || req.Username != nil || req.Password != nil {
 		h.idents.flush() // 角色/用户名/密码版本变更即时生效（不等缓存 TTL）
@@ -203,6 +235,18 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"icp_number":                s.IcpNumber,
 		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
 		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
+		// 邮箱通道（v0.16）
+		"mail_channel":           s.MailChannelVal(),
+		"smtp_host":              s.SMTP.Host,
+		"smtp_port":              s.SMTP.Port,
+		"smtp_username":          s.SMTP.Username,
+		"smtp_password":          s.SMTP.Password,
+		"smtp_from":              s.SMTP.From,
+		"register_verify_mode":   s.RegisterVerifyModeVal(),
+		"password_reset_enabled": s.PasswordResetOpen(),
+		"tpl_register":           s.TplRegisterVal(),
+		"tpl_reset":              s.TplResetVal(),
+		"tpl_notify":             s.TplNotifyVal(),
 	})
 }
 
@@ -214,7 +258,13 @@ func (h *Handlers) GetSiteInfo(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
-	ok(c, gin.H{"register_open": s.RegistrationOpen(), "icp_number": s.IcpNumber})
+	ok(c, gin.H{
+		"register_open": s.RegistrationOpen(),
+		"icp_number":    s.IcpNumber,
+		// 注册验证方式与找回开关（v0.16）：登录页注册表单出邮箱验证码、忘记密码入口显隐
+		"register_verify_mode":   s.RegisterVerifyModeVal(),
+		"password_reset_enabled": s.PasswordResetOpen(),
+	})
 }
 
 // GetNotice 首页公告（公开，首页免登录展示）。
@@ -239,6 +289,18 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		IcpNumber              *string `json:"icp_number"`
 		BatchImportProblemMB   *int    `json:"batch_import_problem_mb"` // 批量导入单题数据上限 MB（v0.15）
 		BatchImportZipMB       *int    `json:"batch_import_zip_mb"`     // 批量导入整包 zip 上限 MB（v0.15）
+		// 邮箱通道（v0.16）
+		MailChannel          *string `json:"mail_channel"`
+		SMTPHost             *string `json:"smtp_host"`
+		SMTPPort             *int    `json:"smtp_port"`
+		SMTPUsername         *string `json:"smtp_username"`
+		SMTPPassword         *string `json:"smtp_password"`
+		SMTPFrom             *string `json:"smtp_from"`
+		RegisterVerifyMode   *string `json:"register_verify_mode"`
+		PasswordResetEnabled *bool   `json:"password_reset_enabled"`
+		TplRegister          *string `json:"tpl_register"`
+		TplReset             *string `json:"tpl_reset"`
+		TplNotify            *string `json:"tpl_notify"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -309,6 +371,101 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.BatchImportZipMB = req.BatchImportZipMB
 	}
+	// ---- 邮箱通道（v0.16）----
+	if req.MailChannel != nil {
+		ch := *req.MailChannel
+		if ch != repo.MailChannelLog && ch != repo.MailChannelSMTP {
+			fail(c, http.StatusBadRequest, "邮件通道仅支持 log / smtp")
+			return
+		}
+		s.MailChannel = ch
+	}
+	// SMTP 三项均可清空（log 通道不用、切回时清配置），仅超长拒绝。
+	if req.SMTPHost != nil {
+		v := strings.TrimSpace(*req.SMTPHost)
+		if len(v) > 253 {
+			fail(c, http.StatusBadRequest, "SMTP 主机过长（上限 253 字符）")
+			return
+		}
+		s.SMTP.Host = v
+	}
+	if req.SMTPPort != nil {
+		if *req.SMTPPort < 0 || *req.SMTPPort > 65535 {
+			fail(c, http.StatusBadRequest, "SMTP 端口需在 0-65535 之间（0 = 未配置）")
+			return
+		}
+		s.SMTP.Port = *req.SMTPPort
+	}
+	if req.SMTPUsername != nil {
+		v := strings.TrimSpace(*req.SMTPUsername)
+		if len(v) > 254 {
+			fail(c, http.StatusBadRequest, "SMTP 账号过长（上限 254 字符）")
+			return
+		}
+		s.SMTP.Username = v
+	}
+	if req.SMTPPassword != nil {
+		if len(*req.SMTPPassword) > 128 {
+			fail(c, http.StatusBadRequest, "SMTP 授权码过长（上限 128 字符）")
+			return
+		}
+		s.SMTP.Password = strings.TrimSpace(*req.SMTPPassword)
+	}
+	if req.SMTPFrom != nil {
+		v := strings.TrimSpace(*req.SMTPFrom)
+		if len(v) > 254 {
+			fail(c, http.StatusBadRequest, "发件人过长（上限 254 字符）")
+			return
+		}
+		s.SMTP.From = v
+	}
+	if req.RegisterVerifyMode != nil {
+		m := *req.RegisterVerifyMode
+		if m != repo.RegisterVerifyNone && m != repo.RegisterVerifyEmail {
+			fail(c, http.StatusBadRequest, "注册验证方式仅支持 none / email")
+			return
+		}
+		s.RegisterVerifyMode = m
+	}
+	if req.PasswordResetEnabled != nil {
+		s.PasswordResetEnabled = req.PasswordResetEnabled
+	}
+	saveTpl := func(sp *string, limit int) (string, bool) {
+		if len(*sp) > limit {
+			return "", false
+		}
+		return strings.TrimSpace(*sp), true
+	}
+	if req.TplRegister != nil {
+		if v, ok := saveTpl(req.TplRegister, 4<<10); !ok {
+			fail(c, http.StatusBadRequest, "注册/绑定邮件模板过长（上限 4KB）")
+			return
+		} else {
+			s.TplRegister = v
+		}
+	}
+	if req.TplReset != nil {
+		if v, ok := saveTpl(req.TplReset, 4<<10); !ok {
+			fail(c, http.StatusBadRequest, "找回邮件模板过长（上限 4KB）")
+			return
+		} else {
+			s.TplReset = v
+		}
+	}
+	if req.TplNotify != nil {
+		if v, ok := saveTpl(req.TplNotify, 4<<10); !ok {
+			fail(c, http.StatusBadRequest, "通知邮件模板过长（上限 4KB）")
+			return
+		} else {
+			s.TplNotify = v
+		}
+	}
+	// 与启动校验同一口径：smtp 通道开着但配置不全不让存——否则重启直接拒绝启动，
+	// 管理员把自己锁在门外（运行期 Mailer() 会降级 log，但重启过不去）。
+	if s.MailChannelVal() == repo.MailChannelSMTP && !s.SMTP.Ready() {
+		fail(c, http.StatusBadRequest, "邮件通道为 smtp 但配置不完整（需主机/端口/发件人），请补全或先切回 log 通道")
+		return
+	}
 	if err := h.repo.UpdateSystemSettings(c.Request.Context(), s); err != nil {
 		fail(c, http.StatusInternalServerError, "更新失败")
 		return
@@ -323,5 +480,17 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"icp_number":                s.IcpNumber,
 		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
 		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
+		// 邮箱通道（v0.16）
+		"mail_channel":           s.MailChannelVal(),
+		"smtp_host":              s.SMTP.Host,
+		"smtp_port":              s.SMTP.Port,
+		"smtp_username":          s.SMTP.Username,
+		"smtp_password":          s.SMTP.Password,
+		"smtp_from":              s.SMTP.From,
+		"register_verify_mode":   s.RegisterVerifyModeVal(),
+		"password_reset_enabled": s.PasswordResetOpen(),
+		"tpl_register":           s.TplRegisterVal(),
+		"tpl_reset":              s.TplResetVal(),
+		"tpl_notify":             s.TplNotifyVal(),
 	})
 }

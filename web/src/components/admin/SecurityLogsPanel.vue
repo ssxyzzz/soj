@@ -12,6 +12,9 @@ const typeMeta: Record<string, { label: string; kind: 'success' | 'danger' | 'wa
   login_locked: { label: '账号锁定', kind: 'warning' },
   password_change: { label: '修改密码', kind: 'primary' },
   password_reset_admin: { label: '重置密码', kind: 'warning' },
+  password_reset: { label: '找回重置', kind: 'warning' },
+  email_bind: { label: '绑定邮箱', kind: 'primary' },
+  email_unbind: { label: '解绑邮箱', kind: 'warning' },
   rate_limited: { label: '限流拦截', kind: 'info' },
 }
 

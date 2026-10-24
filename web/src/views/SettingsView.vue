@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 
 import PageShell from '@/components/PageShell.vue'
 import { authApi } from '@/api'
+import { verifyApi } from '@/api/verify'
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 import { autocompleteAvailable, languageOptions, mergedPrefs } from '@/utils/code'
@@ -48,10 +49,11 @@ async function load() {
     profileForm.qq = p.qq ?? ''
     prefsForm.defaultLang = p.prefs?.defaultLang ?? ''
     prefsForm.codeTemplates = { ...(p.prefs?.codeTemplates ?? {}) }
-    prefsForm.autocomplete = p.prefs?.autocomplete ?? true
+    userStore.setLevel(p.level ?? null) // 顶栏徽章与补全门槛同步（AC 后进设置页即刷新）
+    // 开关对未达标用户是禁用的：显示有效值（关），而不是库里可能残留的 true
+    prefsForm.autocomplete = autocompleteAvailable() ? (p.prefs?.autocomplete ?? true) : false
     prefsForm.mdEditMode = (p.prefs?.mdEditMode || 'wysiwyg') as typeof prefsForm.mdEditMode
     prefsForm.mdTheme = (p.prefs?.mdTheme || 'light') as typeof prefsForm.mdTheme
-    userStore.setLevel(p.level ?? null) // 顶栏徽章与补全门槛同步（AC 后进设置页即刷新）
   } finally {
     loading.value = false
   }
@@ -99,7 +101,10 @@ async function savePrefs() {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadEmail()
+})
 
 // ---- 修改密码（v0.14）：旧密码 + 新密码两次确认；成功后全部登录态失效，强制重新登录 ----
 const savingPwd = ref(false)
@@ -136,6 +141,100 @@ async function changePassword() {
     pwdForm.confirm = ''
   }
 }
+
+// ---- 绑定/换绑邮箱（v0.16）----
+// 无绑定：邮箱 + 新邮箱验证码。换绑：先验证旧邮箱（密码或旧邮箱验证码二选一），
+// 再向新邮箱发码——旧邮箱验证在发码请求里内联提交（后端发码前校验）。
+const email = ref('')
+const bindOpen = ref(false)
+const bindCd = ref(0)
+let bindTimer: ReturnType<typeof setInterval> | undefined
+const bindSending = ref(false)
+const bindLoading = ref(false)
+const bindForm = reactive({
+  email: '',
+  code: '',
+  oldMode: 'password' as 'password' | 'code',
+  oldPassword: '',
+  oldCode: '',
+})
+
+async function loadEmail() {
+  try {
+    const me = await authApi.me()
+    email.value = (me as { email?: string }).email ?? ''
+  } catch {
+    /* 未登录等场景静默 */
+  }
+}
+
+function openBind() {
+  // 换绑场景新邮箱留空：预填旧邮箱会让「获取验证码」把码发往旧邮箱，
+  // 用户按提示输码提交后提示绑定成功但邮箱实际没换。旧邮箱取码走
+  // 「发送至旧邮箱」按钮（sendBindCode(true) 显式指定目标）。
+  Object.assign(bindForm, { email: '', code: '', oldMode: 'password', oldPassword: '', oldCode: '' })
+  bindOpen.value = true
+}
+
+function startBindCd() {
+  bindCd.value = 60
+  bindTimer = setInterval(() => {
+    if (--bindCd.value <= 0) {
+      clearInterval(bindTimer)
+      bindTimer = undefined
+    }
+  }, 1000)
+}
+
+async function sendBindCode(toOld = false) {
+  // toOld：旧邮箱验证码模式的「发送至旧邮箱」按钮——目标固定为当前绑定邮箱
+  //（后端视作旧邮箱验证码路径，不校验旧邮箱），不读「新邮箱」输入框。
+  const target = toOld ? email.value : bindForm.email.trim().toLowerCase()
+  if (!target) {
+    ElMessage.warning('请输入邮箱')
+    return
+  }
+  bindSending.value = true
+  try {
+    const payload: Parameters<typeof verifyApi.sendCode>[0] = { purpose: 'bind', email: target }
+    if (email.value && target !== email.value) {
+      // 换绑：内联带旧邮箱验证（密码或旧邮箱验证码二选一）
+      payload.old_mode = bindForm.oldMode
+      if (bindForm.oldMode === 'password') payload.old_password = bindForm.oldPassword
+      else payload.old_code = bindForm.oldCode.trim()
+    }
+    const r = await verifyApi.sendCode(payload)
+    ElMessage.success(r.message)
+    startBindCd()
+  } catch {
+    // 拦截器统一提示
+  } finally {
+    bindSending.value = false
+  }
+}
+
+async function submitBind() {
+  if (!bindForm.email.trim() || !bindForm.code.trim()) {
+    ElMessage.warning('请输入邮箱与验证码')
+    return
+  }
+  bindLoading.value = true
+  try {
+    const r = await verifyApi.bindEmail(bindForm.email.trim(), bindForm.code.trim())
+    email.value = r.email
+    ElMessage.success('邮箱已绑定')
+    bindOpen.value = false
+  } catch {
+    // 拦截器统一提示
+  } finally {
+    bindLoading.value = false
+  }
+}
+
+onMounted(() => {
+  load()
+  loadEmail()
+})
 </script>
 
 <template>
@@ -208,6 +307,66 @@ async function changePassword() {
         </el-form-item>
       </el-form>
     </el-card>
+
+    <el-card shadow="never" style="margin-top: 16px">
+      <template #header><span>绑定邮箱</span></template>
+      <el-form label-position="left" label-width="120px" style="max-width: 560px">
+        <el-form-item label="邮箱">
+          <div class="email-row">
+            <span :class="{ dim: !email }">{{ email || '未绑定' }}</span>
+            <el-button size="small" @click="openBind">{{ email ? '换绑' : '绑定' }}</el-button>
+          </div>
+          <div class="dim email-tip">
+            绑定后可用于找回密码（需管理员开启）；换绑需验证旧邮箱，换绑成功会向原邮箱发通知
+          </div>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-dialog v-model="bindOpen" :title="email ? '换绑邮箱' : '绑定邮箱'" width="440px">
+      <el-form label-position="top">
+        <template v-if="email">
+          <el-form-item label="验证旧邮箱（二选一）">
+            <el-radio-group v-model="bindForm.oldMode">
+              <el-radio-button value="password">密码验证</el-radio-button>
+              <el-radio-button value="code">旧邮箱验证码</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="bindForm.oldMode === 'password'" label="登录密码">
+            <el-input v-model="bindForm.oldPassword" type="password" show-password />
+          </el-form-item>
+          <el-form-item v-else label="旧邮箱验证码">
+            <el-input v-model="bindForm.oldCode" placeholder="发送至当前绑定邮箱">
+              <template #append>
+                <el-button
+                  :loading="bindSending"
+                  :disabled="bindCd > 0"
+                  @click="sendBindCode(true)"
+                >
+                  {{ bindCd > 0 ? `${bindCd}s` : '发送至旧邮箱' }}
+                </el-button>
+              </template>
+            </el-input>
+            <div class="dim">验证码发送至 {{ email }}</div>
+          </el-form-item>
+        </template>
+        <el-form-item label="新邮箱">
+          <el-input v-model="bindForm.email" placeholder="输入要绑定的新邮箱" />
+        </el-form-item>
+        <el-form-item label="新邮箱验证码">
+          <div class="email-row">
+            <el-input v-model="bindForm.code" placeholder="6 位数字" />
+            <el-button :loading="bindSending" :disabled="bindCd > 0" @click="sendBindCode()">
+              {{ bindCd > 0 ? `${bindCd}s 后重发` : '获取验证码' }}
+            </el-button>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="bindOpen = false">取消</el-button>
+        <el-button type="primary" :loading="bindLoading" @click="submitBind">绑定</el-button>
+      </template>
+    </el-dialog>
 
     <el-card shadow="never" style="margin-top: 16px">
       <template #header><span>偏好</span></template>
@@ -316,5 +475,16 @@ async function changePassword() {
   align-items: flex-start;
   gap: 6px;
   width: 100%;
+}
+
+.email-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.email-tip {
+  margin-top: 2px;
 }
 </style>

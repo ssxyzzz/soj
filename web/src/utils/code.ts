@@ -46,8 +46,9 @@ export function autocompleteOn(): boolean {
 // （工具栏切编辑模式/主题走这条路径）。mergedPrefs 仍用于设置页整表保存与
 // 本地 store 的乐观更新，保证本地快照字段齐全。
 export function mergedPrefs(patch: Partial<UserPrefs>): UserPrefs {
-  const p = useUserStore().prefs ?? {}
-  return {
+  const st = useUserStore()
+  const p = st.prefs ?? {}
+  const merged: UserPrefs = {
     defaultLang: p.defaultLang ?? '',
     codeTemplates: p.codeTemplates ?? {},
     autocomplete: p.autocomplete ?? true,
@@ -57,4 +58,10 @@ export function mergedPrefs(patch: Partial<UserPrefs>): UserPrefs {
     mdTheme: p.mdTheme ?? '',
     ...patch,
   }
+  // 等级未达标时强制 false：后端对 autocomplete=true 一律按等级拒绝，而设置页
+  // 开关对未达标用户是禁用的（关不掉）——不 clamp 会让低等级用户整表保存、
+  // 编辑器字体字号回存全部被 400 拦死。等级尚未加载（null）时不 clamp，
+  // 避免把高等级用户的自动补全误关。
+  if (st.level !== null && !autocompleteAvailable()) merged.autocomplete = false
+  return merged
 }

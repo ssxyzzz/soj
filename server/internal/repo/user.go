@@ -58,6 +58,10 @@ type User struct {
 	// 登录失败锁定（v0.14）：连续失败达到阈值锁 lockedUntil；落库重启不丢、管理端可见。
 	FailedCount int       `bson:"failedCount,omitempty"`
 	LockedUntil time.Time `bson:"lockedUntil,omitempty"`
+	// 绑定邮箱/手机（v0.16）：邮箱经注册验证码/绑定流程验证后落库（trim+小写归一）；
+	// phone 一并落库但 UI 不启用，等短信通道接入。sparse 唯一索引：空值不占号、非空必唯一。
+	Email string `bson:"email,omitempty"`
+	Phone string `bson:"phone,omitempty"`
 }
 
 // UpdatePassword 修改密码：写新哈希并 pwdVer+1（原子），所有旧 token 随即失效。
@@ -130,6 +134,61 @@ func (r *Repo) CreateUser(ctx context.Context, username, passwordHash, nickname,
 		return 0, err
 	}
 	return uid, nil
+}
+
+// CreateUserWithEmail 注册建号（v0.16）：邮箱验证码注册路径——验证通过后带邮箱落库。
+func (r *Repo) CreateUserWithEmail(ctx context.Context, username, password, nickname, role, email string) (int64, error) {
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return 0, err
+	}
+	uid, err := r.nextSeq(ctx, "user")
+	if err != nil {
+		return 0, err
+	}
+	_, err = r.Users.InsertOne(ctx, bson.M{
+		"_id": uid, "uname": username, "pwdHash": hash,
+		"nickname": nickname, "role": role, "createdAt": time.Now(),
+		"email": email,
+	})
+	if err != nil {
+		return 0, err
+	}
+	return uid, nil
+}
+
+// GetUserByEmail 按绑定邮箱查用户（找回密码/注册查重）。
+func (r *Repo) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	var u User
+	err := r.Users.FindOne(ctx, bson.M{"email": email}).Decode(&u)
+	if err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// SetUserEmail 绑定/换绑邮箱（验证通过后调用）。换绑成功前旧值已被读方留存用于通知。
+func (r *Repo) SetUserEmail(ctx context.Context, uid int64, email string) error {
+	res, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$set": bson.M{"email": email}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// UnbindEmail 管理端解绑邮箱（root，学生换邮箱场景）。
+func (r *Repo) UnbindEmail(ctx context.Context, uid int64) error {
+	res, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$unset": bson.M{"email": ""}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 // GetUserByUsername 返回用户与密码哈希；未找到时返回 mongo.ErrNoDocuments。

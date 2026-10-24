@@ -7,6 +7,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/mailer"
 )
 
 // SystemSettings 系统设置（settings 集合，_id="system"）。
@@ -26,6 +28,19 @@ type SystemSettings struct {
 	// 批量导入限额（v0.15，MB）：单题数据上限 / 整包 zip 上限；nil = 未设置按默认（100 / 2048）。
 	BatchImportProblemMB *int `bson:"batchImportProblemMB,omitempty"`
 	BatchImportZipMB     *int `bson:"batchImportZipMB,omitempty"`
+	// 邮件通道（v0.16）：log = 打日志不外发（默认，人工转告）；smtp = 真实发信。
+	MailChannel string `bson:"mailChannel,omitempty"`
+	// SMTP 连接参数（MailChannel=smtp 时使用；启动校验配置完整性，不完整拒绝启动）。
+	SMTP mailer.SMTPConfig `bson:"smtp,omitempty"`
+	// 注册验证方式：none = 无（默认 = 现状）；email = 邮箱验证码。
+	RegisterVerifyMode string `bson:"registerVerifyMode,omitempty"`
+	// 忘记密码自助找回开关（v0.16）：默认关——开启前登录页不展示入口（老师重置仍是主路径）。
+	PasswordResetEnabled *bool `bson:"passwordResetEnabled,omitempty"`
+	// 三类邮件模板（v0.16）：注册/绑定验证码、找回验证码、账号安全通知。
+	// 占位符 {{code}}/{{username}}/{{site}}/{{action}}；空 = 用内置默认。
+	TplRegister string `bson:"tplRegister,omitempty"`
+	TplReset    string `bson:"tplReset,omitempty"`
+	TplNotify   string `bson:"tplNotify,omitempty"`
 }
 
 const (
@@ -35,6 +50,19 @@ const (
 	DefaultAllowRegister        = true
 	DefaultBatchImportProblemMB = 100  // 单题数据 100MB
 	DefaultBatchImportZipMB     = 2048 // 整包 zip 2GB
+
+	MailChannelLog      = "log"
+	MailChannelSMTP     = "smtp"
+	RegisterVerifyNone  = "none"
+	RegisterVerifyEmail = "email"
+
+	// 内置默认模板（后台清空模板 = 回到这里）。
+	DefaultTplRegister = "【{{site}}】邮箱验证码：{{code}}\n\n您正在 {{site}} 进行注册或绑定邮箱操作。" +
+		"验证码 5 分钟内有效，请勿泄露给他人。如非本人操作请忽略本邮件。"
+	DefaultTplReset = "【{{site}}】找回密码验证码：{{code}}\n\n您正在 {{site}} 重置账号 {{username}} 的登录密码。" +
+		"验证码 5 分钟内有效，请勿泄露给他人。如非本人操作请忽略本邮件。"
+	DefaultTplNotify = "【{{site}}】账号安全提醒\n\n您的账号 {{username}} {{action}}。" +
+		"如非本人操作，请立即联系管理员处理。"
 )
 
 func downloadLimitPtr(v int) *int { return &v }
@@ -80,6 +108,12 @@ func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
 	if s.BatchImportZipMB == nil || *s.BatchImportZipMB < 1 {
 		s.BatchImportZipMB = intPtr(DefaultBatchImportZipMB)
 	}
+	if s.MailChannel != MailChannelSMTP {
+		s.MailChannel = MailChannelLog
+	}
+	if s.RegisterVerifyMode != RegisterVerifyEmail {
+		s.RegisterVerifyMode = RegisterVerifyNone
+	}
 	return &s, nil
 }
 
@@ -104,9 +138,70 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"icpNumber":              s.IcpNumber,
 			"batchImportProblemMB":   s.BatchImportProblemMBVal(),
 			"batchImportZipMB":       s.BatchImportZipMBVal(),
+			"mailChannel":            s.MailChannel,
+			"smtp":                   s.SMTP,
+			"registerVerifyMode":     s.RegisterVerifyMode,
+			"passwordResetEnabled":   s.PasswordResetOpen(),
+			"tplRegister":            s.TplRegister,
+			"tplReset":               s.TplReset,
+			"tplNotify":              s.TplNotify,
 		}},
 	)
 	return err
+}
+
+// PasswordResetOpen 忘记密码自助找回是否开启（默认关）。
+func (s *SystemSettings) PasswordResetOpen() bool {
+	return s.PasswordResetEnabled != nil && *s.PasswordResetEnabled
+}
+
+// RegisterVerifyModeVal 注册验证方式（none/email，异常值回 none）。
+func (s *SystemSettings) RegisterVerifyModeVal() string {
+	if s.RegisterVerifyMode == RegisterVerifyEmail {
+		return RegisterVerifyEmail
+	}
+	return RegisterVerifyNone
+}
+
+// MailChannelVal 邮件通道（log/smtp，异常值回 log）。
+func (s *SystemSettings) MailChannelVal() string {
+	if s.MailChannel == MailChannelSMTP {
+		return MailChannelSMTP
+	}
+	return MailChannelLog
+}
+
+// TplRegisterVal 注册/绑定验证码模板（空回内置默认）。
+func (s *SystemSettings) TplRegisterVal() string {
+	if s.TplRegister != "" {
+		return s.TplRegister
+	}
+	return DefaultTplRegister
+}
+
+// TplResetVal 找回验证码模板。
+func (s *SystemSettings) TplResetVal() string {
+	if s.TplReset != "" {
+		return s.TplReset
+	}
+	return DefaultTplReset
+}
+
+// TplNotifyVal 账号安全通知模板。
+func (s *SystemSettings) TplNotifyVal() string {
+	if s.TplNotify != "" {
+		return s.TplNotify
+	}
+	return DefaultTplNotify
+}
+
+// Mailer 当前邮件 provider：smtp 通道配置完整才返回 SMTP 实现，否则一律 log
+// （运行期兜底——启动校验在 server.Run；后台把通道切成 smtp 但配置不全时降级打日志）。
+func (s *SystemSettings) Mailer() mailer.Provider {
+	if s.MailChannelVal() == MailChannelSMTP && s.SMTP.Ready() {
+		return mailer.NewSMTP(s.SMTP)
+	}
+	return mailer.Log{}
 }
 
 // AutocompleteMinLevel 自动补全解锁等级：未设置/越界回默认 5。
