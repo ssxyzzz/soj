@@ -172,6 +172,26 @@ func (h *Handlers) ListSubmissions(c *gin.Context) {
 	ok(c, gin.H{"list": items, "total": total})
 }
 
+// LookupUsers 按用户名/昵称模糊找账号（提交记录/所有代码的「选手」筛选选人用）：
+// 登录即可调（榜单本就公开展示账号），最多 20 条，防枚举靠限流兜底。
+func (h *Handlers) LookupUsers(c *gin.Context) {
+	kw := strings.TrimSpace(c.Query("kw"))
+	if kw == "" || len([]rune(kw)) > 32 {
+		ok(c, []gin.H{})
+		return
+	}
+	users, err := h.repo.LookupUsers(c.Request.Context(), kw, 20)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "服务器内部错误")
+		return
+	}
+	items := make([]gin.H, 0, len(users))
+	for _, u := range users {
+		items = append(items, gin.H{"id": u.ID, "username": u.Username, "nickname": u.Nickname})
+	}
+	ok(c, items)
+}
+
 // GetSubmission 提交详情。可见性规则（隐藏期可见性 2026-10-16 并入 submission.view.all）：
 //   - 隐藏期内的比赛/考试提交：创建者（组织者）与持「查看全部提交」权限位者可见；
 //   - 赛事锁题期间，赛前提交对 default 不回代码（防抄，含本人），优先级最高；
@@ -259,7 +279,12 @@ func (h *Handlers) ListProblemSubmissions(c *gin.Context) {
 		return
 	}
 	page, pageSize := queryPage(c)
-	list, total, err := h.repo.ListPidSubmissions(c.Request.Context(), id, 0, page, pageSize, c.Query("sort"), c.Query("lang"))
+	// user_id：按提交者筛选（2026-10-25 用户需求「所有代码选定账号查找」；0=全部）
+	uidFilter := int64(0)
+	if v, err := strconv.ParseInt(c.Query("user_id"), 10, 64); err == nil && v > 0 {
+		uidFilter = v
+	}
+	list, total, err := h.repo.ListPidSubmissions(c.Request.Context(), id, uidFilter, page, pageSize, c.Query("sort"), c.Query("lang"))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取提交失败")
 		return

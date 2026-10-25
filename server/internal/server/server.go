@@ -109,6 +109,8 @@ func Run(ctx context.Context, deps *Deps) {
 		api.POST("/submissions", AuthRequired(h), h.CreateSubmission)
 		// 提交记录总表需「查看全部提交」权限位（学生查自己的历史走题目页「我的提交」）
 		api.GET("/submissions", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.ListSubmissions)
+		// 选人筛选（提交记录/所有代码的「选手」下拉）：登录即可按用户名/昵称模糊找账号
+		api.GET("/users/lookup", AuthRequired(h), h.LookupUsers)
 		api.GET("/submissions/:id", AuthOptional(h), h.GetSubmission)
 		api.POST("/submissions/:id/rejudge", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.RejudgeSubmission)
 		// 取消评测（v0.7.1）：本人 ∨ submission.view.all（handler 内校验）

@@ -34,6 +34,7 @@ import type {
   ProgressRow,
   RankItem,
   RoleInfo,
+  LookupUser,
   SecurityLogItem,
   DuplicateGroup,
   Submission,
@@ -229,12 +230,13 @@ export const problemApi = {
   // 整包替换测试数据（编辑题目）：旧测试点全部删除，按新 zip 重建
   replaceTestdata: (id: number, form: FormData) =>
     client.post(`/problems/${id}/testdata`, form, { timeout: 0 }).then((r) => r.data.data),
-  submissions: (id: number, page: number, pageSize: number, sort?: string, lang?: string) =>
+  submissions: (id: number, page: number, pageSize: number, sort?: string, lang?: string, uid?: number) =>
     get<SubmissionListResult>(`/problems/${id}/submissions`, {
       page,
       page_size: pageSize,
       ...(sort ? { sort } : {}),
       ...(lang ? { lang } : {}),
+      ...(uid ? { user_id: uid } : {}),
     }),
   userSubmissions: (id: number, pid: number, uid: number) =>
     get<{ list: Submission[] }>(`/contests/${id}/problems/${pid}/submissions`, { uid }),
@@ -300,7 +302,13 @@ export const submissionApi = {
     language?: string
     mine?: boolean
     kw?: string
+    user_id?: number
   }) => get<SubmissionListResult>('/submissions', { ...params }),
+}
+
+// 选人筛选（提交记录/所有代码的「选手」下拉）：按用户名/昵称模糊找账号
+export const userApi = {
+  lookup: (kw: string) => get<LookupUser[]>('/users/lookup', { kw }),
 }
 
 export const rankApi = {

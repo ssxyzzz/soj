@@ -251,6 +251,13 @@ export interface RankItem {
   level?: number // 学生等级 1–10（v0.11；聚合失败省略）
 }
 
+// 选人筛选用账号条目（GET /users/lookup；提交记录/所有代码的「选手」下拉）
+export interface LookupUser {
+  id: number
+  username: string
+  nickname: string
+}
+
 // ---------- 等级体系（v0.11） ----------
 
 // 等级配置公开视图（GET /api/levels）：徽章与进度渲染所需

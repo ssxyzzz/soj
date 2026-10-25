@@ -3,12 +3,12 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 
-import { submissionApi } from '@/api'
+import { submissionApi, userApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtMem, fmtRel, fmtSec, statusDesc, statusMap } from '@/utils/format'
-import type { Submission } from '@/types'
+import type { LookupUser, Submission } from '@/types'
 
 const router = useRouter()
 const list = ref<Submission[]>([])
@@ -18,13 +18,37 @@ const pageSize = 20
 const loading = ref(false)
 let timer: ReturnType<typeof setInterval> | undefined
 
-// v3 筛选 chips（后端 v0.19 扩参）：关键词 / 状态 / 语言 / 仅看自己
+// v3 筛选 chips（后端 v0.19 扩参）：关键词 / 状态 / 语言 / 选手 / 仅看自己
 const kw = ref('')
 const statusFilter = ref('')
 const langFilter = ref('')
 const mineOnly = ref(false)
 const statusOpen = ref(false)
 const langOpen = ref(false)
+
+// 选手筛选（2026-10-25 用户需求「选定账号查找」）：远程模糊搜账号，选中按 user_id 过滤
+const userFilter = ref<number | undefined>()
+const userOptions = ref<LookupUser[]>([])
+const userSearching = ref(false)
+
+async function searchUsers(q: string) {
+  if (!q.trim()) return // 保留已有候选，防已选中项失参后显示成 uid 数字
+  userSearching.value = true
+  try {
+    userOptions.value = await userApi.lookup(q.trim())
+  } catch {
+    userOptions.value = []
+  } finally {
+    userSearching.value = false
+  }
+}
+
+// 与「仅看自己」互斥：语义都是限定提交者，后端 mine 会覆盖 user_id
+function onUserFilterChange() {
+  if (userFilter.value) mineOnly.value = false
+  page.value = 1
+  load()
+}
 
 // 状态候选（判题终态 + 队列态，取全站状态表）
 const statusOptions = computed(() =>
@@ -39,13 +63,19 @@ const langOptions = computed(() => {
 })
 
 const activeCount = computed(
-  () => (kw.value ? 1 : 0) + (statusFilter.value ? 1 : 0) + (langFilter.value ? 1 : 0) + (mineOnly.value ? 1 : 0),
+  () =>
+    (kw.value ? 1 : 0) +
+    (statusFilter.value ? 1 : 0) +
+    (langFilter.value ? 1 : 0) +
+    (userFilter.value ? 1 : 0) +
+    (mineOnly.value ? 1 : 0),
 )
 
 function resetFilters() {
   kw.value = ''
   statusFilter.value = ''
   langFilter.value = ''
+  userFilter.value = undefined
   mineOnly.value = false
   page.value = 1
   load()
@@ -69,6 +99,7 @@ async function load() {
       ...(kw.value.trim() ? { kw: kw.value.trim() } : {}),
       ...(statusFilter.value ? { status: statusFilter.value } : {}),
       ...(langFilter.value ? { language: langFilter.value } : {}),
+      ...(userFilter.value ? { user_id: userFilter.value } : {}),
       ...(mineOnly.value ? { mine: true } : {}),
     })
     list.value = r.list
@@ -99,6 +130,8 @@ function pickLang(v: string) {
 
 function toggleMine() {
   mineOnly.value = !mineOnly.value
+  // 与选手筛选互斥（语义都是限定提交者，后端 mine 覆盖 user_id）
+  if (mineOnly.value) userFilter.value = undefined
   page.value = 1
   load()
 }
@@ -142,6 +175,21 @@ onUnmounted(() => {
         语言<template v-if="langFilter"> · {{ langFilter }}</template>
         <el-icon class="sel-arrow" :class="{ open: langOpen }"><ArrowDown /></el-icon>
       </button>
+      <!-- 选手筛选（2026-10-25 用户需求「选定账号查找」）：远程模糊搜账号 -->
+      <el-select
+        v-model="userFilter"
+        class="user-sel"
+        filterable
+        remote
+        clearable
+        reserve-keyword
+        placeholder="选手"
+        :remote-method="searchUsers"
+        :loading="userSearching"
+        @change="onUserFilterChange"
+      >
+        <el-option v-for="u in userOptions" :key="u.id" :value="u.id" :label="u.nickname || u.username" />
+      </el-select>
       <button class="soj-sel" :class="{ on: mineOnly }" @click="toggleMine">仅看自己</button>
       <el-button v-if="activeCount" link type="primary" @click="resetFilters">清空（{{ activeCount }}）</el-button>
     </div>
@@ -286,6 +334,12 @@ onUnmounted(() => {
 .soj-sel.opt {
   height: 30px;
   padding: 0 13px;
+}
+
+/* 选手筛选下拉：与 chips 同高的紧凑档 */
+.user-sel {
+  width: 150px;
+  --el-component-size: 30px;
 }
 
 .status-tag.clickable {

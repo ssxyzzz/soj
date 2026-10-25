@@ -5,12 +5,12 @@ import { fmtSec } from '@/utils/format'
 // 点行经 SubmissionDetailDialog 看代码与测试点明细。
 import { computed, ref, watch } from 'vue'
 
-import { problemApi } from '@/api'
+import { problemApi, userApi } from '@/api'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, statusDesc } from '@/utils/format'
 import { languageOptions } from '@/utils/code'
-import type { Submission } from '@/types'
+import type { LookupUser, Submission } from '@/types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -25,8 +25,24 @@ const othersTotal = ref(0)
 const othersPage = ref(1)
 const othersSort = ref<'recent' | 'time' | 'mem'>('recent')
 const othersLang = ref('')
+// 提交者筛选（2026-10-25 用户需求「选定账号查找」）：远程模糊搜账号，选中按 user_id 过滤
+const othersUser = ref<number | undefined>()
+const userOptions = ref<LookupUser[]>([])
+const userSearching = ref(false)
 const showOthersDetail = ref(false)
 const othersDetail = ref<Submission | null>(null)
+
+async function searchUsers(q: string) {
+  if (!q.trim()) return // 保留候选，防已选中项显示成 uid 数字
+  userSearching.value = true
+  try {
+    userOptions.value = await userApi.lookup(q.trim())
+  } catch {
+    userOptions.value = []
+  } finally {
+    userSearching.value = false
+  }
+}
 
 // 最后一页不足 PAGE_SIZE 时补空白行，让表格保持整页高度
 const displayOthers = computed(() => {
@@ -42,6 +58,7 @@ async function loadOthers(p = 1) {
       PAGE_SIZE,
       othersSort.value,
       othersLang.value || undefined,
+      othersUser.value || undefined,
     )
     others.value = r.list
     othersTotal.value = r.total
@@ -54,7 +71,10 @@ async function loadOthers(p = 1) {
 watch(
   () => props.modelValue,
   (open) => {
-    if (open) loadOthers()
+    if (open) {
+      othersUser.value = undefined // 换题打开重置提交者筛选
+      loadOthers()
+    }
   },
 )
 
@@ -87,6 +107,21 @@ function openOthersDetail(s: Submission) {
         @change="loadOthers(1)"
       >
         <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
+      </el-select>
+      <!-- 提交者筛选（2026-10-25 用户需求「选定账号查找」）：远程模糊搜账号 -->
+      <el-select
+        v-model="othersUser"
+        class="user-sel"
+        filterable
+        remote
+        clearable
+        reserve-keyword
+        placeholder="全部提交者"
+        :remote-method="searchUsers"
+        :loading="userSearching"
+        @change="loadOthers(1)"
+      >
+        <el-option v-for="u in userOptions" :key="u.id" :value="u.id" :label="u.nickname || u.username" />
       </el-select>
       <span class="dim">共 {{ othersTotal }} 份</span>
     </div>
@@ -158,5 +193,10 @@ stripe
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+/* 提交者筛选下拉 */
+.user-sel {
+  width: 170px;
 }
 </style>

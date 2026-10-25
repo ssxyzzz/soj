@@ -233,6 +233,29 @@ func (r *Repo) GetUsersByIDs(ctx context.Context, ids []int64) (map[int64]*User,
 	return out, cursor.Err()
 }
 
+// LookupUsers 按用户名/昵称子串模糊找账号（提交记录/所有代码的「选手」筛选选人用）：
+// 大小写不敏感，按 _id 稳定排序，最多 limit 条。不返回密码哈希。
+func (r *Repo) LookupUsers(ctx context.Context, kw string, limit int) ([]*User, error) {
+	pat := regexp.QuoteMeta(kw)
+	filter := bson.M{"$or": bson.A{
+		bson.M{"uname": bson.M{"$regex": pat, "$options": "i"}},
+		bson.M{"nickname": bson.M{"$regex": pat, "$options": "i"}},
+	}}
+	cursor, err := r.Users.Find(ctx, filter,
+		options.Find().SetProjection(bson.M{"pwdHash": 0}).
+			SetSort(bson.D{{Key: "_id", Value: 1}}).
+			SetLimit(int64(limit)))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	out := make([]*User, 0)
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CreateUserWithPassword 组合密码哈希与建号，供注册与引导使用。
 func (r *Repo) CreateUserWithPassword(ctx context.Context, username, password, nickname, role string) (int64, error) {
 	hash, err := auth.HashPassword(password)
