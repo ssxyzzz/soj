@@ -5,8 +5,8 @@ import { computed } from 'vue'
 
 import RailCard from '@/components/RailCard.vue'
 import TierBadge from '@/components/TierBadge.vue'
+import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
-import { sourceChain } from '@/utils/source'
 import type { ProblemDetail } from '@/types'
 
 const props = defineProps<{ problem: ProblemDetail }>()
@@ -14,10 +14,13 @@ const props = defineProps<{ problem: ProblemDetail }>()
 const tagStore = useTagTreeStore()
 tagStore.ensure()
 
+const metaStore = useMetaTreeStore()
+metaStore.ensure()
+
 const tagIds = computed(() => props.problem.tags ?? [])
 
-// 来源徽章链（v0.12）：标签下方一行，如「全国赛事 · NOIP 2020」；全空不渲染
-const sourceText = computed(() => sourceChain(props.problem))
+// 来源节点（2026-10-25 双树）：原徽章链退役，来源=标签树节点中性色 chips
+const metaIds = computed(() => props.problem.meta_tags ?? [])
 
 const acceptRate = computed(() => {
   const p = props.problem
@@ -48,9 +51,13 @@ const acceptRate = computed(() => {
       >{{ tagStore.nameOf(id) }}</span>
     </div>
     <div v-else class="hint">暂无标签</div>
-    <!-- 来源徽章链（v0.12）：标签下方 -->
-    <div v-if="sourceText" class="src-row">
-      <el-tag size="small" class="src-tag">{{ sourceText }}</el-tag>
+    <!-- 来源（2026-10-25 双树）：标签树节点 chips（单色中性），紧随知识点标签 -->
+    <div v-if="metaIds.length" class="tag-row src-row">
+      <span
+        v-for="id in metaIds"
+        :key="id"
+        class="soj-tagchip chip src-chip"
+      >{{ metaStore.nameOf(id) }}</span>
     </div>
   </RailCard>
 </template>
@@ -90,5 +97,12 @@ const acceptRate = computed(() => {
 
 .src-row {
   margin-top: 10px;
+}
+
+/* 来源节点：单色中性（石墨蓝），与知识树五级色区分 */
+.src-chip {
+  color: var(--soj-ink-2);
+  background: var(--soj-surface-2);
+  border-color: rgba(11, 31, 69, 0.13);
 }
 </style>

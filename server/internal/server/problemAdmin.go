@@ -81,11 +81,6 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		fail(c, http.StatusBadRequest, derr.Error())
 		return
 	}
-	src, serr := formSource(form)
-	if serr != nil {
-		fail(c, http.StatusBadRequest, serr.Error())
-		return
-	}
 	compare := formValue(form, "compare")
 	if compare == "" {
 		compare = repo.CompareExact
@@ -102,6 +97,18 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	if raw := formValue(form, "tag_ids"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &tagIDs); err != nil || len(tagIDs) > 50 {
 			fail(c, http.StatusBadRequest, "tag_ids 参数错误")
+			return
+		}
+	}
+	// 来源标签树节点（2026-10-25 双树）：来源四字段退役后的唯一来源入口
+	var metaTagIDs []int64
+	if raw := formValue(form, "meta_tag_ids"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &metaTagIDs); err != nil || len(metaTagIDs) > 50 {
+			fail(c, http.StatusBadRequest, "meta_tag_ids 参数错误")
+			return
+		}
+		if err := h.repo.ValidateMetaTagRefs(c.Request.Context(), metaTagIDs); err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
@@ -146,8 +153,7 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 
 	imp := &repo.Importer{
 		Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid,
-		TagIDs: tagIDs, Difficulty: difficulty,
-		SourceType: src.Type, Source: src.Name, Year: src.Year, Region: src.Region,
+		TagIDs: tagIDs, MetaTagIDs: metaTagIDs, Difficulty: difficulty,
 		Compare: compare, FloatTolerance: tol,
 		ObjectiveQuestions: objQuestions,
 	}
@@ -622,10 +628,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		TimeLimitMS    *int     `json:"time_limit_ms"`
 		MemoryLimitKB  *int     `json:"memory_limit_kb"`
 		Difficulty     *int     `json:"difficulty"`  // 难度 1–10（v0.11）
-		SourceType     *string  `json:"source_type"` // 来源类型（v0.12）：空串 = 清为未归类
-		Source         *string  `json:"source"`      // 来源名
-		Year           *int     `json:"year"`        // 年份（0 = 清除）
-		Region         *string  `json:"region"`      // 地区
+		MetaTagIDs     *[]int64 `json:"meta_tag_ids"` // 来源标签树节点（2026-10-25 双树，替换来源四字段）
 		Compare        *string  `json:"compare"`
 		FloatTolerance *float64 `json:"float_tolerance"`
 		FileIOName     *string  `json:"file_io_name"`
@@ -691,15 +694,15 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				return
 			}
 		}
-		if setSrc, err := sourceMetaSet(req.SourceType, req.Source, req.Year, req.Region); err != nil {
-			fail(c, http.StatusBadRequest, err.Error())
-			return
-		} else if len(setSrc) > 0 {
-			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, setSrc); err != nil {
+		if req.MetaTagIDs != nil {
+			if err := h.repo.ValidateMetaTagRefs(c.Request.Context(), *req.MetaTagIDs); err != nil {
+				fail(c, http.StatusBadRequest, err.Error())
+				return
+			}
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{"meta_tags": *req.MetaTagIDs}); err != nil {
 				fail(c, http.StatusInternalServerError, "保存失败")
 				return
 			}
-			h.upsertSourceLib(c, req.SourceType, req.Source)
 		}
 		ok(c, gin.H{"updated": id})
 		return
@@ -738,14 +741,12 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		}
 		set["difficulty"] = *req.Difficulty
 	}
-	if setSrc, err := sourceMetaSet(req.SourceType, req.Source, req.Year, req.Region); err != nil {
-		fail(c, http.StatusBadRequest, err.Error())
-		return
-	} else {
-		for k, v := range setSrc {
-			set[k] = v
+	if req.MetaTagIDs != nil {
+		if err := h.repo.ValidateMetaTagRefs(c.Request.Context(), *req.MetaTagIDs); err != nil {
+			fail(c, http.StatusBadRequest, err.Error())
+			return
 		}
-		h.upsertSourceLib(c, req.SourceType, req.Source)
+		set["meta_tags"] = *req.MetaTagIDs
 	}
 	if req.Compare != nil {
 		if !repo.ValidCompare(*req.Compare) {
@@ -801,58 +802,6 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 
 // ---- helpers ----
 
-// sourceMetaSet 来源四字段 PATCH 校验（v0.12）：指针语义——缺省不动，空串/0 = 清除。
-func sourceMetaSet(sourceType, source *string, year *int, region *string) (bson.M, error) {
-	set := bson.M{}
-	if sourceType != nil {
-		t := strings.TrimSpace(*sourceType)
-		if !repo.ValidSourceType(t) {
-			return nil, fmt.Errorf("source_type 需为 oj / contest / region / local / other")
-		}
-		set["source_type"] = t
-	}
-	if source != nil {
-		s := strings.TrimSpace(*source)
-		if len([]rune(s)) > 64 {
-			return nil, fmt.Errorf("来源名最长 64 字")
-		}
-		set["source"] = s
-	}
-	if year != nil {
-		if *year != 0 && (*year < 1900 || *year > 2100) {
-			return nil, fmt.Errorf("year 需在 1900-2100 之间")
-		}
-		set["year"] = *year
-	}
-	if region != nil {
-		r := strings.TrimSpace(*region)
-		if len([]rune(r)) > 64 {
-			return nil, fmt.Errorf("地区最长 64 字")
-		}
-		set["region"] = r
-	}
-	return set, nil
-}
-
-// upsertSourceLib 来源编辑联动登记（v0.12）：来源名非空时沉淀进来源库，类型仅在库内
-// 尚无类型时补。失败记日志不阻塞保存。
-func (h *Handlers) upsertSourceLib(c *gin.Context, sourceType, source *string) {
-	if source == nil {
-		return
-	}
-	name := strings.TrimSpace(*source)
-	if name == "" {
-		return
-	}
-	typ := ""
-	if sourceType != nil {
-		typ = strings.TrimSpace(*sourceType)
-	}
-	if err := h.repo.UpsertSourceByName(c.Request.Context(), name, typ); err != nil {
-		log.Printf("[source] 登记来源「%s」失败: %v", name, err)
-	}
-}
-
 // formDifficulty 建题表单难度（v0.11）：缺省 D3，越界报错。
 func formDifficulty(form *multipart.Form) (int, error) {
 	d := atoiDefault(formValue(form, "difficulty"), 3)
@@ -860,37 +809,6 @@ func formDifficulty(form *multipart.Form) (int, error) {
 		return 0, fmt.Errorf("难度需在 1-10 之间")
 	}
 	return d, nil
-}
-
-// sourceForm 建题表单来源四字段（v0.12）。
-type sourceForm struct {
-	Type   string
-	Name   string
-	Year   int
-	Region string
-}
-
-// formSource 解析并校验表单来源四字段。
-func formSource(form *multipart.Form) (sourceForm, error) {
-	src := sourceForm{
-		Type:   strings.TrimSpace(formValue(form, "source_type")),
-		Name:   strings.TrimSpace(formValue(form, "source")),
-		Year:   atoiDefault(formValue(form, "year"), 0),
-		Region: strings.TrimSpace(formValue(form, "region")),
-	}
-	if src.Type != "" && !repo.ValidSourceType(src.Type) {
-		return src, fmt.Errorf("source_type 需为 oj / contest / region / local / other")
-	}
-	if src.Year != 0 && (src.Year < 1900 || src.Year > 2100) {
-		return src, fmt.Errorf("year 需在 1900-2100 之间")
-	}
-	if len([]rune(src.Name)) > 64 {
-		return src, fmt.Errorf("来源名最长 64 字")
-	}
-	if len([]rune(src.Region)) > 64 {
-		return src, fmt.Errorf("地区最长 64 字")
-	}
-	return src, nil
 }
 
 func formValue(form *multipart.Form, key string) string {

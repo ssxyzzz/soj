@@ -25,8 +25,6 @@ import type {
   SolutionItem,
   BackupStatus,
   BatchImportStatus,
-  SourceEntry,
-  SourceMetaResult,
   UserProfile,
   UserPrefs,
   ProblemDetail,
@@ -182,8 +180,7 @@ export const problemApi = {
     q?: string,
     tags?: number[],
     difficulty?: number[],
-    sourceType?: string[],
-    year?: number[],
+    meta?: number[],
   ) =>
     get<ProblemListResult>('/problems', {
       page,
@@ -191,8 +188,7 @@ export const problemApi = {
       ...(q ? { q } : {}),
       ...(tags && tags.length ? { tags: tags.join(',') } : {}),
       ...(difficulty && difficulty.length ? { difficulty: difficulty.join(',') } : {}),
-      ...(sourceType && sourceType.length ? { source_type: sourceType.join(',') } : {}),
-      ...(year && year.length ? { year: year.join(',') } : {}),
+      ...(meta && meta.length ? { meta: meta.join(',') } : {}),
     }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   paper: (id: number) => get<PaperData>(`/problems/${id}/paper`),
@@ -246,26 +242,21 @@ export const problemApi = {
     patch<{ id: number }>(`/problems/${id}/statement`, { md }),
 }
 
-// 标签树（v0.5.5）：读公开（题库/详情/表单共用），写仅 root（后端 RequireRoot）
+// 双树（2026-10-25）：知识树（原标签树）读公开（题库/详情/表单共用），写仅 root；
+// 来源树（地区/赛事/题库/年份/其他）同构同权限，按 tree 参数区分
 export const tagApi = {
-  tree: () => get<TagTreeResult>('/tags/tree'),
-  adminTree: () => get<AdminTagTreeResult>('/admin/tagtree'),
-  save: (nodes: TagNode[]) => put<{ count: number }>('/admin/tagtree', { nodes }),
-  // 保存被删拦截后的解绑（一键全部/逐题）：从题目上摘除待删标签，其余标签不动
-  unbind: (problemIds: number[], tagIds: number[]) =>
-    post<{ unbound: number }>('/admin/tagtree/unbind', { problem_ids: problemIds, tag_ids: tagIds }),
-}
-
-// 来源库（v0.12）：元数据公开读（表单 datalist + 题库筛选），管理写仅 root
-export const sourcesApi = {
-  meta: () => get<SourceMetaResult>('/sources/meta'),
-  adminList: () => get<{ list: SourceEntry[] }>('/admin/sources'),
-  create: (name: string, type: string) => post<{ id: number }>('/admin/sources', { name, type }),
-  update: (id: number, body: { name?: string; type?: string }) =>
-    patch<{ updated: number }>(`/admin/sources/${id}`, body),
-  remove: (id: number) => del<{ deleted: number }>(`/admin/sources/${id}`),
-  toTag: (id: number, body: { node_id?: number; parent_id?: number; name?: string }) =>
-    post<{ node_id: number; updated: number }>(`/admin/sources/${id}/to-tag`, body),
+  tree: (tree?: 'knowledge' | 'meta') => get<TagTreeResult>('/tags/tree', tree ? { tree } : {}),
+  adminTree: (tree?: 'knowledge' | 'meta') =>
+    get<AdminTagTreeResult>('/admin/tagtree', tree ? { tree } : {}),
+  save: (nodes: TagNode[], tree?: 'knowledge' | 'meta') =>
+    put<{ count: number }>('/admin/tagtree', { nodes, ...(tree ? { tree } : {}) }),
+  // 保存被删拦截后的解绑（一键全部/逐题）：从题目上摘除待删节点，其余节点不动
+  unbind: (problemIds: number[], tagIds: number[], tree?: 'knowledge' | 'meta') =>
+    post<{ unbound: number }>('/admin/tagtree/unbind', {
+      problem_ids: problemIds,
+      tag_ids: tagIds,
+      ...(tree ? { tree } : {}),
+    }),
 }
 
 // 题包导入（v0.15 统一格式）：独立 /import 页按来源（soj|hydro）适配；problem.create 权限

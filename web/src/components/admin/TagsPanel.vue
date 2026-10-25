@@ -9,11 +9,16 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { problemApi, tagApi } from '@/api'
 import type { ProblemListItem, TagNode, TagRefProblem } from '@/types'
+import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
+
+// tree（2026-10-25 双树）：knowledge = 知识树（默认），meta = 来源标签树。
+// 面板交互完全同构，仅数据源/接口参数/角标字段不同。
+const props = withDefaults(defineProps<{ tree?: 'knowledge' | 'meta' }>(), { tree: 'knowledge' })
 
 const emit = defineEmits<{ (e: 'update:dirty', v: boolean): void }>()
 
-const tagStore = useTagTreeStore()
+const tagStore = props.tree === 'meta' ? useMetaTreeStore() : useTagTreeStore()
 
 // 草稿节点：children 恒为数组（序列化稳定，脏检查用 JSON 快照对比）。
 // 新节点用临时负数 id（仅作 DOM key），保存载荷映射回 0 由服务端取号。
@@ -163,7 +168,11 @@ async function fetchTagProblems(id: number, name: string, page: number) {
   }
   problemsLoading.value = true
   try {
-    const r = await problemApi.list(page, PAGE_SIZE, undefined, [id])
+    // 来源树走 meta= 子树展开筛选（选父节点含区县），知识树维持 tags= 精确匹配
+    const r =
+      props.tree === 'meta'
+        ? await problemApi.list(page, PAGE_SIZE, undefined, undefined, undefined, [id])
+        : await problemApi.list(page, PAGE_SIZE, undefined, [id])
     if (seq !== problemsSeq) return
     tagProblems.value = { id, name, total: r.total, list: r.list }
     problemsPage.value = page
@@ -466,7 +475,7 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('beforeunload', onBeforeUnload)
   try {
-    const r = await tagApi.adminTree()
+    const r = await tagApi.adminTree(props.tree)
     draft.value = fromServer(r.nodes)
     counts.value = r.counts
     savedJson.value = JSON.stringify(draft.value)
@@ -652,10 +661,10 @@ async function doSave() {
   blockedProblems.value = null
   removedTagIds.value = []
   try {
-    const r = await tagApi.save(toPayload(draft.value))
+    const r = await tagApi.save(toPayload(draft.value), props.tree)
     ElMessage.success(`标签树已保存（${r.count} 个标签）`)
     // 保存后新节点已取号，重拉面板数据（树 + 引用数），名字映射广播刷新
-    const fresh = await tagApi.adminTree()
+    const fresh = await tagApi.adminTree(props.tree)
     draft.value = fromServer(fresh.nodes)
     counts.value = fresh.counts
     savedJson.value = JSON.stringify(draft.value)
@@ -692,7 +701,7 @@ async function unbind(row?: TagRefProblem) {
   }
   unbinding.value = true
   try {
-    await tagApi.unbind(ids, removedTagIds.value)
+    await tagApi.unbind(ids, removedTagIds.value, props.tree)
     if (row) {
       blockedProblems.value = problems.filter((p) => p.id !== row.id)
       ElMessage.success(`已从「#${row.id} ${row.title}」解绑`)

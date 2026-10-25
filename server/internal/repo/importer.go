@@ -36,12 +36,9 @@ type Importer struct {
 	CreatorUID int64  // 导入者 uid（0 = 系统/命令行导入，其题目隐藏态仅 root 可改）
 
 	// ---- 表单直传（建题路径权威输入，非零值优先于包内声明）----
-	TagIDs         []int64 // 标签节点 ID
+	TagIDs         []int64 // 知识树节点 ID
+	MetaTagIDs     []int64 // 来源标签树节点 ID（2026-10-25 双树）
 	Difficulty     int     // 难度 1–10
-	SourceType     string  // 来源类型
-	Source         string
-	Year           int
-	Region         string
 	TimeLimitMS    int    // 时限毫秒
 	MemoryLimitKB  int    // 内存 KB
 	FileIOName     string // 文件 IO 基名（way → way.in/way.out）
@@ -219,26 +216,21 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 	}
 	meta.Difficulty = d
 
-	// 来源四字段归一：表单 > yaml > 标题方括号识别
-	if err := im.applySourceFields(meta.Title, &meta); err != nil {
+	// 来源（2026-10-25 双树）：标题方括号线索 → 来源标签树节点匹配，匹配不上直接丢弃
+	metaTagIDs, err := im.resolveMetaTags(ctx, meta.Title)
+	if err != nil {
 		return nil, err
 	}
-	if meta.Source != "" {
-		_ = im.Repo.UpsertSourceByName(ctx, meta.Source, meta.SourceType)
-	}
 
-	// 标签：表单节点 ID > yaml tag 名匹配（未匹配入来源库 + rawTags 保留）
-	tagIDs, rawNames, err := im.resolveTags(ctx, meta.Tag)
+	// 知识标签：表单节点 ID > yaml tag 名匹配（未匹配名直接丢弃，不再有 rawTags 待认领）
+	tagIDs, err := im.resolveTags(ctx, meta.Tag)
 	if err != nil {
 		return nil, fmt.Errorf("挂载标签: %w", err)
-	}
-	for _, n := range rawNames {
-		_ = im.Repo.UpsertSourceByName(ctx, n, "")
 	}
 
 	// 客观题：无 data/；小题定义三源合并（表单直传 > problem.yaml + answer.yaml + answer.md）
 	if meta.Type == TypeObjective {
-		return im.importObjective(ctx, dir, pid, &meta, statement, tagIDs, rawNames)
+		return im.importObjective(ctx, dir, pid, &meta, statement, tagIDs, metaTagIDs)
 	}
 
 	// ---- 编程题：data/ 收集 ----
@@ -336,17 +328,13 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 		Statement:     string(statement),
 		Type:          meta.Type,
 		Difficulty:    d,
-		SourceType:    meta.SourceType,
-		Source:        meta.Source,
-		Year:          meta.Year,
-		Region:        meta.Region,
+		MetaTags:      metaTagIDs,
 		TimeLimitMS:   msLimit,
 		MemoryLimitKB: kbLimit,
 		Visibility:    VisibilityPublic,
 		Hidden:        im.effHidden(&meta),
 		CreatedBy:     im.CreatorUID,
 		Tags:          tagIDs,
-		RawTags:       rawNames,
 		Subtasks:      subtasks,
 		Cases:         cases,
 	}
@@ -501,7 +489,7 @@ func validateSubtasks(ysts []yamlSubtask, caseCount int) ([]Subtask, error) {
 
 // importObjective 客观题导入：小题定义 = 表单直传（含答案）∨ problem.yaml questions
 // + answer.yaml 答案 + answer.md 解析 三源合并；ValidateObjectiveSet 兜底校验。
-func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, meta *problemYAML, statement []byte, tagIDs []int64, rawNames []string) (*Problem, error) {
+func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, meta *problemYAML, statement []byte, tagIDs []int64, metaTagIDs []int64) (*Problem, error) {
 	qs := im.ObjectiveQuestions
 	if qs == nil {
 		answers, err := parseAnswerFile(filepath.Join(dir, "answer.yaml"))
@@ -532,14 +520,13 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 		ID: pid, Title: meta.Title, Statement: string(statement),
 		Type: TypeObjective, Questions: qs,
 		Difficulty: meta.Difficulty,
-		SourceType: meta.SourceType, Source: meta.Source, Year: meta.Year, Region: meta.Region,
+		MetaTags:   metaTagIDs,
 		// 客观题不消费时空限制，占位默认值
 		TimeLimitMS: 1000, MemoryLimitKB: 262144,
 		Visibility: VisibilityPublic,
 		Hidden:     im.effHidden(meta),
 		CreatedBy:  im.CreatorUID,
 		Tags:       tagIDs,
-		RawTags:    rawNames,
 		Cases:      []CaseMeta{},
 	}
 	if err := im.Repo.UpsertProblem(ctx, p); err != nil {
@@ -753,34 +740,10 @@ func hiddenPtr(v bool) *bool {
 	return nil
 }
 
-// applySourceFields 来源四字段归一：表单直传 > yaml > 标题方括号识别（仅全空才识别）。
-func (im *Importer) applySourceFields(title string, meta *problemYAML) error {
-	if im.SourceType != "" {
-		meta.SourceType = im.SourceType
-	}
-	if im.Source != "" {
-		meta.Source = im.Source
-	}
-	if im.Year != 0 {
-		meta.Year = im.Year
-	}
-	if im.Region != "" {
-		meta.Region = im.Region
-	}
-	if meta.SourceType == "" && meta.Source == "" && meta.Year == 0 && meta.Region == "" {
-		if h := ParseSourceHint(title); h.Source != "" || h.Region != "" || h.Year != 0 {
-			meta.SourceType, meta.Source, meta.Year, meta.Region = h.SourceType, h.Source, h.Year, h.Region
-		}
-	}
-	if !ValidSourceType(meta.SourceType) {
-		return fmt.Errorf("source_type 需为 oj / contest / region / local / other")
-	}
-	if meta.Year != 0 && (meta.Year < 1900 || meta.Year > 2100) {
-		return fmt.Errorf("year 需在 1900-2100 之间")
-	}
-	meta.Source = truncateRunes(meta.Source, 64)
-	meta.Region = truncateRunes(meta.Region, 64)
-	return nil
+// resolveMetaTags 来源线索归一（2026-10-25 双树）：标题方括号识别（ParseSourceHint）
+// → 来源标签树节点匹配；匹配不上的线索直接丢弃（rawTags 待认领机制随之退役）。
+func (im *Importer) resolveMetaTags(ctx context.Context, title string) ([]int64, error) {
+	return im.Repo.MatchMetaTags(ctx, ParseSourceHint(title)), nil
 }
 
 // truncateRunes 按 rune 截断到上限。
@@ -814,22 +777,22 @@ func (im *Importer) tagNamesOf(ctx context.Context, ids []int64) []string {
 
 // resolveTags 标签归一为树节点 ID：TagIDs 非空（网页建题）时校验存在；否则按 yaml tag
 // 名匹配（未匹配的入来源库 + rawTags 保留，v0.12）。
-func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, []string, error) {
+func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, error) {
 	if len(im.TagIDs) > 0 {
 		if err := im.Repo.ValidateTagRefs(ctx, im.TagIDs); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return im.TagIDs, nil, nil
+		return im.TagIDs, nil
 	}
 	if len(names) == 0 {
-		return nil, nil, nil
+		return nil, nil
 	}
 	tree, err := im.Repo.GetTagTree(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	ids, unmatched := matchTagNames(TagNameLookup(tree), names)
-	return ids, unmatched, nil
+	ids, _ := matchTagNames(TagNameLookup(tree), names)
+	return ids, nil
 }
 
 // matchTagNames 按名匹配树节点（纯函数，单测覆盖）。

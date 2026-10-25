@@ -556,6 +556,19 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			log.Printf("[boot] 空标签树已注入默认标签树（defaultTagsV1）")
 		}
 	}
+	if !flagDone("defaultMetaTreeV1") {
+		// v0.21 双树（2026-10-25）：全新部署注入来源标签树种子；已有树永不触碰
+		inserted, err := r.EnsureDefaultMetaTagTree(ctx)
+		if err != nil {
+			return err
+		}
+		if err := setFlag("defaultMetaTreeV1"); err != nil {
+			return err
+		}
+		if inserted {
+			log.Printf("[boot] 空来源标签树已注入默认种子（defaultMetaTreeV1）")
+		}
+	}
 	return nil
 }
 

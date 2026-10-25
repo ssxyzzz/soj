@@ -7,7 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { contestApi, examApi, problemApi } from '@/api'
 import MdView from '@/components/MdView.vue'
-import { sourceChain } from '@/utils/source'
+import { useMetaTreeStore } from '@/stores/metaTree'
 import type { ObjectiveKind, PaperData } from '@/types'
 
 type PaperKind = 'contest' | 'exam' | 'problem'
@@ -33,9 +33,12 @@ function kindName(kind: ObjectiveKind): string {
   return kindMap[kind] ?? '客观题'
 }
 
-// 来源链（v0.12 打印带来源）：`类型 · 来源名 年份（地区）`，全空返回空串
-function sourceOf(p: { source_type?: string; source?: string; year?: number; region?: string }): string {
-  return sourceChain(p)
+// 来源链（2026-10-25 双树）：打印取来源标签树节点名，全空返回空串
+const metaStore = useMetaTreeStore()
+metaStore.ensure()
+
+function sourceOf(metaTags: number[] | undefined): string {
+  return (metaTags ?? []).map((id) => metaStore.nameOf(id)).join(' ')
 }
 
 function letter(i: number): string {
@@ -114,7 +117,7 @@ async function printPaper() {
 
       <section v-for="(p, i) in paper.problems" :key="p.id" class="paper-problem">
         <h2 v-if="!paper.single" class="paper-problem-title"><span class="paper-label">T{{ i + 1 }}</span>{{ p.title }}</h2>
-        <div v-if="sourceOf(p)" class="paper-source">来源：{{ sourceOf(p) }}</div>
+        <div v-if="sourceOf(p.meta_tags)" class="paper-source">来源：{{ sourceOf(p.meta_tags) }}</div>
         <div v-if="p.file_io_input" class="paper-file-io">
           文件 IO：{{ p.file_io_input }} / {{ p.file_io_output }}
         </div>

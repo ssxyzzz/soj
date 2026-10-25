@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,19 +26,14 @@ type TagNode struct {
 	Children []TagNode `bson:"children,omitempty" json:"children,omitempty"`
 }
 
-// GetTagTree 读取整棵标签树；从未保存过时返回空树（非错误）。
+// GetTagTree 读取整棵知识树；从未保存过时返回空树（非错误）。
 func (r *Repo) GetTagTree(ctx context.Context) ([]TagNode, error) {
-	var doc struct {
-		Nodes []TagNode `bson:"nodes"`
-	}
-	err := r.Tags.FindOne(ctx, bson.M{"_id": "tree"}).Decode(&doc)
-	if IsNotFound(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return doc.Nodes, nil
+	return r.GetTagTreeDoc(ctx, TreeDocKnowledge)
+}
+
+// GetMetaTagTree 读取整棵来源标签树；从未保存过时返回空树（非错误）。
+func (r *Repo) GetMetaTagTree(ctx context.Context) ([]TagNode, error) {
+	return r.GetTagTreeDoc(ctx, TreeDocMeta)
 }
 
 // ReplaceTagTree 整树覆盖保存（调用方负责形状校验、引用拦截与 ID 分配）。
@@ -210,6 +206,59 @@ func (r *Repo) TagUsageCounts(ctx context.Context) (map[int64]int64, error) {
 	return out, nil
 }
 
+// TagUsageCountsField 引用数统计（字段参数化）：tags=知识树角标，meta_tags=来源树角标。
+func (r *Repo) TagUsageCountsField(ctx context.Context, field string) (map[int64]int64, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$unwind", Value: "$" + field}},
+		{{Key: "$group", Value: bson.M{"_id": "$" + field, "n": bson.M{"$sum": 1}}}},
+	}
+	cursor, err := r.Problems.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	var rows []struct {
+		ID int64 `bson:"_id"`
+		N  int64 `bson:"n"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	out := make(map[int64]int64, len(rows))
+	for _, row := range rows {
+		out[row.ID] = row.N
+	}
+	return out, nil
+}
+
+// TagRefProblemsField 引用题目明细（删除/改名拦截用，字段参数化）。
+func (r *Repo) TagRefProblemsField(ctx context.Context, field string, tagIDs []int64) ([]*Problem, error) {
+	cursor, err := r.Problems.Find(ctx, bson.M{field: bson.M{"$in": tagIDs}},
+		options.Find().SetProjection(bson.M{"title": 1, field: 1}).
+			SetSort(bson.D{{Key: "_id", Value: 1}}))
+	if err != nil {
+		return nil, err
+	}
+	var out []*Problem
+	if err := cursor.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// UnbindTagsField 从指定题目批量摘除指定节点（字段参数化：$pull 只动目标数组）。
+func (r *Repo) UnbindTagsField(ctx context.Context, field string, problemIDs, tagIDs []int64) (int64, error) {
+	if len(problemIDs) == 0 || len(tagIDs) == 0 {
+		return 0, nil
+	}
+	res, err := r.Problems.UpdateMany(ctx,
+		bson.M{"_id": bson.M{"$in": problemIDs}, field: bson.M{"$in": tagIDs}},
+		bson.M{"$pull": bson.M{field: bson.M{"$in": tagIDs}}})
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
 // ValidateTagRefs 校验节点 ID 全部存在于标签树（建题/编辑元数据直传 ID 的入口用）。
 func (r *Repo) ValidateTagRefs(ctx context.Context, ids []int64) error {
 	if len(ids) == 0 {
@@ -224,6 +273,25 @@ func (r *Repo) ValidateTagRefs(ctx context.Context, ids []int64) error {
 	for _, id := range ids {
 		if !exists[id] {
 			return fmt.Errorf("标签节点 %d 不存在于标签树", id)
+		}
+	}
+	return nil
+}
+
+// ValidateMetaTagRefs 校验节点 ID 全部存在于来源标签树（建题/编辑来源直传 ID 的入口用）。
+func (r *Repo) ValidateMetaTagRefs(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tree, err := r.GetMetaTagTree(ctx)
+	if err != nil {
+		return err
+	}
+	exists := map[int64]bool{}
+	CollectTagIDs(tree, exists)
+	for _, id := range ids {
+		if !exists[id] {
+			return fmt.Errorf("来源节点 %d 不存在于来源标签树", id)
 		}
 	}
 	return nil
@@ -773,4 +841,173 @@ func (r *Repo) EnsureDefaultTagTree(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return true, r.ReplaceTagTree(ctx, nodes)
+}
+
+// 双树（2026-10-25 双树体系统一）：知识树（原标签树）与来源标签树共用一套存储、
+// 校验与面板交互，按 tags 集合内的文档 ID 区分；题目侧分两份挂载
+// （Problem.Tags 知识点 / Problem.MetaTags 来源）。
+const (
+	TreeDocKnowledge = "tree"      // 知识树（原标签树）
+	TreeDocMeta      = "tree:meta" // 来源标签树：地区/赛事/题库/年份/其他
+)
+
+// GetTagTreeDoc 读指定树；从未保存过时返回空树（非错误）。
+func (r *Repo) GetTagTreeDoc(ctx context.Context, docID string) ([]TagNode, error) {
+	var doc struct {
+		Nodes []TagNode `bson:"nodes"`
+	}
+	err := r.Tags.FindOne(ctx, bson.M{"_id": docID}).Decode(&doc)
+	if IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return doc.Nodes, nil
+}
+
+// ReplaceTagTreeDoc 整树覆盖保存（调用方负责形状校验、引用拦截与 ID 分配）。
+func (r *Repo) ReplaceTagTreeDoc(ctx context.Context, docID string, nodes []TagNode) error {
+	if nodes == nil {
+		nodes = []TagNode{}
+	}
+	doc := bson.M{"nodes": nodes, "updatedAt": time.Now()}
+	_, err := r.Tags.ReplaceOne(ctx, bson.M{"_id": docID}, doc, options.Replace().SetUpsert(true))
+	return err
+}
+
+// ReconcileTagTreeDoc 整树覆盖前的身份对齐（同名继承旧 ID、新名取新号）。
+// 两棵树独立取号（tag / tag_meta），ID 空间互不相干——题目分两份挂载无歧义。
+func (r *Repo) ReconcileTagTreeDoc(ctx context.Context, docID, counterKey string, newNodes []TagNode) ([]TagNode, []int64, error) {
+	oldNodes, err := r.GetTagTreeDoc(ctx, docID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return reconcileTagTree(oldNodes, newNodes, func() (int64, error) {
+		return r.nextSeq(ctx, counterKey)
+	})
+}
+
+// DefaultMetaTagTreeContent 来源标签树种子：地区（合肥市域为主）/ 赛事 / 题库 / 年份 / 其他。
+// 年份枝 root 手动维护（种子预置 2018–2026，不加不自动建）。
+var DefaultMetaTagTreeContent = []TagNode{
+	{Name: "地区", Children: []TagNode{
+		{Name: "合肥市", Children: []TagNode{
+			{Name: "瑶海区"}, {Name: "庐阳区"}, {Name: "蜀山区"}, {Name: "包河区"},
+			{Name: "经开区"}, {Name: "高新区"}, {Name: "新站区"},
+			{Name: "肥东县"}, {Name: "肥西县"}, {Name: "长丰县"}, {Name: "庐江县"}, {Name: "巢湖市"},
+		}},
+	}},
+	{Name: "赛事", Children: []TagNode{
+		{Name: "NOI"}, {Name: "NOIP"}, {Name: "CSP-J"}, {Name: "CSP-S"}, {Name: "APIO"}, {Name: "蓝桥杯"},
+	}},
+	{Name: "题库", Children: []TagNode{
+		{Name: "洛谷"}, {Name: "Codeforces"}, {Name: "USACO"}, {Name: "AtCoder"}, {Name: "牛客"},
+	}},
+	{Name: "年份", Children: []TagNode{
+		{Name: "2018"}, {Name: "2019"}, {Name: "2020"}, {Name: "2021"}, {Name: "2022"},
+		{Name: "2023"}, {Name: "2024"}, {Name: "2025"}, {Name: "2026"},
+	}},
+	{Name: "校内·自编", Children: []TagNode{
+		{Name: "校内考试"}, {Name: "教师自编"},
+	}},
+	{Name: "其他"},
+}
+
+// EnsureDefaultMetaTagTree 来源标签树不存在或为空时注入种子（取号 counter tag_meta），
+// 已有树返回 false 不动。
+func (r *Repo) EnsureDefaultMetaTagTree(ctx context.Context) (bool, error) {
+	tree, err := r.GetTagTreeDoc(ctx, TreeDocMeta)
+	if err != nil {
+		return false, err
+	}
+	if len(tree) > 0 {
+		return false, nil
+	}
+	var assign func(list []TagNode) ([]TagNode, error)
+	assign = func(list []TagNode) ([]TagNode, error) {
+		res := make([]TagNode, 0, len(list))
+		for _, n := range list {
+			id, err := r.nextSeq(ctx, "tag_meta")
+			if err != nil {
+				return nil, err
+			}
+			ch, err := assign(n.Children)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, TagNode{ID: id, Name: n.Name, Children: ch})
+		}
+		return res, nil
+	}
+	nodes, err := assign(DefaultMetaTagTreeContent)
+	if err != nil {
+		return false, err
+	}
+	if err := ValidateTagTreeShape(nodes); err != nil {
+		return false, err
+	}
+	return true, r.ReplaceTagTreeDoc(ctx, TreeDocMeta, nodes)
+}
+
+// MatchMetaTags 把导入解析出的来源线索（SourceHint）映射到来源标签树节点 ID：
+// Region/Source 按节点名精确匹配（任一层级），Year 按年份枝子节点名匹配；
+// 全部命中失败的线索不返回（2026-10-25 定稿：匹配不上直接丢弃）。
+func (r *Repo) MatchMetaTags(ctx context.Context, hint SourceHint) []int64 {
+	nodes, err := r.GetTagTreeDoc(ctx, TreeDocMeta)
+	if err != nil || len(nodes) == 0 {
+		return nil
+	}
+	byName := map[string]int64{}
+	var walk func(list []TagNode)
+	walk = func(list []TagNode) {
+		for _, n := range list {
+			if _, dup := byName[n.Name]; !dup {
+				byName[n.Name] = n.ID
+			}
+			walk(n.Children)
+		}
+	}
+	walk(nodes)
+
+	ids := make([]int64, 0, 3)
+	add := func(name string) {
+		if name == "" {
+			return
+		}
+		if id, ok := byName[name]; ok {
+			ids = append(ids, id)
+		}
+	}
+	if hint.Year > 0 {
+		add(strconv.Itoa(hint.Year))
+	}
+	add(strings.TrimSpace(hint.Region))
+	add(strings.TrimSpace(hint.Source))
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}
+
+// CollectSubtreeIDs 汇集 wanted 各节点自身与其全部子孙的 ID（来源筛选选父节点
+// 含子节点：选「合肥市」命中全部区县），返回去重后的 ID 集。
+func CollectSubtreeIDs(nodes []TagNode, wanted []int64) []int64 {
+	want := map[int64]bool{}
+	for _, id := range wanted {
+		want[id] = true
+	}
+	out := make([]int64, 0, 16)
+	var walk func(list []TagNode, inherited bool)
+	walk = func(list []TagNode, inherited bool) {
+		for _, n := range list {
+			hit := inherited || want[n.ID]
+			if hit {
+				out = append(out, n.ID)
+			}
+			walk(n.Children, hit)
+		}
+	}
+	walk(nodes, false)
+	return out
 }

@@ -15,7 +15,6 @@ import NoticePanel from '@/components/admin/NoticePanel.vue'
 import RolesPanel from '@/components/admin/RolesPanel.vue'
 import SecurityLogsPanel from '@/components/admin/SecurityLogsPanel.vue'
 import SettingsPanel from '@/components/admin/SettingsPanel.vue'
-import SourcesPanel from '@/components/admin/SourcesPanel.vue'
 import TagsPanel from '@/components/admin/TagsPanel.vue'
 import UsersPanel from '@/components/admin/UsersPanel.vue'
 import { useUserStore } from '@/stores/user'
@@ -25,18 +24,18 @@ const route = useRoute()
 
 const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'settings', 'backup'] as const
 type Section = (typeof sections)[number]
-// 题目管理（v0.18.1 聚合）：标签树 / 来源库 / 重复题扫描三面板同页 tab 切换；
+// 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描三面板同页 tab 切换（2026-10-25 双树）；
 // tags/sources 旧深链值映射到 problems 的对应子页
-type SubTab = 'tags' | 'sources' | 'duplicates'
+type SubTab = 'tags' | 'meta' | 'duplicates'
 const rawSection = (Array.isArray(route.query.section) ? route.query.section[0] : route.query.section) as string | undefined
-const isLegacySub = rawSection === 'tags' || rawSection === 'sources'
+const isLegacySub = rawSection === 'tags' || rawSection === 'sources' || rawSection === 'meta'
 const section = ref<Section>(
   rawSection && (sections.includes(rawSection as Section) || isLegacySub) ? 'problems' : 'users',
 )
 const subTab = ref<SubTab>(
-  isLegacySub ? (rawSection as SubTab) : rawSection === 'duplicates' ? 'duplicates' : 'tags',
+  rawSection === 'meta' ? 'meta' : isLegacySub ? 'tags' : rawSection === 'duplicates' ? 'duplicates' : 'tags',
 )
-// 题目管理入口：root（标签树/来源库）∨ problem.edit.all（重复扫描）
+// 题目管理入口：root（双树）∨ problem.edit.all（重复扫描）
 const canProblemManage = userStore.role === 'root' || userStore.can('problem.edit.all')
 const showTagsTab = userStore.role === 'root'
 const showDuplicatesTab = userStore.can('problem.edit.all')
@@ -107,7 +106,7 @@ async function switchSubTab(target: SubTab) {
         @click="switchSection('problems')"
       >
         <span class="nav-title">题目管理</span>
-        <span class="nav-sub">标签树 / 来源库 / 重复扫描</span>
+        <span class="nav-sub">知识树 / 标签树 / 重复扫描</span>
       </div>
       <div
         v-if="userStore.role === 'root'"
@@ -159,12 +158,12 @@ async function switchSubTab(target: SubTab) {
       <RolesPanel v-else-if="section === 'roles'" />
       <div v-else-if="section === 'problems'" class="problem-manage">
         <el-tabs :model-value="subTab" @tab-change="switchSubTab as never">
-          <el-tab-pane v-if="showTagsTab" name="tags" label="标签树" />
-          <el-tab-pane v-if="showTagsTab" name="sources" label="来源库" />
+          <el-tab-pane v-if="showTagsTab" name="tags" label="知识树" />
+          <el-tab-pane v-if="showTagsTab" name="meta" label="标签树" />
           <el-tab-pane v-if="showDuplicatesTab" name="duplicates" label="重复题扫描" />
         </el-tabs>
         <TagsPanel v-if="subTab === 'tags'" @update:dirty="tagsDirty = $event" />
-        <SourcesPanel v-else-if="subTab === 'sources'" />
+        <TagsPanel v-else-if="subTab === 'meta'" tree="meta" @update:dirty="tagsDirty = $event" />
         <DuplicateProblemsPanel v-else-if="subTab === 'duplicates'" />
       </div>
       <LevelPanel v-else-if="section === 'levels'" />

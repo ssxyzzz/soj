@@ -33,7 +33,7 @@ const editInitial = ref<{
   statement?: string
   file_io_name?: string
   tag_ids?: number[]
-  raw_tags?: string[]
+  meta_tag_ids?: number[]
   questions?: {
     stem: string
     kind: ObjectiveKind
@@ -62,10 +62,7 @@ onMounted(async () => {
       title: p.title,
       type: (p.type as 'objective' | 'function' | 'interactive' | undefined) || 'default',
       difficulty: p.difficulty ?? 3,
-      source_type: p.source_type || '',
-      source: p.source || '',
-      year: p.year || undefined,
-      region: p.region || '',
+      meta_tag_ids: p.meta_tags ? [...p.meta_tags] : [],
       time_limit_ms: p.time_limit_ms,
       memory_limit_mb: Math.max(16, Math.round(p.memory_limit_kb / 1024)),
       compare: p.compare === 'tolerant' ? 'tolerant' : 'exact',
@@ -73,7 +70,6 @@ onMounted(async () => {
       statement: p.description ?? '',
       file_io_name: (p.file_io_input || 'problem.in').replace(/\.in$/, ''),
       tag_ids: p.tags ? [...p.tags] : [],
-      raw_tags: p.raw_tags ? [...p.raw_tags] : [],
       // 客观题整卷完整定义回填（编辑者门槛下 GetProblem 附带 questions_full）
       questions: (p.questions_full ?? []).map((q) => ({
         stem: q.stem ?? '',
@@ -183,10 +179,7 @@ async function onSubmit(p: ProblemFormPayload) {
       await problemApi.updateMeta(pid, {
         title: p.title,
         difficulty: p.difficulty,
-        source_type: p.source_type || '',
-        source: p.source || '',
-        year: p.year || 0,
-        region: p.region || '',
+        meta_tag_ids: p.meta_tag_ids ?? [],
         tag_ids: p.tag_ids,
         questions_json: JSON.stringify(p.questions),
       })
@@ -199,10 +192,7 @@ async function onSubmit(p: ProblemFormPayload) {
       time_limit_ms: p.time_limit_ms,
       memory_limit_kb: p.memory_limit_mb * 1024,
       difficulty: p.difficulty,
-      source_type: p.source_type || '',
-      source: p.source || '',
-      year: p.year || 0,
-      region: p.region || '',
+      meta_tag_ids: p.meta_tag_ids ?? [],
       compare: p.compare,
       file_io_name: p.file_io_name,
       tag_ids: p.tag_ids,

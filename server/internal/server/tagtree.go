@@ -15,9 +15,33 @@ import (
 	"soj/internal/repo"
 )
 
-// GetTagTree 整棵标签树（从未配置时返回空数组）。
+// treeDocID 解析 ?tree= 参数：meta = 来源标签树，缺省 = 知识树（原标签树）。
+func treeDocID(tree string) string {
+	if tree == "meta" {
+		return repo.TreeDocMeta
+	}
+	return repo.TreeDocKnowledge
+}
+
+// treeField 来源树挂载在题目的 meta_tags 字段上（知识树 = tags）。
+func treeField(tree string) string {
+	if tree == "meta" {
+		return "meta_tags"
+	}
+	return "tags"
+}
+
+// treeCounterKey 来源树独立取号（tag_meta），与知识树（tag）ID 空间互不相干。
+func treeCounterKey(tree string) string {
+	if tree == "meta" {
+		return "tag_meta"
+	}
+	return "tag"
+}
+
+// GetTagTree 整棵树（?tree=meta 取来源树；从未配置时返回空数组）。
 func (h *Handlers) GetTagTree(c *gin.Context) {
-	nodes, err := h.repo.GetTagTree(c.Request.Context())
+	nodes, err := h.repo.GetTagTreeDoc(c.Request.Context(), treeDocID(c.Query("tree")))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取标签树失败")
 		return
@@ -32,7 +56,8 @@ func (h *Handlers) GetTagTree(c *gin.Context) {
 // 并供前端把「删除/改名被引用拦截」提前到交互层，不必等保存 400）。
 func (h *Handlers) AdminTagTree(c *gin.Context) {
 	ctx := c.Request.Context()
-	nodes, err := h.repo.GetTagTree(ctx)
+	tree := c.Query("tree")
+	nodes, err := h.repo.GetTagTreeDoc(ctx, treeDocID(tree))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取标签树失败")
 		return
@@ -40,7 +65,7 @@ func (h *Handlers) AdminTagTree(c *gin.Context) {
 	if nodes == nil {
 		nodes = []repo.TagNode{}
 	}
-	counts, err := h.repo.TagUsageCounts(ctx)
+	counts, err := h.repo.TagUsageCountsField(ctx, treeField(tree))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "统计标签引用失败")
 		return
@@ -63,12 +88,13 @@ func (h *Handlers) AdminReplaceTagTree(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	oldNodes, err := h.repo.GetTagTree(ctx)
+	tree := c.Query("tree")
+	oldNodes, err := h.repo.GetTagTreeDoc(ctx, treeDocID(tree))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取标签树失败")
 		return
 	}
-	nodes, removed, err := h.repo.ReconcileTagTree(ctx, req.Nodes)
+	nodes, removed, err := h.repo.ReconcileTagTreeDoc(ctx, treeDocID(tree), treeCounterKey(tree), req.Nodes)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "标签树对齐失败")
 		return
@@ -76,7 +102,7 @@ func (h *Handlers) AdminReplaceTagTree(c *gin.Context) {
 
 	// 删除拦截：待删节点仍被题目引用时拒绝保存，返回题目清单（ID/标题/各自标签名）
 	if len(removed) > 0 {
-		refs, err := h.repo.TagRefProblems(ctx, removed)
+		refs, err := h.repo.TagRefProblemsField(ctx, treeField(tree), removed)
 		if err != nil {
 			fail(c, http.StatusInternalServerError, "检查标签引用失败")
 			return
@@ -90,8 +116,12 @@ func (h *Handlers) AdminReplaceTagTree(c *gin.Context) {
 			firstID := int64(0) // removed 已升序，取命中的最小 ID 点名
 			details := make([]gin.H, 0, len(refs))
 			for _, p := range refs {
-				tagNames := make([]string, 0, len(p.Tags))
-				for _, id := range p.Tags {
+				own := p.Tags
+				if tree == "meta" {
+					own = p.MetaTags
+				}
+				tagNames := make([]string, 0, len(own))
+				for _, id := range own {
 					if name, ok := names[id]; ok {
 						tagNames = append(tagNames, name)
 						if blocked[id] && firstID == 0 {
@@ -108,7 +138,7 @@ func (h *Handlers) AdminReplaceTagTree(c *gin.Context) {
 		}
 	}
 
-	if err = h.repo.ReplaceTagTree(ctx, nodes); err != nil {
+	if err = h.repo.ReplaceTagTreeDoc(ctx, treeDocID(tree), nodes); err != nil {
 		fail(c, http.StatusInternalServerError, "保存标签树失败")
 		return
 	}
@@ -136,7 +166,7 @@ func (h *Handlers) AdminUnbindTags(c *gin.Context) {
 			return
 		}
 	}
-	n, err := h.repo.UnbindTags(c.Request.Context(), req.ProblemIDs, req.TagIDs)
+	n, err := h.repo.UnbindTagsField(c.Request.Context(), treeField(c.Query("tree")), req.ProblemIDs, req.TagIDs)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "解绑失败")
 		return

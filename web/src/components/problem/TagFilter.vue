@@ -2,17 +2,20 @@
 // 标签多选卡片流（题库筛选 + 建题/编辑表单共用）：悬停展开下级、可搜索、点击选中；
 // 多选并集、精确匹配，选中集变化即上抛。已选展示在标签搜索框右边（TagChips 顶行
 // 插槽），showSelected=false 可关闭（外部自带已选展示时用）。
+// tree（2026-10-25 双树）：knowledge = 知识树（默认），meta = 来源标签树（地区/赛事/题库/年份）。
 import { computed, onMounted } from 'vue'
 
+import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
 import TagChips from './TagChips.vue'
 
-const props = withDefaults(defineProps<{ selected: number[]; showSelected?: boolean }>(), {
-  showSelected: true,
-})
+const props = withDefaults(
+  defineProps<{ selected: number[]; showSelected?: boolean; tree?: 'knowledge' | 'meta' }>(),
+  { showSelected: true, tree: 'knowledge' },
+)
 const emit = defineEmits<{ change: [ids: number[]] }>()
 
-const tagStore = useTagTreeStore()
+const tagStore = props.tree === 'meta' ? useMetaTreeStore() : useTagTreeStore()
 
 const selectedSet = computed(() => new Set(props.selected))
 

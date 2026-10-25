@@ -4,13 +4,12 @@
 // 右列 = 管理卡（确认 + 取消）/测试数据/文件 IO/其他信息；<992px 折单列。
 // 提交动作 emit 给调用方——新增 = POST /problems 一次交齐；
 // 编辑 = statement / meta / testdata 分步（编辑模式的 zip 为可选的整包替换）。
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
 import { downloadFile } from '@/api/download'
-import { sourcesApi } from '@/api'
 
 import MdEditor from '@/components/MdEditor.vue'
 import ObjectiveEditor from '@/components/ObjectiveEditor.vue'
@@ -18,18 +17,14 @@ import TagFilter from '@/components/problem/TagFilter.vue'
 import { useLevelsStore } from '@/stores/levels'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
-import { SOURCE_TYPE_OPTIONS } from '@/utils/source'
 import { useUserStore } from '@/stores/user'
 import type { ObjectiveKind, ObjectiveQuestionDraft } from '@/types'
 
 export interface ProblemFormPayload {
+  meta_tag_ids?: number[] // 来源标签树节点（2026-10-25 双树）
   title: string
   type: 'default' | 'objective' | 'function' | 'interactive' // 题目类型（v0.9）：客观题走 question；函数题带 driver/template（v0.9.1）；交互题带 interactor（v0.9.2）
   difficulty: number // 难度 1–10（v0.11，缺省 D3）
-  source_type: string // 来源类型（v0.12）：空 = 未归类
-  source: string // 来源名（自由输入，新名沉淀进来源库）
-  year: number | undefined // 年份（空 = 未设置）
-  region: string // 地区
   time_limit_ms: number
   memory_limit_mb: number
   compare: string
@@ -60,7 +55,7 @@ const props = withDefaults(
         explanation?: string
         score?: number
       }[]
-      raw_tags?: string[] // 导入保留的原标签名（v0.12，只读展示）
+      meta_tag_ids?: number[] // 来源标签树节点（2026-10-25 双树，编辑回填）
     }
     fileIOHint?: { input: string; output: string } // 编辑模式：现行文件 IO 实际文件名
     pid?: number // 编辑模式：题目 ID（「下载数据」按钮拼下载地址用）
@@ -101,10 +96,7 @@ const form = reactive({
         ? 'interactive'
         : 'default') as 'default' | 'objective' | 'function' | 'interactive',
   difficulty: props.initial.difficulty ?? 3,
-  source_type: props.initial.source_type ?? '',
-  source: props.initial.source ?? '',
-  year: props.initial.year || undefined,
-  region: props.initial.region ?? '',
+  meta_tag_ids: props.initial.meta_tag_ids ?? [],
   time_limit_ms: props.initial.time_limit_ms ?? 1000,
   memory_limit_mb: props.initial.memory_limit_mb ?? 256,
   compare: props.initial.compare ?? 'exact',
@@ -112,16 +104,6 @@ const form = reactive({
   statement: props.initial.statement ?? '',
   file_io_name: props.initial.file_io_name ?? '',
   tag_ids: props.initial.tag_ids ?? [],
-})
-
-// 来源名建议（v0.12）：datalist 历史已有值；加载失败静默（输入不受影响）
-const sourceNames = ref<string[]>([])
-onMounted(async () => {
-  try {
-    sourceNames.value = (await sourcesApi.meta()).names
-  } catch {
-    /* 建议列表缺席不阻塞建题 */
-  }
 })
 
 // 时限输入以秒为单位（站点展示口径统一用 s），提交/存储仍为毫秒
@@ -145,6 +127,11 @@ const tagsRequired = computed(() => props.mode === 'create' && !tagTreeEmpty.val
 // 标签卡片流点选回调：整体替换 tag_ids（数组顺序即点选顺序）
 function onTagsChange(ids: number[]) {
   form.tag_ids = ids
+}
+
+// 来源打标点选回调（2026-10-25 双树）：整体替换 meta_tag_ids
+function onMetaTagsChange(ids: number[]) {
+  form.meta_tag_ids = ids
 }
 
 // 难度锚点提示（v0.11，NOI 大纲 + 教学进度定标）：选择器旁展示当前档说明
@@ -272,11 +259,10 @@ function payload(): ProblemFormPayload | null {
   return {
     ...form,
     title: form.title.trim(),
-    source: form.source.trim(),
-    region: form.region.trim(),
     statement: form.statement,
     file_io_name: form.file_io_name.trim(),
     tag_ids: [...form.tag_ids],
+    meta_tag_ids: [...form.meta_tag_ids],
     zip,
     checker: checkerFile(),
     questions,
@@ -467,29 +453,8 @@ function onSubmitClick() {
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
               </div>
-              <div class="source-row">
-                <el-select v-model="form.source_type" clearable placeholder="类型" class="src-type">
-                  <el-option v-for="t in SOURCE_TYPE_OPTIONS" :key="t.value" :value="t.value" :label="t.label" />
-                </el-select>
-                <el-input v-model="form.source" list="soj-source-names" placeholder="来源名，如 NOIP" maxlength="64" clearable />
-              </div>
-              <datalist id="soj-source-names">
-                <option v-for="n in sourceNames" :key="n" :value="n" />
-              </datalist>
-              <div class="source-row">
-                <el-input-number
-                  v-model="form.year"
-                  :controls="false"
-                  :min="1900"
-                  :max="2100"
-                  placeholder="年份"
-                  class="src-year"
-                />
-                <el-input v-model="form.region" placeholder="地区，如 合肥市" maxlength="64" clearable />
-              </div>
-              <div v-if="props.initial.raw_tags?.length" class="dim raw-tags">
-                导入保留的原标签：{{ props.initial.raw_tags.join('、') }}（root 可在后台「来源库」转为标签）
-              </div>
+              <!-- 来源打标（2026-10-25 双树）：来源标签树（地区/赛事/题库/年份），来源四字段退役 -->
+              <TagFilter tree="meta" :selected="form.meta_tag_ids" @change="onMetaTagsChange" />
             </div>
           </el-form-item>
           <el-form-item v-if="form.type !== 'objective'">
@@ -699,31 +664,7 @@ function onSubmitClick() {
 }
 
 /* 来源四字段（v0.12）：右列 320px 内两行紧凑排布 */
-.source-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.source-row + .source-row {
-  margin-top: 8px;
-}
-
-.src-type {
-  flex: 0 0 118px;
-}
-
-.src-year {
-  flex: 0 0 90px;
-}
-
-.raw-tags {
-  margin-top: 8px;
-  line-height: 1.6;
-}
-
-.field-group {
+.source-row + .field-group {
   display: flex;
   flex-direction: column;
 }

@@ -99,10 +99,9 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)
 		api.GET("/problems/:id/submissions", AuthRequired(h), h.ListProblemSubmissions)
 		api.GET("/problems/:id/my-submissions", AuthRequired(h), h.MyProblemSubmissions)
-		// 标签树（v0.5.5）：公开读（题库筛选/详情卡/建题表单共用），写走 /admin/tagtree
+		// 标签树（v0.5.5，2026-10-25 双树）：公开读（题库筛选/详情卡/建题表单共用），
+		// ?tree=meta 取来源标签树；写走 /admin/tagtree（同样带 ?tree）
 		api.GET("/tags/tree", AuthOptional(h), h.GetTagTree)
-		// 来源元数据（v0.12）：公开读（题库高级筛选年份选项 + 建题表单 datalist 建议），写走 /admin/sources
-		api.GET("/sources/meta", AuthOptional(h), h.SourceMeta)
 		// 等级配置（v0.11）：公开读（排行榜/顶栏徽章要名字与特效开关），写走 /admin/levelconfig
 		api.GET("/levels", AuthOptional(h), h.GetLevels)
 
@@ -260,13 +259,6 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.POST("/tagtree/unbind", RequireRoot(), h.AdminUnbindTags)
 				// 重复题扫描（v0.18.1）：按标题+题面双键，只列出供管理员处置
 				adminG.GET("/problems/duplicates", RequirePerm(repo.PermProblemEditAll), h.AdminScanDuplicateProblems)
-
-				// 来源库（v0.12，root）：条目 CRUD + 转为标签；公开建议读走 /sources/meta
-				adminG.GET("/sources", RequireRoot(), h.AdminListSources)
-				adminG.POST("/sources", RequireRoot(), h.AdminCreateSource)
-				adminG.PATCH("/sources/:id", RequireRoot(), h.AdminUpdateSource)
-				adminG.DELETE("/sources/:id", RequireRoot(), h.AdminDeleteSource)
-				adminG.POST("/sources/:id/to-tag", RequireRoot(), h.AdminSourceToTag)
 
 				// 等级面板（v0.11）：名称/阈值/衰减系数/特效开关，仅 root
 				adminG.GET("/levelconfig", RequireRoot(), h.AdminGetLevelConfig)

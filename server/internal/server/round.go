@@ -514,17 +514,14 @@ func (h *Handlers) UpdateContest(c *gin.Context) { h.roundUpdate(c, scopeContest
 func (h *Handlers) UpdateExam(c *gin.Context) { h.roundUpdate(c, scopeExam) }
 
 // paperProblemJSON 学生版单题数据：仅题面与客观题公开字段；withFileIO 时带上题目的
-// 文件 IO 英文文件名（比赛/考试开启文件 IO 后才展示）；来源四字段（v0.12 打印带来源）。
+// 文件 IO 英文文件名（比赛/考试开启文件 IO 后才展示）；meta_tags（2026-10-25 双树，打印带来源）。
 func paperProblemJSON(p *repo.Problem, withFileIO bool) gin.H {
 	item := gin.H{
 		"id":          p.ID,
 		"title":       p.Title,
 		"type":        p.Type,
 		"description": p.Statement,
-		"source_type": p.SourceType,
-		"source":      p.Source,
-		"year":        p.Year,
-		"region":      p.Region,
+		"meta_tags":   orEmptyInt64(p.MetaTags),
 	}
 	if p.IsObjective() {
 		qs := make([]gin.H, 0, len(p.Questions))

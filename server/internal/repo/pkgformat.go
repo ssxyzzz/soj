@@ -26,11 +26,7 @@ type problemYAML struct {
 	Title      string            `yaml:"title"`
 	Type       string            `yaml:"type,omitempty"`      // default·objective·function·interactive
 	Difficulty int               `yaml:"difficulty,omitempty"` // 1–10，缺省 D3
-	Tag        []string          `yaml:"tag,omitempty"`        // 标签名（匹配标签树，未匹配入来源库）
-	SourceType string            `yaml:"source_type,omitempty"`
-	Source     string            `yaml:"source,omitempty"`
-	Year       int               `yaml:"year,omitempty"`
-	Region     string            `yaml:"region,omitempty"`
+	Tag        []string          `yaml:"tag,omitempty"`        // 知识点名（匹配知识树）
 	Hidden     *bool             `yaml:"hidden,omitempty"` // 指针区分「未声明」（取 DefaultHidden）与显式 true/false
 	Questions  []objQuestionDef  `yaml:"questions,omitempty"` // 客观题小题定义（不含答案）
 }
@@ -320,10 +316,6 @@ func renderProblemYAML(p *Problem, tagNames []string) ([]byte, error) {
 		Type:       p.Type,
 		Difficulty: p.Difficulty,
 		Tag:        tagNames,
-		SourceType: p.SourceType,
-		Source:     p.Source,
-		Year:       p.Year,
-		Region:     p.Region,
 		Hidden:     hiddenPtr(p.Hidden),
 	}
 	for _, q := range p.Questions {

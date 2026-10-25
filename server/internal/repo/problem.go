@@ -43,17 +43,13 @@ type Problem struct {
 	Type             string              `bson:"type,omitempty"`        // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
 	Questions        []ObjectiveQuestion `bson:"questions,omitempty"`   // 客观题小题列表（v0.9.3；单题时代的 question 由启动迁移并入）
 	Difficulty       int                 `bson:"difficulty,omitempty"`  // 难度 1–10（v0.11；0 = 未设置，展示按 D3）
-	SourceType       string              `bson:"source_type,omitempty"` // 来源类型（v0.12）：空 = 未归类；oj/contest/region/local/other
-	Source           string              `bson:"source,omitempty"`      // 来源名（洛谷、NOIP、合肥市信息学科普日……）
-	Year             int                 `bson:"year,omitempty"`        // 年份（0 = 未设置）
-	Region           string              `bson:"region,omitempty"`      // 地区（建议「省·市·区」自便）
 	TimeLimitMS      int                 `bson:"timeLimitMs"`
 	MemoryLimitKB    int                 `bson:"memoryLimitKb"`
 	Visibility       string              `bson:"visibility"`
 	Hidden           bool                `bson:"hidden"`             // 题目隐藏：无「题库全量可见」权限的视角看不到也不可交（备题用）
 	CreatedBy        int64               `bson:"createdBy"`          // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
-	Tags             []int64             `bson:"tags"`               // 标签树节点 ID（v0.5.5），名字与层级由 tags 集合的树实时解析
-	RawTags          []string            `bson:"rawTags,omitempty"`  // 题包导入未匹配标签树的原始名（v0.12）：保留在题目上，root 可在来源库「转为标签」归队
+	Tags             []int64             `bson:"tags"`               // 知识树节点 ID（v0.5.5，2026-10-25 更名），名字与层级由 tags 集合知识树实时解析
+	MetaTags         []int64             `bson:"meta_tags,omitempty"` // 来源标签树节点 ID（2026-10-25 双树：地区/赛事/题库/年份/其他），名字由来源树实时解析
 	Subtasks         []Subtask           `bson:"subtasks,omitempty"` // nil = 单点等分
 	Cases            []CaseMeta          `bson:"cases"`
 	Compare          string              `bson:"compare,omitempty"`        // 比对模式，空 = exact

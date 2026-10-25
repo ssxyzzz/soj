@@ -176,11 +176,7 @@ export interface ProblemDetail {
   time_limit_ms: number
   memory_limit_kb: number
   difficulty?: number // 难度 1–10（v0.11；缺省展示按 D3）
-  source_type?: string // 来源类型（v0.12）：oj/contest/region/local/other；空 = 未归类
-  source?: string // 来源名（如 NOIP、USACO 1.3.2）
-  year?: number // 年份（0 = 未设置）
-  region?: string // 地区（如 瑶海区）
-  raw_tags?: string[] // 题包导入未匹配标签树的原始名（v0.12，仅编辑者可见）
+  meta_tags?: number[] // 来源标签树节点 ID（2026-10-25 双树：地区/赛事/题库/年份/其他）
   compare?: string
   float_tolerance?: number
   has_checker?: boolean
@@ -540,10 +536,7 @@ export interface PaperProblem {
   questions?: PaperQuestion[] // 客观题公开字段（无答案/解析/分值）
   file_io_input?: string // 比赛/考试开启文件 IO 时的英文文件名
   file_io_output?: string
-  source_type?: string // 来源四字段（v0.12 打印带来源）
-  source?: string
-  year?: number
-  region?: string
+  meta_tags?: number[] // 来源标签树节点 ID（2026-10-25 双树，打印带来源）
 }
 
 export interface PaperData {

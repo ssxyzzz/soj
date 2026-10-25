@@ -911,6 +911,33 @@ strong {
   font-size: 1.2em;
 }
 
+/* md h2 分节标题竖条（2026-10-25 对齐 v3-full .md h2 设计权威）：
+   左侧 5×20 圆角渐变竖条（blue-hi→teal，与全站品牌渐变同源）+ 19/800 海军蓝。
+   题面「样例」、题解/公告等所有富文本 h2 一致生效 */
+.soj-md .vditor-reset h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 19px;
+  font-weight: var(--soj-fw-heavy);
+  letter-spacing: -0.3px;
+  color: var(--soj-navy);
+  margin: 34px 0 14px;
+}
+
+.soj-md .vditor-reset h2::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 5px;
+  height: 20px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-teal));
+}
+
+.soj-md .vditor-reset h2:first-child {
+  margin-top: 0;
+}
+
 .soj-md .vditor-reset h3 {
   font-size: 1.08em;
 }
@@ -1047,37 +1074,108 @@ strong {
   padding-right: 0.4em;
 }
 
-/* ---- 样例双列（.md-io）：```input1/```output1 围栏配对 ----
-   utils/md.ts pairIOSamples 在渲染后把紧邻同号围栏包成两列网格（列头「输入 #N/输出
-   #N」取自围栏编号，pre 原节点移入 cell、复制按钮与行号照常工作，行号两列各自计数）。
+/* ---- 样例卡片（.md-io）：```input1/```output1 围栏 ----
+   2026-10-25 对齐 v3-full .io/.codeblk 设计权威（「做一模一样」验收）：
+   utils/md.ts pairIOSamples 把编号围栏包成 codeblk 卡——成对（紧邻同号 inputN+outputN）
+   双列网格，落单单列全宽（.md-io-single）；每格 = 格头「样例输入 #N + 复制」文字按钮 /
+   hairline 分隔 / 数据区，复制按钮由胶囊（pre 内绝对定位）改为格头文字按钮；
+   行号保留（2026-10-25 用户回调，设计稿虽无行号）。
    cell min-width:0 是 grid 轨道收缩前提（pre 才能内部横向滚动而非撑破轨道）；
-   pre 移入后外距清零、间距由网格 gap 接管，flex:1 让左右两格等高（对齐洛谷观感）。
-   ≤768px（EP sm 断点）单列堆叠。列头不设色：继承正文颜色（dark 内容主题下同样成立），
-   字号同正文、字重 500（正文 400 上一档，样例标题的提级惯例与站内 strong 一致方向） */
+   pre flex:1 让成对时左右两格等高。≤768px（EP sm 断点）单列堆叠 */
 .soj-md .vditor-reset .md-io {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px 12px;
-  margin: 0.5em 0;
+  gap: 14px;
+  margin: 0 0 16px;
 }
 
+/* 落单编号围栏：不成对就不双列，单列全宽单卡（2026-10-25，规则见 utils/md.ts pairIOSamples） */
+.soj-md .vditor-reset .md-io.md-io-single {
+  grid-template-columns: 1fr;
+}
+
+/* codeblk 卡体：surface-2 淡蓝底 + hairline 边 + 14px 圆角（v3-full 定值） */
 .soj-md .vditor-reset .md-io .md-io-cell {
   min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  background: var(--soj-surface-2);
+  border: 1px solid var(--soj-line);
+  border-radius: 14px;
+  overflow: hidden;
 }
 
+/* 格头：标签 12/700 墨青 + 「复制」主蓝文字按钮居右（v3-full .codeblk-h 定值） */
 .soj-md .vditor-reset .md-io .md-io-head {
-  margin: 0.1em 0 0.35em;
-  font-size: var(--soj-fs-rich);
-  font-weight: var(--soj-fw-medium);
+  display: flex;
+  align-items: center;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-ink-2);
+  border-bottom: 1px solid var(--soj-line);
+  background: rgba(255, 255, 255, 0.6);
 }
 
+.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: var(--soj-fw-emphasis);
+  line-height: 18px;
+  color: var(--soj-blue);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn:hover {
+  background: var(--soj-blue-soft);
+}
+
+.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn.md-copied,
+.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn.md-copied:hover {
+  color: var(--el-color-success);
+  background: transparent;
+}
+
+/* 数据区：卡体即底色，pre 只留内距（压通用代码块淡蓝底/边/圆角与行号缩进）；
+   13.5px/1.8 海军蓝为 v3-full .codeblk pre 定值；样例行号隐藏（.md-io 例外） */
 .soj-md .vditor-reset .md-io pre {
   margin: 0;
   flex: 1;
   overflow: auto;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.soj-md.md-light .vditor-reset .md-io pre {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.soj-md.md-light .vditor-reset .md-io pre > code {
+  padding: 14px 16px;
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--soj-navy);
+}
+
+/* 行号（2026-10-25 用户回调恢复，设计稿虽无行号）：列/分隔线/数字色沿用通用规则
+   （2.25em 列宽 + #d9e6f3 分隔 + #8ba3c2 数字，随样例 13.5px 字号自然缩放）；
+   仅把列 top 从通用 0.5em 改为 14px——通用值按样例字号折算仅 6.75px，
+   而样例数据区内距是 14px，不改会整体偏高约 7px（top 必须等于 padding-top，见通用处注释） */
+.soj-md.md-light .vditor-reset .md-io pre .vditor-linenumber__rows {
+  top: 14px;
 }
 
 @media (max-width: 768px) {
@@ -1600,12 +1698,17 @@ samp {
 /* 交互题说明提示（ProblemStatement el-alert，type=info）：与题型徽章同族浅蓝。
    EP 结构：.el-alert--info.is-light (0,2,0) 定 bg 与根 color（标题/图标继承之），
    .el-alert--info.is-light .el-alert__description (0,3,0) 单独定 description——
-   两条各对齐特异度靠恒序取胜；图标无独立 color 规则，随根 color 走。 */
-.el-alert.ptype-alert {
+   两条各对齐特异度靠恒序取胜；图标无独立 color 规则，随根 color 走。
+   2026-10-25：文件 IO 提示与「暂无测试数据」提示（.notice-alert，type=warning）并入
+   同族——EP 琥珀橙是全站唯一暖色大色块，与蓝调页面冲突（验收反馈「颜色不和谐」）；
+   语义仍是「注意事项」，浅青族为站内提示条的既定语言。 */
+.el-alert.ptype-alert,
+.el-alert.notice-alert {
   --el-alert-bg-color: var(--soj-probtype-bg);
   color: var(--soj-probtype-text);
 }
-.el-alert.ptype-alert .el-alert__description {
+.el-alert.ptype-alert .el-alert__description,
+.el-alert.notice-alert .el-alert__description {
   color: var(--soj-probtype-text);
 }
 
@@ -2031,10 +2134,13 @@ samp {
   pointer-events: none;
 }
 
-/* ---- 题目元信息分格条 .soj-prob-meta（v3 .prob-meta：圆角分格横条） ---- */
+/* ---- 题目元信息分格条 .soj-prob-meta（v3 .prob-meta：圆角分格横条） ----
+   外距照搬 v3-full .prob-meta 定值（6px 0 26px）：2026-10-25 h2 对齐设计稿后首段
+   margin-top 归零，无下外距时分格条与「题目描述」贴死（验收反馈「离得太近」） */
 .soj-prob-meta {
   display: flex;
   flex-wrap: wrap;
+  margin: 6px 0 26px;
   border: 1px solid var(--soj-line);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.7);

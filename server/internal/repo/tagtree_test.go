@@ -151,30 +151,35 @@ func TestTagTreeShapeNodeCap(t *testing.T) {
 	}
 }
 
-// TestAppendTagNodeCap 来源库「转为标签」追加也要过节点数上限（满编拒绝、
-// 未满成功），复用 openTestRepo（本地无 Mongo 自动 skip）。
-func TestAppendTagNodeCap(t *testing.T) {
+// TestEnsureDefaultMetaTagTree 来源标签树种子注入（2026-10-25 双树）：空库注入、
+// 已有树不动、注入后形状校验通过且年份枝可按名命中。
+func TestEnsureDefaultMetaTagTree(t *testing.T) {
 	r := openTestRepo(t)
 	ctx := context.Background()
-	full := make([]TagNode, 0, 1000)
-	for i := 0; i < 1000; i++ {
-		full = append(full, TagNode{ID: int64(i + 1), Name: fmt.Sprintf("标签%d", i)})
+	inserted, err := r.EnsureDefaultMetaTagTree(ctx)
+	if err != nil {
+		t.Fatalf("注入种子: %v", err)
 	}
-	if err := r.ReplaceTagTree(ctx, full); err != nil {
-		t.Fatalf("预置满编树: %v", err)
+	if !inserted {
+		t.Fatal("空库应注入种子")
 	}
-	if _, err := r.AppendTagNode(ctx, 0, "新标签"); err == nil || !strings.Contains(err.Error(), "1000") {
-		t.Fatalf("满编追加应被上限拦截: %v", err)
+	tree, err := r.GetTagTreeDoc(ctx, TreeDocMeta)
+	if err != nil || len(tree) == 0 {
+		t.Fatalf("注入后树为空: len=%d err=%v", len(tree), err)
 	}
-	if err := r.ReplaceTagTree(ctx, full[:999]); err != nil {
-		t.Fatalf("预置 999 节点树: %v", err)
+	if err := ValidateTagTreeShape(tree); err != nil {
+		t.Fatalf("种子树形状非法: %v", err)
 	}
-	id, err := r.AppendTagNode(ctx, 0, "新标签")
-	if err != nil || id <= 0 {
-		t.Fatalf("未满编追加应成功: id=%d err=%v", id, err)
+	// 再次注入应跳过
+	if again, err := r.EnsureDefaultMetaTagTree(ctx); err != nil || again {
+		t.Fatalf("二次注入应跳过: again=%v err=%v", again, err)
 	}
-	tree, err := r.GetTagTree(ctx)
-	if err != nil || len(tree) != 1000 {
-		t.Fatalf("追加后应恰为 1000 节点: len=%d err=%v", len(tree), err)
+	// 年份枝按名命中（MatchMetaTags 依赖此行为）
+	if ids := r.MatchMetaTags(ctx, SourceHint{Year: 2020, Region: "瑶海区"}); len(ids) < 2 {
+		t.Fatalf("年份+地区应至少命中 2 节点: %v", ids)
+	}
+	// 越界年份不命中
+	if ids := r.MatchMetaTags(ctx, SourceHint{Year: 1990}); len(ids) != 0 {
+		t.Fatalf("未预置年份不应命中: %v", ids)
 	}
 }

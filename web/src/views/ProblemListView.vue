@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown, CircleClose, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
 
-import { authApi, problemApi, rankApi, sourcesApi } from '@/api'
+import { authApi, problemApi, rankApi } from '@/api'
 import { downloadFile } from '@/api/download'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
@@ -14,7 +14,6 @@ import TierBadge from '@/components/TierBadge.vue'
 import { useLevelsStore } from '@/stores/levels'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
-import { SOURCE_TYPE_LABELS } from '@/utils/source'
 import type { ProblemListItem } from '@/types'
 
 const router = useRouter()
@@ -52,10 +51,8 @@ const diffSel = ref<number[]>([])
 const advOpen = ref(false)
 const tagOpen = ref(false)
 const diffOpen = ref(false)
-const srcTypeSel = ref<string[]>([])
-const yearSel = ref<number[]>([])
-const sourceYears = ref<number[]>([])
-const activeAdvCount = computed(() => srcTypeSel.value.length + yearSel.value.length)
+const metaSel = ref<number[]>([])
+const activeAdvCount = computed(() => metaSel.value.length)
 
 // ---- 多题打包导出（v0.18.1）：problem.data.download 权限者可见 ----
 // 勾选跨翻页/跨筛选保留（存 id 集合）；表格翻页后当前页勾选态由 selectableRows 同步回显
@@ -90,8 +87,7 @@ async function load() {
       keyword.value.trim() || undefined,
       tagSel.value,
       diffSel.value.length ? diffSel.value : undefined,
-      srcTypeSel.value.length ? srcTypeSel.value : undefined,
-      yearSel.value.length ? yearSel.value : undefined,
+      metaSel.value.length ? metaSel.value : undefined,
     )
     list.value = r.list
     total.value = r.total
@@ -109,8 +105,7 @@ function resetSearch() {
   keyword.value = ''
   tagSel.value = []
   diffSel.value = []
-  srcTypeSel.value = []
-  yearSel.value = []
+  metaSel.value = []
   page.value = 1
   load()
 }
@@ -127,24 +122,15 @@ function onDiffChange(ids: number[]) {
   load()
 }
 
-function onSrcTypeChange(ts: string[]) {
-  srcTypeSel.value = ts
-  page.value = 1
-  load()
-}
-
-function onYearChange(ys: (number | string)[]) {
-  // allow-create 手输的是字符串：归一为整数年份，非法输入（NaN/超界）丢弃、去重
-  const norm = [...new Set(ys.map((v) => Number(v)).filter((v) => Number.isInteger(v) && v >= 1900 && v <= 2100))]
-  yearSel.value = norm
+function onMetaChange(ids: number[]) {
+  metaSel.value = ids
   page.value = 1
   load()
 }
 
 // 高级筛选一键清空（只清来源/年份两路，不动关键词/标签/难度）
 function clearAdv() {
-  srcTypeSel.value = []
-  yearSel.value = []
+  metaSel.value = []
   page.value = 1
   load()
 }
@@ -208,11 +194,6 @@ onMounted(() => {
   load()
   loadMyStats()
   tagStore.ensure() // 标签树异步就绪后筛选区自动出现（v-if 响应 store）
-  // 来源年份选项（v0.12 高级筛选）：加载失败静默（筛选仍可用难度/类型）
-  sourcesApi
-    .meta()
-    .then((m) => (sourceYears.value = m.years))
-    .catch(() => {})
 })
 </script>
 
@@ -280,41 +261,10 @@ onMounted(() => {
           <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
         </el-select>
       </div>
-      <!-- 高级筛选面板（来源类型/年份） -->
+      <!-- 高级筛选面板（来源标签树：地区/赛事/题库/年份，2026-10-25 双树） -->
       <div v-show="advOpen" class="panel-row">
         <div class="adv-inline">
-          <span class="adv-label">来源类型</span>
-          <el-select
-            v-model="srcTypeSel"
-            multiple
-            collapse-tags
-            placeholder="全部"
-            clearable
-            class="adv-select"
-            @change="onSrcTypeChange"
-          >
-            <el-option
-              v-for="(label, value) in SOURCE_TYPE_LABELS"
-              :key="value"
-              :value="value"
-              :label="label"
-            />
-          </el-select>
-          <span class="adv-label">年份</span>
-          <el-select
-            v-model="yearSel"
-            multiple
-            collapse-tags
-            placeholder="全部"
-            clearable
-            filterable
-            allow-create
-            default-first-option
-            class="adv-select adv-select-year"
-            @change="onYearChange"
-          >
-            <el-option v-for="y in sourceYears" :key="y" :value="y" :label="String(y)" />
-          </el-select>
+          <TagFilter tree="meta" :selected="metaSel" @change="onMetaChange" />
           <el-button v-if="activeAdvCount" link type="primary" class="adv-clear" @click="clearAdv">
             清空
           </el-button>

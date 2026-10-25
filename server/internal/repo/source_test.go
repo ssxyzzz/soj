@@ -1,13 +1,11 @@
 package repo
 
 import (
-	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
 
 // 标题方括号前缀识别（v0.12）：用户给的三个实例 + 边角。
+// 2026-10-25 双树定稿后仍保留：ParseSourceHint 是导入挂来源树节点的线索来源。
 func TestParseSourceHint(t *testing.T) {
 	cases := []struct {
 		title string
@@ -40,55 +38,9 @@ func TestParseSourceHint(t *testing.T) {
 	}
 }
 
-// 来源四字段归一：直传 > yaml > 标题识别，仅全空才走识别；枚举/年份校验。
-func TestApplySourceFields(t *testing.T) {
-	run := func(im Importer, title string, meta *problemYAML) error {
-		return im.applySourceFields(title, meta)
-	}
-	t.Run("全空走标题识别", func(t *testing.T) {
-		meta := &problemYAML{}
-		if err := run(Importer{}, "[2025瑶海区小学] 逆序输出", meta); err != nil {
-			t.Fatal(err)
-		}
-		if meta.Year != 2025 || meta.Region != "瑶海区" || meta.Source != "小学" || meta.SourceType != SourceTypeRegion {
-			t.Fatalf("识别结果不符: %+v", meta)
-		}
-	})
-	t.Run("yaml 已有来源则整组跳过识别", func(t *testing.T) {
-		meta := &problemYAML{Source: "校本题库"}
-		if err := run(Importer{}, "[2025瑶海区小学] 逆序输出", meta); err != nil {
-			t.Fatal(err)
-		}
-		if meta.Source != "校本题库" || meta.Year != 0 || meta.Region != "" || meta.SourceType != "" {
-			t.Fatalf("yaml 优先被破坏: %+v", meta)
-		}
-	})
-	t.Run("表单直传最高优先", func(t *testing.T) {
-		meta := &problemYAML{Source: "yaml 来源"}
-		im := Importer{Source: "表单来源", SourceType: SourceTypeLocal}
-		if err := run(im, "[USACO 1.3.2] x", meta); err != nil {
-			t.Fatal(err)
-		}
-		if meta.Source != "表单来源" || meta.SourceType != SourceTypeLocal {
-			t.Fatalf("直传未生效: %+v", meta)
-		}
-	})
-	t.Run("非法枚举报错", func(t *testing.T) {
-		meta := &problemYAML{SourceType: "magazine"}
-		if err := run(Importer{}, "无括号题", meta); err == nil || !strings.Contains(err.Error(), "source_type") {
-			t.Fatalf("want source_type error, got %v", err)
-		}
-	})
-	t.Run("年份越界报错", func(t *testing.T) {
-		meta := &problemYAML{Year: 1800}
-		if err := run(Importer{}, "无括号题", meta); err == nil || !strings.Contains(err.Error(), "year") {
-			t.Fatalf("want year error, got %v", err)
-		}
-	})
-}
-
 // 标签按名匹配与未匹配名保留（v0.12 来源库联动）：命中去重、同名取先见节点、
-// 未命中原名保序返回、空名/重复输入剔除。
+// 未命中原名保序返回、空名/重复输入剔除。2026-10-25 双树后未匹配名直接丢弃，
+// 但匹配核心行为不变，测试保留。
 func TestMatchTagNames(t *testing.T) {
 	lookup := map[string]int64{"贪心": 11, "动态规划": 20, "线性 DP": 21}
 	ids, unmatched := matchTagNames(lookup, []string{"贪心", "神秘标签Q", " 线性 DP ", "", "贪心", "动态规划", "另一个未知"})
@@ -104,25 +56,5 @@ func TestMatchTagNames(t *testing.T) {
 	}
 	if ids3, un3 := matchTagNames(lookup, nil); ids3 != nil || un3 != nil {
 		t.Fatalf("空输入应双 nil: %v %v", ids3, un3)
-	}
-}
-
-// yaml 往返：导出带来源四字段，重新解析可读回。
-func TestSourceYAMLRoundTrip(t *testing.T) {
-	p := &Problem{
-		Title: "修理牛棚", TimeLimitMS: 1000, MemoryLimitKB: 262144,
-		SourceType: SourceTypeOJ, Source: "USACO 1.3.2", Year: 2020, Region: "合肥市瑶海区",
-		Cases: []CaseMeta{{Index: 1}},
-	}
-	raw, err := renderProblemYAML(p, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var meta problemYAML
-	if err := yaml.Unmarshal(raw, &meta); err != nil {
-		t.Fatal(err)
-	}
-	if meta.SourceType != SourceTypeOJ || meta.Source != "USACO 1.3.2" || meta.Year != 2020 || meta.Region != "合肥市瑶海区" {
-		t.Fatalf("yaml 往返丢失来源字段: %+v", meta)
 	}
 }

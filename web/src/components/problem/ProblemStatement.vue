@@ -6,6 +6,7 @@ import { computed } from 'vue'
 // 详情页主列、在线编程左栏共用；标题行右侧扩展位走 #extra 插槽（详情页放隐藏开关）。
 import MdView from '@/components/MdView.vue'
 import TierBadge from '@/components/TierBadge.vue'
+import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { fmtMem, fmtSec } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
@@ -17,6 +18,9 @@ const props = defineProps<{
 
 const tagStore = useTagTreeStore()
 tagStore.ensure()
+
+const metaStore = useMetaTreeStore()
+metaStore.ensure()
 
 // 客观题（v0.9.3）：整卷题型摘要徽章（全同型给具体类型，混合给「客观题」）
 const isObjective = computed(() => props.problem.type === 'objective')
@@ -42,6 +46,9 @@ const kindLabel = computed(() => {
 const metaTags = computed(() =>
   (props.problem.tags ?? []).slice(0, 4).map((id) => ({ id, name: tagStore.nameOf(id), lv: tagStore.levelOf(id) })),
 )
+
+// 来源节点（2026-10-25 双树）：标签树（地区/赛事/题库/年份）节点，中性色 chips
+const sourceTags = computed(() => (props.problem.meta_tags ?? []).slice(0, 4).map((id) => metaStore.nameOf(id)))
 
 // 空心大题号取后四位（P1024 → 1024；三位以内原样）
 const bigNo = computed(() => String(props.problem.id))
@@ -85,13 +92,19 @@ const bigNo = computed(() => String(props.problem.id))
           >{{ t.name }}</span>
         </span>
       </div>
+      <div v-if="sourceTags.length" class="cell tag-cell src-cell">
+        来源
+        <span class="meta-chips">
+          <span v-for="n in sourceTags" :key="n" class="soj-tagchip meta-chip src-chip">{{ n }}</span>
+        </span>
+      </div>
     </div>
 
     <el-alert
       v-if="fileIo"
       type="warning"
       :closable="false"
-      class="fileio-alert"
+      class="fileio-alert notice-alert"
       show-icon
       title="本题请以文件 IO 方式提交"
       :description="`输入输出文件名是 ${problem.file_io_input || 'problem.in'} / ${problem.file_io_output || 'problem.out'}`"
@@ -112,7 +125,7 @@ const bigNo = computed(() => String(props.problem.id))
       v-if="!isObjective && problem.has_cases === false"
       type="warning"
       :closable="false"
-      class="fileio-alert"
+      class="fileio-alert notice-alert"
       show-icon
       title="本题暂无测试数据，不可提交"
     />
@@ -205,5 +218,12 @@ const bigNo = computed(() => String(props.problem.id))
 .tag-cell:hover .meta-chips {
   opacity: 1;
   transition: opacity 0.15s ease 0s;
+}
+
+/* 来源 chips：单色中性（石墨蓝），与知识树五级色区分（2026-10-25 双树） */
+.src-chip {
+  color: var(--soj-ink-2);
+  background: var(--soj-surface-2);
+  border-color: rgba(11, 31, 69, 0.13);
 }
 </style>
