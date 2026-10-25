@@ -323,7 +323,7 @@ onMounted(load)
               v-model="joinCode"
               placeholder="输入邀请码加入班级"
               style="width: 240px"
-              maxlength="8"
+              maxlength="4"
               @keyup.enter="join"
             />
             <el-button type="primary" :loading="joining" @click="join">加入班级</el-button>
@@ -438,7 +438,11 @@ stripe
             <el-button type="primary" style="width: 100%" @click="showCreateAssignment = true">布置作业</el-button>
             <el-button style="width: 100%" @click="showExam = true">发起考试</el-button>
             <el-button style="width: 100%" @click="openEditClass">编辑班级</el-button>
-            <el-button style="width: 100%" @click="copyInvite">复制邀请码</el-button>
+            <!-- 邀请码与复制动作同行（2026-10-25 从班级信息卡挪入） -->
+            <div class="invite-row">
+              <span class="soj-inv-chip">{{ cl.invite_code }}</span>
+              <el-button size="small" @click="copyInvite">复制</el-button>
+            </div>
             <el-button style="width: 100%" @click="regenInvite">重置邀请码</el-button>
             <el-button
               v-if="cl.leaveable"
@@ -464,10 +468,6 @@ stripe
             <div class="k"><b>{{ examsVisible ? exams.length : '—' }}</b><span>考试</span></div>
             <div class="k"><b class="kv-date">{{ fmtDay(cl.created_at) }}</b><span>创建</span></div>
           </div>
-          <div class="inv-wrap">
-            <span class="soj-inv-chip">{{ cl.invite_code }}</span>
-          </div>
-          <p class="hint center">邀请码可分享给学生入班，重置后旧码失效</p>
         </RailCard>
 
         <RailCard ov="说明" title="可见性" class="aside-card">
@@ -639,10 +639,13 @@ stripe
   margin: 16px 0;
 }
 
-.inv-wrap {
+/* 邀请码行（班级管理卡）：4 位码 chip 与复制动作同行（2026-10-25 从班级信息卡挪入） */
+.invite-row {
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-top: 14px;
+  gap: 8px;
+  width: 100%;
 }
 
 .hint {

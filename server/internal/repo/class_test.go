@@ -130,3 +130,26 @@ func TestTransferClass(t *testing.T) {
 		}
 	})
 }
+
+// genInviteCode 规格（2026-10-25 拍板）：4 位，26 小写 + 10 数字随机组合。
+func TestGenInviteCode(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 200; i++ {
+		code, err := genInviteCode()
+		if err != nil {
+			t.Fatalf("genInviteCode: %v", err)
+		}
+		if len(code) != 4 {
+			t.Fatalf("len = %d, want 4", len(code))
+		}
+		for _, ch := range code {
+			if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') {
+				t.Fatalf("码 %s 含越界字符 %q", code, ch)
+			}
+		}
+		seen[code] = true
+	}
+	if len(seen) < 100 {
+		t.Fatalf("200 次采样仅 %d 种取值，随机性可疑", len(seen))
+	}
+}

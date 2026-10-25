@@ -199,7 +199,7 @@ func (h *Handlers) JoinClass(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "请输入邀请码")
 		return
 	}
-	err := h.repo.JoinClass(c.Request.Context(), id, uid, uname, strings.ToUpper(strings.TrimSpace(req.Code)))
+	err := h.repo.JoinClass(c.Request.Context(), id, uid, uname, strings.ToLower(strings.TrimSpace(req.Code)))
 	if errors.Is(err, repo.ErrInviteCode) {
 		fail(c, http.StatusBadRequest, "邀请码错误")
 		return
@@ -489,7 +489,7 @@ func (h *Handlers) JoinByCode(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "请输入邀请码")
 		return
 	}
-	code := strings.ToUpper(strings.TrimSpace(req.Code))
+	code := strings.ToLower(strings.TrimSpace(req.Code))
 	cl, err := h.repo.GetClassByInviteCode(c.Request.Context(), code)
 	if repo.IsNotFound(err) {
 		fail(c, http.StatusBadRequest, "邀请码错误")

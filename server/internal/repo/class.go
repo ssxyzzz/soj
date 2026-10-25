@@ -48,11 +48,12 @@ type ClassMember struct {
 	JoinedAt time.Time `bson:"joinedAt"`
 }
 
-// inviteAlphabet 去掉易混淆字符（0/O/1/I/L）的邀请码字母表。
-const inviteAlphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+// 邀请码字母表：26 小写 + 10 数字（2026-10-25 用户拍板 4 位随机组合；区分大小写，
+// 加入入口统一 ToLower，存量 8 位大写码重置后换新码）。
+const inviteAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
 
 func genInviteCode() (string, error) {
-	b := make([]byte, 8)
+	b := make([]byte, 4)
 	for i := range b {
 		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(inviteAlphabet))))
 		if err != nil {
