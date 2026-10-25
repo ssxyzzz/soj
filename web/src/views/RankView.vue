@@ -63,6 +63,7 @@ onMounted(async () => {
           {{ (p.nickname || p.username).slice(0, 1) }}
         </div>
         <div class="pname">{{ p.nickname || p.username }}</div>
+        <TierBadge v-if="p.level" :tier="p.level" kind="level" size="md" />
         <div class="psolved">解题 <b>{{ p.solved }}</b></div>
       </div>
     </div>
