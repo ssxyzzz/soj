@@ -1069,10 +1069,13 @@ async function unbind(row?: TagRefProblem) {
   background: var(--lv);
 }
 
-/* 卡片激活（层级色实底）时徽标反转为浅底深字，保持可读 */
-.tag-card.active .count-badge.hot {
-  background: var(--lv-bg);
+/* 卡片激活（悬停路径层级色实底）时徽标反转为白底层级色字——
+   原 lv-bg 反转是 8% 透明底，叠在实底卡上与卡面同色致角标看不清（2026-10-25 用户反馈）；
+   描边用 lv-border，兜住激活卡渲染为浅底的场景；计数 0 的灰角标同样被本规则覆盖 */
+.tag-card.active .count-badge {
+  background: var(--el-bg-color, #fff);
   color: var(--lv);
+  box-shadow: 0 0 0 1px var(--lv-border);
 }
 
 .del-x {
