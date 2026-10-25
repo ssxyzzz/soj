@@ -85,7 +85,7 @@ make lint     # ESLint + go vet（+ staticcheck 如已安装）
 ```
 7_我的题目/           # 目录名前缀数字仅为命名习惯，题号一律自动分配
 ├── problem.md        # 题面（唯一题面来源；样例直接写在正文里）
-├── problem.yaml      # title / type / difficulty / tag / 来源四字段（source_type 等）
+├── problem.yaml      # title / type / difficulty / tag（来源四字段已随双树退役，yaml 里的历史键被忽略）
 │                     #   客观题另带 questions 小题定义（不含答案）
 ├── answer.yaml       # 〔客观题〕纯答案（single/judge=选项下标、multiple=下标列表、blank=每空可接受串）
 ├── answer.md         # 〔客观题〕解析（按「### 第 N 题」小节）
