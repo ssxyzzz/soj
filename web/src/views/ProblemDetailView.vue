@@ -271,13 +271,6 @@ function stopPolling() {
   }
 }
 
-// 单题学生版试卷（v0.10）：独立打印视图，仅编辑者；无答案/解析/后台信息
-function openPaper() {
-  if (!problem.value) return
-  const url = router.resolve(`/problems/${problem.value.id}/paper`).href
-  window.open(url, '_blank', 'noopener')
-}
-
 // 隐藏开关（仅题面编辑者可见；状态 tag 已删，按钮文案即状态）
 async function toggleHidden() {
   if (!problem.value) return
@@ -338,11 +331,7 @@ onUnmounted(stopPolling)
         <RailCard v-if="problem.can_edit_statement" ov="管理" title="题目维护" class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
-            <!-- 次要管理动作一行两枚：避免三颗全宽胶囊叠成按钮墙 -->
-            <div class="entry-row">
-              <el-button :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
-              <el-button @click="openPaper">导出试卷</el-button>
-            </div>
+            <el-button :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
           </div>
         </RailCard>
 
@@ -451,7 +440,7 @@ onUnmounted(stopPolling)
 }
 
 /* 次要入口区（题解小按钮独占一行 + 我的提交/所有代码两列，2026-10-25 修复⑥）；
-   字号压到 12px——站点按钮三档只覆盖高度，small 档字号仍 14px，与主 CTA 拉不开（修复⑪） */
+   字号 15px 与上方按钮一致——12px 压缩与 small 档自带 13px 都被否（2026-10-25 二次回调） */
 .entry-extras {
   margin-top: 8px;
   display: grid;
@@ -461,7 +450,7 @@ onUnmounted(stopPolling)
 .entry-extras .el-button {
   width: 100%;
   margin-left: 0;
-  font-size: var(--soj-fs-12);
+  font-size: 15px;
 }
 
 .entry-extras .entry-row {
