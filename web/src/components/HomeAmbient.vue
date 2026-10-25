@@ -129,7 +129,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-/* 跟随光晕：大柔青斑（网格的「灯」），lerp 惯性拖尾 */
+/* 跟随光晕：大柔青斑（网格的「灯」），lerp 惯性拖尾；
+   2026-10-25 用户反馈再淡一档：青 .14→.08、蓝核 .06→.03 */
 .ambient-spot {
   position: absolute;
   left: 0;
@@ -140,8 +141,8 @@ onBeforeUnmount(() => {
   opacity: 0;
   transition: opacity 0.6s ease;
   background:
-    radial-gradient(closest-side, rgba(45, 104, 239, 0.06), transparent 72%),
-    radial-gradient(closest-side, rgba(122, 184, 196, 0.14), transparent 65%);
+    radial-gradient(closest-side, rgba(45, 104, 239, 0.03), transparent 72%),
+    radial-gradient(closest-side, rgba(122, 184, 196, 0.08), transparent 65%);
   will-change: transform;
 }
 
@@ -150,7 +151,8 @@ onBeforeUnmount(() => {
 }
 
 /* 局部网格：44px 双向线全屏铺底，radial mask 圆心跟随光斑——网格只在鼠标周围显影；
-   --gx/--gy 由 rAF 写入（组件根上无 scoped 命中问题：变量挂在 ref 元素自身） */
+   --gx/--gy 由 rAF 写入（组件根上无 scoped 命中问题：变量挂在 ref 元素自身）。
+   2026-10-25 用户反馈：范围加宽 300→560px，多档 alpha 落差做「越远越淡」的距离渐隐 */
 .ambient-grid {
   position: absolute;
   inset: 0;
@@ -160,8 +162,20 @@ onBeforeUnmount(() => {
     linear-gradient(rgba(122, 184, 196, 0.18) 1px, transparent 1px),
     linear-gradient(90deg, rgba(122, 184, 196, 0.18) 1px, transparent 1px);
   background-size: 44px 44px;
-  -webkit-mask-image: radial-gradient(circle 300px at var(--gx) var(--gy), #000 25%, transparent 100%);
-  mask-image: radial-gradient(circle 300px at var(--gx) var(--gy), #000 25%, transparent 100%);
+  -webkit-mask-image: radial-gradient(
+    circle 560px at var(--gx) var(--gy),
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.55) 40%,
+    rgba(0, 0, 0, 0.25) 70%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(
+    circle 560px at var(--gx) var(--gy),
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.55) 40%,
+    rgba(0, 0, 0, 0.25) 70%,
+    transparent 100%
+  );
   opacity: 0;
   transition: opacity 0.6s ease;
 }
