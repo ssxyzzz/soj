@@ -3,14 +3,18 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { useTagTreeStore } from '@/stores/tagtree'
 
-// 表格标签列：全部标签按序常驻平铺（各自层级色，最多 5 级每级一色），
-// 量宽截断——能放下几个显示几个，放不下的折进行尾 +N；悬停整格 50ms 用同款样式展示全部标签。
+// 表格标签列：标签按层级优先级展示（一级 > 二级 > 三级…，同级保持原序），
+// 量宽截断——能整颗放下几颗显示几颗，放不下的整颗隐藏（visibility，不允许半裁残字），
+// 行尾 +N 汇总；悬停整格 50ms 用同款样式展示全部标签。
 const props = defineProps<{ ids: number[] }>()
 const tagStore = useTagTreeStore()
 
 const box = ref<HTMLElement>()
 const visible = ref(props.ids.length)
 let ro: ResizeObserver | undefined
+
+// 层级优先级排序（levelOf 未入树标签默认一级）；ES2019+ sort 稳定，同级保序
+const sortedIds = computed(() => [...props.ids].sort((a, b) => tagStore.levelOf(a) - tagStore.levelOf(b)))
 
 const overflow = computed(() => visible.value < props.ids.length)
 const hidden = computed(() => props.ids.length - visible.value)
@@ -64,7 +68,7 @@ onBeforeUnmount(() => ro?.disconnect())
     <template #content>
       <div class="fit-pop">
         <el-tag
-          v-for="id in ids"
+          v-for="id in sortedIds"
           :key="id"
           size="small"
           class="fit-tag"
@@ -75,13 +79,13 @@ onBeforeUnmount(() => ro?.disconnect())
       </div>
     </template>
     <div ref="box" class="fit-tags">
-      <template v-if="ids.length">
+      <template v-if="sortedIds.length">
         <el-tag
-          v-for="id in ids"
+          v-for="(id, i) in sortedIds"
           :key="id"
           size="small"
           class="fit-tag"
-          :class="`lv-${tagStore.levelOf(id)}`"
+          :class="[`lv-${tagStore.levelOf(id)}`, { 'fit-hide': i >= visible }]"
         >
           {{ tagStore.nameOf(id) }}
         </el-tag>
@@ -113,6 +117,11 @@ onBeforeUnmount(() => ro?.disconnect())
 
 .fit-tag:hover {
   border-color: var(--lv);
+}
+
+/* 落选标签整颗隐身（占位不显示）：任何标签都不允许被裁半个字 */
+.fit-hide {
+  visibility: hidden;
 }
 
 /* 行尾徽标：绝对定位贴右缘，实底遮住被裁切的残 tag */

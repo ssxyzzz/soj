@@ -358,7 +358,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="难度" width="86">
+          <el-table-column label="难度" width="104">
             <template #default="{ row }">
               <TierBadge :tier="row.difficulty ?? 3" kind="difficulty" />
             </template>
