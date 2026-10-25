@@ -83,8 +83,8 @@ func Run(ctx context.Context, deps *Deps) {
 		// 登录页页签显隐与页脚悬挂共用；v0.16 并入注册验证方式与找回开关
 		api.GET("/site", h.GetSiteInfo)
 		// 站点公开统计（v0.19 首页对齐 v3 预览）：题目/用户/今日提交计数 + 平均判题时长
-		// + 今日一题（按日随机）；handler 内 60s 内存缓存
-		api.GET("/site/stats", h.GetSiteStats)
+		// + 今日一题（按日随机；2026-10-25 登录用户按账号等级推荐难度）；handler 内 60s 内存缓存
+		api.GET("/site/stats", AuthOptional(h), h.GetSiteStats)
 		api.POST("/auth/login", authLimit, h.Login)
 		// 本人修改密码（v0.14）：旧密码 + 新密码（前端二次确认），成功后全端下线
 		api.POST("/auth/password", AuthRequired(h), h.ChangePassword)
