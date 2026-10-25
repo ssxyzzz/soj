@@ -104,7 +104,7 @@ func reconcileTagTree(oldNodes, newNodes []TagNode, nextID func() (int64, error)
 }
 
 // ValidateTagTreeShape 保存前形状校验：名称非空 ≤32 字、同级不重名、
-// 嵌套 ≤5 级（v0.20：展示端五级配色定档，标签树同限）、总节点数 ≤1000。
+// 嵌套 ≤5 级（v0.20：展示端五级配色定档，标签树同限）、总节点数 ≤10000（2026-10-25 双树扩容，原 1000）。
 // 节点数按树中节点计数（不看 ID 是否已取号，后台保存时新节点尚无正式号，
 // 按 ID 集合计数会被绕过/少计）。
 func ValidateTagTreeShape(nodes []TagNode) error {
@@ -137,8 +137,8 @@ func ValidateTagTreeShape(nodes []TagNode) error {
 	if err := walk(nodes, 0); err != nil {
 		return err
 	}
-	if total > 1000 {
-		return fmt.Errorf("标签总数超过 1000（当前 %d）", total)
+	if total > 10000 {
+		return fmt.Errorf("节点总数超过 10000（当前 %d）", total)
 	}
 	return nil
 }

@@ -143,11 +143,11 @@ func TestTagTreeShapeNodeCap(t *testing.T) {
 		}
 		return list
 	}
-	if err := ValidateTagTreeShape(mk(1000)); err != nil {
-		t.Fatalf("1000 节点应合法: %v", err)
+	if err := ValidateTagTreeShape(mk(10000)); err != nil {
+		t.Fatalf("10000 节点应合法: %v", err)
 	}
-	if err := ValidateTagTreeShape(mk(1001)); err == nil {
-		t.Fatal("1001 节点应超上限")
+	if err := ValidateTagTreeShape(mk(10001)); err == nil {
+		t.Fatal("10001 节点应超上限")
 	}
 }
 

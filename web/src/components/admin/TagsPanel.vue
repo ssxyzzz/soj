@@ -346,8 +346,8 @@ function commitAdd(fromBlur = false) {
     ElMessage.warning(err)
     return
   }
-  if (total.value >= 1000) {
-    ElMessage.warning(`${noun.value}总数已达上限 1000`)
+  if (total.value >= 10000) {
+    ElMessage.warning(`${noun.value}总数已达上限 10000`)
     return
   }
   tempId -= 1
@@ -619,8 +619,8 @@ async function onImportFile(ev: Event) {
     ElMessage.warning(`文件里没有有效的${noun.value}（列：一级~五级，每行一条路径）`)
     return
   }
-  if (totalImported > 1000) {
-    ElMessage.warning(`导入的${noun.value}共 ${totalImported} 个，超出上限 1000`)
+  if (totalImported > 10000) {
+    ElMessage.warning(`导入的${noun.value}共 ${totalImported} 个，超出上限 10000`)
     return
   }
   const tooLong = roots.flatMap(function walk(n: DraftNode): string[] {
