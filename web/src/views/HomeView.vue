@@ -57,13 +57,17 @@ onMounted(async () => {
   } catch {
     stats.value = null
   }
-  // 最近赛事：进行中/待开赛优先，不足补已结束，最多 3 张
-  try {
-    const all = await contestApi.list()
-    const pri = (s: ContestListItem['status']) => (s === 'running' ? 0 : s === 'scheduled' ? 1 : 2)
-    contests.value = [...all].sort((a, b) => pri(a.status) - pri(b.status)).slice(0, 3)
-  } catch {
-    contests.value = []
+  // 最近赛事：进行中/待开赛优先，不足补已结束，最多 3 张。
+  // 比赛列表接口 AuthRequired（v0.7.3 游客可见面收紧）——游客跳过加载，
+  // 否则 401 拦截器会把人从公开首页弹去登录页（2026-10-25 修复⑬）
+  if (userStore.token) {
+    try {
+      const all = await contestApi.list()
+      const pri = (s: ContestListItem['status']) => (s === 'running' ? 0 : s === 'scheduled' ? 1 : 2)
+      contests.value = [...all].sort((a, b) => pri(a.status) - pri(b.status)).slice(0, 3)
+    } catch {
+      contests.value = []
+    }
   }
 })
 </script>
