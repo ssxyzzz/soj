@@ -35,8 +35,9 @@ function paint() {
 }
 
 function tick() {
-  cx += (tx - cx) * 0.1
-  cy += (ty - cy) * 0.1
+  // 0.28：紧跟鼠标（2026-10-25 用户反馈「更跟手」回调 0.1），保留一丝拖尾波澜
+  cx += (tx - cx) * 0.28
+  cy += (ty - cy) * 0.28
   paint()
   // 追平后停帧省电；下次 mousemove 重启
   if (Math.abs(tx - cx) < 0.5 && Math.abs(ty - cy) < 0.5) {
@@ -171,14 +172,15 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-/* 涟漪环：JS 动态创建（无 scoped 属性），样式挂全局；700ms 扩散淡出后由 JS 移除 */
+/* 涟漪环：JS 动态创建（无 scoped 属性），样式挂全局；700ms 扩散淡出后由 JS 移除。
+   2026-10-25 用户反馈再淡一档：描边 0.28→0.14、峰值透明度 0.4→0.22 */
 .ambient-ring {
   position: absolute;
   width: 24px;
   height: 24px;
   margin: -12px 0 0 -12px;
   border-radius: 50%;
-  border: 1px solid rgba(22, 167, 210, 0.28);
+  border: 1px solid rgba(22, 167, 210, 0.14);
   pointer-events: none;
   animation: ambient-ring 0.7s ease-out forwards;
 }
@@ -186,7 +188,7 @@ onBeforeUnmount(() => {
 @keyframes ambient-ring {
   from {
     transform: scale(0.4);
-    opacity: 0.4;
+    opacity: 0.22;
   }
   to {
     transform: scale(8);
