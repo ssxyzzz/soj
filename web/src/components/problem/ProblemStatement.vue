@@ -37,8 +37,11 @@ const kindLabel = computed(() => {
   return ''
 })
 
-// 标签名平铺（prob-meta 标签格；最多 4 枚防溢出）
-const tagNames = computed(() => (props.problem.tags ?? []).slice(0, 4).map((id) => tagStore.nameOf(id)))
+// 标签平铺（prob-meta 标签格；最多 4 枚防溢出）——五级层级色与题库列表统一
+//（2026-10-25 修复⑰：原 soj-tagchip 青系单色与题库 lv 色不一致）
+const metaTags = computed(() =>
+  (props.problem.tags ?? []).slice(0, 4).map((id) => ({ id, name: tagStore.nameOf(id), lv: tagStore.levelOf(id) })),
+)
 
 // 空心大题号取后四位（P1024 → 1024；三位以内原样）
 const bigNo = computed(() => String(props.problem.id))
@@ -71,10 +74,15 @@ const bigNo = computed(() => String(props.problem.id))
       <div class="cell diff-cell">
         <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
       </div>
-      <div v-if="tagNames.length" class="cell tag-cell">
+      <div v-if="metaTags.length" class="cell tag-cell">
         标签
         <span class="meta-chips">
-          <span v-for="n in tagNames" :key="n" class="soj-tagchip meta-chip">{{ n }}</span>
+          <span
+            v-for="t in metaTags"
+            :key="t.id"
+            class="soj-tagchip meta-chip"
+            :class="`lv-${t.lv}`"
+          >{{ t.name }}</span>
         </span>
       </div>
     </div>
@@ -174,6 +182,10 @@ const bigNo = computed(() => String(props.problem.id))
   height: 20px;
   margin-left: 4px;
   cursor: default;
+  /* 五级层级色（--lv 由全局 .lv-N 注入）：与题库列表 FitTags 统一（修复⑰） */
+  color: var(--lv);
+  background: var(--lv-bg);
+  border-color: var(--lv-border);
 }
 
 /* 标签格：默认只露出「标签」label，chips 透明占位（分格条不跳宽）；

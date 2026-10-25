@@ -486,7 +486,7 @@ onMounted(() => {
           v-for="t in hotTags"
           :key="t.id"
           class="soj-tagchip tagwrap"
-          :class="{ on: tagSel.includes(t.id) }"
+          :class="[{ on: tagSel.includes(t.id) }, `lv-${tagStore.levelOf(t.id)}`]"
           @click="toggleHotTag(t.id)"
         >{{ t.name }}</span>
       </RailCard>
@@ -630,7 +630,24 @@ onMounted(() => {
 }
 
 /* 常用标签 chips 换行间距（v3 tagchip margin 2px 4px 2px 0） */
+/* 常用标签：五级层级色与题库列表统一（修复⑰，--lv 由全局 .lv-N 注入）；
+   .on 选中态沿用筛选 chips 口径（主蓝底白字），优先级压过层级色 */
 .tagwrap {
   margin: 2px 4px 2px 0;
+  color: var(--lv);
+  background: var(--lv-bg);
+  border-color: var(--lv-border);
+}
+
+.tagwrap:hover {
+  color: var(--lv);
+  background: var(--lv-bg);
+  border-color: var(--lv);
+}
+
+.tagwrap.on {
+  color: #fff;
+  background: var(--soj-blue);
+  border-color: var(--soj-blue);
 }
 </style>
