@@ -188,6 +188,8 @@ onUnmounted(() => view?.destroy())
 <style scoped>
 .code-editor {
   width: 100%;
+  /* border-box：自带 1px 边框必须算进 100%，否则在卡体里恒溢出 2px 画出横向滚动条 */
+  box-sizing: border-box;
   border: 1px solid var(--el-border-color);
   border-radius: var(--el-border-radius-base);
   overflow: hidden;

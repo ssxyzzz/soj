@@ -316,14 +316,17 @@ onUnmounted(stopPolling)
         <template #aside>
         <RailCard v-if="problem.can_edit_statement" ov="管理" title="题目维护" class="aside-card">
           <div class="entry-actions">
-            <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
-            <el-button style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
-            <el-button style="width: 100%" @click="openPaper">导出试卷</el-button>
+            <el-button type="primary" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
+            <!-- 次要管理动作一行两枚：避免三颗全宽胶囊叠成按钮墙 -->
+            <div class="entry-row">
+              <el-button :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
+              <el-button @click="openPaper">导出试卷</el-button>
+            </div>
           </div>
         </RailCard>
 
         <!-- v3「提交本题」：内嵌语言选择 + 深色代码框（偏好模板预填）直接提交；客观题换成操作入口卡 -->
-        <RailCard ov="提交" :title="isObjective ? '本题操作' : '提交本题'" class="aside-card">
+        <RailCard ov="评测" :title="isObjective ? '本题操作' : '提交本题'" class="aside-card">
           <template v-if="!isObjective">
             <el-select :model-value="railLang" style="width: 100%" @change="changeRailLang">
               <el-option v-for="o in railLangOptions" :key="o.value" :value="o.value" :label="o.label" />
@@ -421,12 +424,26 @@ onUnmounted(stopPolling)
   margin-top: 10px;
 }
 
-/* 三个次要入口一行排（题解/我的提交/所有代码） */
+/* 三个次要入口一行排（题解/我的提交/所有代码）：hairline 与主体动作区隔开 */
 .entry-links {
   display: flex;
   justify-content: center;
   gap: 4px;
-  margin-top: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--soj-line);
+}
+
+/* 次要管理动作两列行：压掉 EP 的 el-button 联动 margin，间距走 grid gap */
+.entry-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.entry-row .el-button + .el-button {
+  margin-left: 0;
 }
 
 .hint {

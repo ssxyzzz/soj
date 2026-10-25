@@ -28,7 +28,7 @@ const acceptRate = computed(() => {
 </script>
 
 <template>
-  <RailCard ov="统计" title="题目信息" class="aside-card">
+  <RailCard ov="概览" title="题目信息" class="aside-card">
     <div class="soj-kv kv3">
       <div class="k"><b>{{ problem.submit_count ?? 0 }}</b><span>提交</span></div>
       <div class="k"><b>{{ problem.accepted_count ?? 0 }}</b><span>通过</span></div>
