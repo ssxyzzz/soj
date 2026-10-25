@@ -160,6 +160,27 @@ function openWorkbenchEntry() {
   showWorkbench.value = true
 }
 
+// 粘贴提交弹窗（2026-10-25 修复⑥）：副列去内嵌编辑器后的入口
+const showRailSubmit = ref(false)
+
+function openRailSubmit() {
+  if (!userStore.token) {
+    ElMessage.warning('请先登录')
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  showRailSubmit.value = true
+}
+
+function openMine() {
+  if (!userStore.token) {
+    ElMessage.warning('请先登录')
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  showMine.value = true
+}
+
 function openSolutions() {
   if (!problem.value?.can_view_solutions) {
     ElMessage.warning('该题拿到满分后才能查看题解')
@@ -183,6 +204,7 @@ async function handleSubmit(lang: string, code: string) {
     const r = await submissionApi.create(problem.value.id, lang, code)
     ElMessage.success(`已提交 #${r.id}，正在判题`)
     showWorkbench.value = false
+    showRailSubmit.value = false
     mineDialogRef.value?.refresh(1)
     loadRecentMine()
     startPolling(r.id)
@@ -324,35 +346,25 @@ onUnmounted(stopPolling)
           </div>
         </RailCard>
 
-        <!-- v3「提交本题」：内嵌语言选择 + 深色代码框（偏好模板预填）直接提交；客观题换成操作入口卡 -->
+        <!-- v3「提交本题」（2026-10-25 修复⑥）：副列不再内嵌编辑器，点「提交代码」进弹窗粘贴提交；
+             客观题换成操作入口卡 -->
         <RailCard ov="评测" :title="isObjective ? '本题操作' : '提交本题'" class="aside-card">
           <template v-if="!isObjective">
-            <el-select :model-value="railLang" style="width: 100%" @change="changeRailLang">
-              <el-option v-for="o in railLangOptions" :key="o.value" :value="o.value" :label="o.label" />
-            </el-select>
-            <CodeEditor
-              v-model="railCode"
-              class="rail-editor"
-              :language="railLang"
-              :autocomplete="acOn"
-              height="220px"
-              placeholder="在此编写或粘贴你的代码"
-            />
-            <div class="entry-actions rail-acts">
-              <el-button type="primary" style="width: 100%" :disabled="submitDisabled" :loading="submitting" @click="railSubmit">
-                提交评测
-              </el-button>
-              <el-button style="width: 100%" :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
+            <div class="entry-actions">
+              <el-button type="primary" :disabled="submitDisabled" @click="openRailSubmit">提交代码</el-button>
+              <el-button :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
             </div>
-            <div v-if="submitDisabledReason" class="hint center">{{ submitDisabledReason }}</div>
+            <div v-if="submitDisabledReason" class="hint">{{ submitDisabledReason }}</div>
+            <div class="entry-extras">
+              <el-button size="small" @click="openSolutions">题解</el-button>
+              <div class="entry-row">
+                <el-button size="small" @click="openMine">我的提交</el-button>
+                <el-button size="small" @click="openOthers">所有代码</el-button>
+              </div>
+            </div>
           </template>
           <div v-else class="entry-actions">
             <div v-if="!userStore.token" class="hint center">登录后作答</div>
-          </div>
-          <div class="entry-links">
-            <el-button link type="primary" @click="openSolutions">题解</el-button>
-            <el-button v-if="userStore.token" link type="primary" @click="showMine = true">我的提交</el-button>
-            <el-button link type="primary" @click="openOthers">所有代码</el-button>
           </div>
         </RailCard>
 
@@ -391,6 +403,31 @@ onUnmounted(stopPolling)
     <MySubmissionsDialog ref="mineDialogRef" v-model="showMine" :problem-id="problem.id" />
 
     <AllCodesDialog v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
+
+    <!-- 粘贴提交弹窗（2026-10-25 修复⑥）：副列不再内嵌编辑器，点「提交代码」进弹窗粘贴提交 -->
+    <el-dialog v-model="showRailSubmit" title="提交代码" width="720px" :close-on-click-modal="false">
+      <div class="dlg-lang">
+        <span class="dlg-label">语言</span>
+        <el-select :model-value="railLang" style="width: 220px" @change="changeRailLang">
+          <el-option v-for="o in railLangOptions" :key="o.value" :value="o.value" :label="o.label" />
+        </el-select>
+      </div>
+      <CodeEditor
+        v-model="railCode"
+        class="dlg-editor"
+        :language="railLang"
+        :autocomplete="acOn"
+        height="380px"
+        placeholder="在此编写或粘贴你的代码"
+      />
+      <div v-if="submitDisabledReason" class="hint">{{ submitDisabledReason }}</div>
+      <template #footer>
+        <el-button @click="showRailSubmit = false">取消</el-button>
+        <el-button type="primary" :disabled="submitDisabled" :loading="submitting" @click="railSubmit">
+          提交评测
+        </el-button>
+      </template>
+    </el-dialog>
 </template>
   </div>
 </template>
@@ -412,22 +449,38 @@ onUnmounted(stopPolling)
   color: var(--soj-blue);
 }
 
-.rail-editor {
-  margin-top: 10px;
+/* 次要入口区（题解小按钮独占一行 + 我的提交/所有代码两列，2026-10-25 修复⑥） */
+.entry-extras {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
 }
 
-.rail-acts {
-  margin-top: 10px;
+.entry-extras .el-button {
+  width: 100%;
+  margin-left: 0;
 }
 
-/* 三个次要入口一行排（题解/我的提交/所有代码）：hairline 与主体动作区隔开 */
-.entry-links {
+.entry-extras .entry-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* 粘贴提交弹窗 */
+.dlg-lang {
   display: flex;
-  justify-content: center;
-  gap: 4px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--soj-line);
+  align-items: center;
+  gap: 10px;
+}
+
+.dlg-label {
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
+}
+
+.dlg-editor {
+  margin-top: 12px;
 }
 
 /* 次要管理动作两列行：压掉 EP 的 el-button 联动 margin，间距走 grid gap */
