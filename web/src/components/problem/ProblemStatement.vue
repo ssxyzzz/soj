@@ -53,12 +53,11 @@ const bigNo = computed(() => String(props.problem.id))
         <span class="pid mono">P{{ problem.id }}</span>
         <span class="t">{{ problem.title }}</span>
         <el-tag v-if="kindLabel" size="small" class="kind-tag ptype-tag">{{ kindLabel }}</el-tag>
-        <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
         <span class="extra"><slot name="extra" /></span>
       </h1>
     </div>
 
-    <!-- v3 prob-meta 分格条：时限/内存/通过数/标签 -->
+    <!-- v3 prob-meta 分格条：时限/内存/通过数/难度/标签（难度在标签左；标签悬停显示，见 .meta-chips） -->
     <div class="soj-prob-meta">
       <template v-if="!isObjective">
         <div class="cell">时间限制 <b class="mono">{{ fmtSec(problem.time_limit_ms) }}</b></div>
@@ -69,9 +68,14 @@ const bigNo = computed(() => String(props.problem.id))
         </div>
       </template>
       <div v-else class="cell">客观题 · <b>{{ problem.questions?.length ?? 0 }}</b> 小题</div>
-      <div v-if="tagNames.length" class="cell">
+      <div class="cell diff-cell">
+        <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
+      </div>
+      <div v-if="tagNames.length" class="cell tag-cell">
         标签
-        <span v-for="n in tagNames" :key="n" class="soj-tagchip meta-chip">{{ n }}</span>
+        <span class="meta-chips">
+          <span v-for="n in tagNames" :key="n" class="soj-tagchip meta-chip">{{ n }}</span>
+        </span>
       </div>
     </div>
 
@@ -148,9 +152,9 @@ const bigNo = computed(() => String(props.problem.id))
   flex: 0 0 auto;
 }
 
-/* 右侧扩展位（隐藏开关等）推到行尾 */
+/* 右侧扩展位（隐藏开关等）：跟随标题行内排（2026-10-25 从行尾回调到题旁） */
 .extra {
-  margin-left: auto;
+  margin-left: 10px;
   display: inline-flex;
   align-items: center;
 }
@@ -170,5 +174,23 @@ const bigNo = computed(() => String(props.problem.id))
   height: 20px;
   margin-left: 4px;
   cursor: default;
+}
+
+/* 标签格：默认只露出「标签」label，chips 透明占位（分格条不跳宽）；
+   悬停本格淡入，移走 3s 后淡出——延迟走 transition-delay，无需 JS 计时器 */
+.tag-cell {
+  cursor: default;
+}
+
+.meta-chips {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.25s ease 3s;
+}
+
+.tag-cell:hover .meta-chips {
+  opacity: 1;
+  transition: opacity 0.15s ease 0s;
 }
 </style>

@@ -17,7 +17,6 @@ import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
-import ProblemInfoCard from '@/components/problem/ProblemInfoCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import { useUserStore } from '@/stores/user'
@@ -357,9 +356,6 @@ onUnmounted(stopPolling)
           </div>
         </RailCard>
 
-        <ProblemInfoCard :problem="problem" />
-
-        <!-- v3「我的提交」mini 行卡：近 3 条 + 查看全部 -->
         <RailCard v-if="userStore.token" ov="记录" title="我的提交" class="aside-card">
           <template v-if="recentMine.length">
             <div v-for="s in recentMine" :key="s.id" class="soj-mini-li" @click="showMine = true">
