@@ -11,7 +11,7 @@ import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
-import { fmtDate } from '@/utils/format'
+import { fmtDate, fmtDay } from '@/utils/format'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import { useUserStore } from '@/stores/user'
 import type { AssignmentListItem, ClassDetail, ClassMember, PickedProblem } from '@/types'
@@ -462,7 +462,7 @@ stripe
             <div class="k"><b>{{ cl.members?.length ?? '—' }}</b><span>成员</span></div>
             <div class="k"><b>{{ assignmentsVisible ? assignments.length : '—' }}</b><span>作业</span></div>
             <div class="k"><b>{{ examsVisible ? exams.length : '—' }}</b><span>考试</span></div>
-            <div class="k"><b class="kv-date">{{ fmtDate(cl.created_at) }}</b><span>创建</span></div>
+            <div class="k"><b class="kv-date">{{ fmtDay(cl.created_at) }}</b><span>创建</span></div>
           </div>
           <div class="inv-wrap">
             <span class="soj-inv-chip">{{ cl.invite_code }}</span>

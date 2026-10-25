@@ -93,6 +93,19 @@ function findNode(list: DraftNode[], id: number): DraftNode | null {
   return null
 }
 
+// 节点在树中的真实层级（1 起；根下一层 = 1）——v0.20 标签树限 5 级，新增入口按它放行
+function depthOf(id: number): number {
+  const walk = (list: DraftNode[], depth: number): number => {
+    for (const n of list) {
+      if (n.id === id) return depth
+      const hit = walk(n.children, depth + 1)
+      if (hit) return hit
+    }
+    return 0
+  }
+  return walk(draft.value, 1) || 1
+}
+
 // 节点所在的兄弟数组（含自身的层级）
 function findList(list: DraftNode[], id: number): DraftNode[] | null {
   if (list.some((n) => n.id === id)) return list
@@ -228,6 +241,7 @@ function onWheel(e: WheelEvent) {
 // 无悬停时回退到根行（保证任何时候都能建一级标签）。
 function showRowAdd(depth: number): boolean {
   if (search.value.trim()) return false
+  if (depth >= 5) return false // 标签树限 5 级：第 5 级行不再出「加子级」入口
   if (adding.value && addParentId(depth) === adding.value.parentId) return true
   if (path.value.length) return depth === path.value.length - 1
   return depth === 0
@@ -235,6 +249,7 @@ function showRowAdd(depth: number): boolean {
 
 function showMini(node: DraftNode): boolean {
   if (search.value.trim() || node.children.length) return false
+  if (depthOf(node.id) >= 5) return false // 已是第 5 级：不能再建子级
   if (adding.value?.parentId === node.id) return true
   const last = path.value[path.value.length - 1]
   return last !== undefined && node.id === last
@@ -997,6 +1012,7 @@ async function unbind(row?: TagRefProblem) {
   background: var(--lv-bg);
   border: 1px solid var(--lv-border);
   border-radius: 6px;
+  color: var(--lv);
   cursor: pointer;
   user-select: none;
   touch-action: none;

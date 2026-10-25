@@ -3,24 +3,17 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { useTagTreeStore } from '@/stores/tagtree'
 
-// 表格标签列：单元格只显示一级标签（量宽截断，能放下几个显示几个）；
-// 只要有放不下的（或没有任何一级标签），悬停整格 50ms 用同款彩色样式展示全部标签。
+// 表格标签列：全部标签按序常驻平铺（各自层级色，最多 5 级每级一色），
+// 量宽截断——能放下几个显示几个，放不下的折进行尾 +N；悬停整格 50ms 用同款样式展示全部标签。
 const props = defineProps<{ ids: number[] }>()
 const tagStore = useTagTreeStore()
-
-const lv1 = computed(() => props.ids.filter((id) => tagStore.levelOf(id) === 1))
 
 const box = ref<HTMLElement>()
 const visible = ref(props.ids.length)
 let ro: ResizeObserver | undefined
 
-const overflow = computed(() => visible.value < lv1.value.length)
-// 未显示的标签数：一级标签被裁掉的 + 不上屏的子级标签
+const overflow = computed(() => visible.value < props.ids.length)
 const hidden = computed(() => props.ids.length - visible.value)
-// 一级标签放不下、或存在任何未显示的标签（含子级）时，悬停展示全量
-const showPop = computed(
-  () => props.ids.length > 0 && (overflow.value || lv1.value.length < props.ids.length),
-)
 
 function measure() {
   const el = box.value
@@ -49,11 +42,11 @@ function measure() {
 }
 
 function schedule() {
-  visible.value = lv1.value.length
+  visible.value = props.ids.length
   nextTick(measure)
 }
 
-watch(() => [props.ids, lv1.value.length], schedule)
+watch(() => props.ids, schedule)
 
 onMounted(() => {
   ro = new ResizeObserver(() => measure())
@@ -66,8 +59,8 @@ onBeforeUnmount(() => ro?.disconnect())
 </script>
 
 <template>
-  <!-- tooltip 包住整格：标签栏任一处悬停 50ms 展示全部标签（含子级），同表格五级色样式 -->
-  <el-tooltip :show-after="50" :disabled="!showPop" placement="top" effect="light">
+  <!-- tooltip 包住整格：标签栏任一处悬停 50ms 展示全部标签（同层级色样式） -->
+  <el-tooltip :show-after="50" :disabled="!overflow" placement="top" effect="light">
     <template #content>
       <div class="fit-pop">
         <el-tag
@@ -82,9 +75,9 @@ onBeforeUnmount(() => ro?.disconnect())
       </div>
     </template>
     <div ref="box" class="fit-tags">
-      <template v-if="lv1.length">
+      <template v-if="ids.length">
         <el-tag
-          v-for="id in lv1"
+          v-for="id in ids"
           :key="id"
           size="small"
           class="fit-tag"
@@ -115,7 +108,7 @@ onBeforeUnmount(() => ro?.disconnect())
   flex: 0 0 auto;
   background: var(--lv-bg);
   border-color: var(--lv-border);
-  color: var(--el-text-color-primary);
+  color: var(--lv);
 }
 
 .fit-tag:hover {
@@ -132,7 +125,7 @@ onBeforeUnmount(() => ro?.disconnect())
   flex: 0 0 auto;
 }
 
-/* 悬停弹层：与表格同款彩色标签（teleport 到 body，但模板元素带 scoped 属性，样式生效） */
+/* 悬停弹层：与表格同款层级色标签（teleport 到 body，但模板元素带 scoped 属性，样式生效） */
 .fit-pop {
   display: flex;
   flex-wrap: wrap;

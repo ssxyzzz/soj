@@ -7,7 +7,7 @@ import { classApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import { useUserStore } from '@/stores/user'
-import { fmtDate } from '@/utils/format'
+import { fmtDay } from '@/utils/format'
 import type { ClassCard } from '@/types'
 
 const router = useRouter()
@@ -125,7 +125,7 @@ onMounted(load)
             </div>
             <p class="intro">{{ c.intro || '暂无简介' }}</p>
             <div class="meta">
-              <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDate(c.created_at) }}</span>
+              <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDay(c.created_at) }}</span>
             </div>
           </el-card>
         </el-col>

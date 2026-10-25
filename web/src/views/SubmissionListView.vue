@@ -7,7 +7,7 @@ import { submissionApi } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtMem, fmtSec, statusDesc, statusMap } from '@/utils/format'
+import { fmtMem, fmtRel, fmtSec, statusDesc, statusMap } from '@/utils/format'
 import type { Submission } from '@/types'
 
 const router = useRouter()
@@ -172,6 +172,24 @@ onUnmounted(() => {
 
     <el-card class="tbl-card">
       <el-table stripe v-loading="loading" :data="list">
+        <el-table-column label="状态" width="130">
+          <template #default="{ row }">
+            <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
+              <template #content>
+                <div class="status-tip">
+                  <div>{{ statusDesc(row.status)!.meaning }}</div>
+                  <div v-if="statusDesc(row.status)!.cause">常见原因：{{ statusDesc(row.status)!.cause }}</div>
+                </div>
+              </template>
+              <span class="status-tag clickable" @click.stop="openDetail(row.id)">
+                <SubStatus :status="row.status" :score="row.score" />
+              </span>
+            </el-tooltip>
+            <span v-else class="status-tag clickable" @click.stop="openDetail(row.id)">
+              <SubStatus :status="row.status" :score="row.score" />
+            </span>
+          </template>
+        </el-table-column>
         <el-table-column label="提交号" width="92">
           <template #default="{ row }">
             <span class="tlink mono" @click="openDetail(row.id)">#{{ row.id }}</span>
@@ -191,30 +209,6 @@ onUnmounted(() => {
             <span class="dim">{{ row.username }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="130">
-          <template #default="{ row }">
-            <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
-              <template #content>
-                <div class="status-tip">
-                  <div>{{ statusDesc(row.status)!.meaning }}</div>
-                  <div v-if="statusDesc(row.status)!.cause">常见原因：{{ statusDesc(row.status)!.cause }}</div>
-                </div>
-              </template>
-              <span class="status-tag clickable" @click.stop="openDetail(row.id)">
-                <SubStatus :status="row.status" />
-              </span>
-            </el-tooltip>
-            <span v-else class="status-tag clickable" @click.stop="openDetail(row.id)">
-              <SubStatus :status="row.status" />
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="得分" width="72">
-          <template #default="{ row }">
-            <span v-if="row.score != null" class="mono">{{ row.score }}</span>
-            <span v-else class="dim">—</span>
-          </template>
-        </el-table-column>
         <el-table-column prop="language" label="语言" width="90" />
         <el-table-column label="耗时" width="92">
           <template #default="{ row }">
@@ -226,9 +220,9 @@ onUnmounted(() => {
             <span class="mono">{{ row.memory_kb ? fmtMem(row.memory_kb) : '—' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="时间" width="80">
+        <el-table-column label="时间" width="110">
           <template #default="{ row }">
-            <span class="mono dim">{{ (row.created_at ?? '').slice(11, 16) }}</span>
+            <span class="mono dim">{{ fmtRel(row.created_at) }}</span>
           </template>
         </el-table-column>
       </el-table>

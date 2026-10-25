@@ -39,7 +39,13 @@ const acceptRate = computed(() => {
       <span class="hint">难度第 {{ problem.difficulty ?? 3 }} 档</span>
     </div>
     <div v-if="tagIds.length" class="tag-row">
-      <span v-for="id in tagIds" :key="id" class="soj-tagchip chip">{{ tagStore.nameOf(id) }}</span>
+      <span
+        v-for="id in tagIds"
+        :key="id"
+        class="soj-tagchip chip"
+        :class="`lv-${tagStore.levelOf(id)}`"
+        :style="{ color: 'var(--lv)', background: 'var(--lv-bg)', borderColor: 'var(--lv-border)' }"
+      >{{ tagStore.nameOf(id) }}</span>
     </div>
     <div v-else class="hint">暂无标签</div>
     <!-- 来源徽章链（v0.12）：标签下方 -->

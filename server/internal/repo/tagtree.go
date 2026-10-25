@@ -108,8 +108,9 @@ func reconcileTagTree(oldNodes, newNodes []TagNode, nextID func() (int64, error)
 }
 
 // ValidateTagTreeShape 保存前形状校验：名称非空 ≤32 字、同级不重名、
-// 嵌套 ≤32 层、总节点数 ≤1000。节点数按树中节点计数（不看 ID 是否已取号，
-// 后台保存时新节点尚无正式号，按 ID 集合计数会被绕过/少计）。
+// 嵌套 ≤5 级（v0.20：展示端五级配色定档，标签树同限）、总节点数 ≤1000。
+// 节点数按树中节点计数（不看 ID 是否已取号，后台保存时新节点尚无正式号，
+// 按 ID 集合计数会被绕过/少计）。
 func ValidateTagTreeShape(nodes []TagNode) error {
 	total := 0
 	var walk func(list []TagNode, depth int) error
@@ -128,8 +129,8 @@ func ValidateTagTreeShape(nodes []TagNode) error {
 				return fmt.Errorf("同级存在重名标签「%s」", name)
 			}
 			names[name] = true
-			if depth >= 32 {
-				return fmt.Errorf("标签嵌套超过 32 层")
+			if depth >= 5 {
+				return fmt.Errorf("标签嵌套最多 5 级")
 			}
 			if err := walk(n.Children, depth+1); err != nil {
 				return err

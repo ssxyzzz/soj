@@ -111,10 +111,35 @@ export function fmtDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString('zh-CN', { hour12: false })
 }
 
+// 仅年月日（v0.20 班级「创建于」等不需要时分的展示位）：YYYY-MM-DD
+export function fmtDay(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 // 短日期（v0.19 首页/比赛行）：MM-DD HH:mm（v3 卡片行时间口径）
 export function fmtShort(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   const p = (n: number) => String(n).padStart(2, '0')
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+// 相对时间（v0.20 提交记录时间列）：N 秒前 / N 分钟前 / N 小时前 / N 天前 / N 个月前 / N 年前
+export function fmtRel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const sec = Math.max(1, Math.floor((Date.now() - d.getTime()) / 1000))
+  if (sec < 60) return `${sec} 秒前`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min} 分钟前`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr} 小时前`
+  const day = Math.floor(hr / 24)
+  if (day < 30) return `${day} 天前`
+  const mon = Math.floor(day / 30)
+  if (mon < 12) return `${mon} 个月前`
+  return `${Math.floor(mon / 12)} 年前`
 }

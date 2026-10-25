@@ -92,6 +92,16 @@ func TestTagIDNamesAndLookup(t *testing.T) {
 }
 
 func TestValidateTagTreeShape(t *testing.T) {
+	// chain(n)：n 级单链（一级在最外，第 n 级在最里）
+	chain := func(n int) []TagNode {
+		root := TagNode{ID: 1, Name: "L1"}
+		cur := &root
+		for i := 2; i <= n; i++ {
+			cur.Children = []TagNode{{ID: int64(i), Name: fmt.Sprintf("L%d", i)}}
+			cur = &cur.Children[0] // 指向切片内元素继续挂链（值拷贝会断链）
+		}
+		return []TagNode{root}
+	}
 	cases := []struct {
 		name    string
 		tree    []TagNode
@@ -108,6 +118,8 @@ func TestValidateTagTreeShape(t *testing.T) {
 		{"不同级重名合法", []TagNode{
 			{ID: 1, Name: "DP", Children: []TagNode{{ID: 2, Name: "DP"}}},
 		}, false},
+		{"五级链合法", chain(5), false},
+		{"六级链拒绝", chain(6), true},
 	}
 	for _, tc := range cases {
 		err := ValidateTagTreeShape(tc.tree)

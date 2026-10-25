@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 等级面板（v0.11，root）：等级名称 / 升级阈值 / 衰减系数。
 // 十阶档数与色轴固定不开放改。特效开关字段（effects_*）在配置里保留但 UI 已隐藏——
-// v3-full 改版（2026-10-24）等级徽章全静态，开关不再产生视觉差异。
+// v0.21 改版（2026-10-25）等级徽章回归实色炫彩版，特效链恒开、开关不再消费。
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
@@ -68,9 +68,11 @@ async function save() {
   }
 }
 
-// 等级名旁的预览 chip（v3-full 静态浅色胶囊，Lv.10 蓝青渐变实底）
+// 等级名旁的预览 chip（v0.21 实色炫彩版：与站点徽章同款特效链，Lv.3 起挂 fx）
 function chipClass(i: number): Record<string, boolean> {
-  return { 'ulv-tag': true, [`ulv-${i + 1}`]: true }
+  const cls: Record<string, boolean> = { 'ulv-tag': true, [`ulv-${i + 1}`]: true }
+  if (i + 1 >= 3) cls[`ulv-fx${i + 1}`] = true
+  return cls
 }
 
 // 难度名预览 chip（与题库难度徽章同款静态浅色胶囊）
@@ -154,6 +156,8 @@ function diffChipClass(i: number): Record<string, boolean> {
 
 /* 预览 chip：v3-full 静态浅色胶囊（底/边/字由全局 ulv、diff 两族注入），仅定形制 */
 .tier-chip {
+  position: relative;
+  overflow: hidden;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;

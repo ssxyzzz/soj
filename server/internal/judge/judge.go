@@ -469,10 +469,8 @@ func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, langu
 			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(passed, n),
 				jerr.Error(), st.detail
 		}
-		// stdio 判题下检出文件操作：追加针对性提示——本题不需要文件操作，
-		// freopen 会因文件不存在而静默失败（读空输入/输出为空），学生常误判为算法错误
-		if finalStatus == repo.StatusWrongAnswer && !fio.enabled {
-			reason += "（检测到文件操作：本题不需要文件操作）"
+		if finalStatus == repo.StatusWrongAnswer {
+			reason += waFileIOHint(code, fio)
 		}
 		if caseStatus != "" {
 			st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
@@ -530,9 +528,8 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, lan
 				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					jerr.Error(), st.detail
 			}
-			// stdio 判题下检出文件操作：提示同单点模式（本题不需要文件操作）
-			if finalStatus == repo.StatusWrongAnswer && !fio.enabled {
-				reason += "（检测到文件操作：本题不需要文件操作）"
+			if finalStatus == repo.StatusWrongAnswer {
+				reason += waFileIOHint(code, fio)
 			}
 			if caseStatus != "" {
 				st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
@@ -695,6 +692,17 @@ func normalizeOutput(s string) string {
 		lines[i] = strings.TrimRight(lines[i], " \t\r")
 	}
 	return strings.TrimRight(strings.Join(lines, "\n"), "\n")
+}
+
+// waFileIOHint stdio 判题 WA 时的针对性提示：仅当本题不启用文件 IO 且源码
+// 检出文件操作痕迹（freopen/fopen/fstream 家族）时返回追加文案——freopen 会因
+// 文件不存在而静默失败（读空输入/输出为空），学生常误判为算法错误。
+// 普通输出不一致返回空串，不贴文件操作提示（v0.20：曾对所有 WA 一刀切误导）。
+func waFileIOHint(code string, fio fileIOParams) string {
+	if fio.enabled || fileIOKeyword(code) == "" {
+		return ""
+	}
+	return "（检测到文件操作：本题不需要文件操作）"
 }
 
 // fileIOKeyword 扫描源码中的文件操作痕迹（freopen/fopen/fstream 家族，大小写不敏感）。

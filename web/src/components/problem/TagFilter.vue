@@ -34,6 +34,8 @@ onMounted(() => tagStore.ensure())
             :key="id"
             size="small"
             closable
+            :class="`lv-${tagStore.levelOf(id)}`"
+            :style="{ color: 'var(--lv)', background: 'var(--lv-bg)', borderColor: 'var(--lv-border)' }"
             @close="toggle(id)"
           >
             {{ tagStore.nameOf(id) }}

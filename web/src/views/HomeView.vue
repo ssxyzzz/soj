@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import CursorRipple from '@/components/CursorRipple.vue'
 import MdView from '@/components/MdView.vue'
 import TierBadge from '@/components/TierBadge.vue'
 
 import { classApi, contestApi, noticeApi, siteApi } from '@/api'
 import { useUserStore } from '@/stores/user'
-import { fmtShort } from '@/utils/format'
+import { fmtDay, fmtShort } from '@/utils/format'
 import type { ClassCard, ContestListItem } from '@/types'
 
 const router = useRouter()
@@ -69,6 +70,8 @@ onMounted(async () => {
 
 <template>
   <div class="page narrow">
+    <!-- simple408 同款鼠标氛围（光斑跟随 + 涟漪）：仅主页挂载，其他页面保持纯净 -->
+    <CursorRipple />
     <div v-if="notice" class="announce">
       <span class="announce-tag">公告</span>
       <div class="announce-body"><MdView :content="notice" /></div>
@@ -146,7 +149,7 @@ onMounted(async () => {
           </div>
           <p class="clintro">{{ c.intro || '暂无简介' }}</p>
           <div class="meta">
-            <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtShort(c.created_at).split(' ')[0] }}</span>
+            <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDay(c.created_at) }}</span>
           </div>
         </div>
       </div>

@@ -241,7 +241,7 @@ onBeforeUnmount(() => {
   background: var(--lv-bg);
   border: 1px solid var(--lv-border);
   border-radius: var(--el-border-radius-base);
-  color: var(--el-text-color-primary);
+  color: var(--lv);
   cursor: pointer;
   user-select: none;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;

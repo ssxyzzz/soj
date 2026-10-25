@@ -332,7 +332,14 @@ onMounted(() => {
           @selection-change="onSelChange"
         >
           <el-table-column v-if="canExport && picking" type="selection" width="48" reserve-selection :selectable="() => true" />
-          <el-table-column label="题号" width="84">
+          <el-table-column label="状态" width="130">
+            <template #default="{ row }">
+              <SubStatus v-if="userStore.token && row.status" :status="row.status" :score="row.my_score" />
+              <span v-else-if="userStore.token" class="dim">未做</span>
+              <span v-else class="dim">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="题号" width="76">
             <template #default="{ row }">
               <span class="mono dim">P{{ row.id }}</span>
             </template>
@@ -351,7 +358,7 @@ onMounted(() => {
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="难度" width="90">
+          <el-table-column label="难度" width="86">
             <template #default="{ row }">
               <TierBadge :tier="row.difficulty ?? 3" kind="difficulty" />
             </template>
@@ -362,7 +369,7 @@ onMounted(() => {
               <span v-else class="dim">—</span>
             </template>
           </el-table-column>
-          <el-table-column label="通过率" width="96">
+          <el-table-column label="通过率" width="88">
             <template #default="{ row }">
               <el-tooltip
                 v-if="row.submit_count"
@@ -372,12 +379,6 @@ onMounted(() => {
                 <span class="mono">{{ acceptRate(row) }}</span>
               </el-tooltip>
               <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column v-if="userStore.token" label="我的状态" width="110">
-            <template #default="{ row }">
-              <SubStatus v-if="row.status" :status="row.status" :score="row.my_score" />
-              <span v-else class="dim">未做</span>
             </template>
           </el-table-column>
         </el-table>

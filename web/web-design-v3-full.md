@@ -1,0 +1,78 @@
+# v0.20 界面设计语言规范 · v3-full 全面对标（web-design-v3-full）
+
+> 本文档是 **v0.20「全站对标 v3-full 设计稿」批次的唯一权威设计文档**（定稿 2026-10-24，编辑器窗口浅色回归决策 2026-10-25，徽章改版决策 2026-10-25 见 §1.6）。
+> 视觉基准 = `design-preview/soj-redesign-v3-full.html`（24 屏全场景预览稿）。
+> 前置文档：[web-design.md](web-design.md)（布局原则）、[web-design-v3.md](web-design-v3.md)（v0.19 青格蓝调 token 换血）——本文在其之上做**像素级全面对标**，v0.19 文档中与本文冲突的条目（§5 明确不做清单里的「不改十阶色轴 / 不改字号 token / 不新增数据区块」）由本文接替。
+> 范围：除「标签树面板」（用户明确排除，维持现状）外全站 24 屏逐屏对标；等级/难度色轴按 v3 重设计；特效体系退役；可编辑代码窗口**保持浅色**。
+
+## 1. 本批决策记录（先读）
+
+1. **等级特效体系全静态退役**（用户拍板）：呼吸星 / 光晕 / 流光 / 品牌特效态（特效开时顶栏 SOJ 换彩色胶囊）全部移除；徽章一律 v3 静态浅色胶囊，Lv.10 极境 = 蓝青渐变实底白字。后端 `effects_*` 配置字段与 levels store `effectsOn()` 保留（LevelPanel 开关 UI 隐藏），不再产生视觉差异。（2026-10-25 注：特效体系已由 v0.21 重设计恢复——见 main.css「用户等级徽章」段；Lv.10 / 难度第 10 档形制更新见第 6 条。）
+2. **数据缺口三处**（用户拍板「补两个小接口」）：提交列表筛选参数（status/language/mine/kw）与 `GET /me/problem-stats`（AC 数 / 总数 / AC 率 / 近 7 天分布）落地；`/site/stats` featured 补标签名。比赛「报名 / 预约提醒 / 我报名的赛事」无对应系统——降级为现有动作，副列「我的赛程 · 下一场」倒计时卡按现有赛事数据计算，无可计算场次时不渲染。
+3. **可编辑代码窗口保持浅色**（2026-10-25 用户拍板回归）：提交弹窗 / 在线编程 / 题库详情副列编辑框三处 CodeEditor 维持浅色主题（v3 的 #0D1E3C 深色编辑器已试装后回退）。**只读代码展示面仍深色**：评测详情 / 我的提交弹窗代码窗（`.soj-codepane`）与导入页日志窗（`.soj-ilog`）。
+4. 850 字重本地无此档 → 统一 800（不引 Web 字体，v0.19 决策不变）。
+5. 有意偏差两处：排名页「最近 AC」列（后端无字段）与题库「状态」筛选 chip（需按人过滤题库）不做。
+6. **难度方块点缀 + 极境六彩同源**（2026-10-25 用户拍板，稿 = `design-preview/soj-tier-preview-b-heartbeat-v5.html`）：难度徽章 D1–D10 全档加 **7px / 45° 旋转方块点缀**（色随字 `--dct`，D10 方块走六彩渐变；v3-full 设计稿元素落地）；难度第 10 档极境 = **浅色彩虹款**（六彩渐变底 11% / 边 25% 双层渐变描边、字 `#5A3879`，不再实底白字破例）；等级 Lv.10 极境同步换 **六彩渐变流动**（120° 六色、300% 流动，辉光/减动效退场色随星紫锚点 `#7E3E9E`），等级 / 难度极境回到同源六彩。
+
+## 2. 等级 / 难度色轴（重设计，按名字映射 v3）
+
+`--lc-*`（等级 ulv）与 `--dc-*`（难度 diff）同一色轴：**难度 = 静态浅色胶囊**（底 11% / 边 25% / 字深一档，下表「字色（浅底上）」即难度取值）+ 旋转方块点缀；**等级 = 同色实色胶囊（白字）+ 特效链**（v0.21 起，见 §1.6，下表「主色」即实色底色相）；徽章形制 12px / 700 / padding 2px 10px / 胶囊；等级文案带 `✦` 前缀。
+
+| 档 | 名 | 主色 | 字色（浅底上） | 备注 |
+| --- | --- | --- | --- | --- |
+| 1 | 青铜 | `#B4793F` | 同主色 | 原铜锈绿 → 铜棕 |
+| 2 | 白银 | `#75868F` | 同主色 | 微调 |
+| 3 | 黄金 | `#D99141` | 同主色 | 原 #d9a018 |
+| 4 | 铂金 | `#3358B8` | `#2C4EA3` | 原 teal → 铂蓝 |
+| 5 | 钻石 | `#237E6B` | `#1D6B5B` | 原亮蓝 → 钻绿 |
+| 6 | 星耀 | `#7C3AED` | 同主色 | 星紫 |
+| 7 | 宗师 | `#EE7E1F` | 同主色 | v3 未给，沿用 |
+| 8 | 王者 | `#7C3AED`（底/边） | `#6D28D9` | 原鎏金 → 深紫 |
+| 9 | 传奇 | `#D64550` | 同主色 | v3 未给，沿用 |
+| 10 | 极境 | **六彩渐变 `120deg #E63946 → #EE7E1F → #E9C963 → #3CB371 → #4A8DDA → #7E3E9E`**（2026-10-25 接替蓝青） | 等级白字 / 难度 `#5A3879` | 等级 = 实底流动（300% + 星紫辉光）；难度 = 浅彩虹（11% / 25% 渐变描边、无影） |
+
+## 3. token 与全局基件（main.css）
+
+- **token 补齐**：`--soj-ink` 定值 `#10233B`；新增 `--soj-ink-2 #48607F`（副文/表单标签）、`--soj-ink-3 #8DA2BC`（占位/微文字）、`--soj-line-2 rgba(11,31,69,.13)`（控件描边）、`--soj-blue-line rgba(31,73,186,.28)`、`--soj-bg-top/bottom`、状态定值组（`--soj-ac/-bg`、`--soj-wa/-bg`、`--soj-tle/-bg`、`--soj-run #2455DA/-bg #EAF0FE`、`--soj-mut/-bg`）。EP 映射：secondary→ink-2、placeholder→ink-3、border→line-2、border-light→line。
+- **字号升档**：page-title 30→34、hero →56、stat →36、nav →15；新增 28/34/56 档与 `--soj-fs-entity-detail`(28)、`--soj-fs-prob-title`(32)；表格头 13px。字重新增 `--soj-fw-heavy: 800`（850 本地替代）。
+- **按钮**：三档高 42/34/52（`--el-button-size` 覆盖）；primary 渐变影 `0 8px 20px rgba(36,85,218,.28)` + hover 上浮 1px + active scale(.985)；default 及彩色实心统一 **ghost 白底描边**（hover 蓝边蓝字浅蓝底）；danger 实心 → 红描边幽灵款；全站彩色 plain 按钮扫尾换 primary/default。
+- **状态徽章**：padding 3px 11px、圆点 6px、五浅底 v3 定值、run 主色 #2455DA + 圆点 pulse 动画（reduced-motion 关）。
+- **标签 chip 青系单色**：`lv-1..5` 五色退役 → 全部青系 `rgba(22,167,210,.09)/边 .24/字 #0E7A9C`；题型/来源徽章并入同族。
+- **分页**页钮圆角 10；**表格**新增 `.me-row` 整行淡蓝高亮。
+- **新增全局类**：`.soj-input`（胶囊搜索 h44 + 聚焦 4px 环，**内嵌 svg 必须 17×17**——漏定尺寸会渲染成 300×150 大圆环，2026-10-24 走查实锤）、`.soj-sel`（筛选 chip h36 激活蓝底白字）、`.soj-seg`（胶囊分段）、`.soj-orb`、`.soj-tagchip`（含 `.on`）、`.tlink`（表格链接藏蓝 600 hover 蓝）、`.soj-pbar`（8px 胶囊渐变进度条）、`.soj-countdown`（浅底虚线蓝边 mono）、`.soj-kv`（数字格）、`.soj-mini-li`（行卡）、`.soj-inv-chip`（邀请码虚线胶囊）、`.soj-role-chip`（root 红/admin 橙/teacher 蓝/其余灰）、深色代码系 token（`--soj-code-*`）+ `.soj-codepane` / `.soj-ilog`、`.soj-big-no`（96px 描边空心题号）、`.soj-prob-meta`（分格条）、`.frow/.fl/.fd`（行式表单）、`.panel-h/.pt/.acts`、`.page.narrow`(960)。
+- **卡头**：el-card header 去「竖条+底边线」，`16px 20px 0` 无边线；纯表格卡贴边规则保留（头 + 贴边表格组合补 14px 下距）；副列卡统一走 `RailCard.vue`（ov eyebrow 11px teal 大写 + card-t 15/700 藏蓝）。
+
+## 4. 各屏要点（模板级）
+
+- **MainLayout**：内容 1280/24（弃 1328/28）、菜单 15px 胶囊 8px 15px、admin-link 独立描边胶囊、user-chip 胶囊（30px 渐变圆头像首字 + 700 昵称 + 等级徽章）、品牌恒为方块+流彩字（34px/r10 + 24/900）。
+- **Login**：自带画布（spot 50% 16% + 网格 mask 椭圆 90% 70% at 50% 38%，自有渐变底盖全局网格）、左上返回胶囊、卡 36 34 30 / mark 46/r14 / word 30、字段 h46 label 13/600、主钮 48、login-row 左灰提示 + 忘记密码、login-foot 两行；登录/注册分段统一 `.soj-seg`。
+- **Home**：narrow 960；公告渐变横条 + 蓝底「公告」胶囊（content.trim() 才渲染）；hero 56/800/ls-2.2、search h56 + orb、按钮组 default lg；statline 36/800；dotd ov 11px/.16em + meta 难度/通过率/标签 chips；班级卡 joined 绿 ✓ / lock 橙 🔒 + meta 创建时间。
+- **题库**：toolbar 胶囊搜索(flex1) + 标签/难度/高级筛选 chips（弹层承载既有控件）；列序 题号 P####(mono dim)→题目(tlink)→难度→标签(青)→通过率→我的状态(末列)；副列 RailCard 四卡：题目管理 / 数据概览 kv 四格 + 七天 spark（`/me/problem-stats`，未登录登录引导）/ 常用标签（树一级前 9，点击筛选）/ 关于题库。
+- **题目详情**：PageShell `rail-wide`(356)；面包屑 + kicker PROBLEM + big-no + 32/800 标题（pid 胶囊 + 难度）+ prob-meta 分格条（时限/内存/通过/提交/标签）；题面立于画布（不套卡）；副列五卡：题目维护 / **提交本题（内嵌语言选择 + 浅色编辑框直接提交）/ 本题操作**（题解·我的提交·所有代码链接行）/ 题目信息（kv 三格 + 难度档 + 标签平铺）/ 我的提交 mini×3 / 评测须知。
+- **赛题页**：round-head 卡（赛名 17/800 + 状态胶囊 + sw-btns 34×32 r10 切题钮 + 右侧返回）；面包屑（赛名/T n）。
+- **提交弹窗**：720 窄 + **浅色编辑器 460px** + 「提交评测」实心 + 限速 hint。
+- **评测详情弹窗**：desc-grid 三列分格条（含选手格、重测/取消链接）+ 代码区 `.soj-codepane` 深色 + 底部图例 hint。
+- **比赛**：seg 文案「即将开始」；crow 行卡；副列 赛事管理 / 我的赛程·下一场（`.soj-countdown` 每秒刷新，无可计算场次不渲染）/ 赛制说明。详情页标题 28/800、卡 padding 22 26、删除红描边、时间卡 countdown + `.soj-pbar` + 「已进行 N%」。
+- **班级**：clcard（navy 15.5/800 + joined/lock 胶囊 + intro 两行截断 + meta 三项）；详情 seg 统一 + 班级信息 kv 四格 + inv-chip 居中；作业补「完成情况」kv 卡。
+- **成绩榜**：ScoreCell 整格铺色（满分绿底/部分橙底/零分红底/未做灰字，r8 mono，me 格蓝描边）+ 底部图例；摘要卡 sum-li 行形态。
+- **排名**：narrow 960；列 排名(mono)/选手(昵称 700 + @handle dim，me 行整行渐变 + 「· 我」)/等级/解题数(mono)；领奖台 2-1-3（冠军 66px 渐变头像 + 52px 渐变数字，两侧 54/40）。
+- **提交记录**：filterbar 搜索胶囊 250 + 状态/语言/仅看自己 chips（接新筛选参数）+ 候选行；列序 提交号(tlink mono)→题目(P#### tlink)→选手→状态→得分(独立 mono)→语言→耗时→内存→时间(HH:mm)。
+- **设置**：920 单列四卡（个人信息/修改密码/绑定邮箱/偏好）frow 行式（190px 标签列 + dashed 分隔 + fd 副注）；换绑流程弹窗保留。
+- **后台**：anav「面板」eyebrow；用户面板 = panel-h（共 N 人 + 搜索胶囊 260 + 新建）+ 扁平表（ID mono dim/用户名/昵称 700/角色 role-chip/操作链接）+ 卡内分页 20/页（弃分组折叠视图）；等级面板隐藏特效开关区；标签树面板**不动**。
+- **导入**：容器 1080；「第一步 · 选择来源」panel-h + running 徽章、src-grid 3 列、「第二步 · 上传与导入」+ 文件名 + 取消钮、`.soj-pbar` + pstat 三段行、结果流 → `.soj-ilog` 深色日志窗（ok 绿/skip 黄/fail 红/dim 蓝灰行色）。
+- **在线编程**：header 56 定高毛玻璃（白.9 blur12）+ mono 题号 + 提交实心 sm；左栏 46%；**右栏编辑器浅色**（深色 + Ln,Col 状态胶囊已试装后回退，见 §1.3）；Esc 退出。
+- **404**：渐变裁字 100px/800「404」+ 说明 + default lg 钮（弃 el-result）。
+
+## 5. 后端配套（本批新增接口）
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /submissions?status=&language=&mine=1&kw=` | 提交列表筛选（kw：纯数字=提交号精确，否则题名子串不区分大小写；权限模型不变） |
+| `GET /me/problem-stats` | 我的做题统计：solved（按题去重 AC）/ total（可见题）/ submissions / ac_rate / recent7[6 天前..今天] |
+| `GET /site/stats` featured | 补 `tags[]`（标签树节点名，最多 4 个） |
+
+repo 层 `SubmissionFilter` 过滤与 `MyProblemStats` 聚合各有单测（本地无 Mongo 自动 skip）。
+
+## 6. 验收口径
+
+`npm run lint` / `vue-tsc --noEmit` / `npm run build`、`go build / vet / test` 全绿 + ego 真机 root 登录逐屏走查（约 20 屏）对照 `soj-redesign-v3-full.html`；走查修复实录：搜索胶囊 svg 未定尺寸渲染成巨型圆环、深色编辑器 HighlightStyle 引错包致编辑器空白、公告纯空白内容仍渲染横条。

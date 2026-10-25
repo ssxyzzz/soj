@@ -26,7 +26,7 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
 
 <template>
   <TierBadge v-if="level" :tier="tier" kind="level" size="sm" class="unl" :title="fullText">
-    <span class="unl-name" :class="{ 'unl-me': me, 'unl-me-top': me && tier === 10 }">{{ name }}</span>
+    <span class="unl-name" :class="{ 'unl-me': me, 'unl-me-capsule': me }">{{ name }}</span>
     <span class="unl-sep">·</span>
     <span class="unl-tier-text">{{ tierText }}</span>
   </TierBadge>
@@ -64,9 +64,12 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
   font-weight: var(--soj-fw-emphasis);
 }
 
-/* Lv.10 蓝青渐变实底上主色蓝对比度不足：me 高亮退回继承（白）字 */
-.unl-me-top {
-  color: inherit;
+/* 等级胶囊（v0.21 实色炫彩版）内 me 高亮：主色蓝在实色底上不可读，改白字细下划线 */
+.unl-me-capsule {
+  color: #fff;
   font-weight: var(--soj-fw-bold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(255, 255, 255, 0.7);
 }
 </style>

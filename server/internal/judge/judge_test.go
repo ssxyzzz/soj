@@ -115,3 +115,29 @@ func TestFileIOKeyword(t *testing.T) {
 		}
 	}
 }
+
+// TestWAFileIOHint v0.20：WA 提示只在「本题不需要文件 IO 且源码确有文件操作」时追加，
+// 普通输出不一致（无文件操作源码）不得出现文件操作文案。
+func TestWAFileIOHint(t *testing.T) {
+	plain := "int main(){ std::cin >> a >> b; std::cout << a + b; }"
+	freopenCode := `int main(){ freopen("problem.in","r",stdin); freopen("problem.out","w",stdout); }`
+	cases := []struct {
+		name    string
+		code    string
+		fio     fileIOParams
+		wantHas bool
+	}{
+		{"无文件操作不追加", plain, fileIOParams{enabled: false}, false},
+		{"检出 freopen 追加", freopenCode, fileIOParams{enabled: false}, true},
+		{"文件 IO 题不追加", freopenCode, fileIOParams{enabled: true, inName: "problem.in", outName: "problem.out"}, false},
+	}
+	for _, c := range cases {
+		got := waFileIOHint(c.code, c.fio)
+		if c.wantHas && got == "" {
+			t.Errorf("%s: 应追加提示，得到空", c.name)
+		}
+		if !c.wantHas && got != "" {
+			t.Errorf("%s: 不应追加提示，得到 %q", c.name, got)
+		}
+	}
+}
