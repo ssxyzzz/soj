@@ -164,8 +164,8 @@ async function loadMyStats() {
   try {
     const [st, rank] = await Promise.all([authApi.myProblemStats(), rankApi.top()])
     myStats.value = st
-    const me = await authApi.me()
-    myRank.value = rank.find((r) => r.user_id === me.id)?.rank ?? null
+    // 后端已按榜单同序算好观察者名次（含榜外），不必前端 find
+    myRank.value = rank.me?.rank ?? null
   } catch {
     myStats.value = null
   }

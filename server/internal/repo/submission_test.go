@@ -371,3 +371,36 @@ func TestMyProblemStats(t *testing.T) {
 		t.Errorf("Recent7 长度 = %d, want 7", len(st.Recent7))
 	}
 }
+
+// RankMe 名次计算：与榜单同序（solved desc、uid asc 决胜）；无 AC 用户 = 全榜人数 + 1。
+func TestRankMe(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+	// 榜单序：11 与 12 同分 2 题（uid 决胜 11 先），13 一题，14 无 AC
+	for _, s := range []struct{ uid, pid int64 }{
+		{11, 1}, {11, 2},
+		{12, 1}, {12, 2},
+		{13, 1},
+	} {
+		insert(t, r, bson.M{"uid": s.uid, "pid": s.pid, "status": StatusAccepted, "published": true})
+	}
+	cases := []struct {
+		uid    int64
+		rank   int64
+		solved int64
+	}{
+		{11, 1, 2},
+		{12, 2, 2},
+		{13, 3, 1},
+		{14, 4, 0},
+	}
+	for _, c := range cases {
+		rank, solved, err := r.RankMe(ctx, c.uid)
+		if err != nil {
+			t.Fatalf("RankMe(uid=%d): %v", c.uid, err)
+		}
+		if rank != c.rank || solved != c.solved {
+			t.Errorf("RankMe(uid=%d) = (%d, %d), want (%d, %d)", c.uid, rank, solved, c.rank, c.solved)
+		}
+	}
+}

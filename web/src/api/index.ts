@@ -304,7 +304,8 @@ export const submissionApi = {
 }
 
 export const rankApi = {
-  top: () => get<RankItem[]>('/rank'),
+  // items = 前 50 名；me = 观察者条目（含榜外名次，未登录为 null）
+  top: () => get<{ items: RankItem[]; me: RankItem | null }>('/rank'),
 }
 
 // 等级体系（v0.11）：公开读配置（排行榜/顶栏徽章渲染）

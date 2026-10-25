@@ -12,13 +12,15 @@ levels.ensure()
 const userStore = useUserStore()
 
 const list = ref<RankItem[]>([])
+const me = ref<RankItem | null>(null)
 const loading = ref(false)
 
-// v3-full 排名页：前三名领奖台卡（渐变大数字 + 首字头像），表格从第 4 名起
+// v3-full 排名页：前三名领奖台卡（渐变大数字 + 首字头像）
 const podium = computed(() => list.value.slice(0, 3))
-const rest = computed(() => list.value.slice(3))
-// 领奖台展示顺序：2 - 1 - 3（冠军居中）
+// 领奖台展示顺序：2 - 1 - 3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
 const podiumOrder = computed(() => [podium.value[1], podium.value[0], podium.value[2]].filter(Boolean))
+// 表格：自己的条目置顶（含榜外名次），后面跟完整榜单 1..50——方便查看自己
+const tableRows = computed(() => (me.value ? [me.value, ...list.value] : list.value))
 
 const avColors = ['#5a6b4f', '#8a5a33', '#3358b8', '#237e6b', '#7c3aed']
 function avColor(i: number): string {
@@ -32,7 +34,9 @@ function rowClass({ row }: { row: RankItem }): { 'me-row': boolean } {
 onMounted(async () => {
   loading.value = true
   try {
-    list.value = await rankApi.top()
+    const res = await rankApi.top()
+    list.value = res.items
+    me.value = res.me
   } finally {
     loading.value = false
   }
@@ -46,9 +50,14 @@ onMounted(async () => {
       <h1 class="page-title">解题排名<small>按通过题数排序 · 前 50 名</small></h1>
     </div>
 
-    <!-- 领奖台（前三；人数不足自适应） -->
+    <!-- 领奖台（前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3） -->
     <div v-if="podium.length" class="podium" v-loading="loading">
-      <div v-for="p in podiumOrder" :key="p.rank" class="card pcard" :class="{ p1: p.rank === 1 }">
+      <div
+        v-for="p in podiumOrder"
+        :key="p.rank"
+        class="card pcard"
+        :class="{ p1: p.rank === 1, solo: podiumOrder.length === 1 }"
+      >
         <div class="rank-no">{{ p.rank }}</div>
         <div class="pav" :style="p.rank === 1 ? undefined : { background: avColor(p.rank) }">
           {{ (p.nickname || p.username).slice(0, 1) }}
@@ -58,10 +67,10 @@ onMounted(async () => {
       </div>
     </div>
 
-    <el-card v-if="rest.length" class="tbl-card">
+    <el-card v-if="tableRows.length" class="tbl-card">
       <el-table
         stripe
-        :data="rest"
+        :data="tableRows"
         :row-class-name="rowClass as never"
       >
         <el-table-column label="排名" width="88">
@@ -89,7 +98,7 @@ onMounted(async () => {
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && !list.length" description="还没有人通过题目，快去抢占第一！" />
+      <el-empty v-if="!loading && !tableRows.length" description="还没有人通过题目，快去抢占第一！" />
     </el-card>
 
     <div class="rank-footer">
@@ -124,6 +133,11 @@ onMounted(async () => {
   box-shadow:
     0 2px 4px rgba(11, 31, 69, 0.04),
     0 18px 44px rgba(11, 31, 69, 0.11);
+}
+
+/* 单人领奖台：独占中列（冠军位） */
+.pcard.solo {
+  grid-column: 2;
 }
 
 .pcard.p1 {

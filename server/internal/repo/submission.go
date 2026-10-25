@@ -687,3 +687,55 @@ func (r *Repo) RankTop(ctx context.Context, limit int) ([]RankRow, error) {
 	}
 	return rows, nil
 }
+
+// RankMe 观察者位次：与榜单完全同序（solved desc、uid asc 决胜）——
+// rank = 比我靠前的人数 + 1，solved = 我的去重解题数。无任何 AC 时 solved=0、
+// rank = 全榜人数 + 1（所有有 AC 的用户都排前面）。与 RankTop 同一聚合口径
+// （status=accepted && published，按 (uid,pid) 去重计题）。
+func (r *Repo) RankMe(ctx context.Context, uid int64) (rank, solved int64, err error) {
+	// 我的解题数：AC 且已发布的提交按 pid 去重
+	myPipe := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"uid": uid, "status": StatusAccepted, "published": true}}},
+		{{Key: "$group", Value: bson.M{"_id": "$pid"}}},
+		{{Key: "$count", Value: "n"}},
+	}
+	cur, err := r.Submissions.Aggregate(ctx, myPipe)
+	if err != nil {
+		return 0, 0, err
+	}
+	var mine []struct {
+		N int64 `bson:"n"`
+	}
+	if err := cur.All(ctx, &mine); err != nil {
+		return 0, 0, err
+	}
+	if len(mine) > 0 {
+		solved = mine[0].N
+	}
+	// 靠前人数：解题更多，或同分但 uid 更小（与榜单排序键一致，同分不用并列名次）
+	aheadPipe := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"status": StatusAccepted, "published": true}}},
+		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
+		{{Key: "$group", Value: bson.M{"_id": "$_id.uid", "solved": bson.M{"$sum": 1}}}},
+		{{Key: "$match", Value: bson.M{"$or": bson.A{
+			bson.M{"solved": bson.M{"$gt": solved}},
+			bson.M{"solved": solved, "_id": bson.M{"$lt": uid}},
+		}}}},
+		{{Key: "$count", Value: "n"}},
+	}
+	cur2, err := r.Submissions.Aggregate(ctx, aheadPipe)
+	if err != nil {
+		return 0, 0, err
+	}
+	var ahead []struct {
+		N int64 `bson:"n"`
+	}
+	if err := cur2.All(ctx, &ahead); err != nil {
+		return 0, 0, err
+	}
+	rank = 1
+	if len(ahead) > 0 {
+		rank = ahead[0].N + 1
+	}
+	return rank, solved, nil
+}

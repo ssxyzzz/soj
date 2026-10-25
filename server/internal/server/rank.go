@@ -75,12 +75,52 @@ func (rc *rankCache) get(ctx context.Context) []gin.H {
 	return items
 }
 
-// Rank 解题排行榜（前 50 名，30s 缓存）。
+// Rank 解题排行榜（前 50 名 + 观察者位次，榜单 30s 缓存）。
+// me = 观察者自己的条目（含榜外名次），前端置顶展示——「方便查看自己」。
 func (h *Handlers) Rank(c *gin.Context) {
 	items := h.rank.get(c.Request.Context())
 	if items == nil {
 		fail(c, http.StatusInternalServerError, "读取排行榜失败")
 		return
 	}
-	ok(c, items)
+	uid, _, _, logged := currentUser(c)
+	var me gin.H
+	if logged {
+		// 在榜内直接取缓存条目（名次与榜单严格一致）；榜外走 RankMe 补算
+		for _, it := range items {
+			if it["user_id"] == uid {
+				me = it
+				break
+			}
+		}
+		if me == nil {
+			rank, solved, err := h.repo.RankMe(c.Request.Context(), uid)
+			if err == nil {
+				me = gin.H{"rank": rank, "user_id": uid, "solved": solved}
+				if u, err := h.repo.GetUserByID(c.Request.Context(), uid); err == nil {
+					uname, nick := u.Username, u.Nickname
+					if uname == "" {
+						uname, nick = "-", "-"
+					}
+					me["username"], me["nickname"] = uname, nick
+				}
+				// 等级与榜单同口径（解题难度分布 + 经验调整）；0 解题不出等级
+				if solved > 0 {
+					if cfg, err := h.repo.GetLevelConfig(c.Request.Context()); err == nil {
+						if counts, err := h.repo.SolvedDifficultyCounts(c.Request.Context(), []int64{uid}); err == nil {
+							adjs, err := h.repo.SumXpAdjust(c.Request.Context(), []int64{uid})
+							if err != nil {
+								adjs = map[int64]int64{}
+							}
+							if lv, _, _, _, _ := repo.LevelProgress(cfg, counts[uid], adjs[uid]); lv > 0 {
+								me["level"] = lv
+							}
+						}
+					}
+				}
+			}
+			// RankMe 失败：me 缺省为空，前端退化为纯榜单
+		}
+	}
+	ok(c, gin.H{"items": items, "me": me})
 }
