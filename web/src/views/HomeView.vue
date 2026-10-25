@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import CursorRipple from '@/components/CursorRipple.vue'
+import HomeAmbient from '@/components/HomeAmbient.vue'
 import MdView from '@/components/MdView.vue'
 import TierBadge from '@/components/TierBadge.vue'
 
@@ -75,7 +75,7 @@ onMounted(async () => {
 <template>
   <div class="page narrow">
     <!-- simple408 同款鼠标氛围（光斑跟随 + 涟漪）：仅主页挂载，其他页面保持纯净 -->
-    <CursorRipple />
+    <HomeAmbient />
     <div v-if="notice" class="announce">
       <span class="announce-tag">公告</span>
       <div class="announce-body"><MdView :content="notice" /></div>
