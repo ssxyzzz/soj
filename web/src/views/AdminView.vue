@@ -178,9 +178,9 @@ async function switchSubTab(target: SubTab) {
 </template>
 
 <style scoped>
-/* v3 后台布局：页头（kicker + 大标题）+ 白卡导航列 + 主列，容器 1280 对齐全站 */
+/* v3 后台布局：页头（kicker + 大标题）+ 白卡导航列 + 主列，容器 1440 对齐全站（2026-10-25 回调） */
 .admin-wrap {
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
 }
 

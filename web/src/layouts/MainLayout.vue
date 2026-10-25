@@ -127,10 +127,10 @@ function onCommand(command: string) {
   height: 64px;
 }
 
-/* v3-full：内容 1280 + 左右 24（对齐 .topnav-in，弃 1328/28 视觉内收口径） */
+/* v3-full：内容 1440 + 左右 24（2026-10-25 容器回调 1280→1440，与 page-shell 同步） */
 .header-inner {
   box-sizing: border-box;
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 0 auto;
   display: flex;
   align-items: center;
