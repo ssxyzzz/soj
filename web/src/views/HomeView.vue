@@ -472,6 +472,17 @@ onMounted(async () => {
 
 .ccard .clname-row h3 {
   cursor: pointer;
+  margin: 0;
+}
+
+.ccard .clname-row h3:hover {
+  color: var(--soj-blue);
+}
+
+/* 名字行内的迷你点标随行居中（mini-tag 默认 flex-start 是给赛事标题行的，
+   在班级名行会把「私密」徽章顶到行顶，与班名错位——2026-10-25 修复） */
+.clname-row .mini-tag {
+  align-self: center;
 }
 
 .ccard .clname-row h3:hover {
