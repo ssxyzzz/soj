@@ -352,7 +352,8 @@ onUnmounted(stopPolling)
           <template v-if="!isObjective">
             <div class="entry-actions">
               <el-button type="primary" :disabled="submitDisabled" @click="openRailSubmit">提交代码</el-button>
-              <el-button :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
+              <!-- 次级 CTA：primary plain 浅蓝款，与主 CTA 拉开层次（2026-10-25 用户反馈加色） -->
+              <el-button type="primary" plain :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
             </div>
             <div v-if="submitDisabledReason" class="hint">{{ submitDisabledReason }}</div>
             <div class="entry-extras">
@@ -449,7 +450,8 @@ onUnmounted(stopPolling)
   color: var(--soj-blue);
 }
 
-/* 次要入口区（题解小按钮独占一行 + 我的提交/所有代码两列，2026-10-25 修复⑥） */
+/* 次要入口区（题解小按钮独占一行 + 我的提交/所有代码两列，2026-10-25 修复⑥）；
+   字号压到 12px——站点按钮三档只覆盖高度，small 档字号仍 14px，与主 CTA 拉不开（修复⑪） */
 .entry-extras {
   margin-top: 8px;
   display: grid;
@@ -459,6 +461,7 @@ onUnmounted(stopPolling)
 .entry-extras .el-button {
   width: 100%;
   margin-left: 0;
+  font-size: var(--soj-fs-12);
 }
 
 .entry-extras .entry-row {
