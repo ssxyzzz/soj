@@ -222,7 +222,8 @@ onUnmounted(() => {
         </el-table-column>
         <el-table-column label="时间" width="110">
           <template #default="{ row }">
-            <span class="mono dim">{{ fmtRel(row.created_at) }}</span>
+            <!-- 相对时间含中文（N 分钟前），不挂 mono——mono 栈无中文字形会落到衬线体（2026-10-25 修复⑫） -->
+            <span class="dim">{{ fmtRel(row.created_at) }}</span>
           </template>
         </el-table-column>
       </el-table>

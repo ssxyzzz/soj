@@ -21,7 +21,7 @@ import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
-import { fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
+import { fmtRel, fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
 import type { ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/types'
 
 const route = useRoute()
@@ -363,6 +363,8 @@ onUnmounted(stopPolling)
             <div v-for="s in recentMine" :key="s.id" class="soj-mini-li" @click="showMine = true">
               <SubStatus :status="s.status" :score="s.score" />
               <span class="grow mono">#{{ s.id }}</span>
+              <!-- 相对时间列（2026-10-25 用户反馈）：N 秒/分钟/小时前；含中文不挂 mono（修复⑫） -->
+              <span class="t">{{ fmtRel(s.created_at) }}</span>
               <span class="t mono">{{ s.time_ms ? `${s.time_ms}ms` : fmtShort(s.created_at).split(' ')[1] }}</span>
             </div>
             <p class="hint link" @click="showMine = true">查看全部 →</p>
