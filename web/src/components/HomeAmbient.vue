@@ -1,20 +1,13 @@
 <script setup lang="ts">
-// 首页专属氛围特效（2026-10-25 重设计，替代 CursorRipple）：参考 simple408.cn 的
-// 工程图纸气质——静态网格画布撤下，改为「图纸在灯下显影」：
-//   · 跟随光晕：大柔青斑 lerp 惯性拖尾（沿用原跟随机制）；
-//   · 局部网格：全屏 44px 网格层，radial mask 圆心 = 光斑位置（rAF 同步 --gx/--gy
-//     CSS 变量，mask 走合成层不触发 layout）——网格只在鼠标周围显现；
-//   · 涟漪环：移动时节流泛环（降频降浓，仅点缀）。
-// 挂载时给 body 加 home-ambient 类（撤全局青网格与双光晕，留冷白渐变底），卸载还原；
-// prefers-reduced-motion 时整套不启用（body 类也不加，静态画布保留）。
-// 仅 HomeView 挂载，其他页面保持原画布。
+// 首页专属光效（2026-10-25 重设计）：跟随光晕（520px 柔青斑 lerp 惯性拖尾，0.28 紧跟）
+// + 移动时的低频涟漪环。网格显影与静态画布撤下由全站 AmbientGrid（MainLayout 挂载）
+// 负责——本组件只叠首页的光，仅 HomeView 挂载；prefers-reduced-motion 时不启用。
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const layer = ref<HTMLElement>()
 const spot = ref<HTMLElement>()
-const grid = ref<HTMLElement>()
 
-// 目标点（鼠标）/ 当前点（光斑）；rAF 里按 0.1 缓动逼近产生拖尾波澜感
+// 目标点（鼠标）/ 当前点（光斑）；0.28 紧跟（2026-10-25 手感定稿），保留一丝拖尾波澜
 let tx = -600
 let ty = -600
 let cx = -600
@@ -24,21 +17,12 @@ let running = false
 let seen = false // 首次移动后才显示（加载时不可见）
 let lastRing = 0
 
-function paint() {
+function tick() {
+  cx += (tx - cx) * 0.28
+  cy += (ty - cy) * 0.28
   if (spot.value) {
     spot.value.style.transform = `translate3d(${cx - 260}px, ${cy - 260}px, 0)`
   }
-  if (grid.value) {
-    grid.value.style.setProperty('--gx', `${cx}px`)
-    grid.value.style.setProperty('--gy', `${cy}px`)
-  }
-}
-
-function tick() {
-  // 0.28：紧跟鼠标（2026-10-25 用户反馈「更跟手」回调 0.1），保留一丝拖尾波澜
-  cx += (tx - cx) * 0.28
-  cy += (ty - cy) * 0.28
-  paint()
   // 追平后停帧省电；下次 mousemove 重启
   if (Math.abs(tx - cx) < 0.5 && Math.abs(ty - cy) < 0.5) {
     running = false
@@ -65,9 +49,7 @@ function onMove(e: MouseEvent) {
     // 首次出现直接落在鼠标处，避免从屏外横穿
     cx = tx
     cy = ty
-    paint()
     spot.value?.classList.add('on')
-    grid.value?.classList.add('on')
   }
   if (!running) {
     running = true
@@ -83,7 +65,6 @@ function onMove(e: MouseEvent) {
 
 function onLeave() {
   spot.value?.classList.remove('on')
-  grid.value?.classList.remove('on')
   seen = false
 }
 
@@ -99,14 +80,12 @@ function unbind() {
 
 onMounted(() => {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  document.body.classList.add('home-ambient')
   bind()
 })
 
 onBeforeUnmount(() => {
   unbind()
   if (raf) cancelAnimationFrame(raf)
-  document.body.classList.remove('home-ambient') // 离开首页还原静态画布
 })
 </script>
 
@@ -114,7 +93,6 @@ onBeforeUnmount(() => {
   <teleport to="body">
     <div ref="layer" class="home-ambient-fx" aria-hidden="true">
       <div ref="spot" class="ambient-spot" />
-      <div ref="grid" class="ambient-grid" />
     </div>
   </teleport>
 </template>
@@ -147,40 +125,6 @@ onBeforeUnmount(() => {
 }
 
 .ambient-spot.on {
-  opacity: 1;
-}
-
-/* 局部网格：44px 双向线全屏铺底，radial mask 圆心跟随光斑——网格只在鼠标周围显影；
-   --gx/--gy 由 rAF 写入（组件根上无 scoped 命中问题：变量挂在 ref 元素自身）。
-   2026-10-25 用户反馈：范围加宽 300→560px，多档 alpha 落差做「越远越淡」的距离渐隐 */
-.ambient-grid {
-  position: absolute;
-  inset: 0;
-  --gx: 50vw;
-  --gy: 40vh;
-  background:
-    linear-gradient(rgba(122, 184, 196, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(122, 184, 196, 0.18) 1px, transparent 1px);
-  background-size: 44px 44px;
-  -webkit-mask-image: radial-gradient(
-    circle 560px at var(--gx) var(--gy),
-    rgba(0, 0, 0, 0.85) 0%,
-    rgba(0, 0, 0, 0.55) 40%,
-    rgba(0, 0, 0, 0.25) 70%,
-    transparent 100%
-  );
-  mask-image: radial-gradient(
-    circle 560px at var(--gx) var(--gy),
-    rgba(0, 0, 0, 0.85) 0%,
-    rgba(0, 0, 0, 0.55) 40%,
-    rgba(0, 0, 0, 0.25) 70%,
-    transparent 100%
-  );
-  opacity: 0;
-  transition: opacity 0.6s ease;
-}
-
-.ambient-grid.on {
   opacity: 1;
 }
 </style>

@@ -2,6 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import AmbientGrid from '@/components/AmbientGrid.vue'
 import TierBadge from '@/components/TierBadge.vue'
 import { authApi } from '@/api'
 import { useLevelsStore } from '@/stores/levels'
@@ -50,6 +51,8 @@ function onCommand(command: string) {
 
 <template>
   <el-container class="layout">
+    <!-- 全站网格氛围（2026-10-25 修复⑯）：网格在鼠标处显影，静态画布撤下；teleport 到 body -->
+    <AmbientGrid />
     <el-header class="header">
       <div class="header-inner">
         <!-- 品牌（v3-full 恒定形态）：渐变方块 + 流彩渐变字（旧「极境特效胶囊」态已退役） -->

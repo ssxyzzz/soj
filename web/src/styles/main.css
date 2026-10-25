@@ -326,15 +326,15 @@ body::after {
   mask-image: radial-gradient(ellipse 100% 72% at 50% 0%, #000 24%, transparent 78%);
 }
 
-/* 首页氛围特效态（HomeAmbient 挂载时注入，2026-10-25 修复⑮）：
-   静态青网格与双光晕撤下（冷白渐变保留），画布改为「网格在鼠标处显影」——
-   组件卸载即移除本类，其余页面静态画布不受影响 */
-body.home-ambient {
+/* 全站氛围特效态（AmbientGrid 于 MainLayout 挂载时注入，2026-10-25 修复⑯）：
+   静态青网格与双光晕全站撤下（冷白渐变保留），画布改为「网格在鼠标处显影」——
+   无光晕、无涟漪；组件卸载即移除本类；reduced-motion 不注入，静态画布保留 */
+body.ambient-on {
   background: linear-gradient(#fbfdff, #f1f6fd);
   background-attachment: fixed;
 }
 
-body.home-ambient::after {
+body.ambient-on::after {
   display: none;
 }
 
