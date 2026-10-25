@@ -189,7 +189,8 @@ const bigNo = computed(() => String(props.problem.id))
 }
 
 /* 标签格：默认只露出「标签」label，chips 透明占位（分格条不跳宽）；
-   悬停本格淡入，移走 3s 后淡出——延迟走 transition-delay，无需 JS 计时器 */
+   悬停本格快速淡入，移走即缓慢淡出、1 秒淡尽（2026-10-25 用户回调，原 3s 延迟撤）——
+   纯 transition 时长承载，无需 JS 计时器 */
 .tag-cell {
   cursor: default;
 }
@@ -198,7 +199,7 @@ const bigNo = computed(() => String(props.problem.id))
   display: inline-flex;
   align-items: center;
   opacity: 0;
-  transition: opacity 0.25s ease 3s;
+  transition: opacity 1s ease 0s;
 }
 
 .tag-cell:hover .meta-chips {
