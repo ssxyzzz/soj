@@ -223,7 +223,7 @@ function payload(): ProblemFormPayload | null {
     return null
   }
   if (tagsRequired.value && form.tag_ids.length === 0) {
-    ElMessage.warning('请至少选择一个标签')
+    ElMessage.warning('请至少选择一个知识点')
     return null
   }
   // 客观题的题面是「整题说明（可选）」，不强制填写；必填项转由小题列表承担（下方 validate）
@@ -314,7 +314,7 @@ function onSubmitClick() {
                 标签
                 <el-tooltip
                   placement="top"
-                  content="悬停展开下级、可搜索；单击卡片选中/取消，选中的标签显示在下方（点 × 可移除）；树的层级由 root 在后台「标签树」维护，改名后全站展示自动跟随"
+                  content="悬停展开下级、可搜索；单击卡片选中/取消，选中的知识点显示在下方（点 × 可移除）；树的层级由 root 在后台「知识树」维护，改名后全站展示自动跟随"
                 >
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
@@ -323,7 +323,7 @@ function onSubmitClick() {
             <div v-if="!tagTreeEmpty" class="tag-bar">
               <TagFilter :selected="form.tag_ids" @change="onTagsChange" />
             </div>
-            <span v-else class="dim">管理员尚未配置标签树（后台管理 → 标签树）</span>
+            <span v-else class="dim">管理员尚未配置知识树（后台管理 → 知识树）</span>
           </el-form-item>
           <el-form-item :required="form.type !== 'objective'">
             <template #label>

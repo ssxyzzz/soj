@@ -206,7 +206,7 @@ onMounted(() => {
         </h1>
       </div>
 
-      <!-- v3 toolbar：胶囊搜索（flex 自适应）+ 筛选 chips（标签/难度/高级筛选，激活蓝底白字） -->
+      <!-- v3 toolbar：胶囊搜索（flex 自适应）+ 筛选 chips（知识点/难度/高级筛选，激活蓝底白字） -->
       <div class="toolbar">
         <label class="soj-input search-pill">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -222,7 +222,7 @@ onMounted(() => {
           :class="{ on: tagOpen || tagSel.length }"
           @click="tagOpen = !tagOpen"
         >
-          标签<template v-if="tagSel.length"> · {{ tagSel.length }}</template>
+          知识点<template v-if="tagSel.length"> · {{ tagSel.length }}</template>
           <el-icon class="sel-arrow" :class="{ open: tagOpen }"><ArrowDown /></el-icon>
         </button>
         <button
@@ -243,7 +243,7 @@ onMounted(() => {
         </button>
       </div>
 
-      <!-- 标签面板（chip 展开） -->
+      <!-- 知识点面板（chip 展开） -->
       <div v-if="tagOpen && (tagStore.nodes.length || tagSel.length)" class="panel-row">
         <TagFilter :selected="tagSel" @change="onTagChange" />
       </div>
@@ -313,7 +313,7 @@ onMounted(() => {
               <TierBadge :tier="row.difficulty ?? 3" kind="difficulty" />
             </template>
           </el-table-column>
-          <el-table-column label="标签" min-width="180">
+          <el-table-column label="知识点" min-width="180">
             <template #default="{ row }">
               <FitTags v-if="row.tags?.length" :ids="row.tags" />
               <span v-else class="dim">—</span>
@@ -431,7 +431,7 @@ onMounted(() => {
         <el-button type="primary" style="width: 100%" @click="router.push('/login')">去登录</el-button>
       </RailCard>
 
-      <RailCard v-if="hotTags.length" ov="筛选" title="常用标签" class="aside-card">
+      <RailCard v-if="hotTags.length" ov="筛选" title="常用知识点" class="aside-card">
         <span
           v-for="t in hotTags"
           :key="t.id"

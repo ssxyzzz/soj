@@ -67,7 +67,7 @@ const bigNo = computed(() => String(props.problem.id))
       </h1>
     </div>
 
-    <!-- v3 prob-meta 分格条：时限/内存/通过数/难度/标签（难度在标签左；标签悬停显示，见 .meta-chips） -->
+    <!-- v3 prob-meta 分格条：时限/内存/通过数/难度/知识点/来源（难度在知识点左；知识点悬停显示，见 .meta-chips） -->
     <div class="soj-prob-meta">
       <template v-if="!isObjective">
         <div class="cell">时间限制 <b class="mono">{{ fmtSec(problem.time_limit_ms) }}</b></div>
@@ -82,7 +82,7 @@ const bigNo = computed(() => String(props.problem.id))
         <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
       </div>
       <div v-if="metaTags.length" class="cell tag-cell">
-        标签
+        知识点
         <span class="meta-chips">
           <span
             v-for="t in metaTags"

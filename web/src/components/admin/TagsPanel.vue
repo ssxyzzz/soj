@@ -20,6 +20,10 @@ const emit = defineEmits<{ (e: 'update:dirty', v: boolean): void }>()
 
 const tagStore = props.tree === 'meta' ? useMetaTreeStore() : useTagTreeStore()
 
+// 文案按树切换（2026-10-25）：知识树说「知识点」，来源标签树说「标签」
+const noun = computed(() => (props.tree === 'meta' ? '标签' : '知识点'))
+const treeName = computed(() => (props.tree === 'meta' ? '标签树' : '知识树'))
+
 // 草稿节点：children 恒为数组（序列化稳定，脏检查用 JSON 快照对比）。
 // 新节点用临时负数 id（仅作 DOM key），保存载荷映射回 0 由服务端取号。
 interface DraftNode {
@@ -131,8 +135,8 @@ function sumSubtree(n: DraftNode): number {
 
 function validateName(raw: string, siblings: DraftNode[], self?: DraftNode): string | null {
   const name = raw.trim()
-  if (!name) return '标签名不能为空'
-  if ([...name].length > 32) return '标签名超过 32 字'
+  if (!name) return `${noun.value}名不能为空`
+  if ([...name].length > 32) return `${noun.value}名超过 32 字`
   if (siblings.some((s) => s !== self && s.name === name)) return `同级已存在「${name}」`
   return null
 }
@@ -343,7 +347,7 @@ function commitAdd(fromBlur = false) {
     return
   }
   if (total.value >= 1000) {
-    ElMessage.warning('标签总数已达上限 1000')
+    ElMessage.warning(`${noun.value}总数已达上限 1000`)
     return
   }
   tempId -= 1
@@ -521,7 +525,7 @@ function downloadTemplate() {
   })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = '标签树模板.csv'
+  a.download = `${treeName.value}模板.csv`
   a.click()
   URL.revokeObjectURL(a.href)
 }
@@ -592,7 +596,7 @@ async function onImportFile(ev: Event) {
   const rows = parseCSV(decodeCsvText(await file.arrayBuffer()))
   const body = rows[0] && rows[0].map((c) => c.trim()).join(',') === IMPORT_COLUMNS.join(',') ? rows.slice(1) : rows
   if (!body.length) {
-    ElMessage.warning('文件里没有标签数据')
+    ElMessage.warning(`文件里没有${noun.value}数据`)
     return
   }
   // 重建树：同名同级自动合并；新节点用负数临时 id（保存时由服务端按名取号）
@@ -612,24 +616,24 @@ async function onImportFile(ev: Event) {
   }
   const totalImported = countNodes(roots)
   if (!totalImported) {
-    ElMessage.warning('文件里没有有效的标签（列：一级~五级，每行一条路径）')
+    ElMessage.warning(`文件里没有有效的${noun.value}（列：一级~五级，每行一条路径）`)
     return
   }
   if (totalImported > 1000) {
-    ElMessage.warning(`导入的标签共 ${totalImported} 个，超出上限 1000`)
+    ElMessage.warning(`导入的${noun.value}共 ${totalImported} 个，超出上限 1000`)
     return
   }
   const tooLong = roots.flatMap(function walk(n: DraftNode): string[] {
     return [n.name, ...n.children.flatMap(walk)].filter((x) => x.length > 32)
   })
   if (tooLong.length) {
-    ElMessage.warning(`存在超过 32 字的标签名（如「${tooLong[0]}」），请改短后再导入`)
+    ElMessage.warning(`存在超过 32 字的${noun.value}名（如「${tooLong[0]}」），请改短后再导入`)
     return
   }
   try {
     await ElMessageBox.confirm(
-      `导入 ${totalImported} 个标签将覆盖当前草稿（含未保存的修改）；导入后需再点「保存标签树」才会生效。确定导入？`,
-      '导入标签树',
+      `导入 ${totalImported} 个${noun.value}将覆盖当前草稿（含未保存的修改）；导入后需再点「保存${treeName.value}」才会生效。确定导入？`,
+      `导入${treeName.value}` + '',
       { type: 'warning', confirmButtonText: '导入', cancelButtonText: '取消' },
     )
   } catch {
@@ -637,15 +641,15 @@ async function onImportFile(ev: Event) {
   }
   draft.value = roots
   path.value = []
-  ElMessage.success(`已导入 ${totalImported} 个标签到草稿，检查无误后点「保存标签树」生效`)
+  ElMessage.success(`已导入 ${totalImported} 个${noun.value}到草稿，检查无误后点「保存${treeName.value}」生效`)
 }
 
 async function onSave() {
   if (!dirty.value || saving.value) return
   try {
     await ElMessageBox.confirm(
-      `将整树覆盖为 ${total.value} 个标签：同名标签保留引用不变，被删除或改名的标签若仍被题目引用会拦截。确定保存？`,
-      '保存标签树',
+      `将整树覆盖为 ${total.value} 个${noun.value}：同名标签保留引用不变，被删除或改名的${noun.value}若仍被题目引用会拦截。确定保存？`,
+      `保存${treeName.value}` + '',
       { type: 'warning', confirmButtonText: '保存', cancelButtonText: '取消' },
     )
   } catch {
@@ -662,7 +666,7 @@ async function doSave() {
   removedTagIds.value = []
   try {
     const r = await tagApi.save(toPayload(draft.value), props.tree)
-    ElMessage.success(`标签树已保存（${r.count} 个标签）`)
+    ElMessage.success(`${treeName.value}已保存（${r.count} 个${noun.value}）`)
     // 保存后新节点已取号，重拉面板数据（树 + 引用数），名字映射广播刷新
     const fresh = await tagApi.adminTree(props.tree)
     draft.value = fromServer(fresh.nodes)
@@ -722,14 +726,14 @@ async function unbind(row?: TagRefProblem) {
   <el-card v-loading="loading">
     <template #header>
       <div class="panel-header">
-        <span>标签树</span>
+        <span>{{ treeName }}</span>
         <div class="header-actions">
           <el-tag v-if="dirty" type="warning" size="small">未保存</el-tag>
-          <span class="dim">{{ total }} 个标签</span>
-          <el-button @click="downloadTemplate">下载标签树</el-button>
-          <el-button @click="pickImport">导入标签树</el-button>
+          <span class="dim">{{ total }} 个{{ noun }}</span>
+          <el-button @click="downloadTemplate">下载{{ treeName }}</el-button>
+          <el-button @click="pickImport">导入{{ treeName }}</el-button>
           <el-button type="primary" :loading="saving" :disabled="!dirty" @click="onSave">
-            保存标签树
+            保存{{ treeName }}
           </el-button>
           <input ref="importInput" type="file" accept=".csv" class="import-input" @change="onImportFile" />
         </div>
@@ -737,12 +741,12 @@ async function unbind(row?: TagRefProblem) {
     </template>
     <el-alert type="info" :closable="false" class="howto">
       <p>
-        悬停展开下一级；单击列出包含此标签的题目；双击改名（回车确认）；点右侧 × 删除；长按拖动换位；
-        悬停行尾或空标签下方的 ＋ 新增。修改后点右上角「保存标签树」生效，被题目使用的标签需先解绑才能删除。
+        悬停展开下一级；单击列出包含此{{ noun }}的题目；双击改名（回车确认）；点右侧 × 删除；长按拖动换位；
+        悬停行尾或空{{ noun }}下方的 ＋ 新增。修改后点右上角「保存{{ treeName }}」生效，被题目使用的{{ noun }}需先解绑才能删除。
       </p>
     </el-alert>
 
-    <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
+    <el-input v-model="search" class="tag-search" clearable :placeholder="`搜索${noun}…`" />
     <div class="tag-board" @click.self="exitFloating" @mouseleave="scheduleHoverClear">
       <!-- 每级行独立横向滚动：无滚动条，滚轮只在鼠标所在行拦截+横移；各行各自记位置，
            行内有溢出即整行接管（滚到头也不带动页面下滑） -->
@@ -807,7 +811,7 @@ async function unbind(row?: TagRefProblem) {
           <div
             v-if="showMini(item.node)"
             class="tag-card add-card"
-            title="新增子标签"
+            title="新增子级{{ noun }}"
             @click.stop="startAddUnder(item.node)"
           >
             <el-input
@@ -828,7 +832,7 @@ async function unbind(row?: TagRefProblem) {
         <div
           v-if="showRowAdd(r.depth)"
           class="tag-card add-card"
-          title="新增标签"
+          title="新增{{ noun }}"
           @click.stop="startAdd(r.depth)"
         >
           <el-input
@@ -846,7 +850,7 @@ async function unbind(row?: TagRefProblem) {
         </div>
       </div>
       <div v-if="!rows[0].items.length" class="dim empty-tip">
-        {{ search.trim() ? '没有匹配的标签' : '（空树：用上面的 ＋ 建第一个标签）' }}
+        {{ search.trim() ? `没有匹配的${noun}` : `（空树：用上面的 ＋ 建第一个${noun}）` }}
       </div>
       <!-- 底部两行缓冲：末级展开后鼠标继续下移不出容器（进垫片取消收起计时） -->
       <div class="tag-board-pad" @mouseenter="cancelHoverClear" />
@@ -855,7 +859,7 @@ async function unbind(row?: TagRefProblem) {
 
     <div v-if="tagProblems" class="tag-problems">
       <div class="tp-head">
-        <span>包含标签「{{ tagProblems.name }}」的题目：{{ tagProblems.total }} 道</span>
+        <span>包含{{ noun }}「{{ tagProblems.name }}」的题目：{{ tagProblems.total }} 道</span>
         <el-pagination
           v-if="tagProblems.total > PAGE_SIZE"
           v-model:current-page="problemsPage"
@@ -872,7 +876,7 @@ async function unbind(row?: TagRefProblem) {
           #{{ p.id }} {{ p.title }}
         </router-link>
       </div>
-      <div v-else class="dim">（还没有题目使用此标签）</div>
+      <div v-else class="dim">（还没有题目使用此{{ noun }}）</div>
     </div>
 
     <template v-if="blockedProblems">
@@ -895,7 +899,7 @@ async function unbind(row?: TagRefProblem) {
       <el-table stripe :data="blockedProblems" size="small">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="题目" min-width="240" />
-        <el-table-column label="使用的标签" min-width="260">
+        <el-table-column label="使用的{{ noun }}" min-width="260">
           <template #default="{ row }">
             <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-gap">{{ t }}</el-tag>
             <span v-if="!row.tags?.length" class="dim">（无）</span>
