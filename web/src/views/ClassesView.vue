@@ -118,8 +118,9 @@ onMounted(load)
             <div class="name-row">
               <h3 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h3>
               <span v-if="c.private" class="cl-chip lock">🔒 私密</span>
-              <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口 -->
-              <span v-else-if="c.owner_id === userStore.uid" class="cl-chip joined">{{ c.owner_name }}的班</span>
+              <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口。
+                   私密徽章与身份徽章互相独立（2026-10-25：私密班的建班人不再丢「xxx的班」） -->
+              <span v-if="c.owner_id === userStore.uid" class="cl-chip joined">{{ c.owner_name }}的班</span>
               <span v-else-if="c.joined" class="cl-chip joined">✓ 已加入</span>
               <el-button v-else size="small" type="primary" link @click="openJoin(c)">加入</el-button>
             </div>
@@ -205,12 +206,12 @@ onMounted(load)
   flex-wrap: wrap;
 }
 
-/* v3 clcard：班级名藏蓝 15.5/800，hover 主蓝 */
+/* v3 clcard：班级名藏蓝 17/800（2026-10-25 用户反馈关键信息偏小上调），hover 主蓝 */
 .name {
   margin: 0;
   cursor: pointer;
   color: var(--soj-navy);
-  font-size: 15.5px;
+  font-size: 17px;
   font-weight: var(--soj-fw-heavy);
 }
 
@@ -243,7 +244,7 @@ onMounted(load)
 .intro {
   color: var(--soj-ink-2);
   margin: 6px 0 8px;
-  font-size: var(--soj-fs-13);
+  font-size: var(--soj-fs-14);
   line-height: 1.7;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -256,8 +257,8 @@ onMounted(load)
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
-  font-size: var(--soj-fs-12);
-  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
   margin-top: 2px;
 }
 
