@@ -1,20 +1,27 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
 
 // 表格标签列：标签按层级优先级展示（一级 > 二级 > 三级…，同级保持原序），
 // 量宽截断——能整颗放下几颗显示几颗，放不下的整颗隐藏（visibility，不允许半裁残字），
 // 行尾 +N 汇总；悬停整格 50ms 用同款样式展示全部标签。
-const props = defineProps<{ ids: number[] }>()
-const tagStore = useTagTreeStore()
+// tree（2026-10-25 双树）：knowledge = 知识树（默认），meta = 来源标签树——题表
+// 「知识点/标签」列头点击切换时同一列复用本组件，两树 API 同构。
+const props = withDefaults(
+  defineProps<{ ids: number[]; tree?: 'knowledge' | 'meta' }>(),
+  { tree: 'knowledge' },
+)
+const tagStore = computed(() => (props.tree === 'meta' ? useMetaTreeStore() : useTagTreeStore()))
+watch(() => props.tree, () => tagStore.value.ensure(), { immediate: true })
 
 const box = ref<HTMLElement>()
 const visible = ref(props.ids.length)
 let ro: ResizeObserver | undefined
 
 // 层级优先级排序（levelOf 未入树标签默认一级）；ES2019+ sort 稳定，同级保序
-const sortedIds = computed(() => [...props.ids].sort((a, b) => tagStore.levelOf(a) - tagStore.levelOf(b)))
+const sortedIds = computed(() => [...props.ids].sort((a, b) => tagStore.value.levelOf(a) - tagStore.value.levelOf(b)))
 
 const overflow = computed(() => visible.value < props.ids.length)
 const hidden = computed(() => props.ids.length - visible.value)

@@ -359,7 +359,9 @@ body.ambient-on::after {
 .el-table {
   --el-table-header-bg-color: var(--soj-surface-3);
   --el-table-border-color: var(--el-border-color-light);
-  --el-table-row-hover-bg-color: var(--soj-surface-2);
+  /* 悬停行 7% 品牌蓝（2026-10-25 验收反馈：原 surface-2 ≈2% 蓝，与行底基本不可分）；
+     与「我的」行高亮同色阶（.me-row 默认 4.5% / 悬停 10%，层级见下） */
+  --el-table-row-hover-bg-color: rgba(36, 85, 218, 0.07);
   font-size: var(--soj-fs-14);
   /* EP 自声明在 .el-table 上（:root 覆盖无效）：表头藏蓝 / 表体墨水色 */
   --el-table-header-text-color: var(--soj-navy);
@@ -1394,16 +1396,17 @@ samp {
   font-weight: var(--soj-fw-bold);
 }
 
-/* ---- 十阶色轴（v3-full 静态重设计 2026-10-24；v0.21 徽章改版 2026-10-25）----
+/* ---- 十阶色轴（v3-full 静态重设计 2026-10-24；v0.21 徽章改版 2026-10-25；v9 换装 2026-10-25）----
    名字定稿（王者荣耀段位体系）：青铜/白银/黄金/铂金/钻石/星耀/宗师/王者/传奇/极境。
    难度徽章 = .diff-* 浅色胶囊（底 11% / 边 25% / 字深一档）+ 旋转方块点缀，
    用户等级徽章 = .ulv-* 同色实色胶囊 + 特效链（见下方「用户等级徽章」段），
-   第 10 档极境 = 六彩同源两形制：.ulv-10 六彩渐变实底流动、.diff-10 浅色彩虹
-   （2026-10-25 拍板，稿 = design-preview/soj-tier-preview-b-heartbeat-v5.html）。 */
+   第 10 档极境 = 六彩同源两形制：.ulv-10 六彩渐变实底流动、.diff-10 浅色彩虹 + 深金真边框
+   （拍板稿 = private_doc/preview/soj-tier-preview-b-heartbeat-v9.html，色轴 v4：王者承原传奇
+   绯玫红 + 心跳双环，传奇换深邃黑金——轴值取其金，等级本体黑曜石底）。 */
 :root {
-  /* v3-full 色轴（2026-10-24 重设计，按名字映射）：青铜铜棕 → 白银银灰 → 黄金琥珀 →
-     铂金铂蓝 → 钻石钻绿 → 星耀星紫 → 宗师烈橙（v3 未指定，沿用） → 王者深紫 →
-     传奇正红（v3 未指定，沿用） → 极境六彩渐变（.ulv-10 实底流动；.diff-10 浅彩虹） */
+  /* 色轴 v4（2026-10-25 v9 换装，英雄联盟段位材质映射）：青铜暗铜褐 → 白银银青灰 →
+     黄金亮金 → 铂金青绿 → 钻石亮蓝 → 星耀亮紫 → 宗师红橙 →
+     王者绯玫红（承原传奇，含心跳双环） → 传奇黑金（轴值取其金） → 极境六彩渐变 */
   --soj-tier-1: #b4793f; /* 青铜 · 铜棕 */
   --soj-tier-2: #75868f; /* 白银 · 银灰 */
   --soj-tier-3: #d99141; /* 黄金 · 琥珀 */
@@ -1411,19 +1414,21 @@ samp {
   --soj-tier-5: #237e6b; /* 钻石 · 钻绿（字色加深 #1D6B5B） */
   --soj-tier-6: #7c3aed; /* 星耀 · 星紫 */
   --soj-tier-7: #ee7e1f; /* 宗师 · 烈橙 */
-  --soj-tier-8: #7c3aed; /* 王者 · 深紫（底/边 #7C3AED、字 #6D28D9） */
-  --soj-tier-9: #d64550; /* 传奇 · 正红 */
+  --soj-tier-8: #e63946; /* 王者 · 绯玫红（v9 承原传奇；原深紫退役） */
+  --soj-tier-9: #d4af37; /* 传奇 · 黑金（轴值取其金；等级本体为黑曜石底） */
 }
 
 /* SOJ 顶栏品牌恒为方块 + 流彩字（v3-full：品牌特效态退役，不再挂 ulv 族） */
 
-/* ---- 用户等级徽章（v0.21 重设计：同轴实色炫彩版）----
+/* ---- 用户等级徽章（v0.21 重设计：同轴实色炫彩版；v9 换装 2026-10-25）----
    与难度徽章同一色轴（--lc 同 --dc）：难度 = 静态浅色 tag（阅读面不炫、与站点统一），
    等级 = 同色实色胶囊 + 特效链——低段位朴素，高段位逐级递增：
-   Lv.3–4 色圈描边 + 微光 → Lv.5–6 光晕呼吸 + 星芒 → Lv.7–8 强呼吸 + 白流光扫过 →
-   Lv.9 心跳外扩环 → Lv.10 极境六彩渐变流动压轴（六彩与难度 D10 浅彩虹同源；
-   参考 tier-preview 特效链，按青格蓝调收敛：光晕低透明度、动画低速 ≥4.6s、白星低调）。
-   系统「减少动效」时整体退静态实色。特效恒开（后台 effects_* 字段保留未消费）。 */
+   Lv.3–4 玻璃高光 + 微光 → Lv.5–6 光晕呼吸 + 星芒 → Lv.7 强呼吸 + 白流光 →
+   Lv.8 王者绯玫红 + 心跳双环（9px，全站心跳基准）→
+   Lv.9 传奇深邃黑金（黑曜石底 + 金脉涌动替代流光 + 黑色心跳 10px + 墨色粒子）→
+   Lv.10 极境六彩渐变流动 + 金框 + 彩色心跳 11px（rbcycle 22.8s 每拍一色）+ 六彩粒子压轴
+   （拍板稿 = private_doc/preview/soj-tier-preview-b-heartbeat-v9.html）。
+   系统「减少动效」时整体退静态实色、粒子隐藏。特效恒开（后台 effects_* 字段保留未消费）。 */
 .ulv-1 { --lc: #b4793f; }
 .ulv-2 { --lc: #75868f; }
 .ulv-3 { --lc: #d99141; }
@@ -1431,9 +1436,9 @@ samp {
 .ulv-5 { --lc: #237e6b; }
 .ulv-6 { --lc: #7c3aed; }
 .ulv-7 { --lc: #ee7e1f; }
-.ulv-8 { --lc: #6d28d9; }
-.ulv-9 { --lc: #d64550; }
-.ulv-10 { --lc: #7e3e9e; }
+.ulv-8 { --lc: #e63946; } /* 王者 · 绯玫红（v9 承原传奇） */
+.ulv-9 { --lc: #d4af37; } /* 传奇 · 黑金（轴值取其金；本体黑曜石底，见 .ulv-9.ulv-tag） */
+.ulv-10 { --lc: #7e3e9e; } /* 极境锚点星紫（六彩渐变覆盖后的兜底底色） */
 
 .ulv-tag {
   position: relative;
@@ -1444,41 +1449,109 @@ samp {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-/* 特效链（fx 类由 TierBadge 按档位挂载；Lv.1–2 朴素无特效） */
+/* 特效链（fx 类由 TierBadge 按档位挂载；Lv.1–2 朴素无特效；参数 = v9 预览定稿） */
 .ulv-fx3,
 .ulv-fx4 {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--lc) 38%, transparent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 0 8px color-mix(in srgb, var(--lc) 30%, transparent);
 }
 
 .ulv-fx5,
 .ulv-fx6 {
-  box-shadow: 0 0 7px color-mix(in srgb, var(--lc) 40%, transparent);
-  animation: ulv-glow 5s ease-in-out infinite;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 0 10px color-mix(in srgb, var(--lc) 46%, transparent);
+  animation: ulv-glow 4.6s ease-in-out infinite;
 }
 
-.ulv-fx7,
+.ulv-fx7 {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 0 13px color-mix(in srgb, var(--lc) 55%, transparent);
+  animation: ulv-glow2 4.6s ease-in-out infinite;
+}
+
+/* 王者（Lv.8）：绯玫红三段渐变（v9 承原传奇材质，135°）+ 心跳双环——外扩 9px，全站心跳基准 */
+.ulv-8.ulv-tag {
+  background: linear-gradient(135deg, #f2605a, #e63946 55%, #c11f2e);
+}
+
 .ulv-fx8 {
-  box-shadow: 0 0 10px color-mix(in srgb, var(--lc) 48%, transparent);
-  animation: ulv-glow2 5s ease-in-out infinite;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 0 0 1px color-mix(in srgb, var(--lc) 58%, transparent),
+    0 0 14px color-mix(in srgb, var(--lc) 55%, transparent);
+  animation: ulv-beat 3.8s ease-in-out infinite;
 }
 
-/* 白流光（Lv.7+）：光带缓慢扫过胶囊 */
+/* 白流光（Lv.7 / Lv.8 / Lv.10，3.6s；传奇 v9 改金脉，不在此列） */
 .ulv-fx7::before,
 .ulv-fx8::before,
-.ulv-fx9::before {
+.ulv-fx10::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 38%, rgba(255, 255, 255, 0.42) 50%, transparent 62%);
+  background: linear-gradient(105deg, transparent 36%, rgba(255, 255, 255, 0.5) 50%, transparent 64%);
   transform: translateX(-130%);
   pointer-events: none;
-  animation: ulv-sweep 4.2s ease-in-out infinite;
+  animation: ulv-sweep 3.6s ease-in-out infinite;
 }
 
-/* Lv.9 心跳外扩环 */
+/* 传奇（Lv.9）：深邃黑金（v9 新设计）——黑曜石三段底 + 古铜金描边；
+   金脉（宽幅鎏金光带）在黑底下 9s 往复涌动，替代白流光 */
+.ulv-9.ulv-tag {
+  border-color: #a9852b;
+  background:
+    linear-gradient(115deg, transparent 30%, rgba(212, 175, 55, 0.34) 50%, transparent 70%),
+    linear-gradient(135deg, #2b2721, #16130d 55%, #0b0a07);
+  background-size:
+    240% 100%,
+    100% 100%;
+}
+
+/* 传奇（fx9）黑色心跳：黑气外扩 10px（黑曜石底的黑晕压向页面，「深邃」的呼吸感），
+   鎏金内环 1px 恒定不随脉冲变色；金脉与金星照旧 */
 .ulv-fx9 {
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--lc) 55%, transparent), 0 0 12px color-mix(in srgb, var(--lc) 52%, transparent);
-  animation: ulv-beat 4.6s ease-in-out infinite;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 0 1px rgba(212, 175, 55, 0.42),
+    0 0 12px rgba(12, 10, 6, 0.38);
+  animation:
+    ulv-vein 9s ease-in-out infinite,
+    ulv-beat9 3.8s ease-in-out infinite;
+}
+
+/* 传奇金星泛金 */
+.ulv-fx9 .lv-star {
+  color: #ffe9a8;
+  text-shadow: 0 0 6px rgba(212, 175, 55, 0.9);
+}
+
+/* 心跳粒子（v9）：与心跳同周期（3.8s），峰值现形 → 向外飞散 → 淡出；
+   挂在胶囊外层 .lvw wrapper 上（.ulv-tag overflow:hidden 会裁掉内部伪元素），
+   颜色/定位/外飞向量（--dx/--dy）由 TierBadge 内联。仅 Lv.9（墨色 5 粒）/ Lv.10（六彩 6 粒）。 */
+.lvw {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.lvw > .tier-badge {
+  max-width: 100%;
+}
+
+.lv-pt {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 5px currentColor;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+  animation: ulv-pop 3.8s ease-out infinite;
 }
 
 /* 呼吸星（TierBadge 按档位渲染 1–4 颗，位置/错拍内联） */
@@ -1489,53 +1562,171 @@ samp {
   font-style: normal;
   color: rgba(255, 255, 255, 0.92);
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.55);
-  animation: lv-tw 5s ease-in-out infinite;
+  animation: lv-tw 4.2s ease-in-out infinite;
 }
 
-/* Lv.10 极境：六彩渐变流动（120° 正红→烈橙→金→绿→钻蓝→星紫，与难度 D10 浅彩虹同源）
-   + 白星 + 紫辉呼吸（双类特异度压过 fx 链动画；辉光/退场随锚点星紫） */
+/* 极境彩搏的当前色：注册 <color> 才能随 ulv-rbcycle 平滑插值（过旧浏览器退红脉冲） */
+@property --ulv-rb {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: #e63946;
+}
+
+/* Lv.10 极境：六彩渐变流动 + 金色外框（极境身份，与传奇金环呼应）
+   + 彩色心跳（beat10 外扩 11px 压轴；脉冲色 --ulv-rb 由 rbcycle 驱动，22.8s = 6 拍每拍一色）
+   + 白流光 + 白星 + 六彩粒子（双类特异度压过 fx 链；flow 动背景、beat10 动阴影、rbcycle 动变量，三者并行） */
 .ulv-10.ulv-tag {
+  --ulv-rb: #e63946;
   background: linear-gradient(120deg, #e63946, #ee7e1f, #e9c963, #3cb371, #4a8dda, #7e3e9e);
   background-size: 300% 100%;
-  border-color: transparent;
+  border: 2px solid #d9b54a;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 0 0 1.5px rgba(212, 175, 55, 0.6),
+    0 0 13px color-mix(in srgb, var(--ulv-rb) 45%, transparent);
   animation:
-    ulv-flow 8s linear infinite alternate,
-    ulv-glow10 5s ease-in-out infinite;
+    ulv-flow 9s ease-in-out infinite alternate,
+    ulv-beat10 3.8s ease-in-out infinite,
+    ulv-rbcycle 22.8s linear infinite;
 }
 
 @keyframes ulv-glow {
   0%,
   100% {
-    box-shadow: 0 0 6px color-mix(in srgb, var(--lc) 28%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.38),
+      0 0 7px color-mix(in srgb, var(--lc) 32%, transparent);
   }
   50% {
-    box-shadow: 0 0 11px color-mix(in srgb, var(--lc) 46%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.38),
+      0 0 13px color-mix(in srgb, var(--lc) 52%, transparent);
   }
 }
 
 @keyframes ulv-glow2 {
   0%,
   100% {
-    box-shadow: 0 0 8px color-mix(in srgb, var(--lc) 36%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.42),
+      0 0 10px color-mix(in srgb, var(--lc) 42%, transparent);
   }
   50% {
-    box-shadow: 0 0 14px color-mix(in srgb, var(--lc) 55%, transparent);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.42),
+      0 0 17px color-mix(in srgb, var(--lc) 62%, transparent);
   }
 }
 
+/* 王者心跳双环（1px 内圈 + 9px 外扩脉冲；透缝已由实色 border 根治，恢复无缺角） */
 @keyframes ulv-beat {
   0%,
   100% {
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--lc) 55%, transparent),
-      0 0 10px color-mix(in srgb, var(--lc) 45%, transparent),
+      inset 0 1px 0 rgba(255, 255, 255, 0.42),
+      0 0 0 1px color-mix(in srgb, var(--lc) 58%, transparent),
+      0 0 12px color-mix(in srgb, var(--lc) 50%, transparent),
       0 0 0 0 color-mix(in srgb, var(--lc) 42%, transparent);
   }
   50% {
     box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--lc) 55%, transparent),
-      0 0 12px color-mix(in srgb, var(--lc) 52%, transparent),
-      0 0 0 7px rgba(0, 0, 0, 0);
+      inset 0 1px 0 rgba(255, 255, 255, 0.42),
+      0 0 0 1px color-mix(in srgb, var(--lc) 58%, transparent),
+      0 0 16px color-mix(in srgb, var(--lc) 60%, transparent),
+      0 0 0 9px rgba(0, 0, 0, 0);
+  }
+}
+
+/* 金脉涌动：光带自右向左扫过再折返，黑底上留出纯黑的「深邃」呼吸位 */
+@keyframes ulv-vein {
+  0%,
+  100% {
+    background-position: 100% 0, 0 0;
+  }
+  50% {
+    background-position: 0 0, 0 0;
+  }
+}
+
+/* 传奇心跳（v9）：黑色脉冲——鎏金内环恒定，黑气光晕呼吸 + 黑色冲击环外扩 10px */
+@keyframes ulv-beat9 {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 0 0 1px rgba(212, 175, 55, 0.42),
+      0 0 12px rgba(12, 10, 6, 0.38),
+      0 0 0 0 rgba(12, 10, 6, 0.42);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.16),
+      0 0 0 1px rgba(212, 175, 55, 0.42),
+      0 0 18px rgba(12, 10, 6, 0.52),
+      0 0 0 10px rgba(12, 10, 6, 0);
+  }
+}
+
+/* 极境心跳（v9）：彩色脉冲——1.5px 金框恒定，光晕与冲击环取当前色 --ulv-rb（rbcycle 驱动），
+   外扩 11px 压轴 */
+@keyframes ulv-beat10 {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      0 0 0 1.5px rgba(212, 175, 55, 0.6),
+      0 0 13px color-mix(in srgb, var(--ulv-rb) 45%, transparent),
+      0 0 0 0 color-mix(in srgb, var(--ulv-rb) 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      0 0 0 1.5px rgba(212, 175, 55, 0.7),
+      0 0 18px color-mix(in srgb, var(--ulv-rb) 60%, transparent),
+      0 0 0 11px color-mix(in srgb, var(--ulv-rb) 0%, transparent);
+  }
+}
+
+/* 彩搏色循环：22.8s = 6 拍，每拍一色（正红→烈橙→金→绿→钻蓝→星紫），平滑插值 */
+@keyframes ulv-rbcycle {
+  0% {
+    --ulv-rb: #e63946;
+  }
+  16.7% {
+    --ulv-rb: #ee7e1f;
+  }
+  33.3% {
+    --ulv-rb: #e9c963;
+  }
+  50% {
+    --ulv-rb: #3cb371;
+  }
+  66.7% {
+    --ulv-rb: #4a8dda;
+  }
+  83.3% {
+    --ulv-rb: #7e3e9e;
+  }
+  100% {
+    --ulv-rb: #e63946;
+  }
+}
+
+/* 心跳粒子：峰值帧现形 → 向外飞散（--dx/--dy 由 TierBadge 内联）→ 淡出 */
+@keyframes ulv-pop {
+  0%,
+  42% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.3);
+  }
+  50% {
+    opacity: 0.95;
+    transform: translate(calc(var(--dx, 6px) * 0.3), calc(var(--dy, 0px) * 0.3)) scale(1);
+  }
+  86%,
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx, 6px), var(--dy, 0px)) scale(0.25);
   }
 }
 
@@ -1567,33 +1758,38 @@ samp {
   }
 }
 
-@keyframes ulv-glow10 {
-  0%,
-  100% {
-    box-shadow: 0 2px 10px rgba(126, 62, 158, 0.4);
-  }
-  50% {
-    box-shadow: 0 2px 16px rgba(126, 62, 158, 0.55);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ulv-fx5,
   .ulv-fx6,
   .ulv-fx7,
   .ulv-fx8,
   .ulv-fx9,
+  .ulv-fx10,
   .ulv-10.ulv-tag,
   .lv-star,
+  .lv-pt,
   .ulv-fx7::before,
   .ulv-fx8::before,
-  .ulv-fx9::before {
+  .ulv-fx10::before {
     animation: none;
+  }
+
+  /* 粒子退静态：直接隐藏（飞行中的火花定格没有意义） */
+  .lv-pt {
+    opacity: 0;
+  }
+
+  /* 传奇金脉退静态：光带停在胶囊正中，留一道静态鎏金暗纹 */
+  .ulv-fx9 {
+    background-position: 50% 0, 0 0;
   }
 
   .ulv-10.ulv-tag {
     background-position: 50% 50%;
-    box-shadow: 0 2px 10px rgba(126, 62, 158, 0.4);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.4),
+      0 0 0 1.5px rgba(212, 175, 55, 0.6),
+      0 0 14px rgba(212, 175, 55, 0.5);
   }
 }
 
@@ -1609,9 +1805,15 @@ samp {
 .diff-5 { --dc: #237e6b; --dct: #1d6b5b; }
 .diff-6 { --dc: #7c3aed; --dct: #7c3aed; }
 .diff-7 { --dc: #ee7e1f; --dct: #ee7e1f; }
-.diff-8 { --dc: #7c3aed; --dct: #6d28d9; }
-.diff-9 { --dc: #d64550; --dct: #d64550; }
-.diff-10 { --dc: #7e3e9e; --dct: color-mix(in srgb, #7e3e9e 62%, #1f2d3d); }
+.diff-8 { --dc: #e63946; --dct: #ce3845; } /* 王者 · 绯玫红（v9 随色轴换色） */
+.diff-9 { --dc: #d4af37; --dct: #483c16; } /* 传奇 · 黑金款（v9）：深墨金字，古铜金边见下方覆盖 */
+.diff-10 { --dc: #d4af37; --dct: color-mix(in srgb, #7e3e9e 62%, #1f2d3d); } /* 极境 · 轴值取其金 */
+
+/* D9 传奇黑金款（v9）：底色沿用浅金（轴值即其金，底 11% 与 D1–D9 同形制），
+   字与小方块（currentColor）改深墨金、边框加深为古铜金——黑字压金底，即「黑金」浅色形制 */
+.diff-9.diff-tag {
+  border-color: color-mix(in srgb, #8a6a2a 45%, #ffffff);
+}
 
 .diff-tag {
   background: color-mix(in srgb, var(--dc) 11%, #ffffff);
@@ -1633,13 +1835,15 @@ samp {
   opacity: 0.85;
 }
 
-/* 第 10 档极境：浅色彩虹款（2026-10-25 拍板，稿 = design-preview/soj-tier-preview-b-heartbeat-v5.html）
-   —— 与 D1–D9 同形制不破例（底 11% / 边 25% / 字深一档、无阴影），档位色 = 极境六彩渐变
-   （正红→烈橙→金→绿→钻蓝→星紫，与等级 Lv.10 实底流动同源）；渐变描边用 padding-box/border-box
-   双层底实现（胶囊 999px 圆角下 border-image 会失效）；字色走 --dct（scoped 规则消费）。
-   纯静态、无动画，不涉减动效退场。 */
+/* 第 10 档极境：浅色彩虹款 + 深金真边框（v9 定稿，稿 = soj-tier-preview-b-heartbeat-v9.html）
+   —— 与 D1–D9 同形制（底 11% / 1px 框 / 字深一档、无阴影），档位色 = 极境六彩渐变
+   （正红→烈橙→金→绿→钻蓝→星紫，与等级 Lv.10 实底流动同源）。
+   v9 修掉的陈年缺陷：旧版 border-color: transparent + 25% 彩虹渐变描边，实机几乎不可见
+   （「极境没有框」）；现改真边框 = 深金 #C9A227 70%（等级金框 #D9B54A 的加深档，
+   浅金混白后融进彩底不可辨），背景只留 padding-box 单层，border-box 渐变描边废弃。
+   字色走 --dct（scoped 规则消费）。纯静态、无动画，不涉减动效退场。 */
 .diff-10.diff-tag {
-  border-color: transparent;
+  border-color: color-mix(in srgb, #c9a227 70%, #ffffff);
   background:
     linear-gradient(
       120deg,
@@ -1649,16 +1853,7 @@ samp {
       color-mix(in srgb, #3cb371 11%, #ffffff),
       color-mix(in srgb, #4a8dda 11%, #ffffff),
       color-mix(in srgb, #7e3e9e 11%, #ffffff)
-    ) padding-box,
-    linear-gradient(
-      120deg,
-      color-mix(in srgb, #e63946 25%, #ffffff),
-      color-mix(in srgb, #ee7e1f 25%, #ffffff),
-      color-mix(in srgb, #e9c963 25%, #ffffff),
-      color-mix(in srgb, #3cb371 25%, #ffffff),
-      color-mix(in srgb, #4a8dda 25%, #ffffff),
-      color-mix(in srgb, #7e3e9e 25%, #ffffff)
-    ) border-box;
+    ) padding-box;
 }
 
 /* 第 10 档极境：方块同步六彩渐变（覆盖同字色 currentColor） */
@@ -2170,7 +2365,7 @@ samp {
 }
 
 .el-table .el-table__row.me-row:hover > td.el-table__cell {
-  background: rgba(36, 85, 218, 0.07);
+  background: rgba(36, 85, 218, 0.1); /* 高普通行悬停（7%）一档，2026-10-25 随悬停提阶同步上调 */
 }
 
 /* ---- 窄容器（v3 wrap.narrow 960：排名/首页/导入窄版） ---- */

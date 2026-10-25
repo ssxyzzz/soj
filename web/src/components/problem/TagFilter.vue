@@ -28,7 +28,12 @@ onMounted(() => tagStore.ensure())
 
 <template>
   <div class="tag-filter">
-    <TagChips :nodes="tagStore.nodes" :selected="selectedSet" @toggle="toggle">
+    <TagChips
+      :nodes="tagStore.nodes"
+      :selected="selectedSet"
+      :placeholder="props.tree === 'meta' ? '搜索标签…' : '搜索知识点…'"
+      @toggle="toggle"
+    >
       <template #top-right>
         <template v-if="showSelected && selected.length">
           <span class="dim">已选：</span>

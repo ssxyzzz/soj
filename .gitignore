@@ -4,9 +4,14 @@ backups/
 # 部署同步脚本（各机自建：服务器别名与路径因机而异，README 里有模板）
 scripts/sync-to-server.sh
 
+# 用户私人文档：不入 git、不推服务器
+private_doc/
+
+## 本地测试题包中转站：不入 git、不推服务器
+/data/test/  
+
 # 前端
 node_modules/
-design-preview/
 web/dist/
 web/public/vditor/
 *.local
@@ -24,10 +29,6 @@ server/internal/webui/dist/*
 
 # 本地运行时产生的测试数据（正式数据在卷/服务器上）
 /data/testdata/
-
-# 本地测试题包中转站（data/test：hydro/topscoding 等待导入的 zip 一律放这里，
-# 不入 git、不推服务器——题目的正仓库是 OJ 数据卷不是 git；sync-to-server.sh 同步排除）
-/data/test/
 
 # 日志与系统文件
 *.log

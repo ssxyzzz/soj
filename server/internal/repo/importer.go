@@ -775,8 +775,8 @@ func (im *Importer) tagNamesOf(ctx context.Context, ids []int64) []string {
 	return out
 }
 
-// resolveTags 标签归一为树节点 ID：TagIDs 非空（网页建题）时校验存在；否则按 yaml tag
-// 名匹配（未匹配的入来源库 + rawTags 保留，v0.12）。
+// resolveTags 标签归一为知识树节点 ID：TagIDs 非空（网页建题）时校验存在；否则按 yaml tag
+// 名匹配知识树（未匹配的丢弃——v0.21 双树，来源库与 rawTags 已退役）。
 func (im *Importer) resolveTags(ctx context.Context, names []string) ([]int64, error) {
 	if len(im.TagIDs) > 0 {
 		if err := im.Repo.ValidateTagRefs(ctx, im.TagIDs); err != nil {

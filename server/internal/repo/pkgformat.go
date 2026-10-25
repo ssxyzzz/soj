@@ -4,7 +4,7 @@ package repo
 //
 //	<题号+标题>/
 //	├── problem.md      题面（唯一题面来源，样例直接写在正文里）
-//	├── problem.yaml    title / type / difficulty / tag / 来源四字段 /（客观题 questions）
+//	├── problem.yaml    title / type / difficulty / tag / hidden /（客观题 questions）；来源走标题方括号前缀（import-design.md §1.4）
 //	├── answer.yaml     客观题纯答案（方便比对；single/judge=下标、multiple=下标列表、blank=每空可接受串）
 //	├── answer.md       客观题解析（按「### 第 N 题」小节对应）
 //	└── data/           数据对原名（*.in + *.ans|.out）+ config.yaml + 附属文件

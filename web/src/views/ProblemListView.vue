@@ -35,7 +35,7 @@ function typeBadge(row: { type?: string; kind?: string }): string {
 const userStore = useUserStore()
 const tagStore = useTagTreeStore()
 const levels = useLevelsStore()
-levels.ensure() // 难度档名（筛选下拉与徽章展示）
+levels.ensure() // 难度档名（TierBadge 徽章与难度筛选胶囊展示）
 
 const list = ref<ProblemListItem[]>([])
 const total = ref(0)
@@ -47,7 +47,8 @@ const loading = ref(false)
 const keyword = ref('')
 const tagSel = ref<number[]>([])
 const diffSel = ref<number[]>([])
-// 筛选面板展开（v3-full chips 形态）：标签 / 难度 两个独立 chip 面板 + 高级筛选（来源/年份）
+// 筛选面板展开（v3-full chips 形态）：难度 / 知识点 / 标签（标签树）三个独立面板
+// （2026-10-25：原「高级筛选」更名「标签」，与知识点（知识树）对称）
 const advOpen = ref(false)
 const tagOpen = ref(false)
 const diffOpen = ref(false)
@@ -122,13 +123,24 @@ function onDiffChange(ids: number[]) {
   load()
 }
 
+// 难度胶囊面板（2026-10-25：el-select 换十档胶囊一字排开）单点切换
+function toggleDiff(d: number) {
+  onDiffChange(diffSel.value.includes(d) ? diffSel.value.filter((x) => x !== d) : [...diffSel.value, d])
+}
+
+// 题表标签列（2026-10-25）：「知识点/标签」列头点击换向——知识点=知识树 tags，标签=标签树 meta_tags
+const tagCol = ref<'knowledge' | 'meta'>('knowledge')
+function toggleTagCol() {
+  tagCol.value = tagCol.value === 'knowledge' ? 'meta' : 'knowledge'
+}
+
 function onMetaChange(ids: number[]) {
   metaSel.value = ids
   page.value = 1
   load()
 }
 
-// 高级筛选一键清空（只清来源/年份两路，不动关键词/标签/难度）
+// 标签（标签树）一键清空（只清这一路，不动关键词/知识点/难度）
 function clearAdv() {
   metaSel.value = []
   page.value = 1
@@ -206,7 +218,8 @@ onMounted(() => {
         </h1>
       </div>
 
-      <!-- v3 toolbar：胶囊搜索（flex 自适应）+ 筛选 chips（知识点/难度/高级筛选，激活蓝底白字） -->
+      <!-- v3 toolbar：胶囊搜索（flex 自适应）+ 筛选 chips（难度/知识点/标签，激活蓝底白字）
+           2026-10-25：去掉「高级筛选」名目，第三位改名「标签」（即标签树：地区/赛事/题库/年份/来源） -->
       <div class="toolbar">
         <label class="soj-input search-pill">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -219,14 +232,6 @@ onMounted(() => {
         <el-icon v-if="keyword" class="clear-btn" title="清空" @click="resetSearch"><CircleClose /></el-icon>
         <button
           class="soj-sel"
-          :class="{ on: tagOpen || tagSel.length }"
-          @click="tagOpen = !tagOpen"
-        >
-          知识点<template v-if="tagSel.length"> · {{ tagSel.length }}</template>
-          <el-icon class="sel-arrow" :class="{ open: tagOpen }"><ArrowDown /></el-icon>
-        </button>
-        <button
-          class="soj-sel"
           :class="{ on: diffOpen || diffSel.length }"
           @click="diffOpen = !diffOpen"
         >
@@ -235,33 +240,45 @@ onMounted(() => {
         </button>
         <button
           class="soj-sel"
+          :class="{ on: tagOpen || tagSel.length }"
+          @click="tagOpen = !tagOpen"
+        >
+          知识点<template v-if="tagSel.length"> · {{ tagSel.length }}</template>
+          <el-icon class="sel-arrow" :class="{ open: tagOpen }"><ArrowDown /></el-icon>
+        </button>
+        <button
+          class="soj-sel"
           :class="{ on: advOpen || activeAdvCount }"
           @click="advOpen = !advOpen"
         >
-          高级筛选<template v-if="activeAdvCount"> · {{ activeAdvCount }}</template>
+          标签<template v-if="activeAdvCount"> · {{ activeAdvCount }}</template>
           <el-icon class="sel-arrow" :class="{ open: advOpen }"><ArrowDown /></el-icon>
         </button>
       </div>
 
+      <!-- 难度面板：十档胶囊一字排开（即题表「难度」列同款 TierBadge，色随档位），点击多选 -->
+      <div v-if="diffOpen" class="panel-row diff-panel">
+        <div class="diff-chips">
+          <TierBadge
+            v-for="d in 10"
+            :key="d"
+            :tier="d"
+            kind="difficulty"
+            size="md"
+            class="diff-chip"
+            :class="{ sel: diffSel.includes(d) }"
+            @click="toggleDiff(d)"
+          />
+        </div>
+        <el-button v-if="diffSel.length" link type="primary" class="adv-clear" @click="onDiffChange([])">
+          清空
+        </el-button>
+      </div>
       <!-- 知识点面板（chip 展开） -->
       <div v-if="tagOpen && (tagStore.nodes.length || tagSel.length)" class="panel-row">
         <TagFilter :selected="tagSel" @change="onTagChange" />
       </div>
-      <!-- 难度面板（chip 展开；十档多选） -->
-      <div v-if="diffOpen" class="panel-row diff-panel">
-        <el-select
-          v-model="diffSel"
-          multiple
-          collapse-tags
-          placeholder="全部档位"
-          clearable
-          style="width: 320px"
-          @change="onDiffChange"
-        >
-          <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
-        </el-select>
-      </div>
-      <!-- 高级筛选面板（来源标签树：地区/赛事/题库/年份，2026-10-25 双树） -->
+      <!-- 标签面板（标签树：地区/赛事/题库/年份/来源，2026-10-25 双树；原「高级筛选」） -->
       <div v-show="advOpen" class="panel-row">
         <div class="adv-inline">
           <TagFilter tree="meta" :selected="metaSel" @change="onMetaChange" />
@@ -313,9 +330,19 @@ onMounted(() => {
               <TierBadge :tier="row.difficulty ?? 3" kind="difficulty" />
             </template>
           </el-table-column>
-          <el-table-column label="知识点" min-width="180">
+          <el-table-column min-width="180">
+            <template #header>
+              <!-- 知识点/标签切换列头（2026-10-25）：蓝色可点击，当前维度高亮，点击整表换向 -->
+              <button class="tag-col-toggle" title="点击切换知识点 / 标签" @click="toggleTagCol">
+                <span :class="{ cur: tagCol === 'knowledge' }">知识点</span><span class="slash">/</span><span :class="{ cur: tagCol === 'meta' }">标签</span>
+              </button>
+            </template>
             <template #default="{ row }">
-              <FitTags v-if="row.tags?.length" :ids="row.tags" />
+              <FitTags
+                v-if="(tagCol === 'knowledge' ? row.tags : row.meta_tags)?.length"
+                :ids="tagCol === 'knowledge' ? row.tags : row.meta_tags"
+                :tree="tagCol"
+              />
               <span v-else class="dim">—</span>
             </template>
           </el-table-column>
@@ -488,7 +515,7 @@ onMounted(() => {
   transform: rotate(180deg);
 }
 
-/* chip 展开面板（标签卡片流 / 难度下拉 / 高级筛选行） */
+/* chip 展开面板（难度胶囊行 / 知识点卡片流 / 标签卡片流） */
 .panel-row {
   margin-bottom: 16px;
   padding: 12px 14px;
@@ -496,11 +523,82 @@ onMounted(() => {
   border-radius: 14px;
 }
 
-.diff-panel {
-  width: fit-content;
+/* 题表「知识点/标签」切换列头：蓝色可点击，当前维度不透明 + 下划线，另一维度淡化 */
+.tag-col-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-blue);
+  cursor: pointer;
+  user-select: none;
 }
 
-/* 高级筛选一字排开：标签等宽、控件统一宽；窄屏自然折行 */
+.tag-col-toggle .slash {
+  padding: 0 1px;
+  opacity: 0.45;
+}
+
+.tag-col-toggle span:not(.slash) {
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.tag-col-toggle span.cur {
+  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+}
+
+.tag-col-toggle:hover span:not(.slash) {
+  opacity: 0.85;
+}
+
+.tag-col-toggle:hover span.cur {
+  opacity: 1;
+}
+
+.diff-panel {
+  display: flex;
+  align-items: center;
+  gap: 4px 12px;
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* 难度胶囊一字排开（TierBadge 同款胶囊，色随档位）：选中 = 底色加深 + 档位色实线描边，
+   未选中即默认浅胶囊；窄屏自然折行 */
+.diff-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-chip {
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.diff-chip:hover {
+  transform: translateY(-1px);
+}
+
+.diff-chip.sel.diff-tag {
+  background: color-mix(in srgb, var(--dc) 20%, #ffffff);
+  border-color: var(--dc);
+  box-shadow: inset 0 0 0 1px var(--dc);
+}
+
+/* 标签面板一字排开：标签等宽、控件统一宽；窄屏自然折行 */
 .adv-inline {
   display: flex;
   align-items: center;

@@ -7,10 +7,14 @@ import { computed, onBeforeUnmount, ref } from 'vue'
 
 import type { TagNode } from '@/types'
 
-const props = defineProps<{
-  nodes: TagNode[]
-  selected: Set<number>
-}>()
+const props = withDefaults(
+  defineProps<{
+    nodes: TagNode[]
+    selected: Set<number>
+    placeholder?: string // 搜索框占位符随树名变：知识树「搜索知识点…」/标签树「搜索标签…」
+  }>(),
+  { placeholder: '搜索标签…' },
+)
 
 const emit = defineEmits<{ toggle: [id: number] }>()
 
@@ -119,7 +123,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="tag-flow" @mouseleave="scheduleHoverClear">
     <div class="tag-top">
-      <el-input v-model="search" class="tag-search" clearable placeholder="搜索标签…" />
+      <el-input v-model="search" class="tag-search" clearable :placeholder="props.placeholder" />
       <!-- 顶行右侧插槽：TagFilter 在此挂已选展示（搜索标签框右边） -->
       <div class="tag-top-right">
         <slot name="top-right" />
