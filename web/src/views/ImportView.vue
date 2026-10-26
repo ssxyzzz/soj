@@ -517,14 +517,9 @@ const finishedIssues = computed(() =>
 .fmt b {
   color: var(--el-text-color-primary);
 }
-</style>
 
-/* ---- v3-full 导入页补充 ---- */
-/* 容器 1080（题包日志行宽口径） */
-.import-shell :deep(.page-shell) {
-  max-width: 1080px;
-}
-
+/* ---- v3-full 导入页补充（2026-10-26 修复：本段原追加在样式块闭合标签之后、从未生效；
+     容器限宽 1080 随全站页头对齐退役，导入页与各页统一 1440） ---- */
 .step-head {
   padding: 0 0 14px;
 }
@@ -574,3 +569,5 @@ const finishedIssues = computed(() =>
 .soj-ilog .result-line {
   line-height: 1.9;
 }
+
+</style>

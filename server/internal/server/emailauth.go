@@ -33,6 +33,17 @@ const (
 	codeGlobalPerDay = 300              // 全局每日上限
 )
 
+// 三类邮件正文模板写死在代码里（2026-10-26 拍板：无后台配置的必要，设置项退役）。
+// 占位符经 mailer.Render 替换：{{site}}/{{code}}/{{username}}/{{action}}。
+const (
+	tplRegister = "【{{site}}】邮箱验证码：{{code}}\n\n您正在 {{site}} 进行注册或绑定邮箱操作。" +
+		"验证码 5 分钟内有效，请勿泄露给他人。如非本人操作请忽略本邮件。"
+	tplReset = "【{{site}}】找回密码验证码：{{code}}\n\n您正在 {{site}} 重置账号 {{username}} 的登录密码。" +
+		"验证码 5 分钟内有效，请勿泄露给他人。如非本人操作请忽略本邮件。"
+	tplNotify = "【{{site}}】账号安全提醒\n\n您的账号 {{username}} {{action}}。" +
+		"如非本人操作，请立即联系管理员处理。"
+)
+
 var emailRE = regexp.MustCompile(`^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{2,}$`)
 
 // NormalizeEmail 邮箱归一：trim + 转小写（绑定/查重/发码统一口径）。
@@ -250,9 +261,9 @@ func (h *Handlers) EmailCode(c *gin.Context) {
 		return
 	}
 
-	tpl := s.TplRegisterVal()
+	tpl := tplRegister
 	if req.Purpose == repo.VerifyPurposeReset {
-		tpl = s.TplResetVal()
+		tpl = tplReset
 	}
 	codeUsername := bindUsername
 	if req.Purpose == repo.VerifyPurposeReset {
@@ -424,7 +435,7 @@ func (h *Handlers) notifyEmailAsync(s *repo.SystemSettings, to, subject string, 
 	if to == "" || s.MailChannelVal() != repo.MailChannelSMTP {
 		return
 	}
-	body := mailer.Render(s.TplNotifyVal(), vars)
+	body := mailer.Render(tplNotify, vars)
 	provider := mailer.NewSMTP(s.SMTP)
 	go func() {
 		if err := provider.Send(to, subject, body); err != nil {

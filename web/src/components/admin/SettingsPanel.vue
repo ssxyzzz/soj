@@ -28,9 +28,6 @@ const smtpPassword = ref('')
 const smtpFrom = ref('')
 const registerVerifyMode = ref<'none' | 'email'>('none')
 const passwordResetEnabled = ref(false)
-const tplRegister = ref('')
-const tplReset = ref('')
-const tplNotify = ref('')
 
 const savingSettings = ref(false)
 
@@ -52,9 +49,6 @@ onMounted(async () => {
     smtpFrom.value = s.smtp_from || ''
     registerVerifyMode.value = s.register_verify_mode ?? 'none'
     passwordResetEnabled.value = !!s.password_reset_enabled
-    tplRegister.value = s.tpl_register || ''
-    tplReset.value = s.tpl_reset || ''
-    tplNotify.value = s.tpl_notify || ''
   } catch {
     // 加载失败保留默认值展示
   }
@@ -80,9 +74,6 @@ async function saveSettings() {
       smtp_from: smtpFrom.value.trim(),
       register_verify_mode: registerVerifyMode.value,
       password_reset_enabled: passwordResetEnabled.value,
-      tpl_register: tplRegister.value,
-      tpl_reset: tplReset.value,
-      tpl_notify: tplNotify.value,
     })
     ElMessage.success('设置已保存')
     // 备案号/注册验证方式/找回开关改了登录页要跟着变：重置站点公开状态缓存
@@ -195,30 +186,6 @@ async function saveSettings() {
         <span class="dim" style="margin-left: 8px">
           开启后登录页出现「忘记密码」入口（验证码重置，防枚举）；关闭时学生找回请联系老师重置
         </span>
-      </el-form-item>
-      <el-form-item label="注册/绑定邮件模板">
-        <el-input
-          v-model="tplRegister"
-          type="textarea"
-          :rows="3"
-          placeholder="留空用内置默认；占位符 {{code}}/{{username}}/{{site}}"
-        />
-      </el-form-item>
-      <el-form-item label="找回邮件模板">
-        <el-input
-          v-model="tplReset"
-          type="textarea"
-          :rows="3"
-          placeholder="留空用内置默认；占位符 {{code}}/{{username}}/{{site}}"
-        />
-      </el-form-item>
-      <el-form-item label="安全通知模板">
-        <el-input
-          v-model="tplNotify"
-          type="textarea"
-          :rows="3"
-          placeholder="留空用内置默认；占位符 {{username}}/{{site}}/{{action}}（仅 smtp 通道发送）"
-        />
       </el-form-item>
     </el-form>
   </el-card>

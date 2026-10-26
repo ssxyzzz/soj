@@ -110,6 +110,8 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/submissions", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.ListSubmissions)
 		// 选人筛选（提交记录/所有代码的「选手」下拉）：登录即可按用户名/昵称模糊找账号
 		api.GET("/users/lookup", AuthRequired(h), h.LookupUsers)
+		// 用户公开主页（v0.17）：登录可见，本人与他人统一视图（gin 静态段 /lookup 优先匹配，无冲突）
+		api.GET("/users/:id/profile", AuthRequired(h), h.UserProfile)
 		api.GET("/submissions/:id", AuthOptional(h), h.GetSubmission)
 		api.POST("/submissions/:id/rejudge", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.RejudgeSubmission)
 		// 取消评测（v0.7.1）：本人 ∨ submission.view.all（handler 内校验）

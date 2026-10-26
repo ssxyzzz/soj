@@ -36,11 +36,6 @@ type SystemSettings struct {
 	RegisterVerifyMode string `bson:"registerVerifyMode,omitempty"`
 	// 忘记密码自助找回开关（v0.16）：默认关——开启前登录页不展示入口（老师重置仍是主路径）。
 	PasswordResetEnabled *bool `bson:"passwordResetEnabled,omitempty"`
-	// 三类邮件模板（v0.16）：注册/绑定验证码、找回验证码、账号安全通知。
-	// 占位符 {{code}}/{{username}}/{{site}}/{{action}}；空 = 用内置默认。
-	TplRegister string `bson:"tplRegister,omitempty"`
-	TplReset    string `bson:"tplReset,omitempty"`
-	TplNotify   string `bson:"tplNotify,omitempty"`
 }
 
 const (
@@ -55,14 +50,6 @@ const (
 	MailChannelSMTP     = "smtp"
 	RegisterVerifyNone  = "none"
 	RegisterVerifyEmail = "email"
-
-	// 内置默认模板（后台清空模板 = 回到这里）。
-	DefaultTplRegister = "【{{site}}】邮箱验证码：{{code}}\n\n您正在 {{site}} 进行注册或绑定邮箱操作。" +
-		"验证码 5 分钟内有效，请勿泄露给他人。如非本人操作请忽略本邮件。"
-	DefaultTplReset = "【{{site}}】找回密码验证码：{{code}}\n\n您正在 {{site}} 重置账号 {{username}} 的登录密码。" +
-		"验证码 5 分钟内有效，请勿泄露给他人。如非本人操作请忽略本邮件。"
-	DefaultTplNotify = "【{{site}}】账号安全提醒\n\n您的账号 {{username}} {{action}}。" +
-		"如非本人操作，请立即联系管理员处理。"
 )
 
 func downloadLimitPtr(v int) *int { return &v }
@@ -142,9 +129,6 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"smtp":                   s.SMTP,
 			"registerVerifyMode":     s.RegisterVerifyMode,
 			"passwordResetEnabled":   s.PasswordResetOpen(),
-			"tplRegister":            s.TplRegister,
-			"tplReset":               s.TplReset,
-			"tplNotify":              s.TplNotify,
 		}},
 	)
 	return err
@@ -169,30 +153,6 @@ func (s *SystemSettings) MailChannelVal() string {
 		return MailChannelSMTP
 	}
 	return MailChannelLog
-}
-
-// TplRegisterVal 注册/绑定验证码模板（空回内置默认）。
-func (s *SystemSettings) TplRegisterVal() string {
-	if s.TplRegister != "" {
-		return s.TplRegister
-	}
-	return DefaultTplRegister
-}
-
-// TplResetVal 找回验证码模板。
-func (s *SystemSettings) TplResetVal() string {
-	if s.TplReset != "" {
-		return s.TplReset
-	}
-	return DefaultTplReset
-}
-
-// TplNotifyVal 账号安全通知模板。
-func (s *SystemSettings) TplNotifyVal() string {
-	if s.TplNotify != "" {
-		return s.TplNotify
-	}
-	return DefaultTplNotify
 }
 
 // Mailer 当前邮件 provider：smtp 通道配置完整才返回 SMTP 实现，否则一律 log

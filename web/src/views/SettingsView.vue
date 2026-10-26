@@ -270,11 +270,12 @@ onMounted(() => {
           </el-select>
         </div>
         <div class="frow">
-          <span class="fl">学校<div class="fd">仅自己可见</div></span>
+          <!-- v0.17 公开主页：学校/年级对外展示；性别/QQ 维持仅自己可见 -->
+          <span class="fl">学校<div class="fd">展示在公开主页</div></span>
           <el-input v-model="profileForm.school" maxlength="64" placeholder="选填" style="width: 320px" />
         </div>
         <div class="frow">
-          <span class="fl">年级</span>
+          <span class="fl">年级<div class="fd">展示在公开主页</div></span>
           <el-input v-model="profileForm.grade" maxlength="16" placeholder="选填，如：初一 / 高二 / 大一" style="width: 320px" />
         </div>
         <div class="frow">
@@ -466,9 +467,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* v3 settings-wrap：920 单列；fcard 满宽（内部行式表单自带留白） */
+/* v3 settings-wrap：单列表单页；容器与全站统一 1440（2026-10-26 页头对齐拍板），宽度由卡内表单自带留白控制 */
 .settings-wrap {
-  max-width: 920px;
+  max-width: 1440px;
 }
 
 .fcard {

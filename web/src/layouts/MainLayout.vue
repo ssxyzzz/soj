@@ -40,7 +40,9 @@ onMounted(() => {
 })
 
 function onCommand(command: string) {
-  if (command === 'settings') {
+  if (command === 'me') {
+    router.push(`/users/${userStore.uid}`) // 公开主页（v0.17）
+  } else if (command === 'settings') {
     router.push('/settings')
   } else if (command === 'logout') {
     userStore.logout()
@@ -84,6 +86,8 @@ function onCommand(command: string) {
             </span>
             <template #dropdown>
             <el-dropdown-menu>
+              <!-- v0.17：公开主页入口 -->
+              <el-dropdown-item command="me">我的主页</el-dropdown-item>
               <el-dropdown-item command="settings">个人设置</el-dropdown-item>
               <el-dropdown-item command="logout" divided>退出登录</el-dropdown-item>
             </el-dropdown-menu>

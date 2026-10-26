@@ -84,7 +84,7 @@ onMounted(async () => {
     <!-- v0.19 三期 hero：kicker + 大标题渐变点睛 + 搜索胶囊（orb 渐变圆钮）+ 胶囊按钮组 -->
     <section class="hero">
       <div class="kicker hero-kicker">SANDBOX JUDGED · INSTANT SCORED</div>
-      <h1 class="title">把每一次提交，<br />都变成一次<em>成长</em>。</h1>
+      <h1 class="title">每一次提交，<br />都是一次<em>成长</em>。</h1>
       <p class="subtitle">面向班级与社团的轻量 Online Judge：提交代码，沙箱判题，实时出分。</p>
       <div class="hero-search">
         <label class="searchbar">

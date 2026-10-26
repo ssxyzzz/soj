@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import { rankApi } from '@/api'
 import TierBadge from '@/components/TierBadge.vue'
@@ -10,6 +11,7 @@ import type { RankItem } from '@/types'
 const levels = useLevelsStore()
 levels.ensure()
 const userStore = useUserStore()
+const router = useRouter()
 
 const list = ref<RankItem[]>([])
 const me = ref<RankItem | null>(null)
@@ -44,19 +46,22 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page narrow">
+  <!-- 容器与其他页面一致（2026-10-26 用户拍板：960 窄版退役，领奖台/表格铺标准 1440） -->
+  <div class="page">
     <div class="page-head">
       <div class="kicker">LEADERBOARD</div>
       <h1 class="page-title">解题排名<small>按通过题数排序 · 前 50 名</small></h1>
     </div>
 
-    <!-- 领奖台（前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3） -->
+    <!-- 领奖台（前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3）；整卡可点进公开主页 -->
     <div v-if="podium.length" class="podium" v-loading="loading">
       <div
         v-for="p in podiumOrder"
         :key="p.rank"
         class="card pcard"
         :class="{ p1: p.rank === 1, solo: podiumOrder.length === 1 }"
+        title="查看主页"
+        @click="router.push(`/users/${p.user_id}`)"
       >
         <div class="rank-no">{{ p.rank }}</div>
         <div class="pav" :style="p.rank === 1 ? undefined : { background: avColor(p.rank) }">
@@ -81,10 +86,10 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column label="选手" min-width="220">
           <template #default="{ row }">
-            <span class="player">
+            <router-link class="player" :to="`/users/${row.user_id}`">
               <b>{{ row.nickname || row.username }}</b>
               <span class="dim">@{{ row.username }}<template v-if="row.user_id === userStore.uid"> · 我</template></span>
-            </span>
+            </router-link>
           </template>
         </el-table-column>
         <el-table-column label="等级" width="150">
@@ -126,6 +131,7 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
   transition: transform 0.18s, box-shadow 0.18s;
 }
 
@@ -202,12 +208,18 @@ onMounted(async () => {
   font-weight: var(--soj-fw-bold);
 }
 
-/* 选手列：粗昵称 + @handle 弱化 */
+/* 选手列：粗昵称 + @handle 弱化（v0.17 起整格为链接，可点进公开主页） */
 .player {
   display: inline-flex;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+  text-decoration: none;
+  max-width: 100%;
+}
+
+.player:hover b {
+  color: var(--soj-blue);
 }
 
 .player b {

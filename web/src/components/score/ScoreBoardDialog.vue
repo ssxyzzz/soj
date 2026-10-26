@@ -93,7 +93,7 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
         </el-table-column>
         <el-table-column label="昵称" min-width="190" fixed="left">
           <template #default="{ row }">
-            <UserNameLevel :name="row.name" :level="row.level" :me="row.uid === myUid" />
+            <UserNameLevel :name="row.name" :level="row.level" :me="row.uid === myUid" :uid="row.uid" />
           </template>
         </el-table-column>
         <el-table-column label="总分" width="64" align="center" fixed="left">

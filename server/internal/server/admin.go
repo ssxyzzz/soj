@@ -244,9 +244,6 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"smtp_from":              s.SMTP.From,
 		"register_verify_mode":   s.RegisterVerifyModeVal(),
 		"password_reset_enabled": s.PasswordResetOpen(),
-		"tpl_register":           s.TplRegisterVal(),
-		"tpl_reset":              s.TplResetVal(),
-		"tpl_notify":             s.TplNotifyVal(),
 	})
 }
 
@@ -298,9 +295,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		SMTPFrom             *string `json:"smtp_from"`
 		RegisterVerifyMode   *string `json:"register_verify_mode"`
 		PasswordResetEnabled *bool   `json:"password_reset_enabled"`
-		TplRegister          *string `json:"tpl_register"`
-		TplReset             *string `json:"tpl_reset"`
-		TplNotify            *string `json:"tpl_notify"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -430,36 +424,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	if req.PasswordResetEnabled != nil {
 		s.PasswordResetEnabled = req.PasswordResetEnabled
 	}
-	saveTpl := func(sp *string, limit int) (string, bool) {
-		if len(*sp) > limit {
-			return "", false
-		}
-		return strings.TrimSpace(*sp), true
-	}
-	if req.TplRegister != nil {
-		if v, ok := saveTpl(req.TplRegister, 4<<10); !ok {
-			fail(c, http.StatusBadRequest, "注册/绑定邮件模板过长（上限 4KB）")
-			return
-		} else {
-			s.TplRegister = v
-		}
-	}
-	if req.TplReset != nil {
-		if v, ok := saveTpl(req.TplReset, 4<<10); !ok {
-			fail(c, http.StatusBadRequest, "找回邮件模板过长（上限 4KB）")
-			return
-		} else {
-			s.TplReset = v
-		}
-	}
-	if req.TplNotify != nil {
-		if v, ok := saveTpl(req.TplNotify, 4<<10); !ok {
-			fail(c, http.StatusBadRequest, "通知邮件模板过长（上限 4KB）")
-			return
-		} else {
-			s.TplNotify = v
-		}
-	}
 	// 与启动校验同一口径：smtp 通道开着但配置不全不让存——否则重启直接拒绝启动，
 	// 管理员把自己锁在门外（运行期 Mailer() 会降级 log，但重启过不去）。
 	if s.MailChannelVal() == repo.MailChannelSMTP && !s.SMTP.Ready() {
@@ -489,8 +453,5 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"smtp_from":              s.SMTP.From,
 		"register_verify_mode":   s.RegisterVerifyModeVal(),
 		"password_reset_enabled": s.PasswordResetOpen(),
-		"tpl_register":           s.TplRegisterVal(),
-		"tpl_reset":              s.TplResetVal(),
-		"tpl_notify":             s.TplNotifyVal(),
 	})
 }

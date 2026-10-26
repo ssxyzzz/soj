@@ -76,7 +76,8 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
           <span v-if="row.rank != null && row.rank > 0 && row.rank <= 3">{{ medals[row.rank - 1] }}</span>
           <span v-else>{{ row.rank ?? '—' }}</span>
         </span>
-        <UserNameLevel :name="row.name" :level="row.level" />
+        <!-- uid 可点进公开主页；.stop 防止冒泡触发行的「查看完整成绩表」 -->
+        <UserNameLevel :name="row.name" :level="row.level" :uid="row.uid" @click.stop />
         <span class="total">{{ row.total }}</span>
       </div>
     </div>

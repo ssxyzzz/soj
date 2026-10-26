@@ -40,6 +40,7 @@ import type {
   AdminTagTreeResult,
   TagNode,
   TagTreeResult,
+  UserPage,
 } from '@/types'
 
 const client = axios.create({ baseURL: '/api', timeout: 20000 })
@@ -301,6 +302,8 @@ export const submissionApi = {
 // 选人筛选（提交记录/所有代码的「选手」下拉）：按用户名/昵称模糊找账号
 export const userApi = {
   lookup: (kw: string) => get<LookupUser[]>('/users/lookup', { kw }),
+  // 用户公开主页（v0.17）：登录可见，本人与他人统一视图
+  profile: (id: number) => get<UserPage>(`/users/${id}/profile`),
 }
 
 export const rankApi = {
@@ -380,9 +383,6 @@ export const adminApi = {
       smtp_from: string
       register_verify_mode: 'none' | 'email'
       password_reset_enabled: boolean
-      tpl_register: string
-      tpl_reset: string
-      tpl_notify: string
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
@@ -402,9 +402,6 @@ export const adminApi = {
     smtp_from?: string
     register_verify_mode?: 'none' | 'email'
     password_reset_enabled?: boolean
-    tpl_register?: string
-    tpl_reset?: string
-    tpl_notify?: string
   }) =>
     put<{
       rate_limit_per_minute: number
@@ -424,9 +421,6 @@ export const adminApi = {
       smtp_from: string
       register_verify_mode: 'none' | 'email'
       password_reset_enabled: boolean
-      tpl_register: string
-      tpl_reset: string
-      tpl_notify: string
     }>('/admin/settings', patch),
   // 等级面板（v0.11，root）
   getLevelConfig: () => get<{ config: AdminLevelConfig }>('/admin/levelconfig'),

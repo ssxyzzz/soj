@@ -254,6 +254,58 @@ export interface LookupUser {
   nickname: string
 }
 
+// ---------- 用户公开主页（v0.17，GET /users/:id/profile） ----------
+
+// 首次 AC 条目：服务端全量下发（隐藏题已按观察者权限剔除），时间窗前端本地切
+export interface UserPageFirstAC {
+  pid: number
+  title: string
+  difficulty: number
+  hidden?: boolean
+  first_ac_at: string
+}
+
+// 近期提交（published 投影，不带代码/明细；点击进提交详情弹窗走既有权限）
+export interface UserPageRecent {
+  id: number
+  pid: number
+  title: string
+  status: string
+  score: number
+  lang?: string
+  created_at: string
+}
+
+// 比赛历史行：status = 场次时段；result 仅结束后出现——
+// hidden = 隐藏期未过（成绩未公布），published = 已公布（rank/score 随之下发）
+export interface UserPageContest {
+  id: number
+  title: string
+  status: 'scheduled' | 'running' | 'ended'
+  start: string
+  end: string
+  result?: 'hidden' | 'published'
+  rank?: number
+  score?: number
+  total_users?: number
+}
+
+// 主页聚合数据（本人与他人统一视图，无私有区块）
+export interface UserPage {
+  id: number
+  username: string
+  nickname: string
+  created_at: string
+  school?: string
+  grade?: string
+  level?: LevelBadgeInfo
+  rank?: { rank: number; solved: number } // 全站排名（同排行榜口径）
+  stats: { submissions: number; accepted: number; ac_rate: number }
+  recent?: UserPageRecent[]
+  first_ac?: UserPageFirstAC[]
+  contests?: UserPageContest[]
+}
+
 // ---------- 等级体系（v0.11） ----------
 
 // 等级配置公开视图（GET /api/levels）：徽章与进度渲染所需

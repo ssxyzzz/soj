@@ -79,6 +79,15 @@ body,
   min-height: 100vh;
 }
 
+/* 常驻预留视口滚动条槽位（2026-10-26 用户反馈「题库/提交记录整页往外跑」）：
+   短页（比赛/班级/排名）无滚动条、长页（题库/提交记录）有——视口可用宽差 15px，
+   居中的 header-inner 与页容器整体横移 7px，切页时导航栏「跳一下」。
+   stable = 无论是否出滚动条都预留槽位，clientWidth 恒定、全站零横移；
+   不支持该属性的旧浏览器行为回退为原状（仅有切页横移，无功能影响）。 */
+html {
+  scrollbar-gutter: stable;
+}
+
 /* 全站字阶：长文阅读正文 16（.rich）/ 界面与表格 14 / 代码 14 /
    区块小标题 16·600 / 页头大标题 22·600 / hero 与统计大数字 30·32·600（Ant 对齐） */
 :root {
@@ -415,8 +424,8 @@ body.ambient-on::after {
      2026-10-25 回调 1440——题库等表格页主列装不下最小列宽和（scrollable-x），用户拍板 */
   max-width: 1440px;
   margin: 0 auto;
-  /* 左右不留内边距：与 PageShell（1440px 容器 + el-main 20px 内边距）左右边缘对齐 */
-  padding: 16px 0;
+  /* 不留内边距（2026-10-26 页头对齐批）：纵向原先 16px 使 .page 页（排名/设置）
+     比 PageShell 页低 16px；现在纵横都与 PageShell（1440 容器 + el-main 20px 内边距）对齐 */
   /* el-row :gutter 的负向外边距（-gutter/2）会顶出无横向内边距的容器 8px——
      视口 1288–1320px 区间出现横向滚动条；clip 不建滚动容器/不裁内部滚动
      （el-table 自身 overflow 弹层均 teleport 到 body），卡片实际起点在容器边界，视觉零差异 */

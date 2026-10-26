@@ -23,6 +23,7 @@ import ProblemListView from '@/views/ProblemListView.vue'
 import RankView from '@/views/RankView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import SubmissionListView from '@/views/SubmissionListView.vue'
+import UserProfileView from '@/views/UserProfileView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -117,6 +118,13 @@ const router = createRouter({
           meta: { title: '提交记录', staffOnly: true },
         },
         { path: 'rank', name: 'rank', component: RankView, meta: { title: '排名' } },
+        {
+          path: 'users/:id',
+          name: 'user-profile',
+          component: UserProfileView,
+          // 公开主页（v0.17）：登录后可见，未登录由守卫带 redirect 弹登录
+          meta: { title: '用户主页', requiresAuth: true },
+        },
         {
           path: 'settings',
           name: 'settings',
