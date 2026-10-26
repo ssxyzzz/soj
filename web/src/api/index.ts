@@ -209,7 +209,7 @@ export const problemApi = {
   uploadInteractor: (id: number, form: FormData) =>
     client.post(`/problems/${id}/interactor`, form, { timeout: 0 }).then((r) => r.data.data),
   solutions: (id: number, page: number, pageSize: number) =>
-    get<{ list: SolutionItem[]; total: number; can_manage: boolean }>(`/problems/${id}/solutions`, {
+    get<{ list: SolutionItem[]; total: number; can_manage: boolean; mine_id: number }>(`/problems/${id}/solutions`, {
       page,
       page_size: pageSize,
     }),

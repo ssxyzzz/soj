@@ -24,6 +24,7 @@ const solutions = ref<SolutionItem[]>([])
 const solutionsTotal = ref(0)
 const solutionsPage = ref(1)
 const canManageSolutions = ref(false)
+const mineId = ref(0) // 当前用户在该题已发布的题解 ID（0 = 未发布；每人每题一篇）
 const showSolutionEditor = ref(false)
 const solutionEditing = ref<SolutionItem | null>(null)
 const solutionDraft = ref('')
@@ -33,6 +34,7 @@ async function loadSolutions(p = 1) {
   solutions.value = r.list
   solutionsTotal.value = r.total
   canManageSolutions.value = r.can_manage
+  mineId.value = r.mine_id ?? 0
   solutionsPage.value = p
 }
 
@@ -98,7 +100,8 @@ async function togglePin(s: SolutionItem) {
   >
     <div class="dlg-toolbar">
       <span class="dim">共 {{ solutionsTotal }} 篇</span>
-      <el-button type="primary" @click="openWriteSolution">发表题解</el-button>
+      <el-button v-if="!mineId" type="primary" @click="openWriteSolution">发表题解</el-button>
+      <span v-else class="dim">每人每题限一篇题解 · 可在列表中编辑你发布的那篇</span>
     </div>
     <div v-for="s in solutions" :key="s.id" class="solution-item">
       <div class="solution-meta">

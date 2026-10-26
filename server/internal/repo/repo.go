@@ -138,6 +138,10 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		mongo.IndexModel{Keys: bson.D{{Key: "name", Value: 1}}, Options: options.Index().SetUnique(true)}); err != nil {
 		return err
 	}
+	// 题解每题每人一篇（2026-10-26）：清历史重复 + 唯一索引兜底并发
+	if _, err := r.EnsureSolutionUnique(ctx); err != nil {
+		return err
+	}
 
 	// 初始管理员：users 为空时创建 root / sojroot123（root 角色）；
 	// 空用户表同时作为 runMigrations 全新库判定的一环

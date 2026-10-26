@@ -76,7 +76,18 @@ func (h *Handlers) ListSolutions(c *gin.Context) {
 		}
 		items = append(items, solutionJSON(s, nickname))
 	}
-	ok(c, gin.H{"list": items, "total": total, "can_manage": hasPerm(c, repo.PermSolutionManage)})
+	// 每人每题一篇（2026-10-26）：下发当前用户已发布那篇的 ID（0 = 未发布），
+	// 前端据此隐藏「发表题解」入口
+	mine, err := h.repo.GetUserSolution(c.Request.Context(), pid, uid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题解失败")
+		return
+	}
+	mineID := int64(0)
+	if mine != nil {
+		mineID = mine.ID
+	}
+	ok(c, gin.H{"list": items, "total": total, "can_manage": hasPerm(c, repo.PermSolutionManage), "mine_id": mineID})
 }
 
 // PostSolution 发布题解。
@@ -92,6 +103,16 @@ func (h *Handlers) PostSolution(c *gin.Context) {
 	}
 	if !h.solutionAllowed(c, uid, pid) {
 		fail(c, http.StatusForbidden, "该题拿到满分后才能发布题解")
+		return
+	}
+	// 每人每题一篇（2026-10-26）：已发布过则拒绝（编辑走 PATCH，不受此限）
+	mine, err := h.repo.GetUserSolution(c.Request.Context(), pid, uid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "发布失败")
+		return
+	}
+	if mine != nil {
+		fail(c, http.StatusConflict, "每人每题只能发布一篇题解——可编辑你已发布的那篇")
 		return
 	}
 	var req struct {
