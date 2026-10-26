@@ -4,9 +4,13 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,16 +29,48 @@ type Deps struct {
 	Waker   *judge.Waker // 提交入队即时唤醒判题 worker（判题同进程时非空）
 }
 
+// resolveJWTSecret JWT 密钥解析（v0.14 安全强制项；2026-10-26 升级为自动生成）：
+// 显式设置 > 密钥卷持久化文件（<KeysDir>/jwt_secret）> 自动生成随机密钥并落盘（0600）。
+// 随机生成守住「不带着已知密钥上线」的底线（替代原「缺失拒绝启动」，新人零配置可用），
+// 落盘守住跨重启登录态稳定；只有密钥卷不可读写才拒绝启动。
+func resolveJWTSecret(cfg *config.Config) string {
+	if s := cfg.JWTSecret; s != "" {
+		if s == "soj-dev-secret-change-me" || s == "soj-dev-secret" {
+			log.Println("[web] 警告: SOJ_JWT_SECRET 为开发默认值，生产环境务必更换为随机长字符串")
+		}
+		return s
+	}
+	path := filepath.Join(cfg.KeysDir, "jwt_secret")
+	if b, err := os.ReadFile(path); err == nil {
+		s := strings.TrimSpace(string(b))
+		if len(s) < 32 {
+			log.Fatalf("[web] 密钥卷文件 %s 内容不足 32 字符（疑似损坏），请删除该文件后重启以自动重新生成", path)
+		}
+		log.Printf("[web] 未设置 SOJ_JWT_SECRET，已从密钥卷载入 %s", path)
+		return s
+	} else if !os.IsNotExist(err) {
+		log.Fatalf("[web] 密钥卷文件 %s 不可读（%v），请检查 SOJ_KEYS_DIR 挂载权限，或显式设置 SOJ_JWT_SECRET", path, err)
+	}
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("[web] 生成随机 JWT 密钥失败: %v", err)
+	}
+	s := hex.EncodeToString(b)
+	if err := os.MkdirAll(cfg.KeysDir, 0o700); err != nil {
+		log.Fatalf("[web] 密钥卷目录 %s 不可写（%v），无法持久化自动生成的 JWT 密钥；请修复挂载权限，或显式设置 SOJ_JWT_SECRET", cfg.KeysDir, err)
+	}
+	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
+		log.Fatalf("[web] 密钥卷文件 %s 不可写（%v），无法持久化自动生成的 JWT 密钥；请修复挂载权限，或显式设置 SOJ_JWT_SECRET", path, err)
+	}
+	log.Printf("[web] 未设置 SOJ_JWT_SECRET，已自动生成随机密钥并持久化到 %s（多实例部署请显式设置该环境变量）", path)
+	return s
+}
+
 // Run 启动 HTTP 服务（阻塞直至 ctx 取消或监听失败）。
 func Run(ctx context.Context, deps *Deps) {
 	cfg := deps.Cfg
-	// JWT 密钥（v0.14）：缺失拒绝启动（公网伪造 token 防线）；开发默认值警告放行
-	if cfg.JWTSecret == "" {
-		log.Fatal("[web] 未设置 SOJ_JWT_SECRET，拒绝启动（生产安全强制项，见 .env.example / docker-compose.yml）")
-	}
-	if cfg.JWTSecret == "soj-dev-secret-change-me" || cfg.JWTSecret == "soj-dev-secret" {
-		log.Println("[web] 警告: SOJ_JWT_SECRET 为开发默认值，生产环境务必更换为随机长字符串")
-	}
+	// JWT 密钥：显式设置 > 密钥卷 > 自动生成（公网伪造 token 防线不变，见 resolveJWTSecret）
+	cfg.JWTSecret = resolveJWTSecret(cfg)
 	// 邮件通道（v0.16）：smtp 通道开着但配置不全拒绝启动（验证码发不出去等于把
 	// 注册/找回功能打成半残，早失败好过线上排查）
 	if s, err := deps.Repo.GetSystemSettings(ctx); err == nil {
@@ -124,6 +160,17 @@ func Run(ctx context.Context, deps *Deps) {
 		// 比赛（登录后可见；未开始的比赛对无「题库全量可见」者隐藏，见 ListContests/ContestDetail）
 		api.GET("/contests", AuthRequired(h), h.ListContests)
 		api.GET("/contests/:id", AuthRequired(h), h.ContestDetail)
+
+		// 题单（v0.18.3，登录可见）：公开读列表/详情/排名 + 作业复制拍平；写走创建者/root
+		api.GET("/lists", AuthRequired(h), h.GetLists)
+		api.GET("/lists/:id", AuthRequired(h), h.GetListDetail)
+		api.GET("/lists/:id/rank", AuthRequired(h), h.GetListRank)
+		api.GET("/lists/:id/flat", AuthRequired(h), h.GetListFlat)
+		api.POST("/lists", AuthRequired(h), RequirePerm(repo.PermListManage), h.CreateList)
+		// 排序 = 全局次序，收到独立权限位（默认仅 root）
+		api.POST("/lists/reorder", AuthRequired(h), RequirePerm(repo.PermListReorder), h.ReorderLists)
+		api.PATCH("/lists/:id", AuthRequired(h), h.UpdateList)   // handler 内 listManageable
+		api.DELETE("/lists/:id", AuthRequired(h), h.DeleteList)  // handler 内 listManageable
 
 		// 班级（登录后可见；成员/邀请码等按身份返回）
 		api.GET("/classes", AuthRequired(h), h.ListClasses)

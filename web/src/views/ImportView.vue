@@ -410,7 +410,7 @@ const finishedIssues = computed(() =>
 .source-card.active {
   border-color: var(--soj-blue);
   background: var(--soj-blue-soft);
-  box-shadow: 0 4px 14px rgba(36, 85, 218, 0.12);
+  box-shadow: 0 4px 14px rgb(var(--soj-blue-rgb) / 0.12);
 }
 
 .source-card.soon {

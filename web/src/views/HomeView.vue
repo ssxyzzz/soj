@@ -170,8 +170,8 @@ onMounted(async () => {
   padding: 12px 20px;
   margin-bottom: 30px;
   border-radius: 14px;
-  background: linear-gradient(90deg, rgba(36, 85, 218, 0.07), rgba(22, 167, 210, 0.05));
-  border: 1px solid rgba(36, 85, 218, 0.16);
+  background: linear-gradient(90deg, rgb(var(--soj-blue-rgb) / 0.07), rgb(var(--soj-teal-rgb) / 0.05));
+  border: 1px solid rgb(var(--soj-blue-rgb) / 0.16);
   font-size: var(--soj-fs-14);
 }
 
@@ -309,7 +309,7 @@ onMounted(async () => {
   justify-content: center;
   color: #fff;
   background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-blue-lo));
-  box-shadow: 0 8px 18px rgba(36, 85, 218, 0.32);
+  box-shadow: 0 8px 18px rgb(var(--soj-blue-rgb) / 0.32);
   transition: transform 0.18s;
 }
 

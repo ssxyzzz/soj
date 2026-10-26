@@ -243,12 +243,6 @@ func (r *Repo) IsMember(ctx context.Context, classID, uid int64) (bool, error) {
 	return err == nil, err
 }
 
-// CountOtherMembers 班级内除 uid 外的成员数（建班人「没人了才可退」判定用）。
-func (r *Repo) CountOtherMembers(ctx context.Context, classID, uid int64) (int64, error) {
-	return r.db.Collection("classmembers").CountDocuments(ctx,
-		bson.M{"classId": classID, "uid": bson.M{"$ne": uid}})
-}
-
 // ErrNotMember 目标用户不是班级成员，无法受让。
 var ErrNotMember = errors.New("transfer target is not a class member")
 

@@ -27,6 +27,7 @@ type Repo struct {
 	Uploads     *mongo.Collection
 	Solutions   *mongo.Collection
 	Tags        *mongo.Collection
+	Lists       *mongo.Collection // 题单（v0.18.3 章节化自学导航）
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -65,6 +66,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		Uploads:     db.Collection("uploads"),
 		Solutions:   db.Collection("solutions"),
 		Tags:        db.Collection("tags"),
+		Lists:       db.Collection("lists"),
 	}, nil
 }
 
@@ -200,7 +202,7 @@ var freshSkipFlags = []string{
 	"samplesMdV1", "solutionManageV1", "submissionViewUserV1", "nicknameEditV1",
 	"roundFlagsV1", "classLeaveV1", "assignmentScoreViewV1", "contestScorePermV1",
 	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
-	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2",
+	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2", "listManageV1",
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
@@ -397,6 +399,18 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		log.Printf("[boot] admin 角色已补发比赛/考试成绩表权限位（contest.score.view / contest.score.detail）")
+	}
+	if !flagDone("listManageV1") {
+		// v0.18.3：题单管理权限位，初始归属 admin（root 走 "*" 恒通；default 刻意不给）
+		if _, err := r.Roles.UpdateOne(ctx,
+			bson.M{"_id": RoleAdmin},
+			bson.M{"$addToSet": bson.M{"perms": PermListManage}}); err != nil {
+			return err
+		}
+		if err := setFlag("listManageV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] admin 角色已补发题单管理权限位（list.manage）")
 	}
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次

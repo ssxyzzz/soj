@@ -135,7 +135,7 @@ onMounted(load)
     <template #aside>
       <RailCard v-if="canCreate()" ov="管理" title="班级管理" class="aside-card">
         <el-button type="primary" style="width: 100%" @click="showCreate = true">创建班级</el-button>
-        <p class="hint">创建后生成 8 位邀请码，学生凭码入班；公开班级全站可见，私密班级仅成员可见。</p>
+        <p class="hint">创建后生成 4 位邀请码，学生凭码入班；公开班级全站可见，私密班级仅成员可见。</p>
       </RailCard>
 
       <RailCard ov="入口" title="邀请码加入" class="aside-card">

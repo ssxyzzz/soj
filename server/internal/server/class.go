@@ -154,11 +154,7 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		members, err := h.repo.ListMembers(ctx, id)
 		if err == nil {
 			list := make([]gin.H, 0, len(members))
-			others := 0
 			for _, m := range members {
-				if m.UID != cl.OwnerID {
-					others++
-				}
 				memberRole := m.Role
 				if memberRole == "" {
 					memberRole = repo.ClassRoleMember
@@ -169,10 +165,6 @@ func (h *Handlers) GetClass(c *gin.Context) {
 				})
 			}
 			resp["members"] = list
-			// 建班人的可退判定需要成员数（「没人了才可退」），恰在 manage 分支里已取到
-			if uid == cl.OwnerID {
-				resp["leaveable"] = hasPerm(c, repo.PermClassLeave) && others == 0
-			}
 		}
 	}
 	// 成员（非建班人）的可退判定：是成员 + 持 class.leave 位
@@ -239,17 +231,10 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取班级失败")
 		return
 	}
-	// 建班人不可退，例外：班级已没有其他成员（没人了）
+	// 建班人不可退班（2026-10-26 用户拍板：只能转让或解散，删除「没人了才可退」例外）
 	if cl.OwnerID == uid {
-		others, err := h.repo.CountOtherMembers(c.Request.Context(), id, uid)
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "读取成员失败")
-			return
-		}
-		if others > 0 {
-			fail(c, http.StatusBadRequest, "建班人不能退出自己的班级（可解散班级，或成员全部退出后再退）")
-			return
-		}
+		fail(c, http.StatusBadRequest, "建班人不能退出班级，请在编辑班级中转让或解散")
+		return
 	}
 	err = h.repo.LeaveClass(c.Request.Context(), id, uid)
 	if repo.IsNotFound(err) {

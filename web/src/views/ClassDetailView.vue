@@ -10,6 +10,8 @@ import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
+import CopyFromListButton from '@/components/CopyFromListButton.vue'
+import UserSuggestTextarea from '@/components/UserSuggestTextarea.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
 import { fmtDate, fmtDay } from '@/utils/format'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
@@ -33,6 +35,19 @@ const creatingAssignment = ref(false)
 const assignmentForm = reactive({ title: '', intro: '', picked: [] as PickedProblem[] })
 const importText = ref('')
 const importing = ref(false)
+
+// 从题单复制（v0.18.3 拍板 7）：拍平合并进已选（按题号去重），隐藏题提示跳过数量
+function mergeFromList(items: { id: number; title: string }[], skippedHidden: number) {
+  const have = new Set(assignmentForm.picked.map((p) => p.id))
+  let added = 0
+  for (const it of items) {
+    if (!have.has(it.id)) {
+      assignmentForm.picked.push({ id: it.id, title: it.title })
+      added++
+    }
+  }
+  ElMessage.success(`已复制 ${added} 题${skippedHidden ? `，跳过隐藏 ${skippedHidden} 题` : ''}`)
+}
 
 // 发起考试
 const exams = ref<{ id: number; title: string; status: string; start: string; end: string; problem_count: number }[]>([])
@@ -420,11 +435,10 @@ stripe
               </el-table-column>
             </el-table>
             <div v-if="cl.manageable" class="import">
-              <el-input
+              <UserSuggestTextarea
                 v-model="importText"
-                type="textarea"
                 :rows="2"
-                placeholder="批量导入：输入已注册用户名，用空格 / 逗号 / 换行分隔"
+                placeholder="批量导入：输入已注册用户名（输入即联想），用空格 / 逗号 / 换行分隔"
               />
               <el-button type="primary" :loading="importing" @click="importMembers">导入成员</el-button>
             </div>
@@ -438,18 +452,21 @@ stripe
             <el-button type="primary" style="width: 100%" @click="showCreateAssignment = true">布置作业</el-button>
             <el-button style="width: 100%" @click="showExam = true">发起考试</el-button>
             <el-button style="width: 100%" @click="openEditClass">编辑班级</el-button>
-            <!-- 邀请码与复制动作同行（2026-10-25 从班级信息卡挪入） -->
-            <div class="invite-row">
-              <span class="soj-inv-chip">{{ cl.invite_code }}</span>
-              <el-button size="small" @click="copyInvite">复制</el-button>
-            </div>
+            <!-- 邀请码胶囊即复制按钮：体量对齐 entry-actions 动作按钮（2026-10-26 与复制按钮合一） -->
+            <button
+              type="button"
+              class="soj-inv-chip is-clickable"
+              title="点击复制邀请码"
+              @click="copyInvite"
+            >
+              复制邀请码：<span class="inv-code">{{ cl.invite_code }}</span>
+            </button>
             <el-button style="width: 100%" @click="regenInvite">重置邀请码</el-button>
             <el-button
               v-if="cl.leaveable"
               :disabled="leaving"
               type="danger"
               style="width: 100%"
-              title="建班人在班级没有其他成员时可退出"
               @click="leave"
             >
               退出班级
@@ -484,8 +501,11 @@ stripe
         <el-form-item label="作业说明">
           <el-input v-model="assignmentForm.intro" type="textarea" :rows="2" placeholder="选填" />
         </el-form-item>
-        <el-form-item label="作业题目（可先创建后在作业页调整）">
-          <ProblemPicker v-model="assignmentForm.picked" />
+        <el-form-item label="作业题目（可先创建后在作业页调整；支持从题单复制）">
+          <div class="picker-block">
+            <CopyFromListButton @merge="mergeFromList" />
+            <ProblemPicker v-model="assignmentForm.picked" />
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -639,20 +659,20 @@ stripe
   margin: 16px 0;
 }
 
-/* 邀请码行（班级管理卡）：4 位码 chip 与复制动作同行（2026-10-25 从班级信息卡挪入） */
-.invite-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-}
-
 .hint {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   line-height: 1.7;
   margin: 8px 0 0;
+}
+
+/* 作业选题区：复制按钮行 + 选题器 */
+.picker-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
 }
 
 .hint.center {

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 // 数据备份面板（v0.5.4 ② 拆分自 AdminView，v0.4.9/v0.5.1 实现）：
-// 状态卡 + 一键备份下载 + Tier 1 私钥一次性弹窗 + 可编辑使用说明。
+// 状态卡 + 一键备份下载 + Tier 1 私钥一次性弹窗 + 内置使用说明。
+// 文案全部写死（2026-10-26 拍板）：不再提供站点自定义版本，原系统设置 backupGuide 字段退役。
 import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
-import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import { copyText } from '@/utils/clipboard'
@@ -15,61 +15,34 @@ import type { BackupStatus } from '@/types'
 
 const userStore = useUserStore()
 
-// 使用说明默认内容（Markdown）：管理员可在面板里编辑并保存为站点自定义版本，
-// 清空保存即回退到这里的内容。
-const DEFAULT_BACKUP_GUIDE = `## 备份文件里有什么
+// 使用说明（Markdown，写死）：定位是「偶尔查的参考手册」，默认折叠、按小标题速查。
+const BACKUP_GUIDE = `## 备份了什么
 
-## 备份文件里有什么（分层备份）
+整站快照，age 加密存放，没有钥匙谁也打不开：
 
-- **每日库备**（soj-backup-db-…）：用户账号、提交记录、班级与考试成绩、题目元数据——天天变的数据，保留 30 份；
-- **每周数据备**（soj-backup-media-…）：测试数据与题面图片——体积大头但很少变，保留 4 份；
-- **面板按钮** = 全量备份（上面两者合一，手动兜底用）。
+- **每日库备**（soj-backup-db-…）：账号 / 提交 / 班级成绩等天天变的数据，保留 30 份；
+- **每周数据备**（soj-backup-media-…）：测试数据与题面图片，保留 4 份；
+- 面板按钮 = 全量备份（两者合一，手动兜底用）。
 
-所有备份都是加密的（age 格式），没有钥匙谁也打不开。
-
-## 自动备份（服务器上装一次）
-
-在服务器上执行一条命令即可开启每天自动备份：
+## 自动备份（服务器装一次）
 
 \`\`\`
 cd ~/soj && ./scripts/backup.sh --install-cron
 \`\`\`
 
-装好后每天 04:17 自动库备 + 本地快照，每周日 04:20 数据卷备；日志在 backups/cron.log。
-
-**巡检口径**：本面板上方「每日库备」超过 **25 小时**没更新（红灯）= 自动备份没在跑，上服务器看 cron.log。
+装好即每天 04:17 库备 + 每周日 04:20 数据备。面板「每日库备」红灯（超 25 小时没更新）= 没在跑，上服务器看 backups/cron.log。
 
 ## 备份纪律
 
-- 批量导入题目**当天**，手动点一次「立即备份」，把导入窗口纳入备份链；
-- 密文多存一处最稳（网盘 + U 盘）；服务器上还可配置异地副本（--offsite，见脚本注释）。
+- 批量导题**当天**，手动点一次「立即备份」；
+- 密文多存一处（网盘 + U 盘），恢复钥匙与备份**分开存放**；
+- 每季度拿最近一份跑一次校验：\`./scripts/restore.sh <备份文件> --pull-key --verify\`——没验证过恢复的备份等于没备份。
 
-## 恢复与演练
+## 在本机查看备份内容（Windows）
 
-网站出问题时，把备份文件放进 soj 目录，按上方命令交给会命令行的人执行。恢复会把整个网站还原到备份那一刻（覆盖现有数据，脚本会再让你确认一次）；db 层归档只还原数据库、不动题目数据。
-
-**每季度（或大考前）**拿最近一份备份跑一次校验，确认能解密、结构完整：
-
-\`\`\`
-./scripts/restore.sh <备份文件> --pull-key --verify
-\`\`\`
-
-> 没验证过恢复的备份等于没备份。
-
-## 在自己的 Windows 电脑上查看备份内容
-
-1. 下载解密小工具 age：github.com/FiloSottile/age/releases（zip 解压即用，无需安装）；
-2. 准备恢复钥匙：高安全模式＝启用时保存的 txt；普通模式＝找管理员从服务器导出；
-3. 解密并解包（PowerShell，在备份文件目录执行）：
-
-\`\`\`
-age -d -i 恢复钥匙.txt -o backup.tar soj-backup-xxxx.v1.tar.age
-tar -xf backup.tar
-\`\`\`
-
-4. 图片、题目数据解开后直接看；数据库文件（mongo.archive.gz）是二进制，需要管理员恢复到站点查看，或本机起一个临时 MongoDB 后用 Compass 浏览。
-
-> 提醒：恢复钥匙和备份文件不要放在同一台电脑、同一个网盘。
+1. 下载 age：github.com/FiloSottile/age/releases（解压即用）；高安全模式备好「恢复钥匙.txt」；
+2. 在备份文件目录执行：\`age -d -i 恢复钥匙.txt -o backup.tar soj-backup-xxxx.v1.tar.age && tar -xf backup.tar\`
+3. 图片 / 题目数据解开后直接看；数据库文件需管理员恢复到站点，或本机起临时 MongoDB 用 Compass 浏览。
 `
 
 const backupStatus = ref<BackupStatus | null>(null)
@@ -86,58 +59,30 @@ const showOfflineKey = ref(false)
 const offlineKey = ref('')
 const keySaved = ref(false)
 
-// 使用说明（可编辑）：空 = 用 DEFAULT_BACKUP_GUIDE；保存在系统设置 backupGuide
-const backupGuide = ref('')
-const showGuideEdit = ref(false)
-const guideDraft = ref('')
-const guideContent = computed(() => (backupGuide.value.trim() ? backupGuide.value : DEFAULT_BACKUP_GUIDE))
-
 const backupModeMeta: Record<string, { label: string; type: 'info' | 'warning' | 'success'; desc: string }> = {
   uninitialized: {
     label: '尚未备份过',
     type: 'info',
-    desc: '不用做任何设置：点下方按钮做第一次备份，系统会自动生成加密钥匙（先保存在服务器上）。',
+    desc: '点右上「立即备份」做第一次备份，加密钥匙会自动生成（先保存在服务器上）。',
   },
   tier0: {
-    label: '普通模式（加密钥匙存在服务器）',
+    label: '普通模式（钥匙在服务器）',
     type: 'warning',
-    desc: '备份文件是加密的，落到别人手里也打不开；但加密钥匙也在服务器上——万一整台服务器被入侵，历史备份可能一起被看光。想更安全，点下方「升级为离线钥匙」。',
+    desc: '备份已加密，但钥匙也在服务器——整机被入侵时历史备份可能一起泄露，可升级为离线钥匙。',
   },
   tier1: {
     label: '高安全模式（钥匙只在你手里）',
     type: 'success',
-    desc: '服务器上只有锁、没有钥匙：就算整台服务器被入侵，历史备份也解不开。务必保管好启用时保存的那把恢复钥匙——它丢了，所有加密备份就永久打不开了。',
+    desc: '服务器只有锁、没有钥匙；恢复钥匙丢了 = 所有备份永久打不开，请务必妥善保管。',
   },
 }
 
 async function loadBackup() {
   backupLoading.value = true
   try {
-    const st = await adminApi.backupStatus()
-    backupStatus.value = st
-    backupGuide.value = st.guide ?? ''
+    backupStatus.value = await adminApi.backupStatus()
   } finally {
     backupLoading.value = false
-  }
-}
-
-function editGuide() {
-  // 预填当前展示的内容：从未自定义时即为内置默认，可直接在默认文本上改；
-  // 清空再保存仍回退到内置默认（见编辑弹窗标题提示）
-  guideDraft.value = guideContent.value
-  showGuideEdit.value = true
-}
-
-async function saveGuide() {
-  try {
-    await adminApi.updateSettings({ backup_guide: guideDraft.value })
-    // 以服务端持久化结果为准回读刷新（避免本地态与实际存储 diverge 时「看似已保存」）
-    await loadBackup()
-    showGuideEdit.value = false
-    ElMessage.success('使用说明已保存')
-  } catch {
-    // 拦截器已 toast 具体错误；这里保持弹窗打开，草稿不丢
-    ElMessage.error('保存失败，请重试')
   }
 }
 
@@ -214,31 +159,31 @@ onMounted(loadBackup)
       </div>
     </template>
     <div v-loading="backupLoading">
-      <div class="backup-status">
+      <!-- 状态一行条：模式 + 三类最近备份时间 + 巡检红灯（2026-10-26 精简排版） -->
+      <div class="status-row">
         <el-tag
           v-if="backupStatus"
           :type="backupModeMeta[backupStatus.mode]?.type ?? 'info'"
-          size="large"
+          size="small"
         >
           {{ backupModeMeta[backupStatus.mode]?.label ?? backupStatus.mode }}
         </el-tag>
         <span v-if="backupStatus?.last_backup_at" class="muted">
-          上次备份：{{ new Date(backupStatus.last_backup_at).toLocaleString() }}
+          上次备份 {{ new Date(backupStatus.last_backup_at).toLocaleString() }}
         </span>
         <span v-else class="muted">还没有备份过</span>
-      </div>
-      <!-- 分层备份巡检（v0.15.1）：每日库备超 25 小时 = 自动备份没在跑，红灯 -->
-      <div v-if="backupStatus?.last_db_at || backupStatus?.last_media_at" class="tier-times">
-        <span class="muted">
-          每日库备：
-          <template v-if="backupStatus?.last_db_at">{{ new Date(backupStatus.last_db_at).toLocaleString() }}</template>
-          <template v-else>未开启</template>
-        </span>
-        <span class="muted">
-          每周数据备：
-          <template v-if="backupStatus?.last_media_at">{{ new Date(backupStatus.last_media_at).toLocaleString() }}</template>
-          <template v-else>未开启</template>
-        </span>
+        <template v-if="backupStatus?.last_db_at || backupStatus?.last_media_at">
+          <span class="muted">
+            每日库备
+            <template v-if="backupStatus?.last_db_at">{{ new Date(backupStatus.last_db_at).toLocaleString() }}</template>
+            <template v-else>未开启</template>
+          </span>
+          <span class="muted">
+            每周数据备
+            <template v-if="backupStatus?.last_media_at">{{ new Date(backupStatus.last_media_at).toLocaleString() }}</template>
+            <template v-else>未开启</template>
+          </span>
+        </template>
         <el-tag v-if="dbBackupStale" type="danger" size="small">库备超 25 小时——自动备份可能没在跑</el-tag>
       </div>
       <p class="backup-desc">{{ backupModeMeta[backupStatus?.mode ?? 'uninitialized']?.desc }}</p>
@@ -249,10 +194,9 @@ onMounted(loadBackup)
       </div>
 
       <el-divider content-position="center">
-        <span class="section-title">如何恢复（网站出问题时，交给会命令行的人执行）</span>
+        <span class="section-title">如何恢复</span>
       </el-divider>
       <div class="tips">
-        <p>把下载的备份文件放到本系统文件夹（soj 目录）里，点「复制」后粘贴到终端执行：</p>
         <div class="cmd-line">
           <code>./scripts/restore.sh soj-backup-xxxx.v1.tar.age --pull-key</code>
           <el-button
@@ -275,24 +219,18 @@ onMounted(loadBackup)
             复制
           </el-button>
         </div>
-        <p class="cmd-note">上一条＝普通模式（钥匙在服务器上，自动取用）；下一条＝高安全模式（用启用时保存的「恢复钥匙.txt」，把 xxxx 换成实际备份文件名）。恢复会整体覆盖现有数据，脚本会再让你确认一次。</p>
+        <p class="cmd-note">第一条 = 普通模式（钥匙在服务器自动取）；第二条 = 高安全模式（用保存的「恢复钥匙.txt」）。把 xxxx 换成实际备份文件名；恢复会覆盖现有数据，脚本会二次确认。</p>
       </div>
 
-      <el-divider content-position="center">
-        <div class="guide-head">
-          <span class="section-title">使用说明（如何备份 / 恢复 / 在本机查看）</span>
-          <el-button
-            v-if="userStore.can('admin.settings')"
-            size="small"
-            link
-            type="primary"
-            @click="editGuide"
-          >
-            编辑
-          </el-button>
-        </div>
-      </el-divider>
-      <MdView :content="guideContent" class="guide-md" />
+      <!-- 使用说明：文案写死，参考手册定位，默认折叠（2026-10-26 精简排版） -->
+      <el-collapse class="guide-collapse">
+        <el-collapse-item name="guide">
+          <template #title>
+            <span class="section-title">使用说明（备份了什么 / 自动备份 / 本机查看）</span>
+          </template>
+          <MdView :content="BACKUP_GUIDE" class="guide-md" />
+        </el-collapse-item>
+      </el-collapse>
     </div>
 
     <el-dialog
@@ -328,34 +266,16 @@ onMounted(loadBackup)
         </el-button>
       </template>
     </el-dialog>
-
-    <el-dialog
-      v-model="showGuideEdit"
-      title="编辑使用说明（Markdown；清空保存即恢复内置默认）"
-      width="900"
-      destroy-on-close
-    >
-      <MdEditor v-model="guideDraft" variant="compact" height="400px" />
-      <template #footer>
-        <el-button @click="showGuideEdit = false">取消</el-button>
-        <el-button type="primary" @click="saveGuide">保存</el-button>
-      </template>
-    </el-dialog>
   </el-card>
 </template>
 
 <style scoped>
-.tier-times {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.backup-status {
+/* 状态一行条：模式徽章 + 备份时间 + 巡检红灯，窄屏自动换行 */
+.status-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 
 .backup-desc {
@@ -399,10 +319,21 @@ onMounted(loadBackup)
   font-weight: var(--soj-fw-emphasis);
 }
 
-.guide-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+/* 使用说明折叠区：标题行去掉手型箭头区的突兀感，编辑按钮不触发展开 */
+.guide-collapse {
+  margin-top: 16px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  border-bottom: none;
+}
+
+.guide-collapse :deep(.el-collapse-item__header) {
+  height: auto;
+  padding: 10px 0;
+  border-bottom: none;
+}
+
+.guide-collapse :deep(.el-collapse-item__wrap) {
+  border-bottom: none;
 }
 
 /* 分区标题：区块小标题标准档（16/600） */

@@ -1,5 +1,7 @@
 <script setup lang="ts">
-// 等级面板（v0.11，root）：等级名称 / 升级阈值 / 衰减系数。
+// 等级面板（v0.11，root）：用户等级（名称/阈值/衰减）与难度等级（名称/逐档说明）双页签，
+// 切换同题目管理的知识树/标签树 el-tabs 形制（2026-10-26 拆分）。
+// 两个页签共用一份配置、任一侧保存都整体提交——后端 /admin/levelconfig 本就整体覆盖。
 // 十阶档数与色轴固定不开放改。特效开关字段（effects_*）在配置里保留但 UI 已隐藏——
 // v0.21 改版（2026-10-25）等级徽章回归实色炫彩版，特效链恒开、开关不再消费。
 import { onMounted, reactive, ref } from 'vue'
@@ -10,9 +12,13 @@ import { DEFAULT_LEVEL_NAMES, useLevelsStore } from '@/stores/levels'
 
 const levels = useLevelsStore()
 
+// 页签（2026-10-26 拆分）：user = 用户等级，difficulty = 难度等级
+const lvTab = ref<'user' | 'difficulty'>('user')
+
 const form = reactive({
   names: [...DEFAULT_LEVEL_NAMES],
   difficulty_names: [...DEFAULT_LEVEL_NAMES],
+  difficulty_notes: Array.from({ length: 10 }, () => ''),
   thresholds: [200, 600, 1200, 2000, 3000, 4200, 5600, 7200, 9000] as number[],
   decay1: 0.5,
   decay2: 0.2,
@@ -27,6 +33,7 @@ onMounted(async () => {
     const { config } = await adminApi.getLevelConfig()
     form.names = [...config.names]
     form.difficulty_names = [...(config.difficulty_names?.length === 10 ? config.difficulty_names : config.names)]
+    form.difficulty_notes = [...(config.difficulty_notes?.length === 10 ? config.difficulty_notes : Array.from({ length: 10 }, () => ''))]
     form.thresholds = [...config.thresholds]
     form.decay1 = config.decay1
     form.decay2 = config.decay2
@@ -54,6 +61,7 @@ async function save() {
     await adminApi.saveLevelConfig({
       names: form.names.map((n) => n.trim()),
       difficulty_names: form.difficulty_names.map((n) => n.trim()),
+      difficulty_notes: form.difficulty_notes,
       thresholds: form.thresholds,
       decay1: form.decay1,
       decay2: form.decay2,
@@ -82,10 +90,15 @@ function diffChipClass(i: number): Record<string, boolean> {
 </script>
 
 <template>
-  <el-card>
+  <el-tabs v-model="lvTab" class="levels-tabs">
+    <el-tab-pane name="user" label="用户等级" />
+    <el-tab-pane name="difficulty" label="难度等级" />
+  </el-tabs>
+
+  <el-card v-if="lvTab === 'user'">
     <template #header>
       <div class="head">
-        <span>等级设置</span>
+        <span>用户等级</span>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </div>
     </template>
@@ -95,14 +108,6 @@ function diffChipClass(i: number): Record<string, boolean> {
       <div v-for="(label, i) in form.names" :key="i" class="name-cell">
         <span class="tier-chip" :class="chipClass(i)">Lv.{{ i + 1 }}</span>
         <el-input v-model="form.names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
-      </div>
-    </div>
-
-    <div class="section-title">难度名称（难度 1–10 档的展示文字，默认与等级名相同、可独立修改；题库徽章/筛选与建题选择器均显示此名）</div>
-    <div class="names-grid">
-      <div v-for="(label, i) in form.difficulty_names" :key="i" class="name-cell">
-        <span class="tier-chip" :class="diffChipClass(i)">{{ form.difficulty_names[i] }}</span>
-        <el-input v-model="form.difficulty_names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
       </div>
     </div>
 
@@ -128,9 +133,43 @@ function diffChipClass(i: number): Record<string, boolean> {
       <el-input-number v-model="form.decay3" :min="0" :max="1" :step="0.01" :precision="2" :controls="false" />
     </div>
   </el-card>
+
+  <el-card v-else>
+    <template #header>
+      <div class="head">
+        <span>难度等级</span>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </div>
+    </template>
+
+    <div class="section-title">难度名称（难度 1–10 档的展示文字，默认与等级名相同、可独立修改；题库徽章/筛选与建题选择器均显示此名）</div>
+    <div class="names-grid">
+      <div v-for="(label, i) in form.difficulty_names" :key="i" class="name-cell">
+        <span class="tier-chip" :class="diffChipClass(i)">{{ form.difficulty_names[i] }}</span>
+        <el-input v-model="form.difficulty_names[i]" maxlength="12" :placeholder="DEFAULT_LEVEL_NAMES[i]" />
+      </div>
+    </div>
+
+    <div class="section-title">难度说明（每档各一条，逐行展示在题库「难度说明」说明卡；留空 = 该档不显示）</div>
+    <div class="notes-list">
+      <div v-for="i in 10" :key="i" class="note-cell">
+        <span class="tier-chip" :class="diffChipClass(i - 1)">{{ form.difficulty_names[i - 1] }}</span>
+        <el-input
+          v-model="form.difficulty_notes[i - 1]"
+          maxlength="100"
+          :placeholder="`第 ${i} 档说明（留空不显示）`"
+        />
+      </div>
+    </div>
+  </el-card>
 </template>
 
 <style scoped>
+/* 双页签（用户等级/难度等级）：形制同题目管理的知识树/标签树切换 */
+.levels-tabs {
+  margin-bottom: 12px;
+}
+
 .head {
   display: flex;
   align-items: center;
@@ -185,5 +224,18 @@ function diffChipClass(i: number): Record<string, boolean> {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 逐档难度说明：色块 chip + 单行输入，一行一档 */
+.notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.note-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

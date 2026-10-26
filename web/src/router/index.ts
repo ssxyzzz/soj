@@ -24,6 +24,9 @@ import RankView from '@/views/RankView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import SubmissionListView from '@/views/SubmissionListView.vue'
 import UserProfileView from '@/views/UserProfileView.vue'
+import ListsView from '@/views/ListsView.vue'
+import ListDetailView from '@/views/ListDetailView.vue'
+import ListEditView from '@/views/ListEditView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -44,6 +47,24 @@ const router = createRouter({
       children: [
         { path: '', name: 'home', component: HomeView, meta: { title: '首页' } },
         { path: 'problems', name: 'problems', component: ProblemListView, meta: { title: '题库' } },
+        {
+          path: 'lists',
+          name: 'lists',
+          component: ListsView,
+          meta: { title: '题单', requiresAuth: true },
+        },
+        {
+          path: 'lists/:id/edit',
+          name: 'list-edit',
+          component: ListEditView,
+          meta: { title: '编辑题单', requiresAuth: true },
+        },
+        {
+          path: 'lists/:id',
+          name: 'list-detail',
+          component: ListDetailView,
+          meta: { title: '题单', requiresAuth: true },
+        },
         {
           path: 'problems/create',
           name: 'problem-create',

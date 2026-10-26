@@ -13,9 +13,8 @@ import (
 
 // SystemSettings 系统设置（settings 集合，_id="system"）。
 type SystemSettings struct {
-	RateLimitPerMinute int    `bson:"rateLimitPerMinute"`    // default 角色每分钟提交上限
-	HomeNotice         string `bson:"homeNotice"`            // 首页公告（Markdown，空 = 不展示）
-	BackupGuide        string `bson:"backupGuide,omitempty"` // 备份面板使用说明（Markdown，空 = 前端内置默认）
+	RateLimitPerMinute int    `bson:"rateLimitPerMinute"` // default 角色每分钟提交上限
+	HomeNotice         string `bson:"homeNotice"`         // 首页公告（Markdown，空 = 不展示）
 	// 每日每用户可下载数据的题目数上限（problem.data.download 权限位持有者受此限额）。
 	// 指针区分「旧文档未设置」与「显式 0」：nil = 未设置按默认；0 = 不限制；>0 = 每日上限。
 	DataDownloadDailyLimit *int `bson:"dataDownloadDailyLimit,omitempty"`
@@ -118,7 +117,6 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 		bson.M{"$set": bson.M{
 			"rateLimitPerMinute":     s.RateLimitPerMinute,
 			"homeNotice":             s.HomeNotice,
-			"backupGuide":            s.BackupGuide,
 			"dataDownloadDailyLimit": s.DownloadDailyLimit(),
 			"autocompleteMinLevel":   s.MinAutocompleteLevel(),
 			"allowRegister":          s.RegistrationOpen(),

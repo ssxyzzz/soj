@@ -105,8 +105,8 @@ onBeforeUnmount(() => {
   --gx: 50vw;
   --gy: 40vh;
   background:
-    linear-gradient(rgba(122, 184, 196, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(122, 184, 196, 0.18) 1px, transparent 1px);
+    linear-gradient(rgb(var(--soj-teal-soft-rgb) / 0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--soj-teal-soft-rgb) / 0.18) 1px, transparent 1px);
   background-size: 44px 44px;
   -webkit-mask-image: radial-gradient(
     circle 560px at var(--gx) var(--gy),

@@ -9,6 +9,7 @@ import { assignmentApi, authApi } from '@/api'
 import { downloadFile } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
+import CopyFromListButton from '@/components/CopyFromListButton.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
@@ -38,6 +39,19 @@ const progressLoading = ref(false)
 const showAdjust = ref(false)
 const savingOrder = ref(false)
 const editList = ref<PickedProblem[]>([])
+
+// 从题单复制（v0.18.3 拍板 7）：拍平合并进已选（按题号去重），隐藏题提示跳过数量
+function mergeFromList(items: { id: number; title: string }[], skippedHidden: number) {
+  const have = new Set(editList.value.map((p) => p.id))
+  let added = 0
+  for (const it of items) {
+    if (!have.has(it.id)) {
+      editList.value.push({ id: it.id, title: it.title })
+      added++
+    }
+  }
+  ElMessage.success(`已复制 ${added} 题${skippedHidden ? `，跳过隐藏 ${skippedHidden} 题` : ''}`)
+}
 
 // 编辑作业（v0.7.4：名称 + 说明 + 删作业收进同一弹窗，「编辑说明」入口取消）
 const showEdit = ref(false)
@@ -351,6 +365,9 @@ onMounted(() => {
     </el-dialog>
 
     <el-dialog v-model="showAdjust" title="调整作业题目" width="960" top="5vh">
+      <div class="copy-row">
+        <CopyFromListButton @merge="mergeFromList" />
+      </div>
       <ProblemPicker v-model="editList" />
       <div class="dim">拖动 ⠿ 调整顺序，右侧「删除」移除；点下方保存一次性生效</div>
       <template #footer>

@@ -6,8 +6,9 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
 import { useUserStore } from '@/stores/user'
 
-// 提交弹窗（v3-full：窄版 720 + 深色代码窗，赛事做题页「提交」按钮通道）：语言选择 +
+// 提交弹窗（v3-full：960 宽 + 深色代码窗，赛事做题页「提交」按钮通道）：语言选择 +
 // 代码编辑，提交动作由父组件通过 submit 事件接手（练习走 /submissions，比赛/考试走各自通道）。
+// 2026-10-26 与题目页提交弹窗同步加大（720→960）、编辑器 460→520。
 const props = defineProps<{
   modelValue: boolean
   title: string
@@ -66,7 +67,7 @@ function doSubmit() {
   <el-dialog
     :model-value="modelValue"
     :title="`提交 · ${title}`"
-    width="720"
+    width="960"
     top="6vh"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
@@ -83,7 +84,7 @@ function doSubmit() {
       :autocomplete="acOn"
       :font-size="codeFontSize"
       :font-family="codeFont"
-      height="460px"
+      height="520px"
       placeholder="在此编写或粘贴你的代码（偏好里设置的代码模板已填入）"
     />
     <p class="hint">提交间隔受全站限速约束；评测在 go-judge 沙箱中运行。</p>

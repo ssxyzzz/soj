@@ -25,7 +25,7 @@ func (h *Handlers) backupOptions() backup.Options {
 	}
 }
 
-// BackupStatus 当前密钥模式、上次备份时间与使用说明（guide：空 = 前端用内置默认）。
+// BackupStatus 当前密钥模式与上次备份时间。
 // v0.15.1 起分层各报各的最近一次（db 日备 / media 周备），面板按 25 小时红灯规则巡检。
 func (h *Handlers) BackupStatus(c *gin.Context) {
 	st := backup.Inspect(h.cfg.KeysDir, h.cfg.BackupDir)
@@ -35,10 +35,6 @@ func (h *Handlers) BackupStatus(c *gin.Context) {
 		}
 		return t.Format(time.RFC3339)
 	}
-	guide := ""
-	if s, err := h.repo.GetSystemSettings(c.Request.Context()); err == nil {
-		guide = s.BackupGuide // Markdown（v0.8 起单一事实源）；空 = 前端用内置默认
-	}
 	ok(c, gin.H{
 		"mode":             st.Mode,
 		"last_backup_at":   fmtTime(st.LastBackupAt),
@@ -47,7 +43,6 @@ func (h *Handlers) BackupStatus(c *gin.Context) {
 		"last_db_file":     st.LastDBFile,
 		"last_media_at":    fmtTime(st.LastMediaAt),
 		"last_media_file":  st.LastMediaFile,
-		"guide":            guide,
 	})
 }
 

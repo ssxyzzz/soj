@@ -37,7 +37,7 @@ func Load() *Config {
 		KeysDir:      getEnv("SOJ_KEYS_DIR", "./data/keys"),
 		SeedDir:      getEnv("SOJ_SEED_DIR", ""),
 		SandboxAddr:  getEnv("SOJ_SANDBOX_ADDR", "http://127.0.0.1:5050"),
-		JWTSecret:    os.Getenv("SOJ_JWT_SECRET"), // v0.14 起无默认值：缺失由 server.Run 拒绝启动
+		JWTSecret:    os.Getenv("SOJ_JWT_SECRET"), // 留空 = server.Run 从密钥卷载入或自动生成随机密钥（见 resolveJWTSecret）
 		JudgeWorkers: getEnvInt("SOJ_JUDGE_WORKERS", 2),
 	}
 	c.TrustedProxies = parseTrustedProxies(getEnv("SOJ_TRUSTED_PROXIES", "127.0.0.1,::1"))

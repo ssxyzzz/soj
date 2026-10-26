@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import AmbientGrid from '@/components/AmbientGrid.vue'
@@ -8,6 +8,7 @@ import { authApi } from '@/api'
 import { useLevelsStore } from '@/stores/levels'
 import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
+import { applyTheme, initTheme, type ThemeName } from '@/utils/theme'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +18,13 @@ const site = useSiteStore()
 
 const active = computed(() => route.path)
 const adminActive = computed(() => route.path.startsWith('/admin'))
+
+// 站点主题（2026-10-26）：v5 新案（默认）/ 原版 · 深海军蓝，页脚切换、localStorage 持久化
+const theme = ref<ThemeName>(initTheme())
+function switchTheme(t: ThemeName) {
+  applyTheme(t)
+  theme.value = t
+}
 
 // 头像首字（v3 .avatar：渐变圆 + 昵称首字；昵称为空兜底「我」）
 const avatarChar = computed(() => {
@@ -64,6 +72,7 @@ function onCommand(command: string) {
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
           <el-menu-item index="/problems">题库</el-menu-item>
+          <el-menu-item index="/lists">题单</el-menu-item>
           <el-menu-item index="/contests">比赛</el-menu-item>
           <el-menu-item index="/classes">班级</el-menu-item>
           <el-menu-item index="/rank">排名</el-menu-item>
@@ -104,6 +113,12 @@ function onCommand(command: string) {
     </el-main>
     <el-footer class="footer">
       <span>SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
+      <!-- 主题切换（2026-10-26）：v5 新案（默认）/ 原版 · 深海军蓝，data-theme 整站变量换血 -->
+      <span class="theme-switch">
+        <span class="ts-label">主题</span>
+        <button type="button" :class="{ on: theme === 'v5' }" @click="switchTheme('v5')">v5 新案</button>
+        <button type="button" :class="{ on: theme === 'navy' }" @click="switchTheme('navy')">原版 · 深海军蓝</button>
+      </span>
       <!-- ICP 备案号（v0.13）：后台「系统设置」配置，空 = 不展示；法规要求链接工信部备案系统 -->
       <a
         v-if="site.icpNumber"
@@ -167,7 +182,7 @@ function onCommand(command: string) {
   color: #fff;
   font-size: 15px;
   font-weight: var(--soj-fw-heavy);
-  box-shadow: 0 6px 16px rgba(36, 85, 218, 0.32);
+  box-shadow: 0 6px 16px rgb(var(--soj-blue-rgb) / 0.32);
 }
 
 .brand-word {
@@ -305,6 +320,10 @@ function onCommand(command: string) {
 /* 透明画布：body 三层画布（渐变+光晕+青网格）直接透出，main/footer 不再铺实底 */
 .main {
   background: transparent;
+  /* el-main 默认 overflow:auto——哪怕实际滚动在 document，也会让页内
+     position:sticky（题单目录卡等）失效（auto 祖先劫持 sticky 基准）。
+     页面横向溢出已由 .page/.main-col 的 overflow-x:clip 兜住，这里放开 */
+  overflow: visible;
 }
 
 .footer {
@@ -318,6 +337,40 @@ function onCommand(command: string) {
   background: transparent;
   /* v3 页脚：hairline 顶边收束页面 */
   border-top: 1px solid var(--soj-line);
+}
+
+/* 主题切换（2026-10-26）：页脚弱化文案钮，选中态走主蓝浅底胶囊 */
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ts-label {
+  color: var(--soj-ink-3);
+}
+
+.theme-switch button {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--soj-ink-3);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.theme-switch button:hover {
+  color: var(--soj-blue);
+}
+
+.theme-switch button.on {
+  color: var(--soj-blue);
+  background: var(--soj-blue-soft);
+  border-color: var(--soj-blue-line);
+  font-weight: 600;
 }
 
 /* 备案号外链：弱化为页脚次要信息，悬停才提色 */

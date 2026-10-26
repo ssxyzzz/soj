@@ -234,7 +234,7 @@ async function submitForgot() {
   position: relative;
   min-height: 100vh;
   background:
-    radial-gradient(520px 340px at 50% 16%, rgba(122, 184, 196, 0.14), transparent 62%),
+    radial-gradient(520px 340px at 50% 16%, rgb(var(--soj-teal-soft-rgb) / 0.14), transparent 62%),
     linear-gradient(var(--soj-bg-top), var(--soj-bg-bottom));
 }
 
@@ -244,8 +244,8 @@ async function submitForgot() {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(122, 184, 196, 0.11) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(122, 184, 196, 0.11) 1px, transparent 1px);
+    linear-gradient(rgb(var(--soj-teal-soft-rgb) / 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--soj-teal-soft-rgb) / 0.11) 1px, transparent 1px);
   background-size: 44px 44px;
   -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 38%, #000 26%, transparent 80%);
   mask-image: radial-gradient(ellipse 90% 70% at 50% 38%, #000 26%, transparent 80%);
@@ -322,7 +322,7 @@ async function submitForgot() {
   color: #fff;
   font-size: 19px;
   font-weight: var(--soj-fw-heavy);
-  box-shadow: 0 8px 20px rgba(36, 85, 218, 0.3);
+  box-shadow: 0 8px 20px rgb(var(--soj-blue-rgb) / 0.3);
 }
 
 .brand-word {

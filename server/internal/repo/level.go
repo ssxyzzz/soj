@@ -25,6 +25,21 @@ var DefaultLevelNames = [10]string{"青铜", "白银", "黄金", "铂金", "钻�
 // DefaultLevelThresholds 达 Lv.2–10 的累计 XP：100×L×(L−1)。
 var DefaultLevelThresholds = [9]int64{200, 600, 1200, 2000, 3000, 4200, 5600, 7200, 9000}
 
+// DefaultDifficultyNotes 每档难度说明的默认文案（2026-10-26 定稿：锚点对齐 NOI 大纲与教学进度；
+// 空档 = 说明卡不显示该行）。仅对从未保存过等级配置的库生效——后台一旦保存过，以后台内容为准。
+var DefaultDifficultyNotes = [10]string{
+	"语法入门：顺序/分支/循环",
+	"语法基础：数组/字符串/函数/结构体",
+	"算法入门：模拟/枚举/排序/贪心/递推/递归",
+	"算法基础：二分/前缀和/差分/堆/栈/队列/DFS/BFS",
+	"CSP-J：搜索剪枝/记忆化搜索/树基础/基础图论/线性DP",
+	"CSP-S入门：并查集/最短路/最小生成树/树状数组/线段树/倍增",
+	"CSP-S基础：树形/状压/区间DP/KMP/单调队列优化DP/基础数论",
+	"CSP-S进阶：二分图/字符串哈希/AC自动机/组合数学/主席树/网络流",
+	"省选级：树链剖分/点分治/高级数论/复杂图论",
+	"NOI&IOI：综合构造/LCT/后缀自动机等",
+}
+
 const (
 	DefaultDecay1 = 0.5
 	DefaultDecay2 = 0.2
@@ -41,13 +56,16 @@ type LevelConfig struct {
 	// 题目难度名（D1–10 档的展示文字，2026-10-22 起 Difficulty 徽章/筛选/建题选择器均显示名字，
 	// 不再用「D1~D10」描述）；默认与等级名相同，root 后台独立可改。
 	DifficultyNames [10]string `bson:"difficultyNames" json:"difficulty_names"`
+	// 难度说明（2026-10-26）：每档难度各一条自由文案，题库「难度说明」说明卡逐档展示，
+	// 建题/编辑页难度页签提示同源；空档 = 不显示该行。默认为定稿文案，root 后台「难度等级」页签编辑。
+	DifficultyNotes [10]string `bson:"difficultyNotes" json:"difficulty_notes"`
 	// 特效开关：等级徽章的动画/光效（难度徽章恒静态，不受此控制）。
 	// 全局关 = 部署方不想要炫酷效果；逐级关可只保留低档纯色。
 	EffectsEnabled bool     `bson:"effectsEnabled" json:"effects_enabled"`
 	EffectsTiers   [10]bool `bson:"effectsTiers" json:"effects_tiers"`
 }
 
-// DefaultLevelConfig 默认等级配置（深拷贝默认数组；难度名默认与等级名相同）。
+// DefaultLevelConfig 默认等级配置（深拷贝默认数组；难度名默认与等级名相同，难度说明默认为定稿文案）。
 func DefaultLevelConfig() *LevelConfig {
 	cfg := &LevelConfig{
 		Names:           DefaultLevelNames,
@@ -56,6 +74,7 @@ func DefaultLevelConfig() *LevelConfig {
 		Decay2:          DefaultDecay2,
 		Decay3:          DefaultDecay3,
 		DifficultyNames: DefaultLevelNames,
+		DifficultyNotes: DefaultDifficultyNotes,
 		EffectsEnabled:  true,
 	}
 	for i := range cfg.EffectsTiers {

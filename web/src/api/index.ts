@@ -41,6 +41,11 @@ import type {
   TagNode,
   TagTreeResult,
   UserPage,
+  ListCard,
+  ListDetail,
+  ListEntry,
+  ListRankResult,
+  ListFlat,
 } from '@/types'
 
 const client = axios.create({ baseURL: '/api', timeout: 20000 })
@@ -316,6 +321,22 @@ export const levelsApi = {
   config: () => get<LevelConfigInfo>('/levels'),
 }
 
+// 题单（v0.18.3，章节化自学导航）：读登录可见，创建需 list.manage，编辑/删除限创建者
+export const listApi = {
+  all: () => get<{ items: ListCard[]; can_create: boolean }>('/lists'),
+  detail: (id: number) => get<ListDetail>(`/lists/${id}`),
+  rank: (id: number, page: number) => get<ListRankResult>(`/lists/${id}/rank`, { page }),
+  // 作业「从题单复制」：去重保序、跳过隐藏题（服务端一律剔除并计数）
+  flat: (id: number) => get<ListFlat>(`/lists/${id}/flat`),
+  create: (title: string) => post<{ id: number }>('/lists', { title }),
+  update: (
+    id: number,
+    body: { title?: string; intro?: string; hidden?: boolean; sort?: number; chapters?: ListEntry[] },
+  ) => patch<{ updated: number }>(`/lists/${id}`, body),
+  remove: (id: number) => del<{ deleted: number }>(`/lists/${id}`),
+  reorder: (ids: number[]) => post<{ updated: number }>('/lists/reorder', { ids }),
+}
+
 export const classApi = {
   list: () => get<ClassCard[]>('/classes'),
   detail: (id: number) => get<ClassDetail>(`/classes/${id}`),
@@ -367,7 +388,6 @@ export const adminApi = {
     get<{
       rate_limit_per_minute: number
       home_notice: string
-      backup_guide: string
       data_download_daily_limit: number
       autocomplete_min_level: number
       allow_register: boolean
@@ -387,7 +407,6 @@ export const adminApi = {
   updateSettings: (patch: {
     rate_limit_per_minute?: number
     home_notice?: string
-    backup_guide?: string
     data_download_daily_limit?: number
     autocomplete_min_level?: number
     allow_register?: boolean
@@ -406,7 +425,6 @@ export const adminApi = {
     put<{
       rate_limit_per_minute: number
       home_notice: string
-      backup_guide: string
       data_download_daily_limit: number
       autocomplete_min_level: number
       allow_register: boolean
@@ -427,6 +445,7 @@ export const adminApi = {
   saveLevelConfig: (body: {
     names: string[]
     difficulty_names: string[]
+    difficulty_notes: string[]
     thresholds: number[]
     decay1: number
     decay2: number

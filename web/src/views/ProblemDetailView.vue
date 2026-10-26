@@ -396,8 +396,9 @@ onUnmounted(stopPolling)
 
     <AllCodesDialog v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
 
-    <!-- 粘贴提交弹窗（2026-10-25 修复⑥）：副列不再内嵌编辑器，点「提交代码」进弹窗粘贴提交 -->
-    <el-dialog v-model="showRailSubmit" title="提交代码" width="720px" :close-on-click-modal="false">
+    <!-- 粘贴提交弹窗（2026-10-25 修复⑥）：副列不再内嵌编辑器，点「提交代码」进弹窗粘贴提交；
+         2026-10-26 字号/字体跟随用户偏好（与在线编程同一份 prefs 实时联动），弹窗加大 -->
+    <el-dialog v-model="showRailSubmit" title="提交代码" width="960px" top="6vh" :close-on-click-modal="false">
       <div class="dlg-lang">
         <span class="dlg-label">语言</span>
         <el-select :model-value="railLang" style="width: 220px" @change="changeRailLang">
@@ -409,7 +410,9 @@ onUnmounted(stopPolling)
         class="dlg-editor"
         :language="railLang"
         :autocomplete="acOn"
-        height="380px"
+        :font-size="userStore.prefs.codeFontSize || 14"
+        :font-family="userStore.prefs.codeFont || 'Consolas'"
+        height="520px"
         placeholder="在此编写或粘贴你的代码"
       />
       <div v-if="submitDisabledReason" class="hint">{{ submitDisabledReason }}</div>

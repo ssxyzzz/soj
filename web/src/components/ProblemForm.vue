@@ -139,7 +139,8 @@ const catTab = ref<'knowledge' | 'meta' | 'difficulty'>('knowledge')
 const knowledgeNames = computed(() => form.tag_ids.map((id) => tagStore.nameOf(id)))
 const metaNames = computed(() => form.meta_tag_ids.map((id) => metaStore.nameOf(id)))
 const difficultyName = computed(() => levels.difficultyNameOf(form.difficulty))
-const difficultyHint = computed(() => DIFFICULTY_HINTS[form.difficulty] ?? '')
+// 难度提示（2026-10-26）：读后台「难度等级」逐档说明（与题库说明卡同源），不再本地写死；空档不显示
+const difficultyHint = computed(() => levels.difficultyNoteOf(form.difficulty))
 
 // 标签卡片流点选回调：整体替换 tag_ids（数组顺序即点选顺序）
 function onTagsChange(ids: number[]) {
@@ -149,20 +150,6 @@ function onTagsChange(ids: number[]) {
 // 来源打标点选回调（2026-10-25 双树）：整体替换 meta_tag_ids
 function onMetaTagsChange(ids: number[]) {
   form.meta_tag_ids = ids
-}
-
-// 难度锚点提示（v0.11，NOI 大纲 + 教学进度定标）：当前档说明
-const DIFFICULTY_HINTS: Record<number, string> = {
-  1: '入门：变量/顺序/分支/循环',
-  2: '基础：数组/函数/结构体',
-  3: '算法入门：枚举/排序/递归递推',
-  4: '算法基础：贪心/二分/DFS·BFS',
-  5: 'CSP：DP入门/并查集/树状数组',
-  6: 'CSPJ+：图论基础/线段树/KMP/倍增',
-  7: 'CSPS：树形&状压DP/最短路进阶/网络流',
-  8: 'CSPS+：数据结构综合/后缀结构/建模',
-  9: 'NOIP：省选中档、NOI 简单题',
-  10: 'NOI 级：NOI 难题/集训队水平',
 }
 
 // 发布卡完成度清单（只做展示，拦截仍以 payload() 校验为准）
@@ -402,7 +389,7 @@ function onSubmitClick() {
                   @click="form.difficulty = d"
                 />
               </div>
-              <div class="hint">{{ difficultyHint }}</div>
+              <div v-if="difficultyHint" class="hint">{{ difficultyHint }}</div>
             </template>
           </div>
 
@@ -820,10 +807,10 @@ function onSubmitClick() {
 }
 
 .cat-tab.on {
-  background: linear-gradient(135deg, #2d68ef, #2455da);
+  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-blue-lo));
   color: #fff;
   font-weight: var(--soj-fw-emphasis);
-  box-shadow: 0 2px 8px rgba(31, 73, 186, 0.28);
+  box-shadow: 0 2px 8px rgb(var(--soj-blue-rgb) / 0.28);
 }
 
 .cat-tab .n {
@@ -1004,7 +991,7 @@ function onSubmitClick() {
 .zip-upload :deep(.el-upload-dragger) {
   width: 100%;
   /* 虚线加深到可见（EP 默认太淡）+ 悬停主蓝 */
-  border: 1.5px dashed rgba(31, 73, 186, 0.38);
+  border: 1.5px dashed rgb(var(--soj-blue-rgb) / 0.38);
 }
 
 .zip-upload :deep(.el-upload-dragger:hover) {

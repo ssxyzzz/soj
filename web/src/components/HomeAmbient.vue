@@ -119,8 +119,8 @@ onBeforeUnmount(() => {
   opacity: 0;
   transition: opacity 0.6s ease;
   background:
-    radial-gradient(closest-side, rgba(45, 104, 239, 0.03), transparent 72%),
-    radial-gradient(closest-side, rgba(122, 184, 196, 0.08), transparent 65%);
+    radial-gradient(closest-side, rgb(var(--soj-blue-hi-rgb) / 0.03), transparent 72%),
+    radial-gradient(closest-side, rgb(var(--soj-teal-soft-rgb) / 0.08), transparent 65%);
   will-change: transform;
 }
 
@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
   height: 24px;
   margin: -12px 0 0 -12px;
   border-radius: 50%;
-  border: 1px solid rgba(22, 167, 210, 0.14);
+  border: 1px solid rgb(var(--soj-teal-rgb) / 0.14);
   pointer-events: none;
   animation: ambient-ring 0.7s ease-out forwards;
 }

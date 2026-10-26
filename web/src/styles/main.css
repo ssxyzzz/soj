@@ -2,7 +2,7 @@
    SOJ 全局样式
    ------------------------------------------------------------
    v0.19 青格蓝调换血（权威 = web-design-v3.md）：色彩 / 圆角 / 画布 / 组件
-   形制全面重定（主蓝 #1F49BA、藏蓝层级、青网格画布、胶囊控件、卡片柔影），
+   形制全面重定（主蓝 #007BFF、藏蓝层级、青网格画布、胶囊控件、卡片柔影），
    下文字号/字重 token 表（v0.6.3）不受影响、整体保留。
    SOJ 字号/字重 token 表（v0.6.3）
    ------------------------------------------------------------
@@ -167,18 +167,23 @@ html {
     sans-serif;
 
   /* ---- v0.19 青格蓝调（权威 = web-design-v3.md）：画布 / 色彩 / 圆角 token ----
-     主蓝 #1F49BA（simple408.cn 实测），藏蓝文字层级，冷白画布 + 青网格（见 body）。 */
+     主蓝 #007BFF（2026-10-26 用户拍板换色），藏蓝文字层级，冷白画布 + 青网格（见 body）。 */
   --soj-navy: #0b1f45;
   --soj-ink: #10233b;
   --soj-ink-2: #48607f; /* v3-full 墨色第二层：副文/表单标签 */
   --soj-ink-3: #8da2bc; /* v3-full 墨色第三层：占位/微文字 */
-  --soj-blue: #1f49ba;
-  --soj-blue-deep: #1845ad;
-  --soj-blue-hi: #2d68ef;
-  --soj-blue-lo: #2455da;
-  --soj-teal: #16a7d2;
-  --soj-blue-soft: rgba(31, 73, 186, 0.08);
-  --soj-blue-line: rgba(31, 73, 186, 0.28); /* v3-full 主蓝 hairline（hover 描边等） */
+  --soj-blue: #007bff;
+  --soj-blue-deep: #0069d9;
+  --soj-blue-hi: #3395ff;
+  --soj-blue-lo: #007bff;
+  --soj-blue-deeper: #0056b3; /* 按钮按下最深档（hover 底=deep，active=deeper） */
+  --soj-blue-rgb: 0 123 255;
+  --soj-blue-hi-rgb: 51 149 255;
+  --soj-teal: #14b8a6;
+  --soj-teal-rgb: 20 184 166;
+  --soj-teal-soft-rgb: 20 184 166; /* 画布青光晕/氛围（navy 主题回青 #7a8cb4 系） */
+  --soj-blue-soft: rgb(var(--soj-blue-rgb) / 0.08);
+  --soj-blue-line: rgb(var(--soj-blue-rgb) / 0.28); /* v3-full 主蓝 hairline（hover 描边等） */
   --soj-line: rgba(11, 31, 69, 0.08);
   --soj-line-2: rgba(11, 31, 69, 0.13); /* v3-full 第二层线（控件描边/dashed 分隔） */
   --soj-bg-top: #fbfdff;
@@ -186,15 +191,20 @@ html {
   --soj-surface-2: #f5f9ff;
   --soj-surface-3: #f0f5fc;
 
-  /* v3-full 状态定值浅底（.sub-status 用；替 color-mix 派生） */
-  --soj-ac: #0e9f6e;
-  --soj-ac-bg: #e7f7ef;
-  --soj-wa: #e02d3c;
-  --soj-wa-bg: #fdecea;
-  --soj-tle: #d98207;
-  --soj-tle-bg: #fcf3e3;
-  --soj-run: #2455da;
-  --soj-run-bg: #eaf0fe;
+  /* v3-full 状态定值浅底（.sub-status 用；替 color-mix 派生）。
+     2026-10-26 v5 新案（默认）：AC #3cb371 / WA #ff6b6b / TLE #ff8c00，teal 挪绿；
+     语义主色收进 --soj-success/-warning/-danger，navy 主题由 data-theme 块整组覆写 */
+  --soj-success: #3cb371;
+  --soj-warning: #ff8c00;
+  --soj-danger: #ff6b6b;
+  --soj-ac: var(--soj-success);
+  --soj-ac-bg: #ebf7f1;
+  --soj-wa: var(--soj-danger);
+  --soj-wa-bg: #ffefef;
+  --soj-tle: var(--soj-warning);
+  --soj-tle-bg: #fff4e6;
+  --soj-run: var(--soj-blue);
+  --soj-run-bg: #e8f2ff;
   --soj-mut: #7a8ca6;
   --soj-mut-bg: #f0f4fa;
 
@@ -206,42 +216,43 @@ html {
   --soj-code-kw: #7eb3ff;
 
   /* EP 五语义位换血 + color-mix 派生浅阶（EP 约定：light-N ≈ N×10% 向白，
-     dark-2 ≈ 20% 向黑）；浅底场景（plain 按钮 / 浅 tag / 选中底）自动跟随 */
-  --el-color-primary: #1f49ba;
-  --el-color-primary-light-3: color-mix(in srgb, #1f49ba 70%, #ffffff);
-  --el-color-primary-light-5: color-mix(in srgb, #1f49ba 50%, #ffffff);
-  --el-color-primary-light-7: color-mix(in srgb, #1f49ba 30%, #ffffff);
-  --el-color-primary-light-8: color-mix(in srgb, #1f49ba 20%, #ffffff);
-  --el-color-primary-light-9: color-mix(in srgb, #1f49ba 10%, #ffffff);
-  --el-color-primary-dark-2: color-mix(in srgb, #1f49ba 80%, #000000);
-  --el-color-success: #0e9f6e;
-  --el-color-success-light-3: color-mix(in srgb, #0e9f6e 70%, #ffffff);
-  --el-color-success-light-5: color-mix(in srgb, #0e9f6e 50%, #ffffff);
-  --el-color-success-light-7: color-mix(in srgb, #0e9f6e 30%, #ffffff);
-  --el-color-success-light-8: color-mix(in srgb, #0e9f6e 20%, #ffffff);
-  --el-color-success-light-9: color-mix(in srgb, #0e9f6e 10%, #ffffff);
-  --el-color-success-dark-2: color-mix(in srgb, #0e9f6e 80%, #000000);
-  --el-color-warning: #d98207;
-  --el-color-warning-light-3: color-mix(in srgb, #d98207 70%, #ffffff);
-  --el-color-warning-light-5: color-mix(in srgb, #d98207 50%, #ffffff);
-  --el-color-warning-light-7: color-mix(in srgb, #d98207 30%, #ffffff);
-  --el-color-warning-light-8: color-mix(in srgb, #d98207 20%, #ffffff);
-  --el-color-warning-light-9: color-mix(in srgb, #d98207 10%, #ffffff);
-  --el-color-warning-dark-2: color-mix(in srgb, #d98207 80%, #000000);
-  --el-color-danger: #e02d3c;
-  --el-color-danger-light-3: color-mix(in srgb, #e02d3c 70%, #ffffff);
-  --el-color-danger-light-5: color-mix(in srgb, #e02d3c 50%, #ffffff);
-  --el-color-danger-light-7: color-mix(in srgb, #e02d3c 30%, #ffffff);
-  --el-color-danger-light-8: color-mix(in srgb, #e02d3c 20%, #ffffff);
-  --el-color-danger-light-9: color-mix(in srgb, #e02d3c 10%, #ffffff);
-  --el-color-danger-dark-2: color-mix(in srgb, #e02d3c 80%, #000000);
-  --el-color-error: #e02d3c;
-  --el-color-error-light-3: color-mix(in srgb, #e02d3c 70%, #ffffff);
-  --el-color-error-light-5: color-mix(in srgb, #e02d3c 50%, #ffffff);
-  --el-color-error-light-7: color-mix(in srgb, #e02d3c 30%, #ffffff);
-  --el-color-error-light-8: color-mix(in srgb, #e02d3c 20%, #ffffff);
-  --el-color-error-light-9: color-mix(in srgb, #e02d3c 10%, #ffffff);
-  --el-color-error-dark-2: color-mix(in srgb, #e02d3c 80%, #000000);
+     dark-2 ≈ 20% 向黑）；浅底场景（plain 按钮 / 浅 tag / 选中底）自动跟随。
+     2026-10-26 起基色改引 --soj-blue/--soj-* token：双主题（v5/navy）整组自动换血 */
+  --el-color-primary: var(--soj-blue);
+  --el-color-primary-light-3: color-mix(in srgb, var(--soj-blue) 70%, #ffffff);
+  --el-color-primary-light-5: color-mix(in srgb, var(--soj-blue) 50%, #ffffff);
+  --el-color-primary-light-7: color-mix(in srgb, var(--soj-blue) 30%, #ffffff);
+  --el-color-primary-light-8: color-mix(in srgb, var(--soj-blue) 20%, #ffffff);
+  --el-color-primary-light-9: color-mix(in srgb, var(--soj-blue) 10%, #ffffff);
+  --el-color-primary-dark-2: color-mix(in srgb, var(--soj-blue) 80%, #000000);
+  --el-color-success: var(--soj-success);
+  --el-color-success-light-3: color-mix(in srgb, var(--soj-success) 70%, #ffffff);
+  --el-color-success-light-5: color-mix(in srgb, var(--soj-success) 50%, #ffffff);
+  --el-color-success-light-7: color-mix(in srgb, var(--soj-success) 30%, #ffffff);
+  --el-color-success-light-8: color-mix(in srgb, var(--soj-success) 20%, #ffffff);
+  --el-color-success-light-9: color-mix(in srgb, var(--soj-success) 10%, #ffffff);
+  --el-color-success-dark-2: color-mix(in srgb, var(--soj-success) 80%, #000000);
+  --el-color-warning: var(--soj-warning);
+  --el-color-warning-light-3: color-mix(in srgb, var(--soj-warning) 70%, #ffffff);
+  --el-color-warning-light-5: color-mix(in srgb, var(--soj-warning) 50%, #ffffff);
+  --el-color-warning-light-7: color-mix(in srgb, var(--soj-warning) 30%, #ffffff);
+  --el-color-warning-light-8: color-mix(in srgb, var(--soj-warning) 20%, #ffffff);
+  --el-color-warning-light-9: color-mix(in srgb, var(--soj-warning) 10%, #ffffff);
+  --el-color-warning-dark-2: color-mix(in srgb, var(--soj-warning) 80%, #000000);
+  --el-color-danger: var(--soj-danger);
+  --el-color-danger-light-3: color-mix(in srgb, var(--soj-danger) 70%, #ffffff);
+  --el-color-danger-light-5: color-mix(in srgb, var(--soj-danger) 50%, #ffffff);
+  --el-color-danger-light-7: color-mix(in srgb, var(--soj-danger) 30%, #ffffff);
+  --el-color-danger-light-8: color-mix(in srgb, var(--soj-danger) 20%, #ffffff);
+  --el-color-danger-light-9: color-mix(in srgb, var(--soj-danger) 10%, #ffffff);
+  --el-color-danger-dark-2: color-mix(in srgb, var(--soj-danger) 80%, #000000);
+  --el-color-error: var(--soj-danger);
+  --el-color-error-light-3: color-mix(in srgb, var(--soj-danger) 70%, #ffffff);
+  --el-color-error-light-5: color-mix(in srgb, var(--soj-danger) 50%, #ffffff);
+  --el-color-error-light-7: color-mix(in srgb, var(--soj-danger) 30%, #ffffff);
+  --el-color-error-light-8: color-mix(in srgb, var(--soj-danger) 20%, #ffffff);
+  --el-color-error-light-9: color-mix(in srgb, var(--soj-danger) 10%, #ffffff);
+  --el-color-error-dark-2: color-mix(in srgb, var(--soj-danger) 80%, #000000);
   --el-color-info: #7a8ca6;
   --el-color-info-light-3: color-mix(in srgb, #7a8ca6 70%, #ffffff);
   --el-color-info-light-5: color-mix(in srgb, #7a8ca6 50%, #ffffff);
@@ -288,6 +299,30 @@ html {
 
 }
 
+/* ===== 双主题（2026-10-26）：:root 即默认「v5 新案」，data-theme="navy" 切「原版 · 深海军蓝」。
+   只覆写差异 token（蓝系/teal/三状态语义色），其余（墨色/画布/徽章色轴/代码面）两案共用。
+   切换入口在站点页脚，localStorage soj_theme 持久化，main.ts 挂载前应用避免闪烁。 */
+html[data-theme='navy'] {
+  --soj-blue: #1f49ba;
+  --soj-blue-deep: #1845ad;
+  --soj-blue-deeper: #13398f;
+  --soj-blue-hi: #2d68ef;
+  --soj-blue-lo: #2455da;
+  --soj-blue-rgb: 36 85 218;
+  --soj-blue-hi-rgb: 45 104 239;
+  --soj-teal: #16a7d2;
+  --soj-teal-rgb: 22 167 210;
+  --soj-teal-soft-rgb: 122 184 196;
+  --soj-success: #0e9f6e;
+  --soj-warning: #d98207;
+  --soj-danger: #e02d3c;
+  --soj-ac-bg: #e7f7ef;
+  --soj-wa-bg: #fdecea;
+  --soj-tle-bg: #fcf3e3;
+  --soj-run-bg: #eaf0fe;
+  --soj-run: var(--soj-blue-lo);
+}
+
 body {
   font-size: var(--soj-fs-body);
   /* 字体栈纪律（2026-10-22 三修定稿）：CJK 字体必须排在一切拉丁字体之前。
@@ -312,8 +347,8 @@ body {
   /* v0.19 三层画布（web-design-v3.md §3）：冷白纵向渐变（固定视口）+
      顶部中央青光晕 + 右上蓝光晕；青色网格层在 body::after（负 z 索引沉底） */
   background:
-    radial-gradient(520px 340px at 50% 10%, rgba(122, 184, 196, 0.14), transparent 62%),
-    radial-gradient(760px 420px at 90% 6%, rgba(36, 85, 218, 0.05), transparent 60%),
+    radial-gradient(520px 340px at 50% 10%, rgb(var(--soj-teal-soft-rgb) / 0.14), transparent 62%),
+    radial-gradient(760px 420px at 90% 6%, rgb(var(--soj-blue-rgb) / 0.05), transparent 60%),
     linear-gradient(#fbfdff, #f1f6fd);
   background-attachment: fixed;
   color: var(--el-text-color-primary);
@@ -328,8 +363,8 @@ body::after {
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(rgba(122, 184, 196, 0.11) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(122, 184, 196, 0.11) 1px, transparent 1px);
+    linear-gradient(rgb(var(--soj-teal-soft-rgb) / 0.11) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--soj-teal-soft-rgb) / 0.11) 1px, transparent 1px);
   background-size: 44px 44px;
   -webkit-mask-image: radial-gradient(ellipse 100% 72% at 50% 0%, #000 24%, transparent 78%);
   mask-image: radial-gradient(ellipse 100% 72% at 50% 0%, #000 24%, transparent 78%);
@@ -370,7 +405,7 @@ body.ambient-on::after {
   --el-table-border-color: var(--el-border-color-light);
   /* 悬停行 7% 品牌蓝（2026-10-25 验收反馈：原 surface-2 ≈2% 蓝，与行底基本不可分）；
      与「我的」行高亮同色阶（.me-row 默认 4.5% / 悬停 10%，层级见下） */
-  --el-table-row-hover-bg-color: rgba(36, 85, 218, 0.07);
+  --el-table-row-hover-bg-color: rgb(var(--soj-blue-rgb) / 0.07);
   font-size: var(--soj-fs-14);
   /* EP 自声明在 .el-table 上（:root 覆盖无效）：表头藏蓝 / 表体墨水色 */
   --el-table-header-text-color: var(--soj-navy);
@@ -663,15 +698,16 @@ strong {
    五级 紫（等级星耀族）；底 ≈10% / 边 ≈26% / 字深色。--lv* 由 .lv-N 注入卡片，
    表格标签列、筛选面板、后台标签树、详情信息卡共用。 */
 .lv-1 {
-  --lv: #1f49ba;
-  --lv-bg: rgba(31, 73, 186, 0.08);
-  --lv-border: rgba(31, 73, 186, 0.26);
+  --lv: var(--soj-blue);
+  --lv-bg: rgb(var(--soj-blue-rgb) / 0.08);
+  --lv-border: rgb(var(--soj-blue-rgb) / 0.26);
 }
 
 .lv-2 {
   --lv: #0e7a9c;
-  --lv-bg: rgba(22, 167, 210, 0.09);
-  --lv-border: rgba(22, 167, 210, 0.26);
+  /* 二级用自身青色锚点派生浅底/描边，不借 --soj-teal-rgb——v5 的 teal 挪绿后会与三级绿撞色 */
+  --lv-bg: rgba(14, 122, 156, 0.09);
+  --lv-border: rgba(14, 122, 156, 0.26);
 }
 
 .lv-3 {
@@ -788,22 +824,22 @@ strong {
   --el-button-border-color: var(--soj-blue-lo);
   --el-button-hover-bg-color: var(--soj-blue-deep);
   --el-button-hover-border-color: var(--soj-blue-deep);
-  --el-button-active-bg-color: #13398f;
-  --el-button-active-border-color: #13398f;
+  --el-button-active-bg-color: var(--soj-blue-deeper);
+  --el-button-active-border-color: var(--soj-blue-deeper);
   --el-button-disabled-bg-color: var(--soj-blue-lo);
   --el-button-disabled-border-color: var(--soj-blue-lo);
   background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-blue-lo));
   border-color: var(--soj-blue-lo);
-  box-shadow: 0 8px 20px rgba(36, 85, 218, 0.28);
+  box-shadow: 0 8px 20px rgb(var(--soj-blue-rgb) / 0.28);
   transition: all 0.18s;
 }
 
 /* v3-full：主按钮 hover 上浮 1px + 影加深、active 回落微缩 */
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(.is-disabled):hover {
-  background: linear-gradient(180deg, #3a71f2, #2a5ae2);
+  background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-blue-deep));
   border-color: var(--soj-blue-deep);
   transform: translateY(-1px);
-  box-shadow: 0 10px 26px rgba(36, 85, 218, 0.36);
+  box-shadow: 0 10px 26px rgb(var(--soj-blue-rgb) / 0.36);
 }
 
 .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):active {
@@ -1883,8 +1919,8 @@ samp {
    首版因此整体退回 primary 浅蓝灰。此处 .el-tag.ptype-tag 对齐到（0,2,0），
    与 EP 变体平特异度后靠 main.css 恒序（EP→vditor→main.css）后到者胜。 */
 :root {
-  --soj-probtype-bg: rgba(22, 167, 210, 0.09);
-  --soj-probtype-border: rgba(22, 167, 210, 0.24);
+  --soj-probtype-bg: rgb(var(--soj-teal-rgb) / 0.09);
+  --soj-probtype-border: rgb(var(--soj-teal-rgb) / 0.24);
   --soj-probtype-text: #0e7a9c;
 }
 .el-tag.ptype-tag {
@@ -2032,7 +2068,7 @@ samp {
   background: var(--soj-blue);
   color: #fff;
   font-weight: var(--soj-fw-bold);
-  box-shadow: 0 4px 12px rgba(36, 85, 218, 0.3);
+  box-shadow: 0 4px 12px rgb(var(--soj-blue-rgb) / 0.3);
 }
 
 /* ---- 圆形渐变钮 .soj-orb（v3 .orb：52px 主蓝渐变圆钮，hero 搜索用） ---- */
@@ -2047,7 +2083,7 @@ samp {
   border: 0;
   color: #fff;
   background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-blue-lo));
-  box-shadow: 0 8px 18px rgba(36, 85, 218, 0.32);
+  box-shadow: 0 8px 18px rgb(var(--soj-blue-rgb) / 0.32);
   cursor: pointer;
   transition: transform 0.18s;
 }
@@ -2063,8 +2099,8 @@ samp {
   height: 24px;
   padding: 0 11px;
   border-radius: 999px;
-  background: rgba(22, 167, 210, 0.09);
-  border: 1px solid rgba(22, 167, 210, 0.24);
+  background: rgb(var(--soj-teal-rgb) / 0.09);
+  border: 1px solid rgb(var(--soj-teal-rgb) / 0.24);
   color: #0e7a9c;
   font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-emphasis);
@@ -2074,7 +2110,7 @@ samp {
 }
 
 .soj-tagchip:hover {
-  background: rgba(22, 167, 210, 0.16);
+  background: rgb(var(--soj-teal-rgb) / 0.16);
 }
 
 .soj-tagchip.on {
@@ -2189,20 +2225,49 @@ samp {
   color: var(--soj-blue);
 }
 
-/* ---- 邀请码胶囊 .soj-inv-chip（v3 .inv-chip：虚线主蓝边 mono 居中展示） ---- */
+/* ---- 邀请码胶囊 .soj-inv-chip（v3 .inv-chip 演进：虚线主蓝边胶囊即复制按钮。
+     2026-10-25 从班级信息卡挪入管理卡；2026-10-26 与复制按钮合一，体量对齐
+     entry-actions 40px 动作按钮，文案「复制邀请码：xxxx」） ---- */
 .soj-inv-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 14px;
   border-radius: 999px;
   background: var(--soj-blue-soft);
   border: 1px dashed var(--soj-blue-line);
-  font-family: var(--font-mono);
   font-weight: var(--soj-fw-emphasis);
   font-size: var(--soj-fs-14);
   color: var(--soj-blue);
-  letter-spacing: 2px;
+}
+
+/* 码段 mono 微字距；标签中文走正文字体 */
+.soj-inv-chip .inv-code {
+  font-family: var(--font-mono);
+  letter-spacing: 1px;
+}
+
+/* 管理卡动作列内：与相邻 el-button 同宽同高（.entry-actions .el-button = 100% × 40px） */
+.entry-actions .soj-inv-chip {
+  width: 100%;
+  height: 40px;
+}
+
+/* 可点击变体 .is-clickable：hover 描边加深微亮（2026-10-26 码与复制合一） */
+button.soj-inv-chip.is-clickable {
+  cursor: pointer;
+}
+
+button.soj-inv-chip.is-clickable:hover {
+  border-style: solid;
+  border-color: var(--soj-blue);
+  background: color-mix(in srgb, var(--soj-blue-soft) 55%, var(--soj-blue-line));
+}
+
+button.soj-inv-chip.is-clickable:focus-visible {
+  outline: 2px solid var(--soj-blue);
+  outline-offset: 2px;
 }
 
 /* ---- 角色胶囊 .soj-role-chip（v3 role-chip：root 红 / admin 橙 / teacher 蓝 / 其余灰） ---- */
@@ -2225,7 +2290,7 @@ samp {
 }
 
 .soj-role-chip.role-teacher {
-  background: rgba(31, 73, 186, 0.09);
+  background: rgb(var(--soj-blue-rgb) / 0.09);
   color: var(--soj-blue);
 }
 
@@ -2332,7 +2397,7 @@ samp {
   font-weight: var(--soj-fw-emphasis);
   line-height: 1;
   color: transparent;
-  -webkit-text-stroke: 1.5px rgba(36, 85, 218, 0.14);
+  -webkit-text-stroke: 1.5px rgb(var(--soj-blue-rgb) / 0.14);
   user-select: none;
   letter-spacing: -4px;
   pointer-events: none;
@@ -2370,11 +2435,11 @@ samp {
 
 /* ---- 表格「我的」行高亮（v3 tr.me：整行淡蓝渐变；el-table 用 row-class-name 挂 .me-row） ---- */
 .el-table .el-table__row.me-row > td.el-table__cell {
-  background: rgba(36, 85, 218, 0.045);
+  background: rgb(var(--soj-blue-rgb) / 0.045);
 }
 
 .el-table .el-table__row.me-row:hover > td.el-table__cell {
-  background: rgba(36, 85, 218, 0.1); /* 高普通行悬停（7%）一档，2026-10-25 随悬停提阶同步上调 */
+  background: rgb(var(--soj-blue-rgb) / 0.1); /* 高普通行悬停（7%）一档，2026-10-25 随悬停提阶同步上调 */
 }
 
 /* ---- 窄容器（v3 wrap.narrow 960：排名/首页/导入窄版） ---- */

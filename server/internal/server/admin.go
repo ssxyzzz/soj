@@ -228,7 +228,6 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 	ok(c, gin.H{
 		"rate_limit_per_minute":     s.RateLimitPerMinute,
 		"home_notice":               s.HomeNotice,
-		"backup_guide":              s.BackupGuide,
 		"data_download_daily_limit": s.DownloadDailyLimit(),
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
@@ -274,12 +273,11 @@ func (h *Handlers) GetNotice(c *gin.Context) {
 	ok(c, gin.H{"content": s.HomeNotice})
 }
 
-// UpdateSettings 更新系统设置（公告/备份说明收 Markdown）。
+// UpdateSettings 更新系统设置（公告收 Markdown）。
 func (h *Handlers) UpdateSettings(c *gin.Context) {
 	var req struct {
 		RateLimitPerMinute     *int    `json:"rate_limit_per_minute"`
 		HomeNotice             *string `json:"home_notice"`
-		BackupGuide            *string `json:"backup_guide"`
 		DataDownloadDailyLimit *int    `json:"data_download_daily_limit"`
 		AutocompleteMinLevel   *int    `json:"autocomplete_min_level"`
 		AllowRegister          *bool   `json:"allow_register"`
@@ -343,13 +341,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.IcpNumber = icp
-	}
-	if req.BackupGuide != nil {
-		if len(*req.BackupGuide) > 16<<10 {
-			fail(c, http.StatusBadRequest, "备份使用说明过长（上限 16KB）")
-			return
-		}
-		s.BackupGuide = *req.BackupGuide
 	}
 	if req.BatchImportProblemMB != nil {
 		if *req.BatchImportProblemMB < 1 || *req.BatchImportProblemMB > 4096 {
@@ -437,7 +428,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	ok(c, gin.H{
 		"rate_limit_per_minute":     s.RateLimitPerMinute,
 		"home_notice":               s.HomeNotice,
-		"backup_guide":              s.BackupGuide,
 		"data_download_daily_limit": s.DownloadDailyLimit(),
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),

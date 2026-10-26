@@ -151,8 +151,8 @@ onBeforeUnmount(() => {
             title="编辑器字号（12-48，可输入或 +/- 微调）"
             @change="(n: number | undefined) => n && saveEditorPrefs({ codeFontSize: n })"
           />
-          <el-button type="primary" size="small" :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
-          <el-button size="small" @click="emit('update:modelValue', false)">退出全屏（Esc）</el-button>
+          <el-button type="primary" :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
+          <el-button @click="emit('update:modelValue', false)">退出全屏（Esc）</el-button>
         </div>
       </header>
       <div v-if="disabled" class="wb-disabled">{{ disabledReason }}</div>
@@ -221,6 +221,12 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   flex: none;
+}
+
+/* 工具栏整行等高：select/字号框走全局 --el-component-size 40px，
+   按钮弃用 small 档（34px）并钉在 40px，与左侧控件完全对齐（2026-10-26 验收调整） */
+.wb-actions .el-button {
+  height: 40px;
 }
 
 .wb-disabled {

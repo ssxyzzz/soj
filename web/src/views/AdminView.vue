@@ -115,7 +115,7 @@ async function switchSubTab(target: SubTab) {
         @click="switchSection('levels')"
       >
         <span class="nav-title">等级设置</span>
-        <span class="nav-sub">名称 / 阈值 / 特效开关</span>
+        <span class="nav-sub">用户等级 / 难度等级</span>
       </div>
       <div
         class="nav-item"

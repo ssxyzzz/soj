@@ -308,7 +308,7 @@ function openDetail(id: number) {
   font-size: 28px;
   font-weight: 800;
   color: #fff;
-  background: linear-gradient(135deg, #2d68ef, #2455da);
+  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-blue-lo));
 }
 
 .who {
@@ -356,7 +356,7 @@ function openDetail(id: number) {
 .lv-in {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2d68ef, #2455da);
+  background: linear-gradient(90deg, var(--soj-blue-hi), var(--soj-blue-lo));
   transition: width 0.4s;
 }
 
@@ -432,8 +432,8 @@ function openDetail(id: number) {
 }
 
 .dcard:not(:disabled):hover {
-  border-color: #2d68ef;
-  box-shadow: 0 2px 10px rgba(31, 73, 186, 0.12);
+  border-color: var(--soj-blue);
+  box-shadow: 0 2px 10px rgb(var(--soj-blue-rgb) / 0.12);
 }
 
 .dcard:disabled {
@@ -514,7 +514,7 @@ function openDetail(id: number) {
 }
 
 .plink:hover {
-  color: #2d68ef;
+  color: var(--soj-blue);
 }
 
 .pid {
@@ -595,8 +595,8 @@ function openDetail(id: number) {
 }
 
 .mini-tag.ended {
-  color: #2455da;
-  background: rgba(45, 104, 239, 0.1);
+  color: var(--soj-blue-lo);
+  background: rgb(var(--soj-blue-hi-rgb) / 0.1);
 }
 
 .rank-cell {
@@ -607,7 +607,7 @@ function openDetail(id: number) {
 .rank-cell b {
   display: block;
   font-size: 16px;
-  color: #2d68ef;
+  color: var(--soj-blue);
 }
 
 .rank-cell span {

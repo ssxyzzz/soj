@@ -150,8 +150,8 @@ onMounted(async () => {
 .pcard.p1 {
   padding: 30px 22px 26px;
   background:
-    radial-gradient(300px 120px at 50% 0%, rgba(36, 85, 218, 0.08), transparent 70%), var(--el-bg-color);
-  border-color: rgba(36, 85, 218, 0.22);
+    radial-gradient(300px 120px at 50% 0%, rgb(var(--soj-blue-rgb) / 0.08), transparent 70%), var(--el-bg-color);
+  border-color: rgb(var(--soj-blue-rgb) / 0.22);
 }
 
 .rank-no {

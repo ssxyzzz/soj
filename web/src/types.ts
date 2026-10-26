@@ -312,6 +312,7 @@ export interface UserPage {
 export interface LevelConfigInfo {
   names: string[] // Lv.1–10 名称文字
   difficulty_names?: string[] // 难度 1–10 档展示名（缺省与等级名相同）
+  difficulty_notes?: string[] // 每档难度各一条说明（题库说明卡逐档展示；空档不显示）
   thresholds: number[] // 达 Lv.2–10 的累计 XP（9 项）
   decay: [number, number, number] // 低 1/2/3 级题分系数（低 ≥4 级恒 0）
   effects_enabled: boolean
@@ -323,6 +324,7 @@ export interface LevelConfigInfo {
 export interface AdminLevelConfig {
   names: string[]
   difficulty_names: string[]
+  difficulty_notes: string[]
   thresholds: number[]
   decay1: number
   decay2: number
@@ -469,6 +471,104 @@ export interface DuplicateGroup {
   }[]
 }
 
+// ---------- 题单（v0.18.3，GET /lists*） ----------
+
+// 章节树节点（提交/存储形态）：题挂叶子、章最多两层、单章不混挂
+export interface ListEntry {
+  title: string
+  desc?: string
+  problems?: number[]
+  children?: ListEntry[]
+}
+
+// 编辑器草稿节点：题带标题（保序展示与拖拽）
+export interface ListEntryDraft {
+  title: string
+  desc: string
+  problems: PickedProblem[]
+  children: ListEntryDraft[]
+}
+
+export interface ListCard {
+  id: number
+  title: string
+  intro: string
+  hidden?: boolean
+  created_at: string
+  created_by: number
+  chapter_count: number
+  problem_count: number
+  solved: number
+  difficulties: number[]
+  participants: number
+  manageable: boolean
+}
+
+// 详情条目：pid + 摘要 + 我的最高分状态
+export interface ListProblemEntry {
+  pid: number
+  title: string
+  difficulty: number
+  hidden?: boolean
+  locked?: boolean
+  lock_kind?: string
+  status?: string
+  score?: number
+  tags?: number[]
+}
+
+export interface ListSection {
+  no: string
+  title: string
+  desc?: string
+  problems: ListProblemEntry[]
+}
+
+export interface ListChapter {
+  no: string
+  title: string
+  desc?: string
+  problems: ListProblemEntry[]
+  sections: ListSection[]
+}
+
+export interface ListDetail {
+  id: number
+  title: string
+  intro: string
+  hidden?: boolean
+  created_at: string
+  manageable: boolean
+  total: number
+  solved: number
+  difficulties: number[]
+  chapters: ListChapter[]
+}
+
+export interface ListRankItem {
+  rank: number
+  uid: number
+  username: string
+  nickname: string
+  solved: number
+  level?: number
+}
+
+export interface ListRankResult {
+  total: number
+  page: number
+  page_size: number
+  items: ListRankItem[]
+  me: { rank: number; solved: number } | null
+}
+
+// 作业「从题单复制」拍平结果（隐藏题一律跳过并计数）
+export interface ListFlat {
+  title: string
+  items: { id: number; title: string }[]
+  skipped_hidden: number
+}
+
 // ---------- 个人设置（v0.4.8） ----------
 
 // 用户偏好：跟随账号存储，前端消费（默认语言/代码模板/MD 编辑模式）
@@ -519,7 +619,6 @@ export interface BackupStatus {
   last_db_file?: string | null
   last_media_at?: string | null // 每周数据卷备最近一次
   last_media_file?: string | null
-  guide?: string // 备份面板使用说明（Markdown，v0.8 起单一事实源；空 = 前端内置默认）
 }
 
 // ---------- 角色与权限位（v0.4.7） ----------

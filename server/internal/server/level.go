@@ -16,6 +16,7 @@ func levelView(cfg *repo.LevelConfig) gin.H {
 	return gin.H{
 		"names":            cfg.Names,
 		"difficulty_names": cfg.DifficultyNames,
+		"difficulty_notes": cfg.DifficultyNotes,
 		"thresholds":       cfg.Thresholds,
 		"decay":            [3]float64{cfg.Decay1, cfg.Decay2, cfg.Decay3},
 		"effects_enabled":  cfg.EffectsEnabled,
@@ -50,16 +51,17 @@ func (h *Handlers) AdminGetLevelConfig(c *gin.Context) {
 
 // AdminUpdateLevelConfig 等级面板保存（root）：名称/阈值/衰减系数/特效开关整体覆盖。
 func (h *Handlers) AdminUpdateLevelConfig(c *gin.Context) {
-var req struct {
-	Names           [10]string `json:"names"`
-	DifficultyNames [10]string `json:"difficulty_names"`
-	Thresholds      [9]int64   `json:"thresholds"`
-	Decay1          *float64   `json:"decay1"`
-	Decay2          *float64   `json:"decay2"`
-	Decay3          *float64   `json:"decay3"`
-	EffectsEnabled  *bool      `json:"effects_enabled"`
-	EffectsTiers    *[10]bool  `json:"effects_tiers"`
-}
+	var req struct {
+		Names           [10]string `json:"names"`
+		DifficultyNames [10]string `json:"difficulty_names"`
+		DifficultyNotes [10]string `json:"difficulty_notes"`
+		Thresholds      [9]int64   `json:"thresholds"`
+		Decay1          *float64   `json:"decay1"`
+		Decay2          *float64   `json:"decay2"`
+		Decay3          *float64   `json:"decay3"`
+		EffectsEnabled  *bool      `json:"effects_enabled"`
+		EffectsTiers    *[10]bool  `json:"effects_tiers"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
@@ -72,6 +74,9 @@ var req struct {
 	cfg := *cur
 	cfg.Names = req.Names
 	cfg.DifficultyNames = req.DifficultyNames
+	for i := range req.DifficultyNotes {
+		cfg.DifficultyNotes[i] = trimTo(req.DifficultyNotes[i], 100) // 每档说明 ≤100 字，空档留空不展示
+	}
 	cfg.Thresholds = req.Thresholds
 	if req.Decay1 != nil {
 		cfg.Decay1 = *req.Decay1

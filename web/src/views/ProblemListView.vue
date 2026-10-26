@@ -36,6 +36,12 @@ const userStore = useUserStore()
 const tagStore = useTagTreeStore()
 const levels = useLevelsStore()
 levels.ensure() // 难度档名（TierBadge 徽章与难度筛选胶囊展示）
+const difficultyNotes = computed(() => {
+  const notes = levels.cfg?.difficulty_notes ?? []
+  return notes
+    .map((n, i) => ({ tier: i + 1, name: levels.difficultyNameOf(i + 1), note: n.trim() }))
+    .filter((x) => x.note)
+}) // 逐档难度说明（后台难度等级页签编辑；空档不显示）
 
 const list = ref<ProblemListItem[]>([])
 const total = ref(0)
@@ -468,8 +474,16 @@ onMounted(() => {
         >{{ t.name }}</span>
       </RailCard>
 
-      <RailCard ov="说明" title="关于题库" class="aside-card">
-        <p class="hint">难度共十档，锚点对齐 NOI 大纲与教学进度；隐藏题目对普通选手不可见，不计入榜单与排名。</p>
+      <RailCard ov="说明" title="难度说明" class="aside-card">
+        <p class="hint">难度共十档，锚点对齐 NOI 大纲与教学进度。</p>
+        <!-- 逐档难度说明（2026-10-26）：徽章 + 文案一行一档；后台「难度等级」页签逐档编辑，随 levels 配置全局同步；空档不显示 -->
+        <div v-for="x in difficultyNotes" :key="x.name" class="diff-note">
+          <TierBadge :tier="x.tier" kind="difficulty" />
+          <span class="hint">{{ x.note }}</span>
+        </div>
+        <!-- 关于题库（2026-10-26 挪到难度说明之后；卡内二级标题字体同 .rail-t） -->
+        <div class="about-t">关于题库</div>
+        <p class="hint">隐藏题目对普通选手不可见，不计入榜单与排名。</p>
       </RailCard>
     </template>
   </PageShell>
@@ -652,6 +666,26 @@ onMounted(() => {
   margin: 10px 0 0;
 }
 
+/* 难度说明逐档行：徽章 + 文案基线对齐（徽章随首行，文案折行不拽偏徽章） */
+.diff-note {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.diff-note .hint {
+  margin: 0;
+}
+
+/* 卡内二级标题「关于题库」：字体同卡片标题 .rail-t（15/700 藏蓝） */
+.about-t {
+  font-size: 15px;
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
+  margin-top: 16px;
+}
+
 /* v3 .spark：七天提交柱状（18% 主蓝柱，峰值格渐变高亮） */
 .spark {
   display: flex;
@@ -664,7 +698,7 @@ onMounted(() => {
 .spark i {
   flex: 1;
   border-radius: 4px 4px 2px 2px;
-  background: rgba(36, 85, 218, 0.18);
+  background: rgb(var(--soj-blue-rgb) / 0.18);
   min-height: 3px;
   transition: height 0.3s ease;
 }

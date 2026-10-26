@@ -49,6 +49,11 @@ export const useLevelsStore = defineStore('levels', () => {
     return cfg.value?.difficulty_names?.[tier - 1] || DEFAULT_LEVEL_NAMES[tier - 1] || String(tier)
   }
 
+  // 每档难度的说明文案（root 后台逐档编辑，题库说明卡逐档展示；空 = 不显示该行）
+  function difficultyNoteOf(tier: number): string {
+    return cfg.value?.difficulty_notes?.[tier - 1]?.trim() || ''
+  }
+
   // 特效开关：全局关或逐级关时徽章退静态样式；配置未就绪也先静态（就绪后响应式切回）
   function effectsOn(tier: number): boolean {
     const c = cfg.value
@@ -61,5 +66,5 @@ export const useLevelsStore = defineStore('levels', () => {
     return cfg.value?.autocomplete_min_level ?? 5
   }
 
-  return { cfg, ensure, reload, nameOf, difficultyNameOf, effectsOn, autocompleteMinLevel }
+  return { cfg, ensure, reload, nameOf, difficultyNameOf, difficultyNoteOf, effectsOn, autocompleteMinLevel }
 })

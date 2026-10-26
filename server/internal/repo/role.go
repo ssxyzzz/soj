@@ -20,15 +20,17 @@ type Role struct {
 // builtinRoles 内置角色：初始权限精确复刻 v0.4.6 行为（v0.5.2-1 起 admin 增题解管理，
 // v0.5.2-2 起 admin 增查看用户提交明细，v0.6.x 起 default/admin 增本人昵称修改，
 // v0.7.2 起 admin 增退出班级——default 刻意不给，v0.8.3 起 admin 增下载数据，
-// v0.11 起 default/admin 增查看班级作业成绩表、admin 增比赛/考试成绩表查看与详情——default 刻意不给）。
+// v0.11 起 default/admin 增查看班级作业成绩表、admin 增比赛/考试成绩表查看与详情——default 刻意不给，
+// v0.18.3 起 admin 增题单管理）。
 // 存量库由 solutionManageV1 / submissionViewUserV1 / nicknameEditV1 / classLeaveV1 /
-// dataDownloadPermV1 / assignmentScoreViewV1 / contestScorePermV1 迁移补发新位。
+// dataDownloadPermV1 / assignmentScoreViewV1 / contestScorePermV1 / listManageV1 迁移补发新位。
 var builtinRoles = []Role{
 	{ID: RoleDefault, Name: "普通用户", Perms: []string{PermUserNicknameEdit, PermAssignmentScoreView}, Builtin: true},
 	{ID: RoleAdmin, Name: "管理员", Perms: []string{
 		PermProblemViewAll, PermProblemCreate, PermProblemEditOwn,
 		PermProblemDataDownload,
 		PermContestBankCreate, PermContestScoreView, PermContestScoreDetail,
+		PermListManage,
 		PermClassCreate, PermClassViewAll, PermClassLeave, PermAssignmentScoreView,
 		PermSubmissionViewAll, PermSubmissionViewUser, PermSubmissionRateExempt,
 		PermSolutionManage, PermUserNicknameEdit,
