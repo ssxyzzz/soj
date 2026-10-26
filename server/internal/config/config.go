@@ -22,7 +22,7 @@ type Config struct {
 	JWTSecret    string
 	JudgeWorkers int    // 判题并发数
 	// 可信代理（v0.13）：ClientIP() 仅从可信直连方解析 X-Forwarded-For。
-	// 反代/Caddy + frp 隧道拓扑下用于还原学生真实 IP；nil = 不信任任何代理。
+	// 反代拓扑下用于还原学生真实 IP；nil = 不信任任何代理。
 	TrustedProxies []string
 }
 

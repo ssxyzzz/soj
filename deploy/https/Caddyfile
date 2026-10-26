@@ -28,7 +28,7 @@ soj.example.com {
 
 	encode gzip
 
-	# 反代到本机 frps 的 remotePort（现网 frp 配置不动）。
+	# 反代到本机 frps 的 remotePort（frp 配置不动）。
 	# Caddy 在此注入 X-Forwarded-For（学生真实 IP），经 frp 纯 TCP 隧道原样到达 SOJ，
 	# SOJ 侧由 SOJ_TRUSTED_PROXIES 决定信任（docker-compose 已配好私网段）。
 	reverse_proxy 127.0.0.1:8080

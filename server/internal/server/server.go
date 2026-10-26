@@ -98,7 +98,7 @@ func Run(ctx context.Context, deps *Deps) {
 	}
 	r := gin.New()
 	// 可信代理（v0.13）：ClientIP() 只从可信直连方解析 X-Forwarded-For，
-	// 防 XFF 伪造；Caddy/frp 隧道拓扑下配置后可还原学生真实 IP（v0.14 限流依赖）
+	// 防 XFF 伪造；反代拓扑下配置后可还原学生真实 IP（v0.14 限流依赖）
 	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		log.Fatalf("[web] 可信代理配置无效（SOJ_TRUSTED_PROXIES）: %v", err)
 	}

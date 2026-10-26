@@ -50,7 +50,7 @@ func TestIPLimiter(t *testing.T) {
 	}
 }
 
-// isPrivateIP：私网/回环跳过限流（frp 隧道共享出口场景），公网 IP 计数。
+// isPrivateIP：私网/回环跳过限流（共享出口场景），公网 IP 计数。
 func TestIsPrivateIP(t *testing.T) {
 	for _, ip := range []string{"127.0.0.1", "::1", "172.18.0.1", "192.168.1.5", "10.0.0.2", "169.254.1.1", "not-an-ip"} {
 		if !isPrivateIP(ip) {

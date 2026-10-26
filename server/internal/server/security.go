@@ -61,9 +61,9 @@ func (l *ipLimiter) allow(ip string, now time.Time) bool {
 	return true
 }
 
-// isPrivateIP 私网/回环/链路本地不计数：Caddy 反代（v0.13）上线前，全体学生经 frp 隧道
-// 共享出口 IP（docker 网桥 172.x），按该 IP 限流会误伤整校；公网直连才是真实攻击面。
-// 切换后学生真实公网 IP 经 XFF 还原，限流自动生效。
+// isPrivateIP 私网/回环/链路本地不计数：共享出口（反代/隧道）场景下全体学生
+// 同源 IP（docker 网桥 172.x），按该 IP 限流会误伤整校；公网直连才是真实攻击面。
+// 反代上线后学生真实公网 IP 经 XFF 还原，限流自动生效。
 func isPrivateIP(s string) bool {
 	ip := net.ParseIP(s)
 	if ip == nil {
