@@ -129,11 +129,11 @@ make lint     # ESLint + go vet（+ staticcheck 如已安装）
 ```bash
 rsync -a --exclude node_modules --exclude .git --exclude backups --exclude .env \
   --exclude .mimosa --exclude docker-compose.override.yml \
-  --exclude plan.md --exclude private_doc --exclude web-design.md --exclude notes.md ~/soj 服务器别名:~/
+  --exclude plan.md --exclude private_doc --exclude AGENTS.md --exclude web-design.md --exclude web-design-v3.md --exclude web-design-v3-full.md --exclude notes.md ~/soj 服务器别名:~/
 ssh 服务器别名 'cd ~/soj && make up && docker compose up -d --build soj'
 ```
 
-（`plan.md` / `web-design.md` / `notes.md` / `private_doc/` 等内部文档只留开发机，不随部署上服务器；rsync 只加不删，改排除项后记得手动清一次服务器上的旧副本。）
+（`plan.md` / `notes.md` / `private_doc/` / `AGENTS.md` / 各设计文档（web-design*）只留开发机，不随部署上服务器；rsync 只加不删，改排除项后记得手动清一次服务器上的旧副本。）
 
 建议封装成本地 `scripts/sync-to-server.sh`（**不入库**，各机自建：目标别名因机而异）——完成上面两步并做 `/api/health` 健康检查；`--no-build` 只同步不构建，`SOJ_HOST` 覆盖目标机。
 
