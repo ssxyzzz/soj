@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // 建题/编辑题目共用表单：字段、布局与校验单一来源。
-// 布局为单 el-form 跨主/右两列（统一校验与 payload），主列只留 题名/标签/题面，
-// 右列 = 管理卡（确认 + 取消）/测试数据/文件 IO/其他信息；<992px 折单列。
+// 布局为单 el-form 跨主/右两列（统一校验与 payload），卡片只是字段分组容器：
+// 主列三卡 = 题目身份 / 分类（知识点·来源·难度页签三合一，直接点选）/ 题面；
+// 右列三卡 = 发布（含完成度清单）/ 测试数据 / 评测参数；<992px 折单列。
+// 视觉基准 private_doc/preview/soj-problem-form-redesign.html。
 // 提交动作 emit 给调用方——新增 = POST /problems 一次交齐；
 // 编辑 = statement / meta / testdata 分步（编辑模式的 zip 为可选的整包替换）。
 import { computed, reactive, ref } from 'vue'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { QuestionFilled, UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
@@ -13,8 +15,10 @@ import { downloadFile } from '@/api/download'
 
 import MdEditor from '@/components/MdEditor.vue'
 import ObjectiveEditor from '@/components/ObjectiveEditor.vue'
+import TierBadge from '@/components/TierBadge.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import { useLevelsStore } from '@/stores/levels'
+import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import { useUserStore } from '@/stores/user'
@@ -59,6 +63,7 @@ const props = withDefaults(
     }
     fileIOHint?: { input: string; output: string } // 编辑模式：现行文件 IO 实际文件名
     pid?: number // 编辑模式：题目 ID（「下载数据」按钮拼下载地址用）
+    hasData?: boolean // 编辑模式：题目已配置测试数据（绿勾提示 + 「下载数据」入口）
   }>(),
   {
     saving: false,
@@ -66,6 +71,7 @@ const props = withDefaults(
     initial: () => ({}),
     fileIOHint: undefined,
     pid: undefined,
+    hasData: false,
   },
 )
 
@@ -77,7 +83,7 @@ const emit = defineEmits<{
 // initial 仅在挂载时读取一次；编辑页以路由承载，重进即重挂
 const userStore = useUserStore()
 
-// 下载数据：有「下载数据」权限位且已有题目（编辑模式）时展示于 zip 上传行右侧
+// 下载数据：有「下载数据」权限位且已有题目（编辑模式）时展示于测试数据卡头右侧
 const canDownloadData = computed(() => !!props.pid && userStore.can('problem.data.download'))
 
 async function downloadData() {
@@ -119,10 +125,21 @@ tagStore.ensure()
 // 难度档展示名（默认与等级名相同，root 后台可改；选择器不再用 D1~D10 描述）
 const levels = useLevelsStore()
 levels.ensure()
+// 来源标签树（分类页签「来源」与卡底摘要的名字解析）
+const metaStore = useMetaTreeStore()
+metaStore.ensure()
 // 空树时展示「管理员尚未配置标签树」占位
 const tagTreeEmpty = computed(() => !tagStore.nodes.length)
 // 标签必填（建题同标题必填口径）；空树无从选择不拦截，编辑存量无标签题也不强制补挂
 const tagsRequired = computed(() => props.mode === 'create' && !tagTreeEmpty.value)
+
+// 分类页签：知识点 / 来源 / 难度 三合一入口，一次只展开一个选择器
+const catTab = ref<'knowledge' | 'meta' | 'difficulty'>('knowledge')
+
+const knowledgeNames = computed(() => form.tag_ids.map((id) => tagStore.nameOf(id)))
+const metaNames = computed(() => form.meta_tag_ids.map((id) => metaStore.nameOf(id)))
+const difficultyName = computed(() => levels.difficultyNameOf(form.difficulty))
+const difficultyHint = computed(() => DIFFICULTY_HINTS[form.difficulty] ?? '')
 
 // 标签卡片流点选回调：整体替换 tag_ids（数组顺序即点选顺序）
 function onTagsChange(ids: number[]) {
@@ -134,7 +151,7 @@ function onMetaTagsChange(ids: number[]) {
   form.meta_tag_ids = ids
 }
 
-// 难度锚点提示（v0.11，NOI 大纲 + 教学进度定标）：选择器旁展示当前档说明
+// 难度锚点提示（v0.11，NOI 大纲 + 教学进度定标）：当前档说明
 const DIFFICULTY_HINTS: Record<number, string> = {
   1: '入门：变量/顺序/分支/循环',
   2: '基础：数组/函数/结构体',
@@ -147,6 +164,19 @@ const DIFFICULTY_HINTS: Record<number, string> = {
   9: 'NOIP：省选中档、NOI 简单题',
   10: 'NOI 级：NOI 难题/集训队水平',
 }
+
+// 发布卡完成度清单（只做展示，拦截仍以 payload() 校验为准）
+const catReady = computed(() => !tagsRequired.value || form.tag_ids.length > 0)
+const statementReady = computed(() =>
+  form.type === 'objective' ? objQuestions.value.length > 0 : !!form.statement.trim(),
+)
+const statementNote = computed(() =>
+  form.type === 'objective'
+    ? `客观题 · 小题 ${objQuestions.value.length} 道`
+    : form.statement.trim()
+      ? `题面已编辑（约 ${form.statement.length} 字）`
+      : '题面未填写',
+)
 
 const fileList = ref<UploadUserFile[]>([])
 const checkerList = ref<UploadUserFile[]>([])
@@ -283,15 +313,24 @@ function onSubmitClick() {
   <el-form v-loading="saving" class="pf" label-position="top">
     <div class="pf-layout">
       <div class="pf-main">
-        <el-card>
+        <!-- ① 题目身份 -->
+        <el-card class="form-card">
+          <div class="card-head">
+            <span class="card-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9" /><path d="M12 8v4l2.5 2.5" /></svg>
+            </span>
+            <div class="card-head-text"><div class="card-title">题目身份</div></div>
+          </div>
+
           <el-form-item label="标题" required>
             <el-input v-model="form.title" maxlength="64" show-word-limit placeholder="64 字符以内" />
           </el-form-item>
+
           <el-form-item>
             <template #label>
               <span class="label-with-tip">
                 题目类型
-                <el-tooltip placement="top" content="传统题＝编程评测（测试数据比对/SPJ/子任务/文件 IO）；客观题＝单选/多选/判断/填空，题干写在题面里、提交即判分">
+                <el-tooltip placement="top" content="传统题=编程评测；客观题=选择/填空；函数题=补全函数；交互题=双向通信。创建后不可更改">
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
               </span>
@@ -306,86 +345,181 @@ function onSubmitClick() {
               <el-radio-button value="function">函数题（补全实现）</el-radio-button>
               <el-radio-button value="interactive">交互题（双向通信）</el-radio-button>
             </el-radio-group>
-            <span v-if="mode === 'edit'" class="dim type-lock">题型创建后不可更改</span>
           </el-form-item>
-          <el-form-item class="plain-label" :required="tagsRequired">
-            <template #label>
-              <span class="label-with-tip">
-                标签
-                <el-tooltip
-                  placement="top"
-                  content="悬停展开下级、可搜索；单击卡片选中/取消，选中的知识点显示在下方（点 × 可移除）；树的层级由 root 在后台「知识树」维护，改名后全站展示自动跟随"
-                >
+        </el-card>
+
+        <!-- ② 分类：知识点 / 来源 / 难度 三合一，页签切换直接点选 -->
+        <el-card class="form-card">
+          <div class="card-head">
+            <span class="card-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 12l-8.5 8.5a2 2 0 01-2.8 0L3 14.8a2 2 0 010-2.8L11.5 3.5H17l3 3z" /><circle cx="15.5" cy="8.5" r="1.3" /></svg>
+            </span>
+            <div class="card-head-text">
+              <div class="card-title">
+                分类
+                <el-tooltip placement="top" content="知识点 / 难度影响推荐与经验；来源用于筛选与试卷打印">
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
-              </span>
-            </template>
-            <div v-if="!tagTreeEmpty" class="tag-bar">
-              <TagFilter :selected="form.tag_ids" @change="onTagsChange" />
+              </div>
             </div>
-            <span v-else class="dim">管理员尚未配置知识树（后台管理 → 知识树）</span>
-          </el-form-item>
-          <el-form-item :required="form.type !== 'objective'">
-            <template #label>
-              <span class="label-with-tip">
-                {{ form.type === 'objective' ? '整题说明（可选）' : '题面' }}
+          </div>
+
+          <div class="cat-tabs">
+            <button type="button" class="cat-tab" :class="{ on: catTab === 'knowledge' }" @click="catTab = 'knowledge'">
+              <span v-if="tagsRequired" class="req">*</span>知识点
+              <span v-if="form.tag_ids.length" class="n">{{ form.tag_ids.length }}</span>
+            </button>
+            <button type="button" class="cat-tab" :class="{ on: catTab === 'meta' }" @click="catTab = 'meta'">
+              来源
+              <span v-if="form.meta_tag_ids.length" class="n">{{ form.meta_tag_ids.length }}</span>
+            </button>
+            <button type="button" class="cat-tab" :class="{ on: catTab === 'difficulty' }" @click="catTab = 'difficulty'">
+              难度
+              <span class="n">{{ difficultyName }}</span>
+            </button>
+          </div>
+
+          <div class="cat-pane">
+            <template v-if="catTab === 'knowledge'">
+              <div v-if="!tagTreeEmpty" class="tag-bar">
+                <TagFilter :selected="form.tag_ids" @change="onTagsChange" />
+              </div>
+              <span v-else class="dim">管理员尚未配置知识树（后台管理 → 知识树）</span>
+            </template>
+            <template v-else-if="catTab === 'meta'">
+              <TagFilter tree="meta" :selected="form.meta_tag_ids" @change="onMetaTagsChange" />
+            </template>
+            <template v-else>
+              <div class="diff-chips">
+                <TierBadge
+                  v-for="d in 10"
+                  :key="d"
+                  :tier="d"
+                  kind="difficulty"
+                  size="md"
+                  class="diff-chip"
+                  :class="{ sel: form.difficulty === d }"
+                  @click="form.difficulty = d"
+                />
+              </div>
+              <div class="hint">{{ difficultyHint }}</div>
+            </template>
+          </div>
+
+          <div class="cat-summary">
+            <span class="dim">已选：</span>
+            <span v-if="form.tag_ids.length" class="sum-item"><i class="sum-dot" style="background: var(--el-color-primary)" />知识点：{{ knowledgeNames.join(' · ') }}</span>
+            <span v-if="form.meta_tag_ids.length" class="sum-item"><i class="sum-dot" style="background: #0e7a9c" />来源：{{ metaNames.join(' · ') }}</span>
+            <span class="sum-item"><i class="sum-dot" style="background: #d99141" />难度：{{ difficultyName }}</span>
+          </div>
+        </el-card>
+
+        <!-- ③ 题面 -->
+        <el-card class="form-card">
+          <div class="card-head">
+            <span class="card-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
+            </span>
+            <div class="card-head-text">
+              <div class="card-title">
+                {{ form.type === 'objective' ? '整卷说明' : '题面' }}
+                <span v-if="form.type !== 'objective'" class="req">*</span>
                 <el-tooltip
-                  v-if="form.type === 'objective'"
                   placement="top"
-                  content="这里放整卷的导语/说明；每道小题的题干在下方小题列表里单独填写"
+                  :content="form.type === 'objective'
+                    ? '可选；小题的题干在下方小题列表里填写'
+                    : 'Markdown 编辑，可直接粘贴/拖入图片，公式用 $$…$$'"
                 >
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
-              </span>
-            </template>
+              </div>
+            </div>
+          </div>
+
+          <el-form-item>
             <MdEditor v-model="form.statement" auto-height />
           </el-form-item>
 
           <!-- 客观题整卷（v0.9.3）：小题列表（增删/排序 + 每题题干/选项/答案/解析/分值） -->
-          <el-form-item v-if="form.type === 'objective'" class="plain-label">
+          <el-form-item v-if="form.type === 'objective'">
             <ObjectiveEditor ref="objEditor" v-model="objQuestions" :pid="pid" />
           </el-form-item>
         </el-card>
       </div>
+
       <div class="pf-aside">
-        <el-card>
-          <template #header><span>管理</span></template>
+        <!-- 发布 -->
+        <el-card class="form-card">
+          <div class="card-head">
+            <span class="card-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12l5 5L20 7" /></svg>
+            </span>
+            <div class="card-head-text"><div class="card-title">发布</div></div>
+          </div>
+
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" :loading="saving" @click="onSubmitClick">
               {{ confirmText }}
             </el-button>
             <el-button style="width: 100%" @click="emit('cancel')">取消</el-button>
           </div>
+
+          <div class="pub-check">
+            <div class="row">
+              <span v-if="form.title.trim() && catReady" class="ok">✓</span>
+              <span v-else class="todo">!</span>
+              {{ form.title.trim() && catReady ? '标题 / 题型 / 分类已齐' : '标题或知识点待补全' }}
+            </div>
+            <div class="row">
+              <span v-if="statementReady" class="ok">✓</span>
+              <span v-else class="todo">–</span>
+              {{ statementNote }}
+            </div>
+            <div v-if="form.type !== 'objective'" class="row">
+              <span v-if="hasData || fileList.length" class="ok">✓</span>
+              <span v-else class="todo">–</span>
+              {{ hasData ? '已有测试数据，新 zip 可整包替换' : fileList.length ? '新测试数据已选择' : '测试数据未上传——可先创建' }}
+            </div>
+          </div>
         </el-card>
 
-        <el-card>
-          <template #header><span>其他信息</span></template>
-          <el-form-item v-if="form.type !== 'objective'">
-            <template #label>
-              <div class="zip-label-row">
-                <span class="label-with-tip">
-                  测试数据 zip（可选）
-                  <el-tooltip
-                    placement="top"
-                    :content="mode === 'create'
-                      ? 'zip 根下放 data/ 目录（数据对原名 + config.yaml + 附属文件；题面写在上方编辑器，包内不收题面）。不上传则创建暂无数据的题目：题面立即可用、暂不可提交'
-                      : '留空保留现有数据；新 zip 需含 data/ 目录，将整包替换数据与配置（题面不受影响）'"
-                  >
-                    <el-icon class="dim"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </span>
-                <el-button
-                  v-if="canDownloadData"
-                  type="primary"
-                  plain
-                  size="small"
-                  title="下载该题测试数据包（含造数据脚本等存档文件）"
-                  @click.stop="downloadData"
+        <!-- 测试数据 -->
+        <el-card v-if="form.type !== 'objective'" class="form-card">
+          <div class="card-head">
+            <span class="card-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 8v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8m18 0l-2-4H5L3 8m18 0H3m9 4v6m0-6l-3 3m3-3l3 3" /></svg>
+            </span>
+            <div class="card-head-text">
+              <div class="card-title">
+                测试数据
+                <el-tooltip
+                  placement="top"
+                  :content="mode === 'create'
+                    ? '不上传可先创建；zip 里 data/ 下的数据对保持原名'
+                    : '新 zip 整包替换数据与配置；zip 里 data/ 下的数据对保持原名'"
                 >
-                  下载数据
-                </el-button>
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
               </div>
-            </template>
+            </div>
+          </div>
+
+          <!-- 已有数据状态行：绿勾 + 「下载数据」与此行平齐 -->
+          <div v-if="hasData" class="data-status">
+            <span class="ok">✓</span>已有测试数据
+            <el-button
+              v-if="canDownloadData"
+              type="primary"
+              plain
+              size="small"
+              title="下载该题测试数据包（含造数据脚本等存档文件）"
+              @click.stop="downloadData"
+            >
+              下载数据
+            </el-button>
+          </div>
+
+          <el-form-item>
             <el-upload
               v-model:file-list="fileList"
               class="zip-upload"
@@ -397,131 +531,103 @@ function onSubmitClick() {
               :on-remove="onZipRemove"
             >
               <div class="zip-hint">
+                <span class="zip-badge"><el-icon><UploadFilled /></el-icon></span>
                 <p>{{ mode === 'create' ? '拖入 zip 或点击选择' : '拖入新 zip 整包替换' }}</p>
-                <p class="dim">结构：data/ 下 test1.in + test1.ans/.out 等数据对（保持原名）</p>
               </div>
             </el-upload>
           </el-form-item>
-          <el-form-item v-if="form.type !== 'objective'">
+        </el-card>
+
+        <!-- 评测参数 -->
+        <el-card v-if="form.type !== 'objective'" class="form-card">
+          <div class="card-head">
+            <span class="card-ico">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
+            </span>
+            <div class="card-head-text"><div class="card-title">评测参数</div></div>
+          </div>
+
+          <el-form-item label="时限 / 内存">
+            <div class="limits">
+              <el-input-number v-model="timeLimitSec" :controls="false" :min="0.1" :max="600" :step="0.1" />
+              <span class="dim">s</span>
+              <el-input-number v-model="form.memory_limit_mb" :controls="false" :min="16" :max="1024" :step="16" />
+              <span class="dim">MB</span>
+            </div>
+          </el-form-item>
+
+          <el-form-item>
             <div class="field-group">
               <div class="field-label">
                 文件名（可选）
                 <el-tooltip
                   placement="top"
-                  content="仅比赛/考试「本场启用文件 IO」时生效。留空默认 problem.in / problem.out"
+                  content="仅考试启用文件 IO 时生效；留空默认 problem"
                 >
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
               </div>
-              <div class="fileio-row">
-                <el-input v-model="form.file_io_name" placeholder="problem" maxlength="32" />
-              </div>
+              <el-input v-model="form.file_io_name" placeholder="problem" maxlength="32" class="fileio-input" />
               <span v-if="fileIOHint" class="dim fileio-now">
-                当前：{{ fileIOHint.input }} / {{ fileIOHint.output }}
+                当前文件IO：{{ fileIOHint.input.replace(/\.in$/, '') }}
+              </span>
+              <span v-else-if="form.file_io_name.trim()" class="dim fileio-now">
+                将使用文件IO：{{ form.file_io_name.trim() }}
               </span>
             </div>
           </el-form-item>
-          <!-- 难度（v0.11）：1–10 档，学生可见并用于等级经验与筛选；锚点定标见 tooltip -->
+
           <el-form-item>
-            <template #label>
-              <span class="label-with-tip">
-                难度
-                <el-tooltip
-                  placement="top"
-                  content="D1：入门，D2：基础，D3：算法入门，D4：算法基础，D5：J组，D6：J组+，D7：S组，D8：S组+，D9：NOIP，D10：NOI"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </span>
-            </template>
-            <div class="difficulty-row">
-              <el-select v-model="form.difficulty" class="difficulty-select">
-                <el-option v-for="d in 10" :key="d" :value="d" :label="levels.difficultyNameOf(d)" />
-              </el-select>
-              <span class="dim">{{ DIFFICULTY_HINTS[form.difficulty] ?? '' }}</span>
-            </div>
-          </el-form-item>
-          <!-- 来源（v0.12）：类型下拉 + 来源名（datalist 建议，新名自动沉淀来源库）+ 年份 + 地区 -->
-          <el-form-item>
-            <div class="field-group">
-              <div class="field-label">
-                来源（可选）
-                <el-tooltip
-                  placement="top"
-                  content="题目的出处：OJ 站点（洛谷/CF）、全国赛事（NOIP/CSP）、地区活动（科普日）等；显示在题目信息卡，打印试卷会带上"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </div>
-              <!-- 来源打标（2026-10-25 双树）：来源标签树（地区/赛事/题库/年份），来源四字段退役 -->
-              <TagFilter tree="meta" :selected="form.meta_tag_ids" @change="onMetaTagsChange" />
-            </div>
-          </el-form-item>
-          <el-form-item v-if="form.type !== 'objective'">
-            <div class="field-group">
-              <div class="field-label">时限 / 内存</div>
-              <div class="limits">
-                <el-input-number v-model="timeLimitSec" :controls="false" :min="0.1" :max="600" :step="0.1" />
-                <span class="dim">s</span>
-                <el-input-number v-model="form.memory_limit_mb" :controls="false" :min="16" :max="1024" :step="16" />
-                <span class="dim">MB</span>
-              </div>
-            </div>
-          </el-form-item>
-          <el-form-item v-if="form.type !== 'objective'">
             <template #label>
               <span class="label-with-tip">
                 比对模式
                 <el-tooltip
                   placement="top"
-                  content="全文比对：输出与答案精确一致（忽略行尾空白与文末换行）；宽容比对：按空白分词比较，数字可带精度容差（适合答案不唯一的构造/计算题）"
+                  content="全文比对：输出与答案完全一致；宽容比对：忽略空白差异，数字允许小误差"
                 >
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
               </span>
             </template>
-            <div class="compare-row">
-              <el-radio-group v-model="form.compare">
-                <el-radio-button value="exact">全文比对</el-radio-button>
-                <el-radio-button value="tolerant">宽容比对</el-radio-button>
-              </el-radio-group>
-              <span class="dim">
-                {{ form.compare === 'tolerant' ? '按空白分词比较，数字可带精度容差' : '输出与答案精确一致（忽略行尾空白与文末换行）' }}
-              </span>
-            </div>
+            <el-radio-group v-model="form.compare">
+              <el-radio-button value="exact">全文比对</el-radio-button>
+              <el-radio-button value="tolerant">宽容比对</el-radio-button>
+            </el-radio-group>
           </el-form-item>
-          <el-form-item v-if="form.type !== 'objective' && form.compare === 'tolerant'" label="浮点容差" class="plain-label">
+          <el-form-item v-if="form.compare === 'tolerant'" label="浮点容差">
             <el-input-number v-model="form.float_tolerance" :min="0.000001" :max="1" :step="0.0001" :precision="6" />
           </el-form-item>
-          <el-form-item v-if="mode === 'create' && form.type !== 'objective'" class="plain-label">
+
+          <el-form-item v-if="mode === 'create'">
             <template #label>
-              <span class="label-with-tip">自定义校验器（可选）</span>
+              <span class="label-with-tip">
+                自定义校验器（可选）
+                <el-tooltip placement="top" content="配置后判题由校验器决定；细节可在题目页调整">
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </span>
             </template>
-            <div>
-              <el-upload
-                v-model:file-list="checkerList"
-                accept=".cpp"
-                :limit="1"
-                :auto-upload="false"
-                :on-change="onCheckerChange"
-                :on-remove="onCheckerRemove"
-              >
-                <el-button>选择 checker.cpp</el-button>
-              </el-upload>
-              <div class="dim checker-tip">
-                配置后判题由校验器决定（调用约定：checker 输入 期望 考生输出，退出码 0 = 通过）。也可创建后在题目页管理。
-              </div>
-            </div>
+            <el-upload
+              v-model:file-list="checkerList"
+              accept=".cpp"
+              :limit="1"
+              :auto-upload="false"
+              :on-change="onCheckerChange"
+              :on-remove="onCheckerRemove"
+            >
+              <el-button>选择 checker.cpp</el-button>
+            </el-upload>
           </el-form-item>
+
           <!-- 函数题（v0.9.1）：driver/template 上传（创建模式随表单一次交齐；编辑页走即时上传） -->
           <template v-if="form.type === 'function' && mode === 'create'">
-            <el-form-item class="plain-label">
+            <el-form-item>
               <template #label>
                 <span class="label-with-tip">
-                  驱动器 driver.cpp
-                  <el-tooltip placement="top" content="含 main 与函数原型声明、调用学生实现的函数；与学生提交的代码合编成一个程序评测。也可放进 zip 根目录">
-                    <el-icon class="dim"><QuestionFilled /></el-icon>
-                  </el-tooltip>
+                驱动器 driver.cpp
+                <el-tooltip placement="top" content="含 main，调用学生实现的函数；也可放进 zip 根目录">
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
                 </span>
               </template>
               <el-upload
@@ -533,11 +639,11 @@ function onSubmitClick() {
                 <el-button>选择 driver.cpp</el-button>
               </el-upload>
             </el-form-item>
-            <el-form-item class="plain-label">
+            <el-form-item>
               <template #label>
                 <span class="label-with-tip">
                   学生模板 template.cpp（可选）
-                  <el-tooltip placement="top" content="学生提交时代码编辑器预填的内容（函数签名与注释提示）">
+                  <el-tooltip placement="top" content="学生提交时编辑器预填的代码">
                     <el-icon class="dim"><QuestionFilled /></el-icon>
                   </el-tooltip>
                 </span>
@@ -554,13 +660,13 @@ function onSubmitClick() {
           </template>
 
           <!-- 交互题（v0.9.2）：interactor 上传（创建模式随表单；编辑页走即时上传） -->
-          <el-form-item v-if="form.type === 'interactive' && mode === 'create'" class="plain-label">
+          <el-form-item v-if="form.type === 'interactive' && mode === 'create'">
             <template #label>
               <span class="label-with-tip">
                 交互器 interactor.cpp
                 <el-tooltip
                   placement="top"
-                  content="读 argv[1] 指定的输入文件，通过 stdin/stdout 与选手程序双向通信；退出码 0 = 该测试点通过，非 0 = 不通过（stderr 末行作为反馈）。也可放进 zip 根目录"
+                  content="与选手程序双向通信判题；也可放进 zip 根目录"
                 >
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
@@ -582,11 +688,6 @@ function onSubmitClick() {
 </template>
 
 <style scoped>
-/* 客观题编辑（v0.9） */
-.type-lock {
-  margin-left: 10px;
-}
-
 .obj-options,
 .obj-blanks {
   width: 100%;
@@ -612,15 +713,6 @@ function onSubmitClick() {
   gap: 16px;
 }
 
-/* zip 上传行：左「测试数据 zip（可选）」标签，右「下载数据」按钮（v0.8.3） */
-.zip-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-}
-
 /* 表单标签不加粗（Ant：标签与正文同字重 400，颜色不降档） */
 :deep(.el-form-item__label) {
   font-weight: var(--soj-fw-regular);
@@ -632,13 +724,16 @@ function onSubmitClick() {
   max-width: 1440px;
   margin: 0 auto;
   display: flex;
-  gap: 24px;
+  gap: 20px;
   align-items: flex-start;
 }
 
 .pf-main {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .pf-aside {
@@ -646,7 +741,9 @@ function onSubmitClick() {
   width: 320px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+  position: sticky;
+  top: 84px;
 }
 
 /* 纵向按钮组：EP 默认给相邻按钮 margin-left: 12px，纵向排列会把下面的按钮顶离中线 */
@@ -654,7 +751,205 @@ function onSubmitClick() {
   margin-left: 0;
 }
 
-/* 标签栏：与题库筛选区 .tag-row 同底色/圆角/内距（#f5f5f5） */
+/* ---- 卡片头（图标 + 标题 + 副标题，preview 基准样式）---- */
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.card-ico {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.card-ico svg {
+  width: 16px;
+  height: 16px;
+}
+
+.card-title {
+  font-size: var(--soj-fs-16);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-navy);
+}
+
+.card-head .right {
+  margin-left: auto;
+}
+
+.req {
+  color: var(--el-color-danger);
+}
+
+/* ---- 分类页签（知识点 / 来源 / 难度 三合一）---- */
+.cat-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--soj-line);
+  border-radius: 999px;
+  padding: 3px;
+  margin-bottom: 14px;
+}
+
+.cat-tab {
+  border: none;
+  background: transparent;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: var(--soj-fs-14);
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.cat-tab:hover {
+  color: var(--el-color-primary);
+}
+
+.cat-tab.on {
+  background: linear-gradient(135deg, #2d68ef, #2455da);
+  color: #fff;
+  font-weight: var(--soj-fw-emphasis);
+  box-shadow: 0 2px 8px rgba(31, 73, 186, 0.28);
+}
+
+.cat-tab .n {
+  font-size: var(--soj-fs-small);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-weight: var(--soj-fw-bold);
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.cat-tab.on .n {
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--el-color-primary);
+}
+
+.cat-pane {
+  min-width: 0;
+}
+
+/* 卡底已选摘要：三路状态常驻可见 */
+.cat-summary {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--soj-line-2);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: var(--soj-fs-13);
+}
+
+.sum-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--soj-line);
+  border-radius: 999px;
+  padding: 3px 11px;
+  color: var(--el-text-color-regular);
+}
+
+.sum-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  display: inline-block;
+}
+
+/* 难度十档胶囊（题库「难度」筛选同款，TierBadge 色随档位；单选） */
+.diff-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.diff-chip {
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.diff-chip:hover {
+  transform: translateY(-1px);
+}
+
+.diff-chip.sel.diff-tag {
+  background: color-mix(in srgb, var(--dc) 20%, #ffffff);
+  border-color: var(--dc);
+  box-shadow: inset 0 0 0 1px var(--dc);
+}
+
+.hint {
+  font-size: var(--soj-fs-small);
+  color: var(--el-text-color-secondary);
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+/* 发布卡完成度清单 */
+.pub-check {
+  margin: 14px 0 2px;
+  display: grid;
+  gap: 8px;
+}
+
+.pub-check .row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--soj-fs-13);
+  color: var(--el-text-color-regular);
+}
+
+.pub-check .ok {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--el-color-success-light-8);
+  color: var(--el-color-success);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: var(--soj-fw-bold);
+  flex: none;
+}
+
+.pub-check .todo {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--el-text-color-secondary);
+  color: var(--el-text-color-secondary);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  flex: none;
+}
+
+/* 标签栏：与题库筛选区同底色/圆角/内距 */
 .tag-bar {
   box-sizing: border-box;
   width: 100%;
@@ -663,10 +958,11 @@ function onSubmitClick() {
   border-radius: var(--el-border-radius-base);
 }
 
-/* 来源四字段（v0.12）：右列 320px 内两行紧凑排布 */
-.source-row + .field-group {
+.field-group {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
 }
 
 .field-label {
@@ -678,14 +974,15 @@ function onSubmitClick() {
   gap: 4px;
 }
 
-.fileio-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* 文件名输入限宽（右列单列排布） */
+.fileio-input {
+  max-width: 280px;
 }
 
 .fileio-now {
   white-space: nowrap; /* 防止提示文字换行 */
+  font-size: var(--soj-fs-small);
+  margin-top: 6px;
 }
 
 .limits {
@@ -693,17 +990,6 @@ function onSubmitClick() {
   align-items: center;
   gap: 8px;
   flex-wrap: nowrap; /* 时限与内存一行排布 */
-}
-
-.difficulty-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.difficulty-select {
-  width: 96px;
 }
 
 /* 纯填空框（去加减按钮）并限宽，保证两个框加单位在右列一行放下 */
@@ -717,12 +1003,60 @@ function onSubmitClick() {
 
 .zip-upload :deep(.el-upload-dragger) {
   width: 100%;
-  /* 纵向内边距 40 → 10：拖拽框高度约减半（高度 = 上下内边距 + 两行提示文字） */
-  --el-upload-dragger-padding-vertical: 10px;
+  /* 虚线加深到可见（EP 默认太淡）+ 悬停主蓝 */
+  border: 1.5px dashed rgba(31, 73, 186, 0.38);
 }
 
-.zip-replace-hint {
-  font-weight: var(--soj-fw-regular);
+.zip-upload :deep(.el-upload-dragger:hover) {
+  border-color: var(--el-color-primary);
+}
+
+/* 拖放区上传图标徽章（预览基准样式）：一眼可识别「这里是传 zip 的地方」 */
+.zip-badge {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 8px;
+  border-radius: 10px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  display: grid;
+  place-items: center;
+}
+
+.zip-badge .el-icon {
+  font-size: 24px;
+}
+
+.zip-hint p:first-of-type {
+  font-size: var(--soj-fs-14);
+  color: var(--el-text-color-primary);
+}
+
+/* 已有测试数据状态行：绿勾与「下载数据」按钮同一行 */
+.data-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--soj-fs-13);
+  color: var(--el-text-color-regular);
+  margin-bottom: 12px;
+}
+
+.data-status .ok {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--el-color-success-light-8);
+  color: var(--el-color-success);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: var(--soj-fw-bold);
+  flex: none;
+}
+
+.data-status .el-button {
+  margin-left: auto;
 }
 
 /* label 插槽内的图标/提示与标签文字垂直居中（label 为块级布局，行内元素默认按基线对齐会偏高） */
@@ -730,19 +1064,6 @@ function onSubmitClick() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-}
-
-/* 单选按钮组与说明文字垂直居中 */
-.compare-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.checker-tip {
-  padding: 8px 0 0;
-  margin: 0;
 }
 
 @media (max-width: 992px) {
@@ -753,6 +1074,7 @@ function onSubmitClick() {
   .pf-aside {
     width: auto;
     flex: 1 1 auto;
+    position: static;
   }
 }
 </style>

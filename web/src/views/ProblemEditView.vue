@@ -225,6 +225,7 @@ function onCancel() {
       confirm-text="确认修改"
       :initial="editInitial"
       :file-i-o-hint="fileIOHint"
+      :has-data="!!problem.has_cases"
       @submit="onSubmit"
       @cancel="onCancel"
     >
