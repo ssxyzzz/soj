@@ -243,20 +243,21 @@ export const problemApi = {
 }
 
 // 双树（2026-10-25）：知识树（原标签树）读公开（题库/详情/表单共用），写仅 root；
-// 来源树（地区/赛事/题库/年份/其他）同构同权限，按 tree 参数区分
+// 来源树（地区/赛事/题库/年份/其他）同构同权限，按 tree 参数区分。
+// 注意：后端从 URL query 读 tree（c.Query），不能放进请求体——放体里会被忽略、
+// 写操作一律落到默认的知识树文档（2026-10-26 修复的覆盖事故根因）。
 export const tagApi = {
   tree: (tree?: 'knowledge' | 'meta') => get<TagTreeResult>('/tags/tree', tree ? { tree } : {}),
   adminTree: (tree?: 'knowledge' | 'meta') =>
     get<AdminTagTreeResult>('/admin/tagtree', tree ? { tree } : {}),
   save: (nodes: TagNode[], tree?: 'knowledge' | 'meta') =>
-    put<{ count: number }>('/admin/tagtree', { nodes, ...(tree ? { tree } : {}) }),
+    put<{ count: number }>(tree ? `/admin/tagtree?tree=${tree}` : '/admin/tagtree', { nodes }),
   // 保存被删拦截后的解绑（一键全部/逐题）：从题目上摘除待删节点，其余节点不动
   unbind: (problemIds: number[], tagIds: number[], tree?: 'knowledge' | 'meta') =>
-    post<{ unbound: number }>('/admin/tagtree/unbind', {
-      problem_ids: problemIds,
-      tag_ids: tagIds,
-      ...(tree ? { tree } : {}),
-    }),
+    post<{ unbound: number }>(
+      tree ? `/admin/tagtree/unbind?tree=${tree}` : '/admin/tagtree/unbind',
+      { problem_ids: problemIds, tag_ids: tagIds },
+    ),
 }
 
 // 题包导入（v0.15 统一格式）：独立 /import 页按来源（soj|hydro）适配；problem.create 权限

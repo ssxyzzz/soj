@@ -811,7 +811,7 @@ async function unbind(row?: TagRefProblem) {
           <div
             v-if="showMini(item.node)"
             class="tag-card add-card"
-            title="新增子级{{ noun }}"
+            :title="`新增子级${noun}`"
             @click.stop="startAddUnder(item.node)"
           >
             <el-input
@@ -832,7 +832,7 @@ async function unbind(row?: TagRefProblem) {
         <div
           v-if="showRowAdd(r.depth)"
           class="tag-card add-card"
-          title="新增{{ noun }}"
+          :title="`新增${noun}`"
           @click.stop="startAdd(r.depth)"
         >
           <el-input
@@ -899,7 +899,7 @@ async function unbind(row?: TagRefProblem) {
       <el-table stripe :data="blockedProblems" size="small">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="title" label="题目" min-width="240" />
-        <el-table-column label="使用的{{ noun }}" min-width="260">
+        <el-table-column :label="`使用的${noun}`" min-width="260">
           <template #default="{ row }">
             <el-tag v-for="t in row.tags" :key="t" size="small" class="tag-gap">{{ t }}</el-tag>
             <span v-if="!row.tags?.length" class="dim">（无）</span>
