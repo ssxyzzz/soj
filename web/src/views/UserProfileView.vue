@@ -83,6 +83,7 @@ const counts = computed(() => {
   }
   return c
 })
+// 分组（非空难度档）；柱状图与下方题目列表共用
 const groups = computed(() => {
   const gs: { d: number; items: UserPageFirstAC[] }[] = []
   for (let d = 1; d <= 10; d++) {
@@ -91,14 +92,19 @@ const groups = computed(() => {
   }
   return gs
 })
-// 分组折叠态（默认全收起；点计数卡直达展开对应组）
-const expanded = ref<Record<number, boolean>>({})
-function toggleGroup(d: number) {
-  expanded.value[d] = !expanded.value[d]
-}
-function openGroup(d: number) {
-  expanded.value[d] = true
-  document.getElementById(`dgroup-${d}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+
+// 柱状图选中档（2026-10-26 难度完成图改版）：点柱子/计数卡切换下方题目列表；
+// 切时间窗或换用户后选中档无数据时自动落回首个非空档
+const sel = ref(0)
+const effSel = computed(() => (groups.value.some((g) => g.d === sel.value) ? sel.value : groups.value[0]?.d ?? 0))
+const selItems = computed(() => groups.value.find((g) => g.d === effSel.value)?.items ?? [])
+const maxCount = computed(() => Math.max(...counts.value, 1))
+
+// 柱高按完成数占比（最高档满高 150px，零档 4px 灰桩）
+function barH(d: number): string {
+  const c = counts.value[d - 1]
+  if (!c) return '4px'
+  return `${Math.max(Math.round((c / maxCount.value) * 150), 12)}px`
 }
 
 // ---- 比赛历史行状态 ----
@@ -177,10 +183,10 @@ function openDetail(id: number) {
           </div>
         </template>
 
-        <!-- 主列：按难度完成（核心区） -->
+        <!-- 主列：难度完成图（核心区） -->
         <div class="card done-card">
           <div class="done-head">
-            <h3>按难度完成</h3>
+            <h3>难度完成图</h3>
             <div class="soj-seg seg">
               <button
                 v-for="w in WINDOWS"
@@ -193,42 +199,36 @@ function openDetail(id: number) {
             </div>
           </div>
 
-          <!-- D1–D10 计数卡（空档占位；点卡片直达展开对应组） -->
-          <div class="dgrid">
+          <!-- 柱状图（完成数按档位色轴；柱下难度勋章；点柱子切换下方题目列表） -->
+          <div class="dchart">
             <button
               v-for="d in 10"
               :key="d"
-              class="dcard"
-              :class="{ zero: !counts[d - 1] }"
+              class="dbar"
+              :class="[`diff-${d}`, { sel: effSel === d, zero: !counts[d - 1] }]"
+              :title="counts[d - 1] ? `D${d} · ${counts[d - 1]} 题` : `D${d} 无记录`"
               :disabled="!counts[d - 1]"
-              @click="openGroup(d)"
+              @click="sel = d"
             >
+              <span class="v mono">{{ counts[d - 1] || '' }}</span>
+              <i class="bar" :style="{ height: barH(d) }" />
               <TierBadge :tier="d" kind="difficulty" size="sm" />
-              <b class="mono">{{ counts[d - 1] }}</b>
             </button>
           </div>
 
-          <el-empty
-            v-if="!groups.length"
-            description="该时间窗内还没有 AC 记录"
-            :image-size="60"
-          />
-          <div v-else class="dgroups">
-            <div v-for="g in groups" :id="`dgroup-${g.d}`" :key="g.d" class="dgroup">
-              <button class="ghead" @click="toggleGroup(g.d)">
-                <TierBadge :tier="g.d" kind="difficulty" size="sm" />
-                <b>{{ levels.cfg?.difficulty_names?.[g.d - 1] || `D${g.d}` }}</b>
-                <span class="gcount mono">{{ g.items.length }} 题</span>
-                <span class="arrow" :class="{ open: expanded[g.d] }">▾</span>
-              </button>
-              <div v-show="expanded[g.d]" class="glist">
-                <div v-for="e in g.items" :key="e.pid" class="prow">
-                  <router-link class="plink" :to="`/problems/${e.pid}`">
-                    <span class="mono pid">P{{ e.pid }}</span> {{ e.title }}
-                  </router-link>
-                  <el-tag v-if="e.hidden" size="small" type="danger" effect="plain" class="hid">隐藏</el-tag>
-                  <span class="when mono">{{ fmtDate(e.first_ac_at) }}</span>
-                </div>
+          <el-empty v-if="!effSel" description="该时间窗内还没有 AC 记录" :image-size="60" />
+          <div v-else class="dlist">
+            <div class="dlist-head">
+              <TierBadge :tier="effSel" kind="difficulty" size="sm" />
+              <span class="dcount mono">{{ selItems.length }} 题</span>
+            </div>
+            <div class="glist">
+              <div v-for="e in selItems" :key="e.pid" class="prow">
+                <router-link class="plink" :to="`/problems/${e.pid}`">
+                  <span class="mono pid">P{{ e.pid }}</span> {{ e.title }}
+                </router-link>
+                <el-tag v-if="e.hidden" size="small" type="danger" effect="plain" class="hid">隐藏</el-tag>
+                <span class="when mono">{{ fmtDate(e.first_ac_at) }}</span>
               </div>
             </div>
           </div>
@@ -410,80 +410,82 @@ function openDetail(id: number) {
   align-self: center;
 }
 
-/* D1–D10 计数卡：十档一排（标准容器主列 1096px 下每卡 ~96px）；点卡片直达展开对应组 */
-.dgrid {
+/* 柱状图（难度完成图，2026-10-26）：柱色走 .diff-N 的 --dc 色轴，点柱切换下方题目列表 */
+.dchart {
   margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);
+  display: flex;
+  align-items: stretch;
   gap: 10px;
 }
 
-.dcard {
-  border: 1px solid #e3eaf6;
-  border-radius: 12px;
-  background: #fff;
-  padding: 10px 4px 8px;
+.dbar {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  justify-content: flex-end;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 6px 2px;
+  font: inherit;
+  color: var(--dc, var(--soj-blue));
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.dcard:not(:disabled):hover {
-  border-color: var(--soj-blue);
-  box-shadow: 0 2px 10px rgb(var(--soj-blue-rgb) / 0.12);
+.dbar .v {
+  min-height: 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--soj-navy, #0b1f45);
 }
 
-.dcard:disabled {
+.dbar .bar {
+  width: 36px;
+  border-radius: 8px 8px 3px 3px;
+  background: var(--dc, var(--soj-blue));
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.dbar:not(.zero):hover .bar {
+  opacity: 0.8;
+}
+
+.dbar.sel .bar {
+  opacity: 1;
+  outline: 2px solid var(--soj-blue-line);
+  outline-offset: 2px;
+}
+
+.dbar.zero {
   cursor: default;
-  opacity: 0.55;
 }
 
-.dcard b {
-  font-size: 15px;
-  color: var(--soj-navy, #0b1f45);
+.dbar.zero .bar {
+  background: #e3eaf6;
+  opacity: 1;
 }
 
-/* 分组列表 */
-.dgroups {
+.dbar.zero .v {
+  visibility: hidden;
+}
+
+/* 选中档题目列表 */
+.dlist {
   margin-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
-.ghead {
-  width: 100%;
+.dlist-head {
   display: flex;
   align-items: center;
   gap: 10px;
-  border: 1px solid #e3eaf6;
-  border-radius: 10px;
-  background: #f7fafd;
-  padding: 9px 14px;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--soj-navy, #0b1f45);
+  padding: 0 2px 10px;
 }
 
-.ghead:hover {
-  border-color: #bcd0f5;
-}
-
-.gcount {
+.dcount {
   color: var(--soj-ink-3, #5b6b85);
   font-size: 12px;
-}
-
-.arrow {
-  margin-left: auto;
-  transition: transform 0.2s;
-}
-
-.arrow.open {
-  transform: rotate(180deg);
 }
 
 .glist {
@@ -624,10 +626,6 @@ function openDetail(id: number) {
   .hero-stats {
     width: 100%;
     justify-content: space-between;
-  }
-
-  .dgrid {
-    grid-template-columns: repeat(5, 1fr);
   }
 }
 </style>

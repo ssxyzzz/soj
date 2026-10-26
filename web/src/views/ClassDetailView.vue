@@ -437,6 +437,7 @@ stripe
             <div v-if="cl.manageable" class="import">
               <UserSuggestTextarea
                 v-model="importText"
+                class="import-input"
                 :rows="2"
                 placeholder="批量导入：输入已注册用户名（输入即联想），用空格 / 逗号 / 换行分隔"
               />
@@ -720,8 +721,12 @@ stripe
 .import {
   margin-top: 16px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: flex-start;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+/* 文本域吃满剩余宽、导入成员钮钉右侧末行——联想弹层向下展开不再盖钮 */
+.import-input {
+  flex: 1;
 }
 </style>

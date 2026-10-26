@@ -160,8 +160,16 @@ function openWorkbenchEntry() {
   showWorkbench.value = true
 }
 
-// 粘贴提交弹窗（2026-10-25 修复⑥）：副列去内嵌编辑器后的入口
+// 粘贴提交弹窗（2026-10-25 修复⑥）：副列去内嵌编辑器后的入口。
+// 个人模板在「打开弹窗」时回填（与在线编程同口径）——题目加载时 /me/profile 偏好常未就绪，
+// watch(problem) 的早填会拿到空模板；仅在未编辑过（空 / 仍是任一语言起始模板）时回填。
 const showRailSubmit = ref(false)
+
+const railUntouched = computed(() => {
+  const code = railCode.value
+  if (!code.trim()) return true
+  return languageOptions.some((o) => templateFor(o.value) && code === templateFor(o.value))
+})
 
 function openRailSubmit() {
   if (!userStore.token) {
@@ -169,6 +177,7 @@ function openRailSubmit() {
     router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
+  if (railUntouched.value) railCode.value = funcTemplate.value || templateFor(railLang.value)
   showRailSubmit.value = true
 }
 

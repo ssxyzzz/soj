@@ -116,6 +116,38 @@ type ClassCard struct {
 	Private         bool      `bson:"private"         json:"private"`
 	CreatedAt       time.Time `bson:"createdAt"       json:"created_at"`
 	Joined          bool      `json:"joined"` // 由 handler 按视角填写，不落库
+	Pinned          bool      `json:"pinned"` // 当前用户是否置顶（个人视角 marks，不落班档）
+}
+
+// classMarks 个人班级视图标记（2026-10-26 v0.22）：每个用户一份——pins 置顶班 id
+// （数组序 = 置顶内顺序），order = 已入班班的完整展示序；仅已入班的班可置顶/拖动，
+// 非成员视角（privileged 看全站班）不参与排序，保持默认 id 序垫底。
+type classMarksDoc struct {
+	UID   int64   `bson:"uid"`
+	Pins  []int64 `bson:"pins"`
+	Order []int64 `bson:"order"`
+}
+
+// GetClassMarks 读用户班级标记；无记录返回空（nil = 全默认排序）。
+func (r *Repo) GetClassMarks(ctx context.Context, uid int64) (pins, order []int64, err error) {
+	var doc classMarksDoc
+	err = r.db.Collection("classmarks").FindOne(ctx, bson.M{"uid": uid}).Decode(&doc)
+	if IsNotFound(err) {
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return doc.Pins, doc.Order, nil
+}
+
+// SaveClassMarks 整体覆盖用户班级标记（handler 已把两组 id 过滤为该用户的已入班集合）。
+func (r *Repo) SaveClassMarks(ctx context.Context, uid int64, pins, order []int64) error {
+	_, err := r.db.Collection("classmarks").UpdateOne(ctx,
+		bson.M{"uid": uid},
+		bson.M{"$set": bson.M{"pins": pins, "order": order}},
+		options.UpdateOne().SetUpsert(true))
+	return err
 }
 
 // ListClasses 班级卡片（按创建时间正序）：作业数 = 该班 assignments 数量。

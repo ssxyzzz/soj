@@ -169,8 +169,8 @@ func Run(ctx context.Context, deps *Deps) {
 		api.POST("/lists", AuthRequired(h), RequirePerm(repo.PermListManage), h.CreateList)
 		// 排序 = 全局次序，收到独立权限位（默认仅 root）
 		api.POST("/lists/reorder", AuthRequired(h), RequirePerm(repo.PermListReorder), h.ReorderLists)
-		api.PATCH("/lists/:id", AuthRequired(h), h.UpdateList)   // handler 内 listManageable
-		api.DELETE("/lists/:id", AuthRequired(h), h.DeleteList)  // handler 内 listManageable
+		api.PATCH("/lists/:id", AuthRequired(h), h.UpdateList)  // handler 内 listManageable
+		api.DELETE("/lists/:id", AuthRequired(h), h.DeleteList) // handler 内 listManageable
 
 		// 班级（登录后可见；成员/邀请码等按身份返回）
 		api.GET("/classes", AuthRequired(h), h.ListClasses)
@@ -180,6 +180,7 @@ func Run(ctx context.Context, deps *Deps) {
 		authed := api.Group("", AuthRequired(h))
 		{
 			authed.GET("/me/classes", h.MyClasses)
+			authed.POST("/me/classes/marks", h.SaveClassMarks) // 个人班级视图标记：置顶 + 已入班展示序（2026-10-26 v0.22）
 			authed.GET("/me/problem-stats", h.GetMyProblemStats)
 			authed.GET("/me/profile", h.GetMyProfile)
 			authed.PATCH("/me/profile", h.UpdateMyProfile)

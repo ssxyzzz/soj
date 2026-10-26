@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -91,7 +92,86 @@ func (h *Handlers) ListClasses(c *gin.Context) {
 		}
 		visible = append(visible, card)
 	}
+	// 个人视角排序（2026-10-26 v0.22）：置顶优先（pins 序）→ 已排序的已入班班（order 序）
+	// → 其余保持默认 id 序垫底；置顶/拖动仅限已入班（marks 只含成员班），非成员班不可操作。
+	if logged {
+		pins, order, err := h.repo.GetClassMarks(c.Request.Context(), uid)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取班级失败")
+			return
+		}
+		pinIdx := make(map[int64]int, len(pins))
+		for i, id := range pins {
+			pinIdx[id] = i
+		}
+		ordIdx := make(map[int64]int, len(order))
+		for i, id := range order {
+			ordIdx[id] = i
+		}
+		rank := func(card repo.ClassCard) [2]int {
+			if i, ok := pinIdx[card.ID]; ok {
+				return [2]int{0, i}
+			}
+			if i, ok := ordIdx[card.ID]; ok {
+				return [2]int{1, i}
+			}
+			return [2]int{2, int(card.ID)} // 默认序 = 建班先后（_id 升序）
+		}
+		for i := range visible {
+			visible[i].Pinned = func() bool { _, ok := pinIdx[visible[i].ID]; return ok }()
+		}
+		sort.SliceStable(visible, func(i, j int) bool {
+			ra, rb := rank(visible[i]), rank(visible[j])
+			if ra[0] != rb[0] {
+				return ra[0] < rb[0]
+			}
+			return ra[1] < rb[1]
+		})
+	}
 	ok(c, visible)
+}
+
+// SaveClassMarks 保存个人班级视图标记（2026-10-26 v0.22）：pins 置顶序 + order 已入班展示序。
+// 两组 id 均过滤为该用户的已入班集合——非成员班不可置顶/拖动（页脚口径：仅限已入班人员）。
+func (h *Handlers) SaveClassMarks(c *gin.Context) {
+	uid, _, _, okAuth := currentUser(c)
+	if !okAuth {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	var req struct {
+		Pins  []int64 `json:"pins"`
+		Order []int64 `json:"order"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	ids, err := h.repo.MyClassIDs(c.Request.Context(), uid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取班级失败")
+		return
+	}
+	allow := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		allow[id] = true
+	}
+	filter := func(in []int64) []int64 {
+		seen := make(map[int64]bool, len(in))
+		out := make([]int64, 0, len(in))
+		for _, id := range in {
+			if allow[id] && !seen[id] {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+	if err := h.repo.SaveClassMarks(c.Request.Context(), uid, filter(req.Pins), filter(req.Order)); err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"saved": true})
 }
 
 func (h *Handlers) MyClasses(c *gin.Context) {

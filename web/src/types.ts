@@ -359,6 +359,7 @@ export interface ClassCard {
   private: boolean
   created_at: string
   joined: boolean
+  pinned?: boolean // 当前用户是否置顶（个人视角 marks；仅已入班可置顶/拖动）
 }
 
 // ---------- 作业（班级题目清单，即时出分） ----------

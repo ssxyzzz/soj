@@ -2,7 +2,10 @@
 // 用户名联想批量输入（v0.18.3 随题单批次）：批量导入成员的文本域增强——
 // 按空格/逗号/换行分隔输入，光标所在最后一段自动调 /users/lookup 联想已注册用户，
 // 点击建议或 Enter 选中即回填该段；↑↓ 切换候选，Esc 关闭。纯前端回填，导入逻辑不变。
-import { ref } from 'vue'
+// 2026-10-26：弹层不限高全量铺开（服务端上限 20）；改 position:fixed 跟手重定位——
+// 绝对定位会向下撑出文档滚动区（页面右侧多一根滚动条），fixed 脱离文档流根治；
+// 下方视口放不下且上方放得下时向上翻，开着的滚动/缩放实时跟位。
+import { nextTick, onBeforeUnmount, ref } from 'vue'
 
 import { userApi } from '@/api'
 import type { LookupUser } from '@/types'
@@ -18,10 +21,12 @@ const props = withDefaults(
 const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
 
 const input = ref()
+const root = ref<HTMLElement>()
 const open = ref(false)
 const loading = ref(false)
 const items = ref<LookupUser[]>([])
 const active = ref(-1)
+const popStyle = ref<Record<string, string>>({})
 let debounce: ReturnType<typeof setTimeout> | undefined
 let seq = 0
 
@@ -49,12 +54,48 @@ async function lookup(kw: string) {
   try {
     const r = await userApi.lookup(kw)
     if (mySeq !== seq) return // 过期响应丢弃
-    items.value = r.slice(0, 8)
+    items.value = r // 全量列出（服务端上限 20），不截断不内滚
     active.value = -1
-    open.value = items.value.length > 0
+    if (items.value.length > 0) openPop()
+    else close()
   } finally {
     if (mySeq === seq) loading.value = false
   }
+}
+
+// 弹层按实际条目高度定 top：下方放不下且上方放得下时向上翻
+function place() {
+  const el = root.value
+  if (!el || !open.value) return
+  const r = el.getBoundingClientRect()
+  const h = items.value.length * 34 + 10
+  const flip = window.innerHeight - r.bottom < h + 8 && r.top > h + 8
+  const top = flip ? r.top - h - 4 : r.bottom + 4
+  popStyle.value = {
+    left: `${Math.round(r.left)}px`,
+    top: `${Math.round(top)}px`,
+    width: `${Math.round(r.width)}px`,
+  }
+}
+
+function onReposition() {
+  if (open.value) place()
+}
+
+function openPop() {
+  open.value = true
+  place() // 先按估算占位
+  nextTick(place) // 渲染后再校一次
+  window.addEventListener('scroll', onReposition, true)
+  window.addEventListener('resize', onReposition)
+}
+
+function close() {
+  open.value = false
+  items.value = []
+  active.value = -1
+  window.removeEventListener('scroll', onReposition, true)
+  window.removeEventListener('resize', onReposition)
 }
 
 function pick(u: LookupUser) {
@@ -62,12 +103,6 @@ function pick(u: LookupUser) {
   emit('update:modelValue', `${props.modelValue.slice(0, start)}${u.username} `)
   close()
   input.value?.focus()
-}
-
-function close() {
-  open.value = false
-  items.value = []
-  active.value = -1
 }
 
 // 键盘：候选开着时 ↑↓ 移动 / Enter 选中 / Esc 关闭；否则 Enter 换行照旧
@@ -85,10 +120,12 @@ function onKeydown(e: Event) {
     close()
   }
 }
+
+onBeforeUnmount(close)
 </script>
 
 <template>
-  <div class="usuggest">
+  <div ref="root" class="usuggest">
     <el-input
       ref="input"
       :model-value="modelValue"
@@ -99,7 +136,7 @@ function onKeydown(e: Event) {
       @keydown="onKeydown"
       @blur="close"
     />
-    <div v-if="open" class="usuggest-pop">
+    <div v-if="open" class="usuggest-pop" :style="popStyle">
       <div
         v-for="(u, i) in items"
         :key="u.id"
@@ -120,18 +157,14 @@ function onKeydown(e: Event) {
   width: 100%;
 }
 
+/* fixed 脱离文档流：坐标由 place() 按文本域视口位置下发（left/top/width 内联），不撑页面滚动 */
 .usuggest-pop {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
+  position: fixed;
   z-index: 20;
   background: #fff;
   border: 1px solid var(--soj-line, #e3eaf6);
   border-radius: 10px;
   box-shadow: 0 10px 28px rgba(11, 31, 69, 0.14);
-  max-height: 240px;
-  overflow-y: auto;
   padding: 4px;
 }
 

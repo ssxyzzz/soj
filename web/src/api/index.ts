@@ -350,6 +350,9 @@ export const classApi = {
   regenInvite: (id: number) => post<{ invite_code: string }>(`/classes/${id}/invite`),
   importMembers: (id: number, usernames: string) =>
     post<{ added: number; total: number }>(`/classes/${id}/members`, { usernames }),
+  // 个人视图标记（2026-10-26 v0.22）：置顶 + 已入班展示序（服务端过滤为本人已入班集合）
+  saveMarks: (pins: number[], order: number[]) =>
+    post<{ saved: boolean }>('/me/classes/marks', { pins, order }),
   setMemberRole: (id: number, uid: number, role: string) =>
     post<{ updated: number; role: string }>(`/classes/${id}/members/${uid}/role`, { role }),
   listAssignments: (id: number) =>

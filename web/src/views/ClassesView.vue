@@ -21,12 +21,87 @@ const createForm = reactive({ name: '', intro: '', private: false })
 const joinCode = ref('')
 const joining = ref(false)
 
+// 置顶与拖拽排序（2026-10-26 v0.22）：个人视角 marks（POST /me/classes/marks 持久化）——
+// 仅已入班的卡可置顶/拖动；置顶优先（置顶组内按 pins 序），置顶卡不可拖出置顶组、
+// 非置顶卡不可拖入置顶组，组内互相拖动随意；拖完（drop/dragend）整序落库。
+const pins = ref<number[]>([])
+const dragId = ref<number | null>(null)
+const armedId = ref<number | null>(null)
+
+const isPinned = (id: number) => pins.value.includes(id)
+
+function saveMarks() {
+  const order = list.value.filter((c) => c.joined).map((c) => c.id)
+  const p = list.value.filter((c) => c.joined && isPinned(c.id)).map((c) => c.id)
+  classApi.saveMarks(p, order).catch(() => {})
+}
+
+function togglePin(c: ClassCard) {
+  const i = pins.value.indexOf(c.id)
+  if (i >= 0) pins.value.splice(i, 1)
+  else pins.value.unshift(c.id) // 新置顶排置顶组最前
+  resort()
+  saveMarks()
+}
+
+// 置顶组按 pins 序在前；非置顶保持原相对顺序（稳定排序）
+function resort() {
+  const idx = new Map(pins.value.map((id, i) => [id, i] as const))
+  list.value = [...list.value].sort((a, b) => {
+    const pa = idx.has(a.id) ? 0 : 1
+    const pb = idx.has(b.id) ? 0 : 1
+    if (pa !== pb) return pa - pb
+    if (pa === 0) return (idx.get(a.id) ?? 0) - (idx.get(b.id) ?? 0)
+    return 0
+  })
+}
+
+// 拖拽仅从六点手柄发起（避免整卡误拖/文本不可选）：手柄 mousedown 挂 armed，卡片才 draggable
+function armDrag(c: ClassCard) {
+  if (c.joined) armedId.value = c.id
+}
+function disarm() {
+  armedId.value = null
+}
+
+function onDragstart(c: ClassCard, e: DragEvent) {
+  if (armedId.value !== c.id || !c.joined) {
+    e.preventDefault()
+    return
+  }
+  dragId.value = c.id
+  e.dataTransfer?.setData('text/plain', String(c.id))
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+
+function onDragover(c: ClassCard, e: DragEvent) {
+  if (dragId.value == null || c.id === dragId.value) return
+  const from = list.value.findIndex((x) => x.id === dragId.value)
+  const to = list.value.findIndex((x) => x.id === c.id)
+  if (from < 0 || to < 0) return
+  // 置顶优先：置顶卡拖不进非置顶区、非置顶卡拖不进置顶区（跨组直接忽略）
+  if (isPinned(list.value[from].id) !== isPinned(c.id)) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  if (from === to) return
+  list.value.splice(to, 0, list.value.splice(from, 1)[0])
+}
+
+// drop 与 dragend 都会到这：只提交一次
+function commitDrag() {
+  if (dragId.value == null) return
+  dragId.value = null
+  disarm()
+  saveMarks()
+}
+
 const canCreate = () => userStore.token && userStore.can('class.create')
 
 async function load() {
   loading.value = true
   try {
     list.value = await classApi.list()
+    pins.value = list.value.filter((c) => c.pinned).map((c) => c.id)
   } finally {
     loading.value = false
   }
@@ -114,7 +189,16 @@ onMounted(load)
       <el-empty v-if="!loading && !list.length" description="还没有你能看到的班级，用右侧邀请码加入吧" />
       <el-row v-loading="loading" :gutter="16">
         <el-col v-for="c in list" :key="c.id" :xs="24" :sm="12">
-          <el-card class="card clcard" shadow="hover">
+          <el-card
+            class="card clcard"
+            :class="{ dragging: dragId === c.id }"
+            shadow="hover"
+            :draggable="armedId === c.id"
+            @dragstart="onDragstart(c, $event)"
+            @dragover="onDragover(c, $event)"
+            @drop="commitDrag"
+            @dragend="commitDrag"
+          >
             <div class="name-row">
               <h3 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h3>
               <span v-if="c.private" class="cl-chip lock">🔒 私密</span>
@@ -123,11 +207,30 @@ onMounted(load)
               <span v-if="c.owner_id === userStore.uid" class="cl-chip joined">{{ c.owner_name }}的班</span>
               <span v-else-if="c.joined" class="cl-chip joined">✓ 已加入</span>
               <el-button v-else size="small" type="primary" link @click="openJoin(c)">加入</el-button>
+              <!-- 置顶（仅已入班）：置顶优先展示，再点取消 -->
+              <button
+                v-if="c.joined"
+                type="button"
+                class="pin-btn"
+                :class="{ on: isPinned(c.id) }"
+                :title="isPinned(c.id) ? '取消置顶' : '置顶'"
+                @click.stop="togglePin(c)"
+              >
+                📌
+              </button>
             </div>
             <p class="intro">{{ c.intro || '暂无简介' }}</p>
             <div class="meta">
               <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDay(c.created_at) }}</span>
             </div>
+            <!-- 六点拖拽手柄（仅已入班）：按住才能拖动卡片；置顶组内互拖、不跨组 -->
+            <span
+              v-if="c.joined"
+              class="drag-handle"
+              title="拖动排序"
+              @mousedown="armDrag(c)"
+              @mouseup="disarm"
+            ></span>
           </el-card>
         </el-col>
       </el-row>
@@ -204,6 +307,53 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+/* 置顶钮（仅已入班，2026-10-26 v0.22）：钉在标题行右缘，置顶态高亮 */
+.pin-btn {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.35;
+  filter: grayscale(1);
+  transition: opacity 0.15s;
+}
+
+.pin-btn:hover {
+  opacity: 0.75;
+}
+
+.pin-btn.on {
+  opacity: 1;
+  filter: none;
+}
+
+/* 六点拖拽手柄（仅已入班）：右缘 meta 行高度处，grab 光标；卡片拖动中降透明度 */
+.drag-handle {
+  position: absolute;
+  right: 14px;
+  top: 62px;
+  width: 10px;
+  height: 16px;
+  cursor: grab;
+  background-image: radial-gradient(circle, var(--soj-ink-3) 1.2px, transparent 1.3px);
+  background-size: 5px 5.34px;
+}
+
+.drag-handle:hover {
+  background-image: radial-gradient(circle, var(--soj-blue) 1.2px, transparent 1.3px);
+}
+
+:deep(.clcard.dragging) {
+  opacity: 0.55;
+}
+
+/* 手柄 absolute 锚点（卡片自身 relative；global .card 无定位） */
+:deep(.clcard) {
+  position: relative;
 }
 
 /* v3 clcard：班级名藏蓝 17/800（2026-10-25 用户反馈关键信息偏小上调），hover 主蓝 */

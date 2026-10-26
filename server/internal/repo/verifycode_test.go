@@ -108,8 +108,15 @@ func TestVerifyCodeRateQuery(t *testing.T) {
 	if q.Target1d != 2 {
 		t.Fatalf("目标 24h 计数应 2，got %d", q.Target1d)
 	}
-	if q.IP1d < 3 { // 同 IP 当日至少 3 条（不含 30h 前那条）
-		t.Fatalf("IP 当日计数应 ≥3，got %d", q.IP1d)
+	// IP1d 是自然日口径（≥本地零点，见 QueryVerifyCodeRate dayStart）：-2h 的种子在
+	// 00:00–02:00 之间运行会落入昨日（当日只剩 -2min/-1min 两条），断言按当日是否跨零点取值
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	wantIP1d := int64(3)
+	if now.Add(-2 * time.Hour).Before(dayStart) {
+		wantIP1d = 2
+	}
+	if q.IP1d != wantIP1d { // 同 IP 当日（不含 30h 前那条，-2h 跨零点时另计）
+		t.Fatalf("IP 当日计数应 %d，got %d", wantIP1d, q.IP1d)
 	}
 	if q.Global1d < q.IP1d {
 		t.Fatalf("全局计数 %d 不应小于 IP 计数 %d", q.Global1d, q.IP1d)
