@@ -16,6 +16,9 @@ export const useUserStore = defineStore('user', () => {
   const nickname = ref(localStorage.getItem('soj_nickname') ?? '')
   const role = ref(localStorage.getItem('soj_role') ?? '')
   const perms = ref<string[]>(JSON.parse(localStorage.getItem('soj_perms') ?? '[]'))
+  // QQ 头像直链（v0.23）：顶栏头像用；localStorage 持久化保证首帧就有图，
+  // /me/profile 返回后刷新（开关关闭/未绑定为空串回退首字头像）
+  const avatarUrl = ref(localStorage.getItem('soj_avatar') ?? '')
 
   // 用户偏好（v0.4.8 个人设置）：登录后由布局层经 /me/profile 拉取，设置页保存后同步；
   // 供提交弹窗/在线编程预填默认语言、在线编程预填代码模板消费。不落 localStorage。
@@ -66,6 +69,13 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('soj_nickname', n)
   }
 
+  // QQ 头像同步（设置页保存 / 布局层 getProfile 回来后调用；空串 = 未绑定回退首字）
+  function setAvatarUrl(u: string) {
+    avatarUrl.value = u ?? ''
+    if (u) localStorage.setItem('soj_avatar', u)
+    else localStorage.removeItem('soj_avatar')
+  }
+
   function logout() {
     token.value = ''
     uid.value = 0
@@ -74,12 +84,14 @@ export const useUserStore = defineStore('user', () => {
     perms.value = []
     prefs.value = {}
     level.value = null
+    avatarUrl.value = ''
     localStorage.removeItem('soj_token')
     localStorage.removeItem('soj_uid')
     localStorage.removeItem('soj_nickname')
     localStorage.removeItem('soj_role')
     localStorage.removeItem('soj_perms')
+    localStorage.removeItem('soj_avatar')
   }
 
-  return { token, uid, nickname, role, perms, prefs, level, canAdmin, can, setLogin, setPrefs, setLevel, setNickname, logout }
+  return { token, uid, nickname, role, perms, prefs, level, avatarUrl, canAdmin, can, setLogin, setPrefs, setLevel, setNickname, setAvatarUrl, logout }
 })

@@ -31,14 +31,34 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 		return
 	}
 
+	// 资料区（v0.23 起按本人公开开关下发）：学校/年级/性别/QQ 逐字段判定——
+	// 关掉的整字段省略（前端 v-if 渲染）；存量未配置沿用 v0.17 口径（性别/学校/年级公开、QQ 私密）
+	vis := u.EffProfileVis()
 	out := gin.H{
-		// 资料区：昵称/注册时间/学校/年级公开；性别与 QQ 不展示（v0.17 拍板）
 		"id":         u.ID,
 		"username":   u.Username,
 		"nickname":   u.Nickname,
 		"created_at": u.CreatedAt,
-		"school":     u.School,
-		"grade":      u.Grade,
+	}
+	if vis.School {
+		out["school"] = u.School
+	}
+	if vis.Grade {
+		out["grade"] = u.Grade
+	}
+	if vis.RegionPublic() {
+		out["region"] = u.Region
+	}
+	if vis.Gender {
+		out["gender"] = u.Gender
+	}
+	if vis.QQ {
+		out["qq"] = u.QQ
+	}
+	// QQ 头像（v0.23）：绑定开关开且填了 QQ 号时下发头像直链（QQ 号本身可保持私密）；
+	// 前端有 avatar_url 用图，否则回退首字头像
+	if u.QQAvatar && u.QQ != "" {
+		out["avatar_url"] = "https://q1.qlogo.cn/g?b=qq&nk=" + u.QQ + "&s=100"
 	}
 
 	// 等级（徽章 + 距下一级进度）与全站排名：聚合失败降级省略，不阻塞主页

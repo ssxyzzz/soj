@@ -254,6 +254,29 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "建题失败："+err.Error())
 		return
 	}
+	// 挑战时长与答案解析视频（v0.23）：随建题表单一并落库（复用编辑同款校验）
+	setMeta := bson.M{}
+	if v := strings.TrimSpace(formValue(form, "video_url")); v != "" {
+		if len(v) > 1024 {
+			fail(c, http.StatusBadRequest, "视频链接过长（上限 1024 字符）")
+			return
+		}
+		setMeta["videoUrl"] = v
+	}
+	if raw := formValue(form, "challenge_time_sec"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 60 || n > 14400 {
+			fail(c, http.StatusBadRequest, "挑战时长需在 60–14400 秒（1 分钟 – 4 小时），留空按难度默认")
+			return
+		}
+		setMeta["challengeTimeSec"] = n
+	}
+	if len(setMeta) > 0 {
+		if err := h.repo.UpdateProblemMeta(c.Request.Context(), pr.ID, setMeta); err != nil {
+			fail(c, http.StatusInternalServerError, "建题元数据保存失败")
+			return
+		}
+	}
 	ok(c, gin.H{"id": pr.ID})
 }
 
@@ -624,16 +647,18 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Title          *string  `json:"title"`
-		TimeLimitMS    *int     `json:"time_limit_ms"`
-		MemoryLimitKB  *int     `json:"memory_limit_kb"`
-		Difficulty     *int     `json:"difficulty"`  // 难度 1–10（v0.11）
-		MetaTagIDs     *[]int64 `json:"meta_tag_ids"` // 来源标签树节点（2026-10-25 双树，替换来源四字段）
-		Compare        *string  `json:"compare"`
-		FloatTolerance *float64 `json:"float_tolerance"`
-		FileIOName     *string  `json:"file_io_name"`
-		TagIDs         *[]int64 `json:"tag_ids"`        // 指针语义：缺省不动，空数组清空
-		QuestionsJSON  *string  `json:"questions_json"` // 客观题整卷定义编辑（仅客观题可带）
+		Title            *string  `json:"title"`
+		TimeLimitMS      *int     `json:"time_limit_ms"`
+		MemoryLimitKB    *int     `json:"memory_limit_kb"`
+		Difficulty       *int     `json:"difficulty"`   // 难度 1–10（v0.11）
+		MetaTagIDs       *[]int64 `json:"meta_tag_ids"` // 来源标签树节点（2026-10-25 双树，替换来源四字段）
+		Compare          *string  `json:"compare"`
+		FloatTolerance   *float64 `json:"float_tolerance"`
+		FileIOName       *string  `json:"file_io_name"`
+		TagIDs           *[]int64 `json:"tag_ids"`            // 指针语义：缺省不动，空数组清空
+		QuestionsJSON    *string  `json:"questions_json"`     // 客观题整卷定义编辑（仅客观题可带）
+		VideoURL         *string  `json:"video_url"`          // 答案解析视频链接（v0.23；空串清除）
+		ChallengeTimeSec *int     `json:"challenge_time_sec"` // 挑战时长秒（v0.23；0 = 按难度默认）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -776,6 +801,24 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			set["fileIoInput"] = ""
 			set["fileIoOutput"] = ""
 		}
+	}
+	// 答案解析视频链接（v0.23）：B 站/直链 mp4，空串清除
+	if req.VideoURL != nil {
+		v := strings.TrimSpace(*req.VideoURL)
+		if len(v) > 1024 {
+			fail(c, http.StatusBadRequest, "视频链接过长（上限 1024 字符）")
+			return
+		}
+		set["videoUrl"] = v
+	}
+	// 挑战时长（v0.23）：0 = 按难度×5min 默认；显式配置 60–14400 秒
+	if req.ChallengeTimeSec != nil {
+		n := *req.ChallengeTimeSec
+		if n != 0 && (n < 60 || n > 14400) {
+			fail(c, http.StatusBadRequest, "挑战时长需在 60–14400 秒（1 分钟 – 4 小时），留空按难度默认")
+			return
+		}
+		set["challengeTimeSec"] = n
 	}
 	// 标签：节点 ID 数组，全部存在于树中才接受
 	if req.TagIDs != nil {

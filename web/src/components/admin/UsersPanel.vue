@@ -383,7 +383,7 @@ defineExpose({ refresh: () => load() })
           />
         </el-form-item>
         <el-form-item label="昵称">
-          <el-input v-model="editForm.nickname" maxlength="32" placeholder="用于榜单、题解等公开页面展示" />
+          <el-input v-model="editForm.nickname" maxlength="6" placeholder="用于榜单、题解等公开页面展示（6 字以内）" />
         </el-form-item>
         <el-form-item label="新密码">
           <el-input

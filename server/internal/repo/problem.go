@@ -39,18 +39,18 @@ func ValidCompare(c string) bool { return c == CompareExact || c == CompareToler
 type Problem struct {
 	ID               int64               `bson:"_id"`
 	Title            string              `bson:"title"`
-	Statement        string              `bson:"statement"`             // 题面（Markdown，v0.8 起单一事实源；v0.6–v0.7 富文本时代的 contentHtml 已启动回迁）
-	Type             string              `bson:"type,omitempty"`        // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
-	Questions        []ObjectiveQuestion `bson:"questions,omitempty"`   // 客观题小题列表（v0.9.3；单题时代的 question 由启动迁移并入）
-	Difficulty       int                 `bson:"difficulty,omitempty"`  // 难度 1–10（v0.11；0 = 未设置，展示按 D3）
+	Statement        string              `bson:"statement"`            // 题面（Markdown，v0.8 起单一事实源；v0.6–v0.7 富文本时代的 contentHtml 已启动回迁）
+	Type             string              `bson:"type,omitempty"`       // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
+	Questions        []ObjectiveQuestion `bson:"questions,omitempty"`  // 客观题小题列表（v0.9.3；单题时代的 question 由启动迁移并入）
+	Difficulty       int                 `bson:"difficulty,omitempty"` // 难度 1–10（v0.11；0 = 未设置，展示按 D3）
 	TimeLimitMS      int                 `bson:"timeLimitMs"`
 	MemoryLimitKB    int                 `bson:"memoryLimitKb"`
 	Visibility       string              `bson:"visibility"`
-	Hidden           bool                `bson:"hidden"`             // 题目隐藏：无「题库全量可见」权限的视角看不到也不可交（备题用）
-	CreatedBy        int64               `bson:"createdBy"`          // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
-	Tags             []int64             `bson:"tags"`               // 知识树节点 ID（v0.5.5，2026-10-25 更名），名字与层级由 tags 集合知识树实时解析
+	Hidden           bool                `bson:"hidden"`              // 题目隐藏：无「题库全量可见」权限的视角看不到也不可交（备题用）
+	CreatedBy        int64               `bson:"createdBy"`           // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
+	Tags             []int64             `bson:"tags"`                // 知识树节点 ID（v0.5.5，2026-10-25 更名），名字与层级由 tags 集合知识树实时解析
 	MetaTags         []int64             `bson:"meta_tags,omitempty"` // 来源标签树节点 ID（2026-10-25 双树：地区/赛事/题库/年份/其他），名字由来源树实时解析
-	Subtasks         []Subtask           `bson:"subtasks,omitempty"` // nil = 单点等分
+	Subtasks         []Subtask           `bson:"subtasks,omitempty"`  // nil = 单点等分
 	Cases            []CaseMeta          `bson:"cases"`
 	Compare          string              `bson:"compare,omitempty"`        // 比对模式，空 = exact
 	FloatTolerance   float64             `bson:"floatTolerance,omitempty"` // tolerant 时的浮点容差，0 = 默认 1e-4
@@ -66,6 +66,8 @@ type Problem struct {
 	FileIO           bool                `bson:"fileIo,omitempty"`           // 文件 IO 模式（v0.5.2-3 生效）
 	FileIOInput      string              `bson:"fileIoInput,omitempty"`
 	FileIOOutput     string              `bson:"fileIoOutput,omitempty"`
+	ChallengeTimeSec int                 `bson:"challengeTimeSec,omitempty"` // 挑战时长秒（v0.23；0 = 按难度×5min 默认，60–14400 生效）
+	VideoURL         string              `bson:"videoUrl,omitempty"`         // 答案解析视频链接（v0.23；B 站/直链 mp4，题解同门槛可见）
 	CreatedAt        time.Time           `bson:"createdAt"`
 	UpdatedAt        time.Time           `bson:"updatedAt"`
 }

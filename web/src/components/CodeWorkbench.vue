@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
+import SelfTestPanel from '@/components/SelfTestPanel.vue'
 import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions, mergedPrefs, templateFor } from '@/utils/code'
@@ -47,6 +48,10 @@ const userStore = useUserStore()
 const acOn = computed(() => autocompleteOn())
 const codeFont = computed(() => userStore.prefs.codeFont || 'Consolas')
 const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
+
+// 自测（v0.23）：stdio 传统题可用；面板悬在编辑器上方，自测不计入任何统计
+const selfTestOpen = ref(false)
+const selfTestEligible = computed(() => props.problem.challenge?.eligible ?? false)
 
 // 字体/字号即改即存：先乐观更新本地 store（编辑器点击瞬间重绘，不等网络往返），
 // 再全量字段落库（整体覆盖语义，见 utils/code.ts mergedPrefs）。
@@ -151,6 +156,9 @@ onBeforeUnmount(() => {
             title="编辑器字号（12-48，可输入或 +/- 微调）"
             @change="(n: number | undefined) => n && saveEditorPrefs({ codeFontSize: n })"
           />
+          <el-button v-if="selfTestEligible" :type="selfTestOpen ? 'primary' : 'default'" @click="selfTestOpen = !selfTestOpen">
+            {{ selfTestOpen ? '收起自测' : '自测' }}
+          </el-button>
           <el-button type="primary" :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
           <el-button @click="emit('update:modelValue', false)">退出全屏（Esc）</el-button>
         </div>
@@ -162,17 +170,26 @@ onBeforeUnmount(() => {
         </section>
         <div ref="divider" class="wb-divider" @mousedown="onDragStart" title="拖动调整分栏" />
         <section class="wb-right">
-          <CodeEditor
-            v-model="code"
-            class="wb-editor"
-            :language="lang"
-            :autocomplete="acOn"
-            :font-size="codeFontSize"
-            :font-family="codeFont"
-            :tab-indent="true"
-            height="100%"
-            placeholder="在此编写或粘贴你的代码"
-          />
+          <div class="wb-right-col">
+            <SelfTestPanel
+              v-if="selfTestOpen"
+              class="wb-selftest"
+              :problem-id="problem.id"
+              :language="lang"
+              :code="code"
+            />
+            <CodeEditor
+              v-model="code"
+              class="wb-editor"
+              :language="lang"
+              :autocomplete="acOn"
+              :font-size="codeFontSize"
+              :font-family="codeFont"
+              :tab-indent="true"
+              height="100%"
+              placeholder="在此编写或粘贴你的代码"
+            />
+          </div>
         </section>
       </div>
     </div>
@@ -266,8 +283,23 @@ onBeforeUnmount(() => {
   display: flex;
 }
 
+/* 自测面板悬在编辑器上方：面板定高收缩，编辑器吃剩余高度 */
+.wb-right-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.wb-selftest {
+  flex: none;
+  max-height: 300px;
+  overflow: auto;
+}
 .wb-editor {
   flex: 1;
   height: 100%;
+  min-height: 0;
 }
 </style>

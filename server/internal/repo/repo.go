@@ -28,6 +28,7 @@ type Repo struct {
 	Solutions   *mongo.Collection
 	Tags        *mongo.Collection
 	Lists       *mongo.Collection // 题单（v0.18.3 章节化自学导航）
+	Challenges  *mongo.Collection // 挑战模式会话/记录（v0.23）
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -67,6 +68,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		Solutions:   db.Collection("solutions"),
 		Tags:        db.Collection("tags"),
 		Lists:       db.Collection("lists"),
+		Challenges:  db.Collection("challenges"),
 	}, nil
 }
 
@@ -124,6 +126,10 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	// 经验调整流水（v0.11）：管理端加/减经验按 uid 聚合
 	if _, err := r.db.Collection("xpAdjust").Indexes().CreateOne(ctx,
 		mongo.IndexModel{Keys: bson.D{{Key: "uid", Value: 1}}}); err != nil {
+		return err
+	}
+	// 挑战模式（v0.23）：会话查询 + 题内榜聚合
+	if err := r.ensureChallengeIndexes(ctx); err != nil {
 		return err
 	}
 	// 安全审计日志（v0.14）：at 上 TTL 索引滚动保留 90 天（mongod 后台清扫，无需应用层定时）；

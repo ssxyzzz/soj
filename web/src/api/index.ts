@@ -46,6 +46,10 @@ import type {
   ListEntry,
   ListRankResult,
   ListFlat,
+  BoardsResult,
+  ChallengeStartResult,
+  ChallengeSessionView,
+  SelfTestResult,
 } from '@/types'
 
 const client = axios.create({ baseURL: '/api', timeout: 20000 })
@@ -138,7 +142,10 @@ export const authApi = {
     gender?: string
     school?: string
     grade?: string
+    region?: string
     qq?: string
+    profileVis?: { gender: boolean; school: boolean; grade: boolean; region: boolean; qq: boolean }
+    qqAvatar?: boolean
     prefs?: UserPrefs
   }) => patch<UserProfile>('/me/profile', body),
   // 我的做题统计（v0.19 题库副列 v3 卡）：AC 题数 / 可见题总数 / 提交数 / AC 率 / 近 7 天分布
@@ -246,6 +253,19 @@ export const problemApi = {
     get<SubmissionListResult>(`/problems/${id}/my-submissions`, { page, page_size: pageSize }),
   setStatement: (id: number, md: string) =>
     patch<{ id: number }>(`/problems/${id}/statement`, { md }),
+  boards: (id: number) => get<BoardsResult>(`/problems/${id}/boards`),
+  selfTest: (id: number, language: string, code: string, input: string) =>
+    post<SelfTestResult>(`/problems/${id}/run`, { language, code, input }),
+}
+
+// 挑战模式（v0.23）：会话三接口（计时权威在服务端，前端倒计时纯展示）
+export const challengeApi = {
+  start: (id: number) => post<ChallengeStartResult>(`/problems/${id}/challenge/start`),
+  status: (id: number) =>
+    get<{ active: Partial<ChallengeSessionView>; last?: ChallengeSessionView }>(
+      `/problems/${id}/challenge/status`,
+    ),
+  quit: (id: number) => post<{ quit: boolean }>(`/problems/${id}/challenge/quit`),
 }
 
 // 双树（2026-10-25）：知识树（原标签树）读公开（题库/详情/表单共用），写仅 root；
@@ -285,8 +305,19 @@ export const importApi = {
 }
 
 export const submissionApi = {
-  create: (problemId: number, language: string, code: string) =>
-    post<{ id: number }>('/submissions', { problem_id: problemId, language, code }),
+  create: (
+    problemId: number,
+    language: string,
+    code: string,
+    opts?: { challengeId?: number; changelog?: { ti: number; dc: string }[] },
+  ) =>
+    post<{ id: number }>('/submissions', {
+      problem_id: problemId,
+      language,
+      code,
+      ...(opts?.challengeId ? { challenge_id: opts.challengeId } : {}),
+      ...(opts?.changelog?.length ? { changelog: opts.changelog } : {}),
+    }),
   // 客观题提交（v0.9）：作答即判，免语言/代码
   createObjective: (problemId: number, answers: import('@/types').ObjectiveAnswer[]) =>
     post<{ id: number }>('/submissions', { problem_id: problemId, answers }),

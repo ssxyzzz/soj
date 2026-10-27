@@ -23,15 +23,16 @@ const nickname = ref('')
 const canEditNickname = ref(false)
 
 // '' 表示未填写（后端显式空串=清空）
-const profileForm = reactive({ gender: '', school: '', grade: '', qq: '' })
+const profileForm = reactive({ gender: '', school: '', grade: '', region: '', qq: '' })
+// 资料公开开关（v0.23）：true=对外公开，false=仅自己可见；缺省沿用历史口径（性别/学校/年级/地区公开、QQ 私密）
+const profileVis = reactive({ gender: true, school: true, grade: true, region: true, qq: false })
+const qqAvatar = ref(false) // QQ 头像绑定：公开主页头像用 QQ 头像（独立于 QQ 号可见性）
 
 const prefsForm = reactive<{
   defaultLang: string
   codeTemplates: Record<string, string>
   autocomplete: boolean
-  mdEditMode: 'wysiwyg' | 'ir' | 'sv'
-  mdTheme: 'light' | 'ant-design' | 'dark' | 'wechat'
-}>({ defaultLang: '', codeTemplates: {}, autocomplete: true, mdEditMode: 'wysiwyg', mdTheme: 'light' })
+}>({ defaultLang: '', codeTemplates: {}, autocomplete: true })
 
 // 模板编辑器当前编辑的语言（按语言各存一套，切换带出对应模板）
 const tplLang = ref('cpp')
@@ -45,14 +46,23 @@ async function load() {
     profileForm.gender = p.gender ?? ''
     profileForm.school = p.school ?? ''
     profileForm.grade = p.grade ?? ''
+    profileForm.region = p.region ?? ''
     profileForm.qq = p.qq ?? ''
+    const vis = p.profile_vis
+    if (vis) {
+      profileVis.gender = !!vis.gender
+      profileVis.school = !!vis.school
+      profileVis.grade = !!vis.grade
+      // 地区开关晚于本卡上线：存量已存开关文档缺该键（undefined），按公开兜底（与默认口径一致）
+      profileVis.region = vis.region !== false
+      profileVis.qq = !!vis.qq
+    }
+    qqAvatar.value = !!p.qq_avatar
     prefsForm.defaultLang = p.prefs?.defaultLang ?? ''
     prefsForm.codeTemplates = { ...(p.prefs?.codeTemplates ?? {}) }
     userStore.setLevel(p.level ?? null) // 顶栏徽章与补全门槛同步（AC 后进设置页即刷新）
     // 开关对未达标用户是禁用的：显示有效值（关），而不是库里可能残留的 true
     prefsForm.autocomplete = autocompleteAvailable() ? (p.prefs?.autocomplete ?? true) : false
-    prefsForm.mdEditMode = (p.prefs?.mdEditMode || 'wysiwyg') as typeof prefsForm.mdEditMode
-    prefsForm.mdTheme = (p.prefs?.mdTheme || 'light') as typeof prefsForm.mdTheme
   } finally {
     loading.value = false
   }
@@ -70,10 +80,14 @@ async function saveProfile() {
       gender: profileForm.gender,
       school: profileForm.school,
       grade: profileForm.grade,
+      region: profileForm.region,
       qq: profileForm.qq,
+      profileVis: { ...profileVis },
+      qqAvatar: qqAvatar.value,
     })
     nickname.value = p.nickname ?? nickname.value
     if (p.nickname) userStore.setNickname(p.nickname) // 顶栏即时更新
+    userStore.setAvatarUrl(p.avatar_url ?? '') // 顶栏头像即时换/退（QQ 头像开关联动）
     ElMessage.success('个人信息已保存')
   } finally {
     savingProfile.value = false
@@ -83,13 +97,13 @@ async function saveProfile() {
 async function savePrefs() {
   savingPrefs.value = true
   try {
-    // 全量合成后整体覆盖（避免清掉在线编程保存的字体/字号），先乐观更新本地再落库
+    // 全量合成后整体覆盖（避免清掉在线编程保存的字体/字号），先乐观更新本地再落库。
+    // mdEditMode / mdTheme 不在设置页维护（2026-10-27 起）：编辑器工具栏切换即实时回存，
+    // mergedPrefs 会带着 store 里的现值一起落库，不会被旧表单值覆盖
     const merged = mergedPrefs({
       defaultLang: prefsForm.defaultLang,
       codeTemplates: prefsForm.codeTemplates,
       autocomplete: prefsForm.autocomplete,
-      mdEditMode: prefsForm.mdEditMode,
-      mdTheme: prefsForm.mdTheme,
     })
     userStore.setPrefs(merged)
     const p = await authApi.updateProfile({ prefs: merged })
@@ -255,7 +269,7 @@ onMounted(() => {
             <el-input
               v-model="nickname"
               :disabled="!canEditNickname"
-              maxlength="32"
+              maxlength="6"
               placeholder="用于榜单、题解等公开页面展示"
               style="width: 320px"
             />
@@ -264,23 +278,61 @@ onMounted(() => {
         </div>
         <div class="frow">
           <span class="fl">性别</span>
-          <el-select v-model="profileForm.gender" clearable placeholder="未填写" style="width: 160px">
-            <el-option value="男" label="男" />
-            <el-option value="女" label="女" />
-          </el-select>
+          <div class="fctrl-line">
+            <el-select v-model="profileForm.gender" clearable placeholder="未填写" style="width: 160px">
+              <el-option value="男" label="男" />
+              <el-option value="女" label="女" />
+            </el-select>
+            <label class="vis-sw">
+              <el-switch v-model="profileVis.gender" />
+              <span>{{ profileVis.gender ? '对外公开' : '仅自己可见' }}</span>
+            </label>
+          </div>
         </div>
         <div class="frow">
-          <!-- v0.17 公开主页：学校/年级对外展示；性别/QQ 维持仅自己可见 -->
-          <span class="fl">学校<div class="fd">展示在公开主页</div></span>
-          <el-input v-model="profileForm.school" maxlength="64" placeholder="选填" style="width: 320px" />
+          <span class="fl">学校</span>
+          <div class="fctrl-line">
+            <el-input v-model="profileForm.school" maxlength="64" placeholder="选填" style="width: 320px" />
+            <label class="vis-sw">
+              <el-switch v-model="profileVis.school" />
+              <span>{{ profileVis.school ? '对外公开' : '仅自己可见' }}</span>
+            </label>
+          </div>
         </div>
         <div class="frow">
-          <span class="fl">年级<div class="fd">展示在公开主页</div></span>
-          <el-input v-model="profileForm.grade" maxlength="16" placeholder="选填，如：初一 / 高二 / 大一" style="width: 320px" />
+          <span class="fl">年级<div class="fd">选填，如：初一 / 高二 / 大一</div></span>
+          <div class="fctrl-line">
+            <el-input v-model="profileForm.grade" maxlength="16" placeholder="选填" style="width: 320px" />
+            <label class="vis-sw">
+              <el-switch v-model="profileVis.grade" />
+              <span>{{ profileVis.grade ? '对外公开' : '仅自己可见' }}</span>
+            </label>
+          </div>
         </div>
         <div class="frow">
-          <span class="fl">QQ<div class="fd">仅自己可见</div></span>
-          <el-input v-model="profileForm.qq" maxlength="16" placeholder="选填" style="width: 320px" />
+          <span class="fl">地区</span>
+          <div class="fctrl-line">
+            <el-input v-model="profileForm.region" maxlength="32" placeholder="选填，如：安徽合肥" style="width: 320px" />
+            <label class="vis-sw">
+              <el-switch v-model="profileVis.region" />
+              <span>{{ profileVis.region ? '对外公开' : '仅自己可见' }}</span>
+            </label>
+          </div>
+        </div>
+        <div class="frow">
+          <span class="fl">QQ</span>
+          <div class="fctrl-line">
+            <el-input v-model="profileForm.qq" maxlength="16" placeholder="选填" style="width: 320px" />
+            <label class="vis-sw">
+              <el-switch v-model="profileVis.qq" />
+              <span>{{ profileVis.qq ? '对外公开' : '仅自己可见' }}</span>
+            </label>
+            <!-- QQ 头像绑定（v0.23）：开 = 公开主页头像用 QQ 头像，独立于 QQ 号是否公开 -->
+            <label class="vis-sw">
+              <el-switch v-model="qqAvatar" :disabled="!profileForm.qq" />
+              <span>QQ头像</span>
+            </label>
+          </div>
         </div>
         <div class="frow">
           <span class="fl"></span>
@@ -395,24 +447,8 @@ onMounted(() => {
           </div>
         </div>
         <div class="frow">
-          <span class="fl">Markdown 编辑模式<div class="fd">题面 / 公告等编辑器默认模式</div></span>
+          <span class="fl"></span>
           <div class="fctrl">
-            <el-radio-group v-model="prefsForm.mdEditMode">
-              <el-radio-button value="wysiwyg">所见即所得</el-radio-button>
-              <el-radio-button value="ir">即时渲染</el-radio-button>
-              <el-radio-button value="sv">分屏预览</el-radio-button>
-            </el-radio-group>
-          </div>
-        </div>
-        <div class="frow">
-          <span class="fl">Markdown 主题<div class="fd">仅作用于编辑器内容区</div></span>
-          <div class="fctrl">
-            <el-select v-model="prefsForm.mdTheme" style="width: 240px">
-              <el-option value="light" label="明亮（站内默认）" />
-              <el-option value="ant-design" label="Ant Design" />
-              <el-option value="dark" label="暗色" />
-              <el-option value="wechat" label="微信" />
-            </el-select>
             <el-button type="primary" size="small" :loading="savingPrefs" @click="savePrefs">保存偏好</el-button>
           </div>
         </div>
@@ -483,6 +519,25 @@ onMounted(() => {
 /* frow 内边距收紧（全局 .frow 基础上适配卡体内距） */
 .fbody .frow {
   grid-template-columns: 190px minmax(0, 1fr);
+}
+
+/* 资料公开开关行（v0.23）：输入控件 + 行内开关组 */
+.fctrl-line {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.vis-sw {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--soj-ink-3);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
 }
 
 .frow-top {

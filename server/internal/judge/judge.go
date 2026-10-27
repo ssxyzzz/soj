@@ -147,6 +147,11 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 		return
 	}
 	log.Printf("[judge] 提交 #%d => %s (%dms / %dKB / %d分)", sub.ID, status, timeMS, memKB, score)
+	// 挑战模式（v0.23）：AC 触发挑战终判（时长按提交创建时刻起算，判题排队耗时不惩罚选手；
+	// 已终态的会话重复触发为 no-op，重测幂等）
+	if status == repo.StatusAccepted && sub.ChallengeID != 0 {
+		j.Repo.FinalizeChallengeOnAC(ctx, sub.UID, sub.ProblemID, sub.ID, len(sub.Code))
+	}
 }
 
 // heartbeatLoop 判题租约心跳：每 HeartbeatInterval 刷一次 heartbeatAt，

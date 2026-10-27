@@ -199,6 +199,60 @@ export interface ProblemDetail {
   tags?: number[] // 标签树节点 ID（题目信息卡展示，名字由前端标签树映射）
   submit_count?: number // 公开态提交数（题目信息卡）
   accepted_count?: number // 其中 AC 的提交数
+  challenge?: { eligible: boolean; sec: number } // 挑战模式（v0.23）：资格 + 生效时长（服务端权威）
+  challenge_time_sec?: number // 原始覆盖配置（编辑回填；0/缺省 = 按难度默认）——仅编辑者下发
+  video_url?: string // 答案解析视频原始链接（编辑回填）——仅编辑者下发
+  solution_video_url?: string // 答案解析视频（展示侧，满分∨老师门槛；无链接缺省）
+}
+
+// 挑战模式（v0.23）
+export interface ChallengeStartResult {
+  id: number
+  started_at: number // Unix ms
+  deadline_at: number
+  sec: number
+}
+
+export interface ChallengeSessionView {
+  id: number
+  status: 'running' | 'ac' | 'timeout' | 'quit'
+  started_at: number
+  deadline_at?: number // running 态
+  remaining_ms?: number
+  finished_at?: number
+  duration_ms?: number // AC 态
+  chars_per_sec?: number
+}
+
+// 题内榜单行（v0.23 三榜）
+export interface BoardRow {
+  rank: number
+  uid: number
+  nickname: string
+  username?: string
+  value?: number // 用时榜 ms / 内存榜 KB
+  duration_ms?: number // 挑战榜
+  chars_per_sec?: number
+  lang: string
+  submission_id?: number
+  created_at: number
+}
+
+export interface BoardsResult {
+  can_view_boards: boolean // 时间/内存榜门槛（满分∨特权）；挑战榜恒登录可见
+  challenge: BoardRow[] | null
+  time: BoardRow[] | null
+  mem: BoardRow[] | null
+}
+
+// 自测直跑结果（v0.23）
+export interface SelfTestResult {
+  status: string
+  stdout: string
+  stderr: string
+  time_ms: number
+  mem_kb: number
+  truncated: boolean
 }
 
 export interface Submission {
@@ -298,6 +352,10 @@ export interface UserPage {
   created_at: string
   school?: string
   grade?: string
+  region?: string // 地区（v0.23；公开开关开时下发）
+  gender?: string // 资料公开开关开时下发（v0.23）
+  qq?: string
+  avatar_url?: string // QQ 头像直链（绑定开关开 + 已填 QQ 时下发；缺省回退首字头像）
   level?: LevelBadgeInfo
   rank?: { rank: number; solved: number } // 全站排名（同排行榜口径）
   stats: { submissions: number; accepted: number; ac_rate: number }
@@ -591,7 +649,11 @@ export interface UserProfile {
   gender: string
   school: string
   grade: string
+  region: string
   qq: string
+  profile_vis: { gender: boolean; school: boolean; grade: boolean; region: boolean; qq: boolean } // 资料公开开关（v0.23）
+  qq_avatar: boolean // QQ 头像绑定开关（v0.23）
+  avatar_url?: string // QQ 头像直链（绑定开关开 + 已填 QQ 时下发；顶栏/主页共用）
   prefs: UserPrefs
   level?: LevelBadgeInfo // 学生等级（v0.11；顶栏徽章与补全门槛提示用）
 }

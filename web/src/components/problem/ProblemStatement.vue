@@ -41,14 +41,15 @@ const kindLabel = computed(() => {
   return ''
 })
 
-// 标签平铺（prob-meta 标签格；最多 4 枚防溢出）——五级层级色与题库列表统一
-//（2026-10-25 修复⑰：原 soj-tagchip 青系单色与题库 lv 色不一致）
+// 标签平铺（prob-meta 知识点格）——五级层级色与题库列表统一
+//（2026-10-25 修复⑰：原 soj-tagchip 青系单色与题库 lv 色不一致）；
+// 全量渲染不截断（2026-10-27 验收反馈）：过多时格子内另起一行铺开
 const metaTags = computed(() =>
-  (props.problem.tags ?? []).slice(0, 4).map((id) => ({ id, name: tagStore.nameOf(id), lv: tagStore.levelOf(id) })),
+  (props.problem.tags ?? []).map((id) => ({ id, name: tagStore.nameOf(id), lv: tagStore.levelOf(id) })),
 )
 
-// 来源节点（2026-10-25 双树）：标签树（地区/赛事/题库/年份）节点，中性色 chips
-const sourceTags = computed(() => (props.problem.meta_tags ?? []).slice(0, 4).map((id) => metaStore.nameOf(id)))
+// 来源节点（2026-10-25 双树）：标签树（地区/赛事/题库/年份）节点，中性色 chips（同样全量换行）
+const sourceTags = computed(() => (props.problem.meta_tags ?? []).map((id) => metaStore.nameOf(id)))
 
 // 空心大题号取后四位（P1024 → 1024；三位以内原样）
 const bigNo = computed(() => String(props.problem.id))
@@ -196,6 +197,7 @@ const bigNo = computed(() => String(props.problem.id))
   height: 20px;
   margin-left: 4px;
   cursor: default;
+  flex: none; /* chip 整颗换行不被压缩截断 */
   /* 五级层级色（--lv 由全局 .lv-N 注入）：与题库列表 FitTags 统一（修复⑰） */
   color: var(--lv);
   background: var(--lv-bg);
@@ -204,14 +206,24 @@ const bigNo = computed(() => String(props.problem.id))
 
 /* 标签格：默认只露出「标签」label，chips 透明占位（分格条不跳宽）；
    悬停本格快速淡入，移走即缓慢淡出、1 秒淡尽（2026-10-25 用户回调，原 3s 延迟撤）——
-   纯 transition 时长承载，无需 JS 计时器 */
+   纯 transition 时长承载，无需 JS 计时器。
+   换行（2026-10-27 验收反馈）：知识点/来源过多时格子内另起一行铺开，不再溢出裁切——
+   格子与 chips 容器双向 flex-wrap + max-width 收窄，chip flex:none 整颗下移 */
 .tag-cell {
   cursor: default;
+  flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .meta-chips {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  max-width: 100%;
   opacity: 0;
   transition: opacity 1s ease 0s;
 }

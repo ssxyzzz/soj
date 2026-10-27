@@ -36,6 +36,8 @@ export interface ProblemFormPayload {
   statement: string
   file_io_name: string
   tag_ids: number[]
+  challenge_time_sec: number // 挑战时长秒（v0.23；0 = 按难度×5min 默认）
+  video_url: string // 答案解析视频链接（v0.23；B 站/直链 mp4，可空）
   zip: File | null
   checker: File | null
   questions: ObjectiveQuestionDraft[] | null
@@ -110,6 +112,8 @@ const form = reactive({
   statement: props.initial.statement ?? '',
   file_io_name: props.initial.file_io_name ?? '',
   tag_ids: props.initial.tag_ids ?? [],
+  challenge_time_sec: props.initial.challenge_time_sec ?? 0,
+  video_url: props.initial.video_url ?? '',
 })
 
 // 时限输入以秒为单位（站点展示口径统一用 s），提交/存储仍为毫秒
@@ -583,6 +587,50 @@ function onSubmitClick() {
           </el-form-item>
           <el-form-item v-if="form.compare === 'tolerant'" label="浮点容差">
             <el-input-number v-model="form.float_tolerance" :min="0.000001" :max="1" :step="0.0001" :precision="6" />
+          </el-form-item>
+
+          <el-form-item>
+            <template #label>
+              <span class="label-with-tip">
+                挑战时长（可选）
+                <el-tooltip
+                  placement="top"
+                  content="挑战模式的限时；留空按难度默认（难度 × 5 分钟），可配 60–14400 秒"
+                >
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
+            <div class="limits">
+              <el-input-number
+                v-model="form.challenge_time_sec"
+                :controls="false"
+                :min="0"
+                :max="14400"
+                :step="60"
+                placeholder="默认"
+              />
+              <span class="dim">秒（0 = 按难度默认）</span>
+            </div>
+          </el-form-item>
+
+          <el-form-item>
+            <template #label>
+              <span class="label-with-tip">
+                视频讲解链接（可选）
+                <el-tooltip
+                  placement="top"
+                  content="答案解析卡的视频：B 站视频页链接或 mp4 直链；与题解同门槛（满分可见）"
+                >
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
+            <el-input
+              v-model="form.video_url"
+              placeholder="https://www.bilibili.com/video/BV… 或 https://…/solution.mp4"
+              maxlength="1024"
+            />
           </el-form-item>
 
           <el-form-item v-if="mode === 'create'">

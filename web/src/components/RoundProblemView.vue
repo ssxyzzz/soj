@@ -15,6 +15,7 @@ import SubStatus from '@/components/SubStatus.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
+import AnswerAnalysisCard from '@/components/problem/AnswerAnalysisCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
@@ -162,17 +163,9 @@ async function rejudgeAll() {
   }
 }
 
-// 题解弹窗（揭榜后显示入口）：未满分时后端会拒绝，弹窗内为空并提示——
-// 入口处直接用详情接口的 can_view_solutions 给出提示，不打无意义的请求
+// 题解弹窗（揭榜后的答案解析卡内入口，卡片已按 revealed + can_view_solutions 显隐）
 const showSolutions = ref(false)
-
-function openSolutions() {
-  if (!problem.value?.can_view_solutions) {
-    ElMessage.warning('该题拿到满分后才能查看题解')
-    return
-  }
-  showSolutions.value = true
-}
+const showVideo = ref(false)
 
 // 客观题提交（v0.9）
 async function handleObjectiveSubmit(answers: ObjAnswer[]) {
@@ -320,12 +313,29 @@ onUnmounted(() => {
                 </el-button>
               </el-tooltip>
             </template>
-            <el-button style="width: 100%" @click="openSolutions">题解</el-button>
             <el-button style="width: 100%" @click="showMine = true">我的提交</el-button>
             <el-button v-if="canViewOthers" style="width: 100%" @click="showOthers = true">所有代码</el-button>
             <div v-if="!running" class="hint center">{{ name }}未在进行中</div>
           </div>
           <p v-if="!revealed" class="hint">隐藏期内不出分，「我的提交」仅显示已记录，可查看自己的代码。</p>
+        </RailCard>
+
+        <!-- 答案解析（v0.23）：视频讲解默认可看，文字题解满分∨老师门槛，两钮同款白底黑字；
+             比赛/考试隐藏期（未揭榜）整卡不显示 -->
+        <RailCard
+          v-if="revealed && (problem.solution_video_url || problem.can_view_solutions)"
+          ov="解析"
+          title="答案解析"
+          class="aside-card"
+        >
+          <div class="entry-actions">
+            <el-button v-if="problem.solution_video_url" style="width: 100%" @click="showVideo = true">
+              视频讲解
+            </el-button>
+            <el-button v-if="problem.can_view_solutions" style="width: 100%" @click="showSolutions = true">
+              文字题解
+            </el-button>
+          </div>
         </RailCard>
       </template>
     </PageShell>
@@ -354,6 +364,11 @@ onUnmounted(() => {
       />
 
       <SolutionsDialog v-model="showSolutions" :problem-id="pid" />
+
+      <!-- 视频讲解弹窗（答案解析卡入口） -->
+      <el-dialog v-model="showVideo" title="视频讲解" width="880px" top="6vh" destroy-on-close>
+        <AnswerAnalysisCard v-if="problem.solution_video_url" :url="problem.solution_video_url" />
+      </el-dialog>
       <AllCodesDialog v-if="problem" v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
 
       <!-- 我的提交（题库弹窗同形态）：隐藏期内不出分（状态列显示「已记录」），

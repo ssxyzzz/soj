@@ -26,7 +26,8 @@ type Deps struct {
 	Cfg     *config.Config
 	Repo    *repo.Repo
 	Sandbox *sandbox.Client
-	Waker   *judge.Waker // 提交入队即时唤醒判题 worker（判题同进程时非空）
+	Waker   *judge.Waker  // 提交入队即时唤醒判题 worker（判题同进程时非空）
+	Judge   *judge.Judger // 自测直跑（v0.23）：Web 进程内复用判题器（--judge-only 形态为 nil）
 }
 
 // resolveJWTSecret JWT 密钥解析（v0.14 安全强制项；2026-10-26 升级为自动生成）：
@@ -89,8 +90,11 @@ func Run(ctx context.Context, deps *Deps) {
 		repo:          deps.Repo,
 		sandbox:       deps.Sandbox,
 		waker:         deps.Waker,
+		judger:        deps.Judge,
 		rank:          newRankCache(deps.Repo),
 		limiter:       newRateLimiter(),
+		runLimit:      newRateLimiter(),
+		boards:        newBoardsCache(deps.Repo),
 		idents:        newIdentCache(),
 		ipLimitGlobal: newIPLimiter(ipRateGlobalPerMin, time.Minute),
 		ipLimitAuth:   newIPLimiter(ipRateAuthPerMin, time.Minute),
@@ -135,6 +139,12 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)
 		api.GET("/problems/:id/submissions", AuthRequired(h), h.ListProblemSubmissions)
 		api.GET("/problems/:id/my-submissions", AuthRequired(h), h.MyProblemSubmissions)
+		// 挑战模式（v0.23）：会话三接口（计时权威在服务端）+ 自测直跑 + 题内三榜
+		api.POST("/problems/:id/challenge/start", AuthRequired(h), h.StartChallenge)
+		api.GET("/problems/:id/challenge/status", AuthRequired(h), h.ChallengeStatus)
+		api.POST("/problems/:id/challenge/quit", AuthRequired(h), h.QuitChallenge)
+		api.POST("/problems/:id/run", AuthRequired(h), h.SelfTestRun)
+		api.GET("/problems/:id/boards", AuthRequired(h), h.ProblemBoards)
 		// 标签树（v0.5.5，2026-10-25 双树）：公开读（题库筛选/详情卡/建题表单共用），
 		// ?tree=meta 取来源标签树；写走 /admin/tagtree（同样带 ?tree）
 		api.GET("/tags/tree", AuthOptional(h), h.GetTagTree)

@@ -1678,17 +1678,55 @@ samp {
    + 白流光 + 白星 + 六彩粒子（双类特异度压过 fx 链；flow 动背景、beat10 动阴影、rbcycle 动变量，三者并行） */
 .ulv-10.ulv-tag {
   --ulv-rb: #e63946;
-  background: linear-gradient(120deg, #e63946, #ee7e1f, #e9c963, #3cb371, #4a8dda, #7e3e9e);
-  background-size: 300% 100%;
+  /* 六彩单向流彩 · 斜向观感（2026-10-27 终版二）：直接对元素做 120° 渐变时 tile 接缝
+     必现斜切线（斜纹等色线沿边缘逐点错位，数学上不可无缝）——改为 ::after 旋转层方案：
+     层自转 30°、层内渐变保持 90°（旋转坐标系里水平 tile 严格无缝），观感即原 120° 斜向
+     色带；周期 tile + 位移 0→200% linear infinite 与顶栏品牌字同机制。
+     isolation 限住 ::after 的 z-index:-1：垫在静态底之上、文字之下；overflow:hidden 裁形。
+     元素本体留静态六彩底 = reduced-motion 退静态的最终形态（::after 隐藏后所见） */
+  isolation: isolate;
+  background: linear-gradient(
+    90deg,
+    #e63946 0%,
+    #ee7e1f 16.7%,
+    #e9c963 33.3%,
+    #3cb371 50%,
+    #4a8dda 66.7%,
+    #7e3e9e 83.3%,
+    #e63946 100%
+  );
+  background-size: 200% 100%;
   border: 2px solid #d9b54a;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.4),
     0 0 0 1.5px rgba(212, 175, 55, 0.6),
     0 0 13px color-mix(in srgb, var(--ulv-rb) 45%, transparent);
   animation:
-    ulv-flow 9s ease-in-out infinite alternate,
     ulv-beat10 3.8s ease-in-out infinite,
     ulv-rbcycle 22.8s linear infinite;
+}
+
+/* 斜向流彩层：放大 260%×260% 再旋转 30°（等价原 120° 渐变的条纹倾角），
+   层内 90° 渐变 + ulv-flow 位移逐帧无缝 */
+.ulv-10.ulv-tag::after {
+  content: '';
+  position: absolute;
+  inset: -80%;
+  z-index: -1;
+  background: linear-gradient(
+    90deg,
+    #e63946 0%,
+    #ee7e1f 16.7%,
+    #e9c963 33.3%,
+    #3cb371 50%,
+    #4a8dda 66.7%,
+    #7e3e9e 83.3%,
+    #e63946 100%
+  );
+  background-size: 200% 100%;
+  transform: rotate(30deg);
+  pointer-events: none;
+  animation: ulv-flow 10s linear infinite;
 }
 
 @keyframes ulv-glow {
@@ -1855,7 +1893,7 @@ samp {
 
 @keyframes ulv-flow {
   to {
-    background-position: 100% 0;
+    background-position: 200% 0;
   }
 }
 
@@ -1891,6 +1929,11 @@ samp {
       inset 0 1px 0 rgba(255, 255, 255, 0.4),
       0 0 0 1.5px rgba(212, 175, 55, 0.6),
       0 0 14px rgba(212, 175, 55, 0.5);
+  }
+
+  /* 斜向流彩层退静态：整体隐藏，露出元素本体的静态六彩底 */
+  .ulv-10.ulv-tag::after {
+    display: none;
   }
 }
 

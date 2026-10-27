@@ -343,15 +343,27 @@ func TestMyProblemStats(t *testing.T) {
 	insert(t, r, bson.M{"_id": int64(204), "uid": int64(9), "pid": int64(2), "status": "Accepted"})
 	insert(t, r, bson.M{"_id": int64(205), "uid": int64(9), "pid": int64(1), "status": "Accepted", "createdAt": now.AddDate(0, 0, -8)})
 
-	st, err := r.MyProblemStats(context.Background(), 9)
+	st, err := r.MyProblemStats(context.Background(), 9, true)
 	if err != nil {
 		t.Fatalf("MyProblemStats: %v", err)
 	}
 	if st.Solved != 2 {
 		t.Errorf("Solved = %d, want 2", st.Solved)
 	}
-	if st.Total != 2 {
-		t.Errorf("Total = %d, want 2（隐藏题不计）", st.Total)
+	// 全量可见视角（root/老师）：隐藏题计入分母，与题库列表口径一致
+	if st.Total != 3 {
+		t.Errorf("Total(includeHidden) = %d, want 3", st.Total)
+	}
+	// 学生视角：隐藏题不计入分母
+	st2, err := r.MyProblemStats(context.Background(), 9, false)
+	if err != nil {
+		t.Fatalf("MyProblemStats(student): %v", err)
+	}
+	if st2.Total != 2 {
+		t.Errorf("Total(student) = %d, want 2（隐藏题不计）", st2.Total)
+	}
+	if st2.Solved != 2 {
+		t.Errorf("Solved = %d, want 2", st2.Solved)
 	}
 	if st.Submissions != 5 {
 		t.Errorf("Submissions = %d, want 5", st.Submissions)

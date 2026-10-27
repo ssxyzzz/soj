@@ -47,9 +47,10 @@ type User struct {
 	Nickname     string     `bson:"nickname"`
 	Role         string     `bson:"role"`
 	CreatedAt    time.Time  `bson:"createdAt"`
-	Gender       string     `bson:"gender,omitempty"` // 性别/学校/年级/QQ：本人自助修改，他人不可见
+	Gender       string     `bson:"gender,omitempty"` // 性别/学校/年级/地区/QQ：本人自助修改
 	School       string     `bson:"school,omitempty"`
 	Grade        string     `bson:"grade,omitempty"`
+	Region       string     `bson:"region,omitempty"` // 地区（v0.23）：省市等自由文本，公开主页按开关展示
 	QQ           string     `bson:"qq,omitempty"`
 	Prefs        *UserPrefs `bson:"prefs,omitempty"`
 	// 密码版本（v0.14）：改密/重置 +1，JWT claims 携带签发时的版本，不一致即 401——
@@ -62,6 +63,33 @@ type User struct {
 	// phone 一并落库但 UI 不启用，等短信通道接入。sparse 唯一索引：空值不占号、非空必唯一。
 	Email string `bson:"email,omitempty"`
 	Phone string `bson:"phone,omitempty"`
+	// 资料公开开关（v0.23）：逐字段控制对外主页可见性；QQ 头像绑定独立于 QQ 号可见性
+	ProfileVis *ProfileVis `bson:"profileVis,omitempty"`
+	QQAvatar   bool        `bson:"qqAvatar,omitempty"`
+}
+
+// ProfileVis 个人资料对外可见开关：true = 对外公开（公开主页可见），false = 仅自己可见。
+// json 标签必须显式小写：gin.H 响应走 encoding/json，无标签会序列化成大写字段名
+//（2026-10-27 实锤：设置页回填读到 undefined，开关保存后「看起来被还原」）。
+type ProfileVis struct {
+	Gender bool `bson:"gender" json:"gender"`
+	School bool `bson:"school" json:"school"`
+	Grade  bool `bson:"grade" json:"grade"`
+	// 地区（v0.23 追加）：指针语义 —— nil = 该键从未写过（本卡上线当天前保存的存量开关文档），
+	// 按公开兜底（RegionPublic）；显式 false 才是「仅自己可见」。json 下发 null，前端按非 false 判公开。
+	Region *bool `bson:"region,omitempty" json:"region"`
+	QQ     bool  `bson:"qq" json:"qq"`
+}
+
+// RegionPublic 地区是否对外可见：未写过（nil）视同公开，与学校/年级默认口径一致。
+func (v ProfileVis) RegionPublic() bool { return v.Region == nil || *v.Region }
+
+// EffProfileVis 生效开关：存量文档未配置时沿用历史口径——性别/学校/年级/地区公开、QQ 私密。
+func (u *User) EffProfileVis() ProfileVis {
+	if u.ProfileVis != nil {
+		return *u.ProfileVis
+	}
+	return ProfileVis{Gender: true, School: true, Grade: true, QQ: false}
 }
 
 // UpdatePassword 修改密码：写新哈希并 pwdVer+1（原子），所有旧 token 随即失效。

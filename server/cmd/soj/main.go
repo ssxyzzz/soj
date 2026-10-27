@@ -140,7 +140,8 @@ func main() {
 		}
 	}()
 
-	server.Run(ctx, &server.Deps{Cfg: cfg, Repo: r, Sandbox: sb, Waker: waker})
+	// Web 进程内复用判题器：自测直跑（v0.23）借其编译串行闸与沙箱客户端
+	server.Run(ctx, &server.Deps{Cfg: cfg, Repo: r, Sandbox: sb, Waker: waker, Judge: jd})
 }
 
 func hostname() string {

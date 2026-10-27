@@ -78,12 +78,14 @@ type Submission struct {
 	ClaimedAt   time.Time     `bson:"claimedAt,omitempty"`
 	HeartbeatAt *time.Time    `bson:"heartbeatAt,omitempty"` // 租约心跳（v0.7.1）：判题中周期刷新，超时由回收者重排队
 	Priority    int           `bson:"priority"`              // 队列优先级：领取按其降序（v0.7.1）
+	ChallengeID int64         `bson:"challengeId,omitempty"` // 挑战模式会话 ID（v0.23；0 = 普通提交）
 	CreatedAt   time.Time     `bson:"createdAt"`
 	JudgedAt    *time.Time    `bson:"judgedAt,omitempty"`
 }
 
 // CreateSubmission 创建提交；contest/exam 非 nil 表示比赛或考试提交（隐藏期结束前不计入公开态）。
-func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p *Problem, lang, code string, contest *Contest, exam *Exam) (int64, error) {
+// challengeID 非 0 表示挑战模式提交（AC 后由 judge 管道触发挑战终判）。
+func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p *Problem, lang, code string, contest *Contest, exam *Exam, challengeID int64) (int64, error) {
 	sid, err := r.nextSeq(ctx, "submission")
 	if err != nil {
 		return 0, err
@@ -93,6 +95,9 @@ func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p 
 		"pid": p.ID, "ptitle": p.Title,
 		"lang": lang, "code": code, "status": StatusPending,
 		"score": 0, "timeMs": 0, "memKb": 0, "priority": PriorityHigh, "createdAt": time.Now(),
+	}
+	if challengeID != 0 {
+		doc["challengeId"] = challengeID
 	}
 	switch {
 	case contest != nil:
@@ -448,11 +453,16 @@ type MyProblemStats struct {
 	Recent7     []int64 `json:"recent7"`
 }
 
-func (r *Repo) MyProblemStats(ctx context.Context, uid int64) (*MyProblemStats, error) {
+func (r *Repo) MyProblemStats(ctx context.Context, uid int64, includeHidden bool) (*MyProblemStats, error) {
 	st := &MyProblemStats{Recent7: make([]int64, 7)}
 
-	// 可见题总数
-	total, err := r.Problems.CountDocuments(ctx, bson.M{"hidden": bson.M{"$ne": true}})
+	// 可见题总数（2026-10-27 起按观看者视角：root/老师含隐藏题，与题库列表页头口径一致；
+	// 学生不含隐藏题——隐藏题对其不存在）
+	totalFilter := bson.M{}
+	if !includeHidden {
+		totalFilter["hidden"] = bson.M{"$ne": true}
+	}
+	total, err := r.Problems.CountDocuments(ctx, totalFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -738,4 +748,57 @@ func (r *Repo) RankMe(ctx context.Context, uid int64) (rank, solved int64, err e
 		rank = ahead[0].N + 1
 	}
 	return rank, solved, nil
+}
+
+// BoardRow 题内效率榜行（v0.23）：Value = timeMs（用时榜）或 memKb（内存榜）。
+type BoardRow struct {
+	UID          int64
+	Value        int
+	Lang         string
+	SubmissionID int64
+	CreatedAt    time.Time // 该条最优提交的时刻（同值并列时的决胜与展示）
+}
+
+// ProblemEfficiencyBoard 题内用时/内存榜：Accepted∧published 每人取最优——
+// 用时榜按 timeMs↑（同值 memKb↑、再按先达成），内存榜按 memKb↑（同值 timeMs↑、再按先达成）；
+// Mongo 排序 + Go 侧按 uid 去重，截前 limit 名。班级规模毫秒级，无需预聚合。
+func (r *Repo) ProblemEfficiencyBoard(ctx context.Context, pid int64, byMem bool, limit int) ([]BoardRow, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	sortKeys := bson.D{{Key: "timeMs", Value: 1}, {Key: "memKb", Value: 1}}
+	if byMem {
+		sortKeys = bson.D{{Key: "memKb", Value: 1}, {Key: "timeMs", Value: 1}}
+	}
+	sortKeys = append(sortKeys, bson.D{{Key: "createdAt", Value: 1}, {Key: "_id", Value: 1}}...)
+	cur, err := r.Submissions.Find(ctx,
+		bson.M{"pid": pid, "status": StatusAccepted, "published": true},
+		options.Find().
+			SetSort(sortKeys).
+			SetProjection(bson.M{"uid": 1, "timeMs": 1, "memKb": 1, "lang": 1, "createdAt": 1}))
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	var rows []BoardRow
+	seen := map[int64]bool{}
+	for cur.Next(ctx) {
+		var s Submission
+		if err := cur.Decode(&s); err != nil {
+			return nil, err
+		}
+		if seen[s.UID] {
+			continue
+		}
+		seen[s.UID] = true
+		v := s.TimeMS
+		if byMem {
+			v = s.MemKB
+		}
+		rows = append(rows, BoardRow{UID: s.UID, Value: v, Lang: s.Language, SubmissionID: s.ID, CreatedAt: s.CreatedAt})
+		if len(rows) >= limit {
+			break
+		}
+	}
+	return rows, cur.Err()
 }

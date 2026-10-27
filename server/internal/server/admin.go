@@ -147,7 +147,7 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		set["uname"] = *req.Username // User 结构体的 bson 字段名是 uname（裸 $set 不走结构体，勿用 API 字段名）
 	}
 	if req.Nickname != nil {
-		nickname := trimTo(*req.Nickname, 32)
+		nickname := trimTo(*req.Nickname, maxNicknameRunes)
 		if nickname == "" {
 			fail(c, http.StatusBadRequest, "昵称不能为空")
 			return

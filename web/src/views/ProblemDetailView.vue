@@ -19,6 +19,7 @@ import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
+import AnswerAnalysisCard from '@/components/problem/AnswerAnalysisCard.vue'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
 import { fmtRel, fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
@@ -32,12 +33,13 @@ const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
 let timer: ReturnType<typeof setInterval> | undefined
 
-// 右列弹窗：在线编程 / 题解 / 我的提交 / 所有代码（提交走副列内嵌编辑器）
+// 右列弹窗：在线编程 / 榜单 / 答案解析（视频+文字题解）/ 我的提交（提交走副列内嵌编辑器）
 const showWorkbench = ref(false)
 const submitting = ref(false)
 const showMine = ref(false)
 const showOthers = ref(false)
 const showSolutions = ref(false)
+const showVideo = ref(false)
 const mineDialogRef = ref<InstanceType<typeof MySubmissionsDialog>>()
 
 // 赛事隐藏期自动重定向（v0.7.3 优先级模型）：比赛收录的题一律进比赛做题页，
@@ -114,6 +116,31 @@ const isFunction = computed(() => problem.value?.type === 'function')
 const funcTemplate = computed(() => problem.value?.function?.template_code || '')
 const isInteractive = computed(() => problem.value?.type === 'interactive')
 
+// 挑战模式（v0.23）：题目资格（stdio 传统题）+ 有数据 + 非锁题；入口走独立全屏页
+const challengeReady = computed(
+  () =>
+    !!problem.value?.challenge?.eligible &&
+    problem.value?.has_cases !== false &&
+    !problem.value?.locked,
+)
+
+function openChallenge() {
+  if (!userStore.token) {
+    ElMessage.warning('请先登录')
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
+    return
+  }
+  if (!challengeReady.value) {
+    ElMessage.warning(
+      problem.value?.locked
+        ? '该题处于比赛/考试锁定期，暂不可挑战'
+        : '本题暂不支持挑战（仅限标准输入输出的传统题）',
+    )
+    return
+  }
+  router.push(`/problems/${problem.value!.id}/challenge`)
+}
+
 // ---- 副列「提交本题」内嵌编辑器（v3 rail codebox）：语言 + 深色代码框 + 直接提交 ----
 const railLang = ref(defaultLang())
 const railCode = ref('')
@@ -179,26 +206,16 @@ function openRailSubmit() {
   showRailSubmit.value = true
 }
 
-function openMine() {
-  if (!userStore.token) {
-    ElMessage.warning('请先登录')
-    router.push({ path: '/login', query: { redirect: route.fullPath } })
-    return
-  }
-  showMine.value = true
-}
-
 function openSolutions() {
-  if (!problem.value?.can_view_solutions) {
-    ElMessage.warning('该题拿到满分后才能查看题解')
-    return
-  }
+  // 入口在答案解析卡内，卡片本身已按满分∨老师门槛显隐，这里直接开
   showSolutions.value = true
 }
 
 function openOthers() {
-  if (!problem.value?.can_view_others) {
-    ElMessage.warning('该题拿到满分后可查看他人的代码')
+  // 榜单弹窗（v0.23 Tab 化）：挑战榜登录即可见，用时/内存榜 AC 门槛在弹窗内提示
+  if (!userStore.token) {
+    ElMessage.warning('请先登录')
+    router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
   showOthers.value = true
@@ -350,9 +367,14 @@ onUnmounted(stopPolling)
             <div class="entry-actions">
               <el-button type="primary" :disabled="submitDisabled" @click="openRailSubmit">提交</el-button>
               <el-button :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
-              <el-button @click="openSolutions">题解</el-button>
-              <el-button @click="openMine">我的提交</el-button>
-              <el-button @click="openOthers">所有代码</el-button>
+              <el-button
+                class="btn-challenge"
+                :class="{ off: !challengeReady }"
+                @click="openChallenge"
+              >
+                ⚡ 挑战模式
+              </el-button>
+              <el-button @click="openOthers">榜单</el-button>
             </div>
             <div v-if="submitDisabledReason" class="hint">{{ submitDisabledReason }}</div>
           </template>
@@ -375,6 +397,20 @@ onUnmounted(stopPolling)
           <p v-else class="hint">还没有提交过本题。</p>
         </RailCard>
 
+        <!-- 答案解析（v0.23 验收调整）：视频讲解默认可看（不设 AC 门槛），文字题解满分∨老师门槛；
+             两钮同款白底黑字；比赛/考试锁定期整卡不显示 -->
+        <RailCard
+          v-if="!problem.locked && (problem.solution_video_url || problem.can_view_solutions)"
+          ov="解析"
+          title="答案解析"
+          class="aside-card"
+        >
+          <div class="entry-actions">
+            <el-button v-if="problem.solution_video_url" @click="showVideo = true">视频讲解</el-button>
+            <el-button v-if="problem.can_view_solutions" @click="openSolutions">文字题解</el-button>
+          </div>
+        </RailCard>
+
         <RailCard ov="说明" title="评测须知" class="aside-card">
           <p class="hint">
             代码在 go-judge 沙箱中编译运行，全文比对输出；提交间隔受全站限速约束。请勿读写约定之外的文件。
@@ -394,6 +430,11 @@ onUnmounted(stopPolling)
     />
 
     <SolutionsDialog v-model="showSolutions" :problem-id="problem.id" />
+
+    <!-- 视频讲解弹窗（答案解析卡入口） -->
+    <el-dialog v-model="showVideo" title="视频讲解" width="880px" top="6vh" destroy-on-close>
+      <AnswerAnalysisCard v-if="problem.solution_video_url" :url="problem.solution_video_url" />
+    </el-dialog>
 
     <MySubmissionsDialog ref="mineDialogRef" v-model="showMine" :problem-id="problem.id" />
 
@@ -474,6 +515,27 @@ onUnmounted(stopPolling)
   cursor: pointer;
   color: var(--soj-blue);
   font-weight: var(--soj-fw-emphasis);
+}
+
+/* 挑战模式入口（v0.23）：暖橙渐变在评测卡五连中一眼可辨；无资格态降灰 */
+.btn-challenge {
+  --el-button-text-color: #b45309;
+  --el-button-border-color: color-mix(in srgb, #f59e0b 45%, #fff);
+  --el-button-bg-color: color-mix(in srgb, #f59e0b 12%, #fff);
+  --el-button-hover-text-color: #92400e;
+  --el-button-hover-border-color: #f59e0b;
+  --el-button-hover-bg-color: color-mix(in srgb, #f59e0b 22%, #fff);
+  font-weight: var(--soj-fw-emphasis);
+}
+.btn-challenge.off {
+  --el-button-text-color: var(--soj-ink-3);
+  --el-button-border-color: var(--soj-line);
+  --el-button-bg-color: var(--soj-bg, #f6f8fb);
+  --el-button-hover-text-color: var(--soj-ink-3);
+  --el-button-hover-border-color: var(--soj-line);
+  --el-button-hover-bg-color: var(--soj-bg, #f6f8fb);
+  filter: grayscale(1);
+  cursor: not-allowed;
 }
 
 .center {

@@ -33,10 +33,12 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		return
 	}
 	var req struct {
-		ProblemID int64                  `json:"problem_id" binding:"required"`
-		Language  string                 `json:"language"` // 客观题免语言/代码（v0.9）
-		Code      string                 `json:"code"`
-		Answers   []repo.ObjectiveAnswer `json:"answers"` // 客观题整卷作答（v0.9.3）
+		ProblemID   int64                  `json:"problem_id" binding:"required"`
+		Language    string                 `json:"language"` // 客观题免语言/代码（v0.9）
+		Code        string                 `json:"code"`
+		Answers     []repo.ObjectiveAnswer `json:"answers"`      // 客观题整卷作答（v0.9.3）
+		ChallengeID int64                  `json:"challenge_id"` // 挑战模式会话（v0.23；0 = 普通提交）
+		ChangeLog   []repo.ChallengeDelta  `json:"changelog"`    // 挑战打字流水（审计留存，超限服务端丢弃）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数不完整")
@@ -128,13 +130,35 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 		return
 	}
 
-	id, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, nil, nil)
+	// 挑战模式（v0.23）：会话校验 + 提交绑定。会话必须属于本人、同题、仍在跑；
+	// 是否赶在 deadline 前创建由终判核对（这里校验的是会话状态本身）
+	if req.ChallengeID != 0 {
+		valid, err := h.repo.ChallengeRunningOK(ctx, req.ChallengeID, uid, p.ID)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "挑战会话校验失败")
+			return
+		}
+		if !valid {
+			fail(c, http.StatusBadRequest, "挑战会话已结束或不存在，请重新开始挑战")
+			return
+		}
+	}
+
+	id, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, nil, nil, req.ChallengeID)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "创建提交失败")
 		return
 	}
+	if req.ChallengeID != 0 {
+		if _, err := h.repo.AttachChallengeSubmission(ctx, req.ChallengeID, id, req.Language, len(req.Code), req.ChangeLog); err != nil {
+			log.Printf("[challenge] 提交绑定失败(cid=%d sid=%d): %v", req.ChallengeID, id, err)
+		}
+	}
 	h.wakeJudge() // 即时唤醒空闲 worker（多进程部署靠 1s 轮询兜底）
 	log.Printf("[web] 用户 %s 提交 #%d (题目 %d, %s)", uname, id, req.ProblemID, req.Language)
+	if req.ChallengeID != 0 {
+		log.Printf("[web] 用户 %s 挑战提交 #%d (会话 %d, 题目 %d)", uname, id, req.ChallengeID, req.ProblemID)
+	}
 	ok(c, gin.H{"id": id})
 }
 

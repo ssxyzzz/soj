@@ -216,13 +216,14 @@ func (h *Handlers) GetSiteStats(c *gin.Context) {
 
 // GetMyProblemStats 我的做题统计（v0.19 题库副列 v3 卡）：AC 题数 / 可见题总数 /
 // 提交数 / AC 率 / 最近 7 天提交分布。登录即可看自己的（无敏感面）。
+// 分母按观看者视角（2026-10-27）：持「题库全量可见」者含隐藏题，与题库页头「共 N 题」一致。
 func (h *Handlers) GetMyProblemStats(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
 	if !logged {
 		fail(c, http.StatusUnauthorized, "请先登录")
 		return
 	}
-	st, err := h.repo.MyProblemStats(c.Request.Context(), uid)
+	st, err := h.repo.MyProblemStats(c.Request.Context(), uid, hasPerm(c, repo.PermProblemViewAll))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return

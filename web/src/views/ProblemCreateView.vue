@@ -65,6 +65,8 @@ async function onSubmit(p: ProblemFormPayload) {
     if (p.compare === 'tolerant') {
       fd.append('float_tolerance', String(p.float_tolerance))
     }
+    if (p.challenge_time_sec) fd.append('challenge_time_sec', String(p.challenge_time_sec))
+    if (p.video_url) fd.append('video_url', p.video_url)
     fd.append('statement', p.statement)
     if (p.file_io_name) fd.append('file_io_name', p.file_io_name)
     fd.append('tag_ids', JSON.stringify(p.tag_ids))

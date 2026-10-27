@@ -290,6 +290,18 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"meta_tags":          orEmptyInt64(p.MetaTags), // 来源标签树节点 ID（2026-10-25 双树），名字由前端来源树映射
 		"tags":               orEmptyInt64(p.Tags),     // 知识树节点 ID，名字由前端知识树映射
 	}
+	// 挑战模式（v0.23）：题目资格与生效时长（服务端权威，前端只做展示）；
+	// 编辑者额外下发原始配置供表单回填（0 = 未覆盖按难度默认）
+	resp["challenge"] = gin.H{"eligible": p.ChallengeEligible(), "sec": p.EffChallengeSec()}
+	if h.problemEditable(c, p) {
+		resp["challenge_time_sec"] = p.ChallengeTimeSec
+		resp["video_url"] = p.VideoURL // 编辑回填（展示侧的可见性门控在下方 canViewSolutions 分支）
+	}
+	// 答案解析视频（v0.23 验收调整）：默认可看（不设 AC 门槛，题目可见即可看）；
+	// 文字题解仍维持满分∨老师群体门槛；无链接不下发
+	if p.VideoURL != "" {
+		resp["solution_video_url"] = p.VideoURL
+	}
 	// 客观题（v0.9.3 多小题）：对外只回脱敏视图；正确答案与解析在满分 ∨ 老师群体门槛下附给
 	if p.IsObjective() {
 		resp["questions"] = repo.PublicSetView(p.Questions)
@@ -327,6 +339,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		!(logged && uid == vk.Round.CreatedBy) && !privileged && !h.problemEditable(c, p) {
 		delete(resp, "difficulty")
 		delete(resp, "tags")
+		delete(resp, "challenge") // 挑战时长按难度推导，随难度一并裁剪（赛时该题本就禁挑战）
 	}
 	if vk != nil {
 		resp["locked"] = true

@@ -19,6 +19,10 @@ import (
 
 var qqDigits = regexp.MustCompile(`^\d{5,16}$`)
 
+// maxNicknameRunes 昵称长度上限（字符数，中文按 1 计；2026-10-27 用户拍板 6 字以内）。
+// 本人设置/管理端/注册三处写入口统一走此值，trimTo 静默截断。
+const maxNicknameRunes = 6
+
 // trimTo 去首尾空白并按字符数截断（中文按 1 字符计）。
 func trimTo(s string, max int) string {
 	s = strings.TrimSpace(s)
@@ -39,15 +43,24 @@ func profileJSON(u *repo.User, canEditNickname bool) gin.H {
 	if prefs.CodeTemplates == nil {
 		prefs.CodeTemplates = map[string]string{}
 	}
-	return gin.H{
+	vis := u.EffProfileVis()
+	info := gin.H{
 		"nickname":          u.Nickname,
 		"can_edit_nickname": canEditNickname,
 		"gender":            u.Gender,
 		"school":            u.School,
 		"grade":             u.Grade,
+		"region":            u.Region,
 		"qq":                u.QQ,
+		"profile_vis":       vis, // 资料公开开关（v0.23）：设置页开关回填
+		"qq_avatar":         u.QQAvatar,
 		"prefs":             prefs,
 	}
+	// QQ 头像（v0.23）：设置页与顶栏头像共用；绑定开关开且已填 QQ 才下发
+	if u.QQAvatar && u.QQ != "" {
+		info["avatar_url"] = "https://q1.qlogo.cn/g?b=qq&nk=" + u.QQ + "&s=100"
+	}
+	return info
 }
 
 // GetMyProfile 当前用户的个人信息与偏好（要求登录）。
@@ -86,8 +99,12 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		Gender   *string `json:"gender"`
 		School   *string `json:"school"`
 		Grade    *string `json:"grade"`
+		Region   *string `json:"region"`
 		QQ       *string `json:"qq"`
-		Prefs    *struct {
+		// 资料公开开关（v0.23）：整组提交（出现才改，逐字段布尔）
+		ProfileVis *repo.ProfileVis `json:"profileVis"`
+		QQAvatar   *bool            `json:"qqAvatar"`
+		Prefs *struct {
 			DefaultLang   *string            `json:"defaultLang"`
 			CodeTemplates *map[string]string `json:"codeTemplates"`
 			Autocomplete  *bool              `json:"autocomplete"`
@@ -107,7 +124,7 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 			fail(c, http.StatusForbidden, "当前角色不允许修改昵称")
 			return
 		}
-		nickname := trimTo(*req.Nickname, 32)
+		nickname := trimTo(*req.Nickname, maxNicknameRunes)
 		if nickname == "" {
 			fail(c, http.StatusBadRequest, "昵称不能为空")
 			return
@@ -122,6 +139,7 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 	bindStr(req.Gender, "gender", 8)
 	bindStr(req.School, "school", 64)
 	bindStr(req.Grade, "grade", 16)
+	bindStr(req.Region, "region", 32)
 	if req.QQ != nil {
 		qq := trimTo(*req.QQ, 16)
 		if qq != "" && !qqDigits.MatchString(qq) {
@@ -129,6 +147,12 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 			return
 		}
 		set["qq"] = qq
+	}
+	if req.ProfileVis != nil {
+		set["profileVis"] = *req.ProfileVis
+	}
+	if req.QQAvatar != nil {
+		set["qqAvatar"] = *req.QQAvatar
 	}
 	if req.Prefs != nil {
 		// 合并语义：在既有偏好上覆盖本次出现的字段。编辑器工具栏的自动回存只带

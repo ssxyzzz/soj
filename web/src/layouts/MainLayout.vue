@@ -44,6 +44,7 @@ onMounted(() => {
     .then((p) => {
       userStore.setPrefs(p.prefs ?? {})
       userStore.setLevel(p.level ?? null)
+      userStore.setAvatarUrl(p.avatar_url ?? '') // QQ 头像（v0.23）：顶栏同步
     })
     .catch(() => {})
 })
@@ -85,7 +86,8 @@ function onCommand(command: string) {
         <template v-if="userStore.token">
           <el-dropdown class="user-dropdown" @command="onCommand">
             <span class="user-chip">
-              <span class="avatar">{{ avatarChar }}</span>
+              <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" />
+              <span v-else class="avatar">{{ avatarChar }}</span>
               <span class="uname">{{ userStore.nickname || '已登录' }}</span>
               <TierBadge
                 v-if="userStore.level?.level"
@@ -194,24 +196,31 @@ function onCommand(command: string) {
   font-size: 24px;
   font-weight: var(--soj-fw-heavy);
   letter-spacing: 1px;
-  background: linear-gradient(
-    90deg,
-    #16a7d2 0%,
-    #1557b8 25%,
-    #2c5de0 50%,
-    #16a7d2 75%,
-    #1557b8 100%
+  /* 斜向单向流彩（2026-10-27 终版三）：真正的坑不是渐变周期，而是背景图的「盒子平铺」——
+     渐变图按元素盒大小裁切后 repeat，盒子宽度不与轴周期对齐时，平铺交界线扫过元素
+     即一道全色周期硬跳（前两版的接缝与「刷新感」皆源于此）。
+     解法 = 固定背景图尺寸使其四边与轴周期对齐：轴向周期 P = 51.9615px（= 60px × sin120°，
+     青蓝亮蓝三段循环首色尾接），background-size 60 × 103.923px 满足 60·sin120° = P、
+     103.923·cos120°投影 = P（横竖平铺缝均颜色连续）；keyframe 每轮位移恰好一个图宽 60px，
+     循环首末帧全等，linear infinite 逐帧无缝 */
+  background: repeating-linear-gradient(
+    120deg,
+    #16a7d2 0,
+    #1557b8 17.3205px,
+    #2c5de0 34.641px,
+    #16a7d2 51.9615px
   );
-  background-size: 220% 100%;
+  background-size: 60px 103.923px;
+  background-position: 0 0;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: brand-flow 7s linear infinite;
+  animation: brand-flow 10s linear infinite;
 }
 
 @keyframes brand-flow {
   to {
-    background-position: 220% 0;
+    background-position: 60px 0;
   }
 }
 
@@ -314,6 +323,13 @@ function onCommand(command: string) {
   color: #fff;
   font-weight: var(--soj-fw-bold);
   font-size: var(--soj-fs-14);
+}
+
+/* QQ 头像版顶栏头像（v0.23）：同径圆 + 细描边 */
+.avatar-img {
+  object-fit: cover;
+  border: 1px solid var(--soj-line);
+  background: #fff;
 }
 
 .uname {

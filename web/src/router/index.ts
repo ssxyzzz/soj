@@ -27,6 +27,7 @@ import UserProfileView from '@/views/UserProfileView.vue'
 import ListsView from '@/views/ListsView.vue'
 import ListDetailView from '@/views/ListDetailView.vue'
 import ListEditView from '@/views/ListEditView.vue'
+import ChallengeView from '@/views/ChallengeView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -187,6 +188,13 @@ const router = createRouter({
       component: PaperView,
       props: { kind: 'problem' },
       meta: { title: '导出试卷', requiresAuth: true },
+    },
+    {
+      path: '/problems/:id/challenge',
+      name: 'problem-challenge',
+      component: ChallengeView,
+      // 挑战全屏页（v0.23）：脱离 MainLayout 独立画布，倒计时不吃导航栏
+      meta: { title: '挑战模式', requiresAuth: true },
     },
     {
       path: '/:pathMatch(.*)*',

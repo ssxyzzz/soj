@@ -117,9 +117,10 @@ func (h *Handlers) Register(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "当前注册无需邮箱，请留空")
 		return
 	}
-	nickname := req.Nickname
+	nickname := trimTo(req.Nickname, maxNicknameRunes)
 	if nickname == "" {
-		nickname = req.Username
+		// 未填昵称回退用户名（同样 6 字封顶；用户名本身 3-32 位）
+		nickname = trimTo(req.Username, maxNicknameRunes)
 	}
 
 	ctx := c.Request.Context()

@@ -98,13 +98,13 @@ const groups = computed(() => {
 const sel = ref(0)
 const effSel = computed(() => (groups.value.some((g) => g.d === sel.value) ? sel.value : groups.value[0]?.d ?? 0))
 const selItems = computed(() => groups.value.find((g) => g.d === effSel.value)?.items ?? [])
-const maxCount = computed(() => Math.max(...counts.value, 1))
 
-// 柱高按完成数占比（最高档满高 150px，零档 4px 灰桩）
+// 柱高按真实做题数线性等比（2026-10-27 用户拍板，弃最高档归一口径）：
+// 每题 1px、初始4px、240px 封顶（236 题满高；到顶后靠柱顶数字区分）；零档 4px 灰桩。
 function barH(d: number): string {
   const c = counts.value[d - 1]
   if (!c) return '4px'
-  return `${Math.max(Math.round((c / maxCount.value) * 150), 12)}px`
+  return `${Math.min(c+4, 240)}px`
 }
 
 // ---- 比赛历史行状态 ----
@@ -137,7 +137,8 @@ function openDetail(id: number) {
 
           <!-- 头部资料卡：昵称 + 等级 + 进度条 + 资料 + 统计 -->
           <div class="card hero">
-            <div class="avatar">{{ avatarChar }}</div>
+            <img v-if="page.avatar_url" :src="page.avatar_url" alt="" class="avatar avatar-img" />
+            <div v-else class="avatar">{{ avatarChar }}</div>
             <div class="who">
               <div class="name-row">
                 <h2>{{ page.nickname || page.username }}</h2>
@@ -146,8 +147,11 @@ function openDetail(id: number) {
               <div class="meta">
                 <span class="mono">@{{ page.username }}</span>
                 <span>注册于 {{ fmtDate(page.created_at) }}</span>
+                <span v-if="page.gender">{{ page.gender }}</span>
+                <span v-if="page.region">{{ page.region }}</span>
                 <span v-if="page.school">{{ page.school }}</span>
                 <span v-if="page.grade">{{ page.grade }}</span>
+                <span v-if="page.qq">QQ {{ page.qq }}</span>
               </div>
               <div v-if="page.level" class="lv-progress">
                 <div class="lv-bar">
@@ -309,6 +313,13 @@ function openDetail(id: number) {
   font-weight: 800;
   color: #fff;
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-blue-lo));
+}
+
+/* QQ 头像（v0.23 绑定开关开启时）：图片版首字头像同位同径 */
+.avatar-img {
+  object-fit: cover;
+  border: 1px solid var(--soj-line);
+  background: #fff;
 }
 
 .who {

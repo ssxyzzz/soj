@@ -32,6 +32,8 @@ const editInitial = ref<{
   float_tolerance?: number
   statement?: string
   file_io_name?: string
+  challenge_time_sec?: number
+  video_url?: string
   tag_ids?: number[]
   meta_tag_ids?: number[]
   questions?: {
@@ -69,6 +71,8 @@ onMounted(async () => {
       float_tolerance: p.float_tolerance ?? 0.0001,
       statement: p.description ?? '',
       file_io_name: (p.file_io_input || 'problem.in').replace(/\.in$/, ''),
+      challenge_time_sec: p.challenge_time_sec ?? 0,
+      video_url: p.video_url ?? '',
       tag_ids: p.tags ? [...p.tags] : [],
       // 客观题整卷完整定义回填（编辑者门槛下 GetProblem 附带 questions_full）
       questions: (p.questions_full ?? []).map((q) => ({
@@ -196,6 +200,8 @@ async function onSubmit(p: ProblemFormPayload) {
       compare: p.compare,
       file_io_name: p.file_io_name,
       tag_ids: p.tag_ids,
+      video_url: p.video_url ?? '',
+      challenge_time_sec: p.challenge_time_sec ?? 0,
       ...(p.compare === 'tolerant' ? { float_tolerance: p.float_tolerance } : {}),
     })
     if (p.zip) {

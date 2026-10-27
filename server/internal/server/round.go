@@ -732,7 +732,7 @@ func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {
 		fail(c, http.StatusBadRequest, "本题暂无数据，无法评测。请联系管理员上传数据")
 		return
 	}
-	sid, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, ctArg, eArg)
+	sid, err := h.repo.CreateSubmission(ctx, uid, uname, p, req.Language, req.Code, ctArg, eArg, 0)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "创建提交失败")
 		return
