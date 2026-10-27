@@ -207,9 +207,14 @@ onMounted(load)
               <span v-if="c.owner_id === userStore.uid" class="cl-chip joined">{{ c.owner_name }}的班</span>
               <span v-else-if="c.joined" class="cl-chip joined">✓ 已加入</span>
               <el-button v-else size="small" type="primary" link @click="openJoin(c)">加入</el-button>
-              <!-- 置顶（仅已入班）：置顶优先展示，再点取消 -->
+            </div>
+            <p class="intro">{{ c.intro || '暂无简介' }}</p>
+            <div class="meta">
+              <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDay(c.created_at) }}</span>
+            </div>
+            <!-- 置顶 + 拖拽手柄（仅已入班）：右缘竖排对齐；置顶优先、组内互拖、不跨组 -->
+            <span v-if="c.joined" class="card-tools">
               <button
-                v-if="c.joined"
                 type="button"
                 class="pin-btn"
                 :class="{ on: isPinned(c.id) }"
@@ -218,19 +223,13 @@ onMounted(load)
               >
                 📌
               </button>
-            </div>
-            <p class="intro">{{ c.intro || '暂无简介' }}</p>
-            <div class="meta">
-              <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDay(c.created_at) }}</span>
-            </div>
-            <!-- 六点拖拽手柄（仅已入班）：按住才能拖动卡片；置顶组内互拖、不跨组 -->
-            <span
-              v-if="c.joined"
-              class="drag-handle"
-              title="拖动排序"
-              @mousedown="armDrag(c)"
-              @mouseup="disarm"
-            ></span>
+              <span
+                class="drag-handle"
+                title="拖动排序"
+                @mousedown="armDrag(c)"
+                @mouseup="disarm"
+              ></span>
+            </span>
           </el-card>
         </el-col>
       </el-row>
@@ -309,9 +308,20 @@ onMounted(load)
   flex-wrap: wrap;
 }
 
-/* 置顶钮（仅已入班，2026-10-26 v0.22）：钉在标题行右缘，置顶态高亮 */
+/* 置顶钮 + 六点手柄：右缘竖排容器，随卡高垂直居中——两颗图标恒同列 */
+.card-tools {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 置顶钮（仅已入班）：置顶态全彩，未置顶灰度 */
 .pin-btn {
-  margin-left: auto;
   border: 0;
   background: transparent;
   font-size: 14px;
@@ -320,6 +330,7 @@ onMounted(load)
   opacity: 0.35;
   filter: grayscale(1);
   transition: opacity 0.15s;
+  padding: 2px;
 }
 
 .pin-btn:hover {
@@ -331,11 +342,8 @@ onMounted(load)
   filter: none;
 }
 
-/* 六点拖拽手柄（仅已入班）：右缘 meta 行高度处，grab 光标；卡片拖动中降透明度 */
+/* 六点拖拽手柄：grab 光标，hover 主蓝 */
 .drag-handle {
-  position: absolute;
-  right: 14px;
-  top: 62px;
   width: 10px;
   height: 16px;
   cursor: grab;
