@@ -113,11 +113,11 @@ function onCommand(command: string) {
     </el-main>
     <el-footer class="footer">
       <span>SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
-      <!-- 主题切换（2026-10-26）：v5 新案（默认）/ 原版 · 深海军蓝，data-theme 整站变量换血 -->
+      <!-- 主题切换（2026-10-26）：v5 版（默认）/ 原版，data-theme 整站变量换血 -->
       <span class="theme-switch">
         <span class="ts-label">主题</span>
-        <button type="button" :class="{ on: theme === 'v5' }" @click="switchTheme('v5')">v5 新案</button>
-        <button type="button" :class="{ on: theme === 'navy' }" @click="switchTheme('navy')">原版 · 深海军蓝</button>
+        <button type="button" :class="{ on: theme === 'v5' }" @click="switchTheme('v5')">v5 版</button>
+        <button type="button" :class="{ on: theme === 'navy' }" @click="switchTheme('navy')">原版</button>
       </span>
       <!-- ICP 备案号（v0.13）：后台「系统设置」配置，空 = 不展示；法规要求链接工信部备案系统 -->
       <a
