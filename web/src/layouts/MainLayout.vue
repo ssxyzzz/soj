@@ -113,13 +113,11 @@ function onCommand(command: string) {
       <router-view />
     </el-main>
     <el-footer class="footer">
-      <!-- 页脚版本与仓库链接（2026-10-26）：版本号发版时改 utils/version.ts 一处 -->
-      <span class="ver">
-        <a class="flink" href="https://github.com/ssxyzzz/soj" target="_blank" rel="noopener noreferrer">SOJ</a>
-        {{ appVersion }}
-      </span>
-      ·
+      <!-- 页脚版本与仓库链接（2026-10-26）：SOJ+版本整体外链仓库，竖线分段；版本号发版时改 utils/version.ts 一处 -->
+      <a class="flink" href="https://github.com/ssxyzzz/soj" target="_blank" rel="noopener noreferrer">SOJ {{ appVersion }}</a>
+      <span class="fsep">|</span>
       <span>Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
+      <span class="fsep">|</span>
       <!-- 主题切换（2026-10-26）：v5 版（默认）/ 原版，data-theme 整站变量换血 -->
       <span class="theme-switch">
         <span class="ts-label">主题</span>
@@ -380,19 +378,20 @@ function onCommand(command: string) {
   font-weight: 600;
 }
 
-/* 页脚版本与仓库链接：弱化文字钮，悬停提主蓝；外链新窗 */
-.ver {
-  color: var(--soj-ink-3);
-}
-
+/* 页脚版本与仓库链接：整体外链不加粗，悬停提主蓝 */
 .flink {
   color: var(--soj-ink-3);
   text-decoration: none;
-  font-weight: 600;
 }
 
 .flink:hover {
   color: var(--soj-blue);
+}
+
+/* 竖线分段：弱化 */
+.fsep {
+  color: var(--soj-ink-3);
+  opacity: 0.55;
 }
 
 /* 备案号外链：弱化为页脚次要信息，悬停才提色 */
