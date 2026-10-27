@@ -1,9 +1,11 @@
 <script setup lang="ts">
-// 用户管理面板（v3-full 重制）：panel-h（标题 + 搜索胶囊 + 新建）+ 扁平用户表
-// （ID / 用户名 / 昵称 / 角色 role-chip / 操作链接）+ 卡内分页；搜索 300ms 防抖自动刷新。
+// 用户管理面板（v3-full 重制）：panel-h（标题 + 搜索胶囊 + 新建）+ 按角色分组的用户表
+// （2026-10-27 拍板：普通用户组默认收起，其余展开；组头点击折叠）。
+// 数据一次拉全量（循环分页，page_size 100）后本地分组/过滤——搜索零请求、组不会被分页切碎。
 // 角色胶囊色：root 红 / admin 橙 / teacher 蓝 / 其余（自定义角色、default）灰。
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 
 import { adminApi } from '@/api'
 import { verifyApi } from '@/api/verify'
@@ -15,31 +17,65 @@ import type { AdminUser, UserLevelInfo } from '@/types'
 const roleStore = useAdminRolesStore()
 const userStore = useUserStore()
 
-const pageSize = 20
-const list = ref<AdminUser[]>([])
-const total = ref(0)
-const page = ref(1)
+const all = ref<AdminUser[]>([])
 const keyword = ref('')
 const loading = ref(false)
 
-async function load(p = page.value) {
+// 全量拉取（page_size 100 循环翻页；50 页兜底防异常死循环）
+async function load() {
   loading.value = true
   try {
-    const r = await adminApi.listUsers(p, pageSize, keyword.value.trim() || undefined)
-    list.value = r.list
-    total.value = r.total
-    page.value = p
+    const out: AdminUser[] = []
+    for (let p = 1; p <= 50; p++) {
+      const r = await adminApi.listUsers(p, 100)
+      out.push(...r.list)
+      if (out.length >= r.total || !r.list.length) break
+    }
+    all.value = out
   } finally {
     loading.value = false
   }
 }
 
-// 搜索 300ms 防抖：回页首重查
-let debounce: ReturnType<typeof setTimeout> | undefined
-watch(keyword, () => {
-  if (debounce) clearTimeout(debounce)
-  debounce = setTimeout(() => load(1), 300)
+// 搜索本地过滤（用户名 / 昵称，与原服务端口径一致），零请求即时出结果
+const filtered = computed(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  if (!kw) return all.value
+  return all.value.filter(
+    (u) => u.username.toLowerCase().includes(kw) || (u.nickname ?? '').toLowerCase().includes(kw),
+  )
 })
+
+// 按角色分组：顺序沿用角色 store 的 roleGroups（root→admin→自定义→default 垫底），
+// 不在 store 里的角色（已删自定义角色等）追加末尾；空组不显示
+const groups = computed(() => {
+  const byRole = new Map<string, AdminUser[]>()
+  for (const u of filtered.value) {
+    const arr = byRole.get(u.role)
+    if (arr) arr.push(u)
+    else byRole.set(u.role, [u])
+  }
+  const order = [
+    ...roleStore.roleGroups.map((r) => r.id),
+    ...[...byRole.keys()].filter((id) => !roleStore.roleGroups.some((r) => r.id === id)),
+  ]
+  return order
+    .filter((id) => byRole.has(id))
+    .map((id) => ({ role: id, name: roleStore.roleName(id), users: byRole.get(id)! }))
+})
+
+// 折叠态：未点过的角色按「default 收起、其余展开」的默认值；点击后记显式值
+const expandedOverrides = reactive<Record<string, boolean>>({})
+function isOpen(role: string): boolean {
+  return expandedOverrides[role] ?? role !== 'default'
+}
+function toggle(role: string) {
+  expandedOverrides[role] = !isOpen(role)
+}
+
+// 搜索时强制全部展开（折叠会藏住匹配项）；清空搜索恢复各自折叠态
+const forceExpand = computed(() => !!keyword.value.trim())
+const expanded = (role: string) => forceExpand.value || isOpen(role)
 
 // v3 role-chip 色映射：root 红 / admin 橙 / teacher 蓝 / 其余灰
 function roleClass(role: string): string {
@@ -73,7 +109,7 @@ async function create() {
     createForm.password = ''
     createForm.nickname = ''
     createForm.role = 'default'
-    await load(1)
+    await load()
   } finally {
     creating.value = false
   }
@@ -171,7 +207,7 @@ async function submitEdit() {
     })
     ElMessage.success('用户信息已修改')
     showEdit.value = false
-    await load(page.value)
+    await load()
   } finally {
     editSaving.value = false
   }
@@ -226,10 +262,10 @@ async function submitXp() {
 
 onMounted(async () => {
   await roleStore.ensure()
-  await load(1)
+  await load()
 })
 
-defineExpose({ refresh: () => load(page.value) })
+defineExpose({ refresh: () => load() })
 </script>
 
 <template>
@@ -237,7 +273,7 @@ defineExpose({ refresh: () => load(page.value) })
     <!-- v3 panel-h：标题 + 计数 + 右侧搜索胶囊 + 新建 -->
     <div class="panel-h panel-head">
       <span class="pt">编辑用户</span>
-      <span class="dim count">共 {{ total }} 人</span>
+      <span class="dim count">共 {{ filtered.length }} 人</span>
       <div class="acts">
         <label class="soj-input head-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -247,56 +283,48 @@ defineExpose({ refresh: () => load(page.value) })
       </div>
     </div>
 
-    <el-table v-loading="loading" :data="list">
-      <el-table-column label="ID" width="80">
-        <template #default="{ row }">
-          <span class="mono dim">{{ row.id }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column prop="username" label="用户名" min-width="150">
-        <template #default="{ row }">
-          <span :class="{ 'username-bold': row.id === userStore.uid }">{{ row.username }}</span>
-          <el-tag
-            v-if="row.locked_until && new Date(row.locked_until) > new Date()"
-            type="danger"
-            size="small"
-            class="ml8"
-          >
-            锁定中
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="昵称" min-width="150">
-        <template #default="{ row }">
-          <b class="nickname">{{ row.nickname }}</b>
-        </template>
-      </el-table-column>
-      <el-table-column label="角色" width="150">
-        <template #default="{ row }">
-          <span class="soj-role-chip" :class="roleClass(row.role)">{{ roleStore.roleName(row.role) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="120">
-        <template #default="{ row }">
-          <el-button size="small" link type="primary" @click="openEdit(row as AdminUser)">编辑</el-button>
-          <el-button size="small" link type="primary" @click="openXp(row as AdminUser)">经验</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <!-- 按角色分组（2026-10-27 拍板）：组头点击折叠，default 组默认收起；搜索时强制展开 -->
+    <template v-for="g in groups" :key="g.role">
+      <button type="button" class="group-h" @click="toggle(g.role)">
+        <span class="soj-role-chip" :class="roleClass(g.role)">{{ g.name }}</span>
+        <span class="dim gcount">{{ g.users.length }} 人</span>
+        <el-icon class="chev" :class="{ open: expanded(g.role) }"><ArrowDown /></el-icon>
+      </button>
+      <el-table v-if="expanded(g.role)" v-loading="loading" :data="g.users">
+        <el-table-column label="ID" width="80">
+          <template #default="{ row }">
+            <span class="mono dim">{{ row.id }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="username" label="用户名" min-width="150">
+          <template #default="{ row }">
+            <span :class="{ 'username-bold': row.id === userStore.uid }">{{ row.username }}</span>
+            <el-tag
+              v-if="row.locked_until && new Date(row.locked_until) > new Date()"
+              type="danger"
+              size="small"
+              class="ml8"
+            >
+              锁定中
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="昵称" min-width="150">
+          <template #default="{ row }">
+            <b class="nickname">{{ row.nickname }}</b>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="120">
+          <template #default="{ row }">
+            <el-button size="small" link type="primary" @click="openEdit(row as AdminUser)">编辑</el-button>
+            <el-button size="small" link type="primary" @click="openXp(row as AdminUser)">经验</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </template>
 
-    <!-- 卡内分页 -->
-    <div class="pager">
-      <el-pagination
-        background
-        layout="prev, pager, next, total"
-        :total="total"
-        :page-size="pageSize"
-        :current-page="page"
-        @current-change="(p: number) => load(p)"
-      />
-    </div>
     <el-empty
-      v-if="!loading && !list.length"
+      v-if="!loading && !filtered.length"
       :description="keyword ? `没有匹配「${keyword.trim()}」的用户` : '暂无用户'"
       :image-size="60"
     />
@@ -426,16 +454,40 @@ defineExpose({ refresh: () => load(page.value) })
   font-weight: var(--soj-fw-bold);
 }
 
+/* 角色分组头（2026-10-27）：整行可点折叠，胶囊 + 人数 + 旋转箭头 */
+.group-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 6px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.group-h:hover {
+  background: var(--el-fill-color-light);
+}
+
+.gcount {
+  font-size: var(--soj-fs-13);
+}
+
+.chev {
+  margin-left: auto;
+  color: var(--el-text-color-secondary);
+  transition: transform 0.15s;
+}
+
+.chev.open {
+  transform: rotate(180deg);
+}
+
 .nickname {
   color: var(--soj-navy);
   font-weight: var(--soj-fw-bold);
-}
-
-.pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 14px;
-  padding-bottom: 2px;
 }
 
 /* 经验调整弹窗：当前等级徽章 + 经验数字 */

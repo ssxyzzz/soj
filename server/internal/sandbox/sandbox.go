@@ -57,10 +57,16 @@ func PipeReader(name string) File {
 }
 
 // CopyFile 描述 copyIn 的文件来源：内容或已缓存的 fileId 二选一。
+// Content 与 File.Content 同理用指针：string+omitempty 会把「空内容的合法拷入」
+//（如文件 IO 模式下 0 字节的测试点输入）整个丢成 {}，被沙箱以 400 拒绝
+//（2026-10-27 比赛文件 IO 判题 System Error 的根因）。经 CopyContent 构造。
 type CopyFile struct {
-	Content string `json:"content,omitempty"`
-	FileID  string `json:"fileId,omitempty"`
+	Content *string `json:"content,omitempty"`
+	FileID  string  `json:"fileId,omitempty"`
 }
+
+// CopyContent 以给定内容拷入文件（内容为空也必须显式带 "content": ""）。
+func CopyContent(content string) CopyFile { return CopyFile{Content: &content} }
 
 type Cmd struct {
 	Args          []string            `json:"args"`

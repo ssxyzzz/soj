@@ -362,7 +362,7 @@ onMounted(() => {
           </el-select>
         </div>
         <div class="frow frow-top">
-          <span class="fl">代码模板<div class="fd">留空则提交时全空白</div></span>
+          <span class="fl">代码模板<div class="fd">仅用于在线编程起始代码，留空则全空白</div></span>
           <div class="tpl">
             <el-select v-model="tplLang" style="width: 160px">
               <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
@@ -373,7 +373,7 @@ onMounted(() => {
               :rows="8"
               class="mono"
               spellcheck="false"
-              placeholder="留空则提交时全空白，由作答者自行编写"
+              placeholder="留空则在线编程起始为空白，由作答者自行编写"
             />
           </div>
         </div>

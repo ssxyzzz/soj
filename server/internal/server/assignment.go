@@ -283,7 +283,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 		if err != nil || p.Hidden {
 			continue // 题目已删除或主题库隐藏（备题）
 		}
-		item := gin.H{"id": p.ID, "title": p.Title}
+		item := gin.H{"id": p.ID, "title": p.Title, "difficulty": p.Difficulty}
 		resultHidden := false
 		if lk != nil {
 			if lk.Kind == repo.KindExam {
@@ -653,4 +653,35 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 		out = append(out, row)
 	}
 	serveCSV(c, fmt.Sprintf("%s_%s_%s.csv", csvSafeName(cl.Name), csvSafeName(a.Title), time.Now().Format("2006-01-02")), out)
+}
+
+// ReorderClassAssignments 保存作业展示序（班级管理员拖拽；2026-10-26 拍板：
+// 作业卡长条化 + 六点手柄排序）。ids 即拖完的完整顺序，逐个写 sort = 下标。
+func (h *Handlers) ReorderClassAssignments(c *gin.Context) {
+	classID, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		IDs []int64 `json:"ids"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		fail(c, http.StatusBadRequest, "缺少作业顺序")
+		return
+	}
+	cl, err := h.repo.GetClass(c.Request.Context(), classID)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	}
+	if err != nil || !h.classManageable(c, cl) {
+		fail(c, http.StatusForbidden, "仅班级管理员可调整作业顺序")
+		return
+	}
+	updated, err := h.repo.ReorderAssignments(c.Request.Context(), classID, req.IDs)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "保存失败")
+		return
+	}
+	ok(c, gin.H{"updated": updated})
 }

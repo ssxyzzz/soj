@@ -88,21 +88,16 @@ function onClick() {
   color: var(--soj-ink-3);
 }
 
+/* 未满分次数角标（2026-10-27 拍板）：无背景纯数字，收在药丸右下角**内侧**——
+   旧款红底圆徽章带负偏移悬在药丸外，被表格 .cell 的 overflow 裁掉下半截 */
 .score-errors {
   position: absolute;
-  right: -6px;
-  bottom: -4px;
-  box-sizing: border-box;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 2px;
-  border-radius: 7px;
-  background: var(--soj-wa);
-  color: #fff;
-  font-size: var(--soj-fs-9);
-  font-weight: var(--soj-fw-emphasis);
-  line-height: 14px;
-  text-align: center;
+  right: 3px;
+  bottom: 1px;
+  color: var(--soj-wa);
+  font-size: 10px;
+  font-weight: var(--soj-fw-bold);
+  line-height: 1;
   pointer-events: none;
 }
 </style>

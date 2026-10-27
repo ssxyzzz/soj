@@ -9,18 +9,18 @@ import { ArrowLeft } from '@element-plus/icons-vue'
 
 import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
+import CodePane from '@/components/CodePane.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
-import ProblemInfoCard from '@/components/problem/ProblemInfoCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
 import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import { fmtDate, fmtMem, fmtSec, isQueueStatus } from '@/utils/format'
+import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
 import type { ContestDetail, ContestMySubmission, ObjectiveAnswer as ObjAnswer, ProblemDetail } from '@/types'
 
@@ -327,8 +327,6 @@ onUnmounted(() => {
           </div>
           <p v-if="!revealed" class="hint">隐藏期内不出分，「我的提交」仅显示已记录，可查看自己的代码。</p>
         </RailCard>
-
-        <ProblemInfoCard v-if="revealed || canViewOthers" :problem="problem" />
       </template>
     </PageShell>
 
@@ -381,7 +379,7 @@ onUnmounted(() => {
               </template>
             </el-table-column>
             <el-table-column label="提交时间">
-              <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+              <template #default="{ row }">{{ fmtRel(row.created_at) }}</template>
             </el-table-column>
           </el-table>
           <el-empty v-if="!mine.length" description="还没有提交" :image-size="48" />
@@ -396,7 +394,7 @@ onUnmounted(() => {
             <el-descriptions-item label="提交时间">{{ fmtDate(mineDetail.created_at) }}</el-descriptions-item>
           </el-descriptions>
           <div class="detail-sub">代码</div>
-          <pre class="soj-codepane mono">{{ mineDetail.code }}</pre>
+          <CodePane :code="mineDetail.code" :language="mineDetail.language" />
         </template>
       </el-dialog>
     </template>

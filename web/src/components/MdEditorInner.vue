@@ -105,9 +105,10 @@ function fitHeight() {
   if (editable) contentH = Math.max(contentH, editable.scrollHeight)
   if (contentH <= 0) return
 
-  // 空内容 ≈ 两行文本（textarea 行高 27 + 上下内距 20）：这是高度下限
-  const minH = tbH + 74
-  const h = Math.max(contentH + tbH + 2, minH)
+  // 高度 = 内容 + 工具栏（2026-10-27 重新设定）：内容元素的 padding-bottom（.md-auto
+  // 规则，恒定 2 行 = 54px）已计入 scrollHeight——底部留白恒定，空编辑器也有 2 行；
+  // 不再设内容下限（min-height 会随内容拉伸容器，造成各编辑器底部留白忽大忽小）
+  const h = contentH + tbH
   root.style.height = `${h}px`
 }
 
@@ -157,6 +158,28 @@ function onToolbarClick(e: MouseEvent) {
   } else {
     bodyOverflowBeforeFullscreen = document.body.style.overflow
   }
+}
+
+// undo/redo 补同步（2026-10-27）：Vditor 的撤销/重做（⌘/Ctrl+Z・Y 热键与工具栏按钮）
+// 走 renderDiff 直改 DOM，不触发 options.input——编辑器内容已变而 update:modelValue
+// 没发，保存时把旧值写回，表现为「公告/简介等改了却显示旧内容」。捕获到这两类操作
+// 后补发一次同步（setTimeout 等 Vditor 处理完再取值）。
+function syncValue() {
+  if (!vd) return
+  const v = vd.getValue()
+  inner = v
+  emit('update:modelValue', v)
+}
+
+function onEditorKeydown(e: KeyboardEvent) {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+  const k = e.key.toLowerCase()
+  if (k === 'z' || k === 'y') window.setTimeout(syncValue, 0)
+}
+
+function onUndoRedoClick(e: MouseEvent) {
+  if (!(e.target as HTMLElement | null)?.closest('[data-type="undo"],[data-type="redo"]')) return
+  window.setTimeout(syncValue, 0)
 }
 
 // Vditor 的 resize 手柄改的是 .vditor 内联高度，而 .md-field 的 height:auto !important
@@ -244,7 +267,7 @@ onMounted(async () => {
     mode: initialMode,
     lang: 'zh_CN',
     cdn: '/vditor',
-    height: props.autoHeight ? '96px' : props.height,
+    height: props.autoHeight ? '132px' : props.height,
     placeholder: 'Markdown 编辑：工具栏排版、直接粘贴/拖入图片；公式用 $…$ / $$…$$',
     toolbar: toolbar() as never,
     cache: { enable: false }, // 内容由 v-model 管理，关掉 localStorage 草稿
@@ -277,6 +300,8 @@ onMounted(async () => {
       if (!vd) return
       loading.value = false
       editorRoot()?.addEventListener('click', onToolbarClick, true)
+      editorRoot()?.addEventListener('keydown', onEditorKeydown, true)
+      editorRoot()?.addEventListener('click', onUndoRedoClick, true)
       scheduleFit()
       window.addEventListener('resize', onWindowResize)
       // 模式切换（工具栏菜单或 ⌥⌘7/8/9 热键）都会重排 edit-mode 按钮的 current 类，
@@ -331,6 +356,8 @@ onBeforeUnmount(() => {
   unbindCopy = null
   const root = editorRoot()
   root?.removeEventListener('click', onToolbarClick, true)
+  root?.removeEventListener('keydown', onEditorKeydown, true)
+  root?.removeEventListener('click', onUndoRedoClick, true)
   if (root?.classList.contains('vditor--fullscreen')) {
     document.body.style.overflow = bodyOverflowBeforeFullscreen
   }
@@ -380,12 +407,12 @@ onBeforeUnmount(() => {
 
 .md-field :deep(.vditor-content) {
   flex: 1 1 auto;
-  min-height: 54px;
+  /* 不设 min-height（2026-10-27）：min-height 会拉伸内容容器，底部留白随内容多少漂移；
+     空编辑器的高度由内容自身的 1 行 + 底部 2 行 padding（.md-auto 规则）自然构成 */
 }
 
 .md-field :deep(textarea.vditor-sv) {
   field-sizing: content;
-  min-height: 54px;
   overflow-y: auto;
 }
 
@@ -394,6 +421,13 @@ onBeforeUnmount(() => {
 .md-field :deep(.vditor-ir),
 .md-field :deep(.vditor-wysiwyg) {
   overflow-y: auto;
+}
+
+/* 自动高度模式内容底部留 2 行空白（2026-10-27）：写完不贴底边。两条量高路径
+   （field-sizing 原生自撑 / JS scrollHeight）都把该 padding 计入总高，与 fitHeight 口径一致 */
+.md-auto :deep(textarea.vditor-sv),
+.md-auto :deep(.vditor-reset) {
+  padding-bottom: 54px;
 }
 
 /* 视觉融合：边框圆角对齐 Element Plus 控件口径 */

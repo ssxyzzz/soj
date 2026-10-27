@@ -78,8 +78,9 @@ const bigNo = computed(() => String(props.problem.id))
         </div>
       </template>
       <div v-else class="cell">客观题 · <b>{{ problem.questions?.length ?? 0 }}</b> 小题</div>
-      <div class="cell diff-cell">
-        <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
+      <!-- 赛时隐藏难度（hideMeta）时服务端不下发 difficulty，整格隐藏而非按 D3 兜底 -->
+      <div v-if="problem.difficulty != null" class="cell diff-cell">
+        <TierBadge :tier="problem.difficulty" kind="difficulty" />
       </div>
       <div v-if="metaTags.length" class="cell tag-cell">
         知识点

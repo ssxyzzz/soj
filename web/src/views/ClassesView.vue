@@ -198,23 +198,19 @@ onMounted(load)
             @dragover="onDragover(c, $event)"
             @drop="commitDrag"
             @dragend="commitDrag"
+            @click="router.push(`/classes/${c.id}`)"
           >
             <div class="name-row">
-              <h3 class="name" @click="router.push(`/classes/${c.id}`)">{{ c.name }}</h3>
+              <h3 class="name">{{ c.name }}</h3>
               <span v-if="c.private" class="cl-chip lock">🔒 私密</span>
               <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口。
                    私密徽章与身份徽章互相独立（2026-10-25：私密班的建班人不再丢「xxx的班」） -->
               <span v-if="c.owner_id === userStore.uid" class="cl-chip joined">{{ c.owner_name }}的班</span>
               <span v-else-if="c.joined" class="cl-chip joined">✓ 已加入</span>
-              <el-button v-else size="small" type="primary" link @click="openJoin(c)">加入</el-button>
-            </div>
-            <p class="intro">{{ c.intro || '暂无简介' }}</p>
-            <div class="meta">
-              <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDay(c.created_at) }}</span>
-            </div>
-            <!-- 置顶 + 拖拽手柄（仅已入班）：右缘竖排对齐；置顶优先、组内互拖、不跨组 -->
-            <span v-if="c.joined" class="card-tools">
+              <el-button v-else size="small" type="primary" link @click.stop="openJoin(c)">加入</el-button>
+              <!-- 置顶钮：锚名称行右缘垂直居中（2026-10-26 拍板：与首行平齐、与六点同列） -->
               <button
+                v-if="c.joined"
                 type="button"
                 class="pin-btn"
                 :class="{ on: isPinned(c.id) }"
@@ -223,13 +219,21 @@ onMounted(load)
               >
                 📌
               </button>
+            </div>
+            <p class="intro">{{ c.intro.trim() || '暂无简介' }}</p>
+            <div class="meta">
+              <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDay(c.created_at) }}</span>
+              <!-- 六点拖拽手柄（仅已入班）：锚信息行右缘垂直居中，与置顶钮同列；
+                   拖拽仅从手柄发起（避免整卡误拖/文本不可选），置顶优先、组内互拖、不跨组 -->
               <span
+                v-if="c.joined"
                 class="drag-handle"
                 title="拖动排序"
                 @mousedown="armDrag(c)"
                 @mouseup="disarm"
+                @click.stop
               ></span>
-            </span>
+            </div>
           </el-card>
         </el-col>
       </el-row>
@@ -308,20 +312,26 @@ onMounted(load)
   flex-wrap: wrap;
 }
 
-/* 置顶钮 + 六点手柄：右缘竖排容器，随卡高垂直居中——两颗图标恒同列 */
-.card-tools {
-  position: absolute;
-  right: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
+/* 置顶钮与六点手柄（2026-10-26 拍板）：各自锚定所在行右缘垂直居中——置顶对齐
+   名称行、六点对齐信息行；同宽盒子（20px）同 right 锚点保证竖对齐同列。
+   行右侧预留 26px，长名称/长信息不钻到图标下面 */
+.name-row,
+.meta {
+  position: relative;
+  padding-right: 26px;
 }
 
 /* 置顶钮（仅已入班）：置顶态全彩，未置顶灰度 */
 .pin-btn {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: transparent;
   font-size: 14px;
@@ -330,7 +340,7 @@ onMounted(load)
   opacity: 0.35;
   filter: grayscale(1);
   transition: opacity 0.15s;
-  padding: 2px;
+  padding: 0;
 }
 
 .pin-btn:hover {
@@ -342,8 +352,12 @@ onMounted(load)
   filter: none;
 }
 
-/* 六点拖拽手柄：grab 光标，hover 主蓝 */
+/* 六点拖拽手柄：grab 光标，hover 主蓝；盒 10×16 右偏 5px 使中心与 20px 置顶钮同列 */
 .drag-handle {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 10px;
   height: 16px;
   cursor: grab;
@@ -359,9 +373,15 @@ onMounted(load)
   opacity: 0.55;
 }
 
-/* 手柄 absolute 锚点（卡片自身 relative；global .card 无定位） */
+/* 手柄 absolute 锚点（卡片自身 relative；global .card 无定位）；
+   全卡可点进班级（2026-10-26 拍板：对齐题单卡交互）——指针 + hover 上浮 */
 :deep(.clcard) {
   position: relative;
+  cursor: pointer;
+}
+
+:deep(.clcard:hover) {
+  transform: translateY(-2px);
 }
 
 /* v3 clcard：班级名藏蓝 17/800（2026-10-25 用户反馈关键信息偏小上调），hover 主蓝 */

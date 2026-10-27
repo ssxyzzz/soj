@@ -176,6 +176,7 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/classes", AuthRequired(h), h.ListClasses)
 		api.GET("/classes/:id", AuthRequired(h), h.GetClass)
 		api.GET("/classes/:id/assignments", AuthRequired(h), h.ListClassAssignments)
+		api.POST("/classes/:id/assignments/reorder", AuthRequired(h), h.ReorderClassAssignments)
 
 		authed := api.Group("", AuthRequired(h))
 		{

@@ -15,6 +15,7 @@ import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import FitTags from '@/components/problem/FitTags.vue'
 import SubStatus from '@/components/SubStatus.vue'
+import TierBadge from '@/components/TierBadge.vue'
 import { buildRoundBoard } from '@/components/score/adapters'
 import ScoreBoardDialog from '@/components/score/ScoreBoardDialog.vue'
 import ScoreSummaryCard from '@/components/score/ScoreSummaryCard.vue'
@@ -304,7 +305,8 @@ onUnmounted(() => {
         </div>
       </el-card>
 
-      <!-- 题目表：T1 / 状态 / 题目 / 标签 / 通过率 -->
+      <!-- 题目表：T1 / 状态 / 题目 / 难度 / 知识点 / 通过率（难度与知识点按场次 hide_meta
+           开关服务端下发：隐藏时字段缺席渲染横杠，2026-10-27） -->
       <el-card class="block">
         <template #header><span>题目（{{ problemTotal }}）</span></template>
         <el-table v-if="round.problems?.length" stripe :data="round.problems">
@@ -326,9 +328,15 @@ onUnmounted(() => {
               <span class="tlink" @click="problemRoute(row)">{{ row.title }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="标签" min-width="170">
+          <el-table-column label="难度" width="92">
             <template #default="{ row }">
-              <FitTags v-if="!row.result_hidden && row.tags?.length" :ids="row.tags" />
+              <TierBadge v-if="row.difficulty != null" :tier="row.difficulty" kind="difficulty" />
+              <span v-else class="dim">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="知识点" min-width="170">
+            <template #default="{ row }">
+              <FitTags v-if="row.tags?.length" :ids="row.tags" />
               <span v-else class="dim">—</span>
             </template>
           </el-table-column>

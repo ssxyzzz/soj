@@ -6,7 +6,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { QuestionFilled } from '@element-plus/icons-vue'
+import { QuestionFilled, UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 
 import { importApi } from '@/api'
@@ -269,6 +269,8 @@ const finishedIssues = computed(() =>
         :on-remove="onZipRemove"
       >
         <div class="drop-hint">
+          <!-- 大号上传图标（2026-10-27 拍板：参考云上传块样式，上传入口更显眼） -->
+          <div class="drop-icon"><el-icon><UploadFilled /></el-icon></div>
           <p>{{ running ? '导入进行中，等待完成或取消' : '拖入题包 zip 或点击选择' }}</p>
           <p class="dim">单题数据 ≤100MB、整包 ≤2GB（root 可在系统设置调整）；题多分批传</p>
         </div>
@@ -447,6 +449,26 @@ const finishedIssues = computed(() =>
 
 .drop-hint p {
   margin: 4px 0;
+}
+
+/* 大号上传图标块：浅蓝圆角方底 + 主蓝图标（对齐云上传参考样式），拖拽悬停微放大 */
+.drop-icon {
+  width: 56px;
+  height: 56px;
+  margin: 2px auto 10px;
+  border-radius: 14px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  transition: transform 0.15s;
+}
+
+.import-drop :deep(.el-upload-dragger:hover) .drop-icon,
+.import-drop :deep(.el-upload-dragger.is-dragover) .drop-icon {
+  transform: scale(1.08);
 }
 
 .switch-row {

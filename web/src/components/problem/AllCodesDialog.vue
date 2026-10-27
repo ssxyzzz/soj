@@ -8,7 +8,7 @@ import { computed, ref, watch } from 'vue'
 import { problemApi, userApi } from '@/api'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, statusDesc } from '@/utils/format'
+import { fmtMem, fmtRel, statusDesc } from '@/utils/format'
 import { languageOptions } from '@/utils/code'
 import type { LookupUser, Submission } from '@/types'
 
@@ -163,7 +163,7 @@ stripe
       </el-table-column>
       <el-table-column label="提交时间">
         <template #default="{ row }">
-          <template v-if="row.id">{{ fmtDate(row.created_at) }}</template>
+          <template v-if="row.id">{{ fmtRel(row.created_at) }}</template>
         </template>
       </el-table-column>
     </el-table>

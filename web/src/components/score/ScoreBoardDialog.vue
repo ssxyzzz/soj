@@ -155,6 +155,14 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
   text-decoration: underline;
 }
 
+/* 分数格竖向空间（2026-10-27）：.cell 默认行高 23px + overflow hidden 会把 26px 的
+   分数药丸（及我的行 2px 描边）上下沿裁平——放开行高并给上下内距，行高随内容走 */
+.score-table :deep(.el-table .cell) {
+  line-height: normal;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
 .total {
   color: var(--soj-blue);
   font-weight: var(--soj-fw-bold);

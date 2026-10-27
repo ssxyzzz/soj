@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { fmtDate, fmtMem, fmtSec } from '@/utils/format'
+import { fmtMem, fmtRel, fmtSec } from '@/utils/format'
 import SubStatus from '@/components/SubStatus.vue'
 import type { Submission } from '@/types'
 
@@ -71,7 +71,7 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
         <template #default="{ row }">{{ fmtMem(row.memory_kb) }}</template>
       </el-table-column>
       <el-table-column label="提交时间">
-        <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
+        <template #default="{ row }">{{ fmtRel(row.created_at) }}</template>
       </el-table-column>
     </el-table>
     <el-empty v-if="!loading && !list.length" :description="emptyText" :image-size="48" />

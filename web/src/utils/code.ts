@@ -1,7 +1,7 @@
 // 判题语言与起始代码：提交弹窗 / 在线编程共用。
-// 系统不预置任何语言的代码模板，编辑器初始为全空白；
-// 仅当用户在个人设置里自定义了该语言的模板时才填充（stores/user.ts 的 prefs，
-// 随登录经 /me/profile 拉进 store）。
+// 系统不预置任何语言的代码模板；个人代码模板（stores/user.ts 的 prefs，随登录经
+// /me/profile 拉进 store）只作为在线编程（CodeWorkbench）的起始代码填入，
+// 提交弹窗默认全空白（2026-10-27）。
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 import type { UserPrefs } from '@/types'
@@ -18,7 +18,7 @@ export function defaultLang(): string {
   return languageOptions.some((o) => o.value === lang) ? lang : 'cpp'
 }
 
-// 某语言的起始代码：仅当个人设置里该语言的模板非空时返回，否则为空白。
+// 某语言的个人模板起始代码（仅在线编程使用）：模板非空时返回，否则为空白。
 export function templateFor(lang: string): string {
   const pref = useUserStore().prefs.codeTemplates?.[lang]
   return pref && pref.trim() ? pref : ''

@@ -114,13 +114,13 @@ function onCommand(command: string) {
     </el-main>
     <el-footer class="footer">
       <!-- 页脚版本与仓库链接（2026-10-26）：SOJ+版本整体外链仓库，竖线分段；版本号发版时改 utils/version.ts 一处 -->
-      <a class="flink" href="https://github.com/ssxyzzz/soj" target="_blank" rel="noopener noreferrer">SOJ {{ appVersion }}</a>
+      <a class="flink" href="https://github.com/ssxyzzz/soj" target="_blank" rel="noopener noreferrer">SOJ · {{ appVersion }}</a>
       <span class="fsep">|</span>
       <span>Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
       <span class="fsep">|</span>
       <!-- 主题切换（2026-10-26）：v5 版（默认）/ 原版，data-theme 整站变量换血 -->
       <span class="theme-switch">
-        <span class="ts-label">主题</span>
+        <span class="ts-label">主题    </span>
         <button type="button" :class="{ on: theme === 'v5' }" @click="switchTheme('v5')">v5 版</button>
         <button type="button" :class="{ on: theme === 'navy' }" @click="switchTheme('navy')">原版</button>
       </span>

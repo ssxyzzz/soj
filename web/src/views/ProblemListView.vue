@@ -333,7 +333,9 @@ onMounted(() => {
           </el-table-column>
           <el-table-column label="难度" width="104">
             <template #default="{ row }">
-              <TierBadge :tier="row.difficulty ?? 3" kind="difficulty" />
+              <!-- 赛时隐藏难度（hideMeta）时服务端不下发，渲染横杠而非按 D3 兜底 -->
+              <TierBadge v-if="row.difficulty != null" :tier="row.difficulty" kind="difficulty" />
+              <span v-else class="dim">—</span>
             </template>
           </el-table-column>
           <el-table-column min-width="180">
@@ -648,9 +650,26 @@ onMounted(() => {
   padding-bottom: 2px;
 }
 
-/* 自拼的首页/末页按钮：观感对齐 EP 分页的 background 按钮 */
+/* 自拼的首页/末页按钮：对齐 EP 分页按钮的盒子——32px 圆角方块（radius 10px 同
+   main.css 分页口径）、无边框同底色；默认 el-button 的边框 + 4px 圆角 + 8px 内距
+   会撑成椭圆，与中间页钮形状不一致（2026-10-26 拍板） */
 .pg-edge {
-  padding: 8px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  background: var(--el-fill-color-light);
+  border-radius: 10px;
+}
+
+.pg-edge:hover {
+  background: var(--el-fill-color);
+  color: var(--soj-blue);
+}
+
+.pg-edge:disabled {
+  background: var(--el-fill-color-light);
+  color: var(--el-text-color-placeholder);
 }
 
 .pager-meta {

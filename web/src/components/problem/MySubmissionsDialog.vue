@@ -5,8 +5,9 @@ import { fmtSec } from '@/utils/format'
 import { computed, ref, watch } from 'vue'
 
 import { problemApi } from '@/api'
+import CodePane from '@/components/CodePane.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, fmtRel, statusDesc } from '@/utils/format'
 import type { Submission } from '@/types'
 
 const props = defineProps<{
@@ -106,7 +107,7 @@ defineExpose({ refresh: loadMine })
         </el-table-column>
         <el-table-column label="提交时间">
           <template #default="{ row }">
-            <template v-if="row.id">{{ fmtDate(row.created_at) }}</template>
+            <template v-if="row.id">{{ fmtRel(row.created_at) }}</template>
           </template>
         </el-table-column>
       </el-table>
@@ -148,7 +149,7 @@ defineExpose({ refresh: loadMine })
         <pre class="mono sub-code">{{ mineDetail.error_info }}</pre>
       </template>
       <div class="detail-sub">代码</div>
-      <pre class="mono sub-code">{{ mineDetail.code }}</pre>
+      <CodePane :code="mineDetail.code" :language="mineDetail.language" />
       <template v-if="mineDetail.detail?.length">
         <div class="detail-sub">测试点明细</div>
         <el-table stripe :data="sortedDetail" border>

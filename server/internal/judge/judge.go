@@ -655,12 +655,12 @@ func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code stri
 	if l.NeedCompile {
 		cmd.CopyIn = map[string]sandbox.CopyFile{"main": {FileID: fileID}}
 	} else {
-		cmd.CopyIn = map[string]sandbox.CopyFile{l.SourceFile: {Content: code}}
+		cmd.CopyIn = map[string]sandbox.CopyFile{l.SourceFile: sandbox.CopyContent(code)}
 	}
 	if fio.enabled {
 		// 文件 IO：测试点输入按题目配置的文件名拷入工作目录，
 		// 程序 freopen 读入、把答案写到输出文件名，判题收集该文件比对（同样走缓存形态）
-		cmd.CopyIn[fio.inName] = sandbox.CopyFile{Content: string(input)}
+		cmd.CopyIn[fio.inName] = sandbox.CopyContent(string(input))
 		cmd.CopyOutCached = append(cmd.CopyOutCached, fio.outName)
 	}
 	results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
@@ -800,9 +800,9 @@ func (cr *checkerRunner) tryRun(ctx context.Context, fileID string, tc repo.Case
 		},
 		CopyIn: map[string]sandbox.CopyFile{
 			"main":   {FileID: fileID},
-			"input":  {Content: in},
-			"answer": {Content: ansS},
-			"output": {Content: out},
+			"input":  sandbox.CopyContent(in),
+			"answer": sandbox.CopyContent(ansS),
+			"output": sandbox.CopyContent(out),
 		},
 		CPULimit:    int64(cr.p.TimeLimitMS) * int64(time.Millisecond),
 		ClockLimit:  int64(cr.p.TimeLimitMS) * int64(time.Millisecond) * 3,

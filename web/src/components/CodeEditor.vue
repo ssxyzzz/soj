@@ -17,6 +17,7 @@ const props = withDefaults(
     fontSize?: number // px（12-48）
     fontFamily?: string // Consolas / Menlo / Monaco
     tabIndent?: boolean // Tab 键插入缩进，补全弹层开着时优先接受补全（在线编程开启；关闭时 Tab 移出焦点便于表单导航）
+    readOnly?: boolean // 只读查看态（2026-10-27 评测详情/我的提交等代码展示）：不可编辑、无编辑光标，仍可选择复制
   }>(),
   {
     language: 'cpp',
@@ -26,6 +27,7 @@ const props = withDefaults(
     fontSize: 14,
     fontFamily: 'Consolas',
     tabIndent: false,
+    readOnly: false,
   },
 )
 
@@ -106,6 +108,8 @@ onMounted(async () => {
   // 无弹层时 acceptCompletion 返回 false 自然落回缩进（VS Code 同款）。补全关闭时无弹层，该绑定恒落空无害。
   if (props.tabIndent)
     exts.push(vm.keymap.of([{ key: 'Tab', run: autocompleteMod.acceptCompletion }, commandsMod.indentWithTab]))
+  // 只读查看态：readOnly 挡编辑命令，editable:false 去掉编辑光标（内容仍可选择/复制）
+  if (props.readOnly) exts.push(state.EditorState.readOnly.of(true), vm.EditorView.editable.of(false))
   if (props.autocomplete) exts.push(acComp.of(acFactory()))
   if (props.placeholder) exts.push(vm.placeholder(props.placeholder))
   // 控制流语句（for/if/while 等）以 ) 结尾时，换行新行与该行对齐而非 +1 缩进——

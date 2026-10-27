@@ -12,6 +12,8 @@ import (
 
 // Assignment 班级作业：一组题库题目的引用清单。
 // 无截止时间、不锁外班；学生做题即时出分（走普通练习提交）。
+// Sort 为展示序（2026-10-26 拍板：作业卡可拖动排序）——缺省 0，列表按
+// sort 升序 + id 降序（同序号新者在前 = 默认最新在最上）；新建作业取 minSort-1 钉顶。
 type Assignment struct {
 	ID        int64     `bson:"_id"`
 	ClassID   int64     `bson:"classId"`
@@ -19,6 +21,7 @@ type Assignment struct {
 	Intro     string    `bson:"intro"` // 作业说明（Markdown，v0.8 起单一事实源）
 	Problems  []int64   `bson:"problems"`
 	CreatedAt time.Time `bson:"createdAt"`
+	Sort      int64     `bson:"sort,omitempty"`
 }
 
 func (r *Repo) CreateAssignment(ctx context.Context, classID int64, title, intro string) (*Assignment, error) {
@@ -26,9 +29,19 @@ func (r *Repo) CreateAssignment(ctx context.Context, classID int64, title, intro
 	if err != nil {
 		return nil, err
 	}
+	// 新作业钉顶：取本班最小序号减一（未拖过序全 0 时同为 0，列表 id 降序兜底最新在前）
+	var minSort struct {
+		Sort *int64 `bson:"sort"`
+	}
+	sort := int64(0)
+	if err := r.db.Collection("assignments").FindOne(ctx,
+		bson.M{"classId": classID},
+		options.FindOne().SetSort(bson.D{{Key: "sort", Value: 1}})).Decode(&minSort); err == nil && minSort.Sort != nil {
+		sort = *minSort.Sort - 1
+	}
 	a := &Assignment{
 		ID: id, ClassID: classID, Title: title, Intro: intro,
-		Problems: []int64{}, CreatedAt: time.Now(),
+		Problems: []int64{}, CreatedAt: time.Now(), Sort: sort,
 	}
 	_, err = r.db.Collection("assignments").InsertOne(ctx, a)
 	if err != nil {
@@ -69,11 +82,12 @@ func (r *Repo) DeleteAssignment(ctx context.Context, id int64) error {
 	return nil
 }
 
-// ListAssignments 班级作业列表（按创建时间正序）。
+// ListAssignments 班级作业列表：sort 升序（拖动后的自定义序）+ id 降序
+//（同序号新者在前——未拖过序全 0 时即默认最新在最上，2026-10-26 拍板）。
 func (r *Repo) ListAssignments(ctx context.Context, classID int64) ([]*Assignment, error) {
 	cursor, err := r.db.Collection("assignments").Find(ctx,
 		bson.M{"classId": classID},
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+		options.Find().SetSort(bson.D{{Key: "sort", Value: 1}, {Key: "_id", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -83,6 +97,22 @@ func (r *Repo) ListAssignments(ctx context.Context, classID int64) ([]*Assignmen
 		return nil, err
 	}
 	return list, nil
+}
+
+// ReorderAssignments 保存作业展示序（班级管理员拖拽排序）：ids 即完整顺序，
+// 逐个写 sort = 下标；只更新属于该班的作业，返回实际更新数。
+func (r *Repo) ReorderAssignments(ctx context.Context, classID int64, ids []int64) (int64, error) {
+	var updated int64
+	for i, id := range ids {
+		res, err := r.db.Collection("assignments").UpdateOne(ctx,
+			bson.M{"_id": id, "classId": classID},
+			bson.M{"$set": bson.M{"sort": int64(i)}})
+		if err != nil {
+			return updated, err
+		}
+		updated += res.ModifiedCount
+	}
+	return updated, nil
 }
 
 // CountAssignments 班级作业数（班级卡片展示用）。

@@ -326,8 +326,10 @@ export const listApi = {
   all: () => get<{ items: ListCard[]; can_create: boolean }>('/lists'),
   detail: (id: number) => get<ListDetail>(`/lists/${id}`),
   rank: (id: number, page: number) => get<ListRankResult>(`/lists/${id}/rank`, { page }),
-  // 作业「从题单复制」：去重保序、跳过隐藏题（服务端一律剔除并计数）
-  flat: (id: number) => get<ListFlat>(`/lists/${id}/flat`),
+  // 作业「从题单复制」：去重保序、跳过隐藏题（服务端一律剔除并计数）；
+  // chapter/section（详情接口的 no）圈定范围——不传 = 整单，section 需与 chapter 同给
+  flat: (id: number, chapter?: string, section?: string) =>
+    get<ListFlat>(`/lists/${id}/flat`, { chapter, section }),
   create: (title: string) => post<{ id: number }>('/lists', { title }),
   update: (
     id: number,
@@ -343,6 +345,9 @@ export const classApi = {
   create: (name: string, intro: string, priv = false) =>
     post<{ id: number; name: string; invite_code: string }>('/classes', { name, intro, private: priv }),
   join: (id: number, code: string) => post<{ joined: boolean }>(`/classes/${id}/join`, { code }),
+  // 作业展示序保存（班级管理员拖拽）：ids 即完整顺序，服务端逐个写 sort = 下标
+  reorderAssignments: (id: number, ids: number[]) =>
+    post<{ updated: number }>(`/classes/${id}/assignments/reorder`, { ids }),
   joinByCode: (code: string) =>
     post<{ joined: boolean; class_id: number; name: string }>('/classes/join-by-code', { code }),
   leave: (id: number) => post<{ left: boolean }>(`/classes/${id}/leave`),
@@ -496,6 +501,7 @@ export interface CreateContestPayload {
   file_io?: boolean
   scoreboard?: boolean // v0.7：开启成绩表（默认 true）
   hide_during?: boolean // v0.7：赛期内对参赛者隐藏结果（默认 true）
+  hide_meta?: boolean // 2026-10-27：发布前对参赛者隐藏难度与知识点（比赛默认开，考试不提供）
 }
 
 // ---------- 比赛/考试（v0.5.4 ① 合并：10 对同构接口收敛为 roundApiOf(kind) 工厂） ----------
@@ -507,7 +513,7 @@ const roundApiOf = (kind: RoundKind) => {
   const base = `/${kind}s`
   return {
     detail: (id: number) => get<ContestDetail>(`${base}/${id}`),
-    update: (id: number, body: { title?: string; start?: string; end?: string; intro?: string; problem_ids?: number[]; scoreboard?: boolean; hide_during?: boolean; file_io?: boolean }) =>
+    update: (id: number, body: { title?: string; start?: string; end?: string; intro?: string; problem_ids?: number[]; scoreboard?: boolean; hide_during?: boolean; hide_meta?: boolean; file_io?: boolean }) =>
       patch<{ updated: number }>(`${base}/${id}`, body),
     remove: (id: number) => del<{ deleted: number }>(`${base}/${id}`),
     submit: (roundId: number, pid: number, language: string, code: string) =>

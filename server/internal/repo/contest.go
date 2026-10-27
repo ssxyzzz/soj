@@ -39,6 +39,7 @@ type Contest struct {
 	FileIO      bool             `bson:"fileIo,omitempty"` // 本场启用文件 IO：场内所有题按各题文件名对以文件读写方式判题（v0.5.2-3）
 	Scoreboard  bool             `bson:"scoreboard"`       // 是否开启成绩表（v0.7；默认开，关闭后参与者不看榜单，组织者仍可见）
 	HideDuring  bool             `bson:"hideDuring"`       // 赛期内对参赛者隐藏结果/状态/标签/通过率（v0.7；默认开，保持 OI 现状）
+	HideMeta    bool             `bson:"hideMeta"`         // 发布前对参赛者隐藏难度与知识点（2026-10-27；比赛默认开，服务端不下发，悬停不可见；组织者/题库全量可见视角不受限）
 	CreatedAt   time.Time        `bson:"createdAt"`
 }
 
@@ -261,8 +262,9 @@ func (r *Repo) RoundSubmissions(ctx context.Context, kind string, roundID int64,
 	if uid > 0 {
 		filter["uid"] = uid
 	}
+	// 最新在前（2026-10-27 统一口径：所有提交列表默认最新在上）
 	cursor, err := r.Submissions.Find(ctx, filter,
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +285,7 @@ func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, rou
 		"pid":               pid,
 	}
 	cursor, err := r.Submissions.Find(ctx, filter,
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}
@@ -300,7 +302,7 @@ func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, rou
 func (r *Repo) UserProblemSubmissions(ctx context.Context, uid, pid int64) ([]*Submission, error) {
 	filter := bson.M{"uid": uid, "pid": pid, "published": true}
 	cursor, err := r.Submissions.Find(ctx, filter,
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
+		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}

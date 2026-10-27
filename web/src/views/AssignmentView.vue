@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 作业详情（v0.7 按 design.md 重排）：名称卡（20px + 说明）→ 题目表；
-// 副列管理卡 → 成绩表。题目表列：T1/状态/题目/标签/通过率。
+// 副列管理卡 → 成绩表。题目表列：T1/状态/题目/难度/标签/通过率（难度 2026-10-27 补，对齐题库）。
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -10,6 +10,7 @@ import { downloadFile } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import CopyFromListButton from '@/components/CopyFromListButton.vue'
+import TierBadge from '@/components/TierBadge.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
@@ -283,6 +284,12 @@ onMounted(() => {
               <span class="tlink" @click="problemRoute(row as AssignmentProblem)">{{ row.title }}</span>
             </template>
           </el-table-column>
+          <!-- 难度（2026-10-27）：TierBadge 与题库难度列同款（锁题隐藏期随行隐藏信息口径，不给难度也无妨——服务端已下发） -->
+          <el-table-column label="难度" width="104">
+            <template #default="{ row }">
+              <TierBadge :tier="(row as AssignmentProblem).difficulty || 3" kind="difficulty" />
+            </template>
+          </el-table-column>
           <el-table-column label="标签" min-width="170">
             <template #default="{ row }">
               <FitTags v-if="!row.result_hidden && row.tags?.length" :ids="row.tags" />
@@ -400,6 +407,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* 「从题单复制」按钮行与下方选题器留出间距（2026-10-26：原贴在一起） */
+.copy-row {
+  margin-bottom: 10px;
+}
+
 .title-row {
   display: flex;
   align-items: center;

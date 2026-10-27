@@ -49,6 +49,7 @@ type roundCreateReq struct {
 	FileIO     bool      `json:"file_io"`
 	Scoreboard *bool     `json:"scoreboard"`  // 缺省 true：开启成绩表
 	HideDuring *bool     `json:"hide_during"` // 缺省 true：赛期内对参赛者隐藏结果
+	HideMeta   *bool     `json:"hide_meta"`   // 缺省：比赛 true / 考试 false——发布前对参赛者隐藏难度与知识点
 }
 
 // validateRoundCreate 校验创建参数；ok=false 时已写响应。
@@ -147,6 +148,8 @@ func (h *Handlers) createRound(c *gin.Context, s roundScope, classID int64) {
 		FileIO:     req.FileIO,
 		Scoreboard: req.Scoreboard == nil || *req.Scoreboard,
 		HideDuring: req.HideDuring == nil || *req.HideDuring,
+		// 赛时隐藏难度/知识点是比赛场景开关：比赛默认开；考试 UI 不提供，保持关
+		HideMeta: s.Kind == repo.KindContest && (req.HideMeta == nil || *req.HideMeta),
 	}
 	if req.HiddenDays > 0 {
 		ct.HiddenUntil = req.End.AddDate(0, 0, req.HiddenDays)
@@ -184,6 +187,7 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 		"file_io":       ct.FileIO,     // 本场启用文件 IO（v0.5.2-3）
 		"scoreboard":    ct.Scoreboard, // v0.7：是否开启成绩表
 		"hide_during":   ct.HideDuring, // v0.7：赛期内对参赛者隐藏结果
+		"hide_meta":     ct.HideMeta,   // 2026-10-27：发布前对参赛者隐藏难度与知识点
 	}
 	if !ct.HiddenUntil.IsZero() {
 		resp["hidden_until"] = ct.HiddenUntil
@@ -192,6 +196,9 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 	// 赛后隐藏期（hidden_until）仍按原 OI 规则隐藏。
 	resultHidden := !isOrganizer && !ct.Published && !(status == "running" && !ct.HideDuring)
 	resp["result_hidden"] = resultHidden
+	// 难度/知识点可见性（hideMeta）：未发布且非特权视角不下发，前端渲染横杠；
+	// 组织者与「题库全量可见」（root/admin）不受限。
+	metaHidden := ct.HideMeta && !ct.Published && !isOrganizer && !hasPerm(c, repo.PermProblemViewAll)
 	// 题目列表：赛前只给组织者；比赛开始后对所有人开放，考试仅本班成员。
 	canSeeProblems := isOrganizer || (status != "scheduled" && (participant || s.Kind == repo.KindContest))
 	if canSeeProblems {
@@ -226,7 +233,10 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 				item["submitted"] = submitted[cp.PID]
 			}
 			if !resultHidden {
-				item["tags"] = orEmptyInt64(p.Tags)
+				if !metaHidden {
+					item["tags"] = orEmptyInt64(p.Tags)
+					item["difficulty"] = p.EffDifficulty()
+				}
 				if st, ok := best[cp.PID]; ok {
 					item["status"] = st.Status
 					item["my_score"] = st.Score
@@ -390,7 +400,8 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 		ProblemIDs *[]int64   `json:"problem_ids"`
 		Scoreboard *bool      `json:"scoreboard"`
 		HideDuring *bool      `json:"hide_during"`
-		FileIO     *bool      `json:"file_io"` // v0.7.4：随编辑弹窗一并保存（同 /file-io 端点语义，只影响之后的提交）
+		HideMeta   *bool      `json:"hide_meta"` // 2026-10-27：发布前对参赛者隐藏难度与知识点
+		FileIO     *bool      `json:"file_io"`   // v0.7.4：随编辑弹窗一并保存（同 /file-io 端点语义，只影响之后的提交）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -482,6 +493,9 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 	}
 	if req.HideDuring != nil {
 		set["hideDuring"] = *req.HideDuring
+	}
+	if req.HideMeta != nil {
+		set["hideMeta"] = *req.HideMeta
 	}
 	if req.FileIO != nil {
 		set["fileIo"] = *req.FileIO

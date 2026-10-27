@@ -28,6 +28,7 @@ const form = ref({
   fileIO: false,
   scoreboard: true,
   hideDuring: true,
+  hideMeta: true,
 })
 
 const running = computed(() => list.value.filter((c) => c.status === 'running'))
@@ -113,6 +114,7 @@ async function create() {
       file_io: form.value.fileIO,
       scoreboard: form.value.scoreboard,
       hide_during: form.value.hideDuring,
+      hide_meta: form.value.hideMeta,
     })
     ElMessage.success('比赛创建成功')
     showCreate.value = false
@@ -239,6 +241,13 @@ onUnmounted(() => {
           v-model="form.hideDuring"
           label="赛时隐藏成绩"
           tip="隐藏状态/标签/通过率，赛中只显示「已提交」；关闭后赛中即可查看结果"
+        />
+      </el-form-item>
+      <el-form-item>
+        <SwitchRow
+          v-model="form.hideMeta"
+          label="赛时隐藏难度与知识点"
+          tip="比赛期间对参赛者隐藏题目难度与知识点（服务端不下发，悬停不可见），题目表与做题页显示横杠；发布后恢复显示，组织者与管理员不受影响"
         />
       </el-form-item>
     </el-form>

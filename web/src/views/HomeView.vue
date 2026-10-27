@@ -151,7 +151,7 @@ onMounted(async () => {
             <span v-if="c.private" class="mini-tag lock">🔒 私密</span>
             <span v-else-if="c.joined" class="mini-tag joined">✓ 已加入</span>
           </div>
-          <p class="clintro">{{ c.intro || '暂无简介' }}</p>
+          <p class="clintro">{{ c.intro.trim() || '暂无简介' }}</p>
           <div class="meta">
             <span>{{ c.member_count }} 名成员</span>·<span>{{ c.assignment_count }} 个作业</span>·<span>创建于 {{ fmtDay(c.created_at) }}</span>
           </div>

@@ -39,6 +39,8 @@ const intro = ref('')
 const fileIO = ref(false)
 const scoreboard = ref(true)
 const hideDuring = ref(true)
+// 赛时隐藏难度与知识点（2026-10-27）：比赛场景开关（考试不提供）
+const hideMeta = ref(true)
 const editList = ref<PickedProblem[]>([])
 const saving = ref(false)
 
@@ -49,6 +51,7 @@ function reset() {
   fileIO.value = !!props.round.file_io
   scoreboard.value = !!props.round.scoreboard
   hideDuring.value = !!props.round.hide_during
+  hideMeta.value = props.round.hide_meta ?? false
   const source = props.round.edit_problems ?? props.round.problems ?? []
   editList.value = source.map((p) => ({ id: p.id, title: p.title, hidden: 'hidden' in p ? p.hidden : false }))
 }
@@ -111,6 +114,7 @@ async function save() {
       problem_ids?: number[]
       scoreboard?: boolean
       hide_during?: boolean
+      hide_meta?: boolean
       file_io?: boolean
     } =
       props.mode === 'problems'
@@ -122,6 +126,7 @@ async function save() {
             intro: intro.value,
             scoreboard: scoreboard.value,
             hide_during: hideDuring.value,
+            ...(props.kind === 'contest' ? { hide_meta: hideMeta.value } : {}),
             file_io: fileIO.value,
           }
     await api.value.update(props.round.id, body)
@@ -182,6 +187,13 @@ watch(
             v-model="hideDuring"
             label="赛时隐藏成绩"
             tip="开启后隐藏期内（赛时到成绩发布前）参赛者看不到状态、标签与通过率；关闭则赛中即可实时查看"
+          />
+        </el-form-item>
+        <el-form-item v-if="kind === 'contest'">
+          <SwitchRow
+            v-model="hideMeta"
+            label="赛时隐藏难度与知识点"
+            tip="比赛期间对参赛者隐藏题目难度与知识点（服务端不下发，悬停不可见），题目表与做题页显示横杠；发布后恢复显示，组织者与管理员不受影响"
           />
         </el-form-item>
       </el-form>

@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import CodeEditor from '@/components/CodeEditor.vue'
-import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
+import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
 import { useUserStore } from '@/stores/user'
 
 // 提交弹窗（v3-full：960 宽 + 深色代码窗，赛事做题页「提交」按钮通道）：语言选择 +
@@ -15,7 +15,7 @@ const props = defineProps<{
   disabled?: boolean
   disabledReason?: string
   submitting?: boolean
-  initialCode?: string // 函数题学生模板（v0.9.1）：打开时预填，优先于个人默认模板
+  initialCode?: string // 函数题学生模板（v0.9.1）：打开时预填；个人代码模板只用于在线编程，这里不填
   langOnly?: string | string[] // 语言锁（函数题 = 'cpp'；交互题 = ['cpp','c']）
 }>()
 
@@ -35,13 +35,12 @@ watch(() => props.modelValue, (open) => {
   if (open) {
     const lock = props.langOnly
     if (lock) lang.value = Array.isArray(lock) ? lock[0] : lock
-    code.value = props.initialCode || templateFor(lang.value)
+    // 仅函数题预填题面学生模板；个人代码模板只用于在线编程（2026-10-27），提交弹窗默认全空白
+    code.value = props.initialCode || ''
   }
 })
 
 function changeLang(l: string) {
-  // 仅在代码还是初始模板（未编辑）时跟随切换，避免覆盖已粘贴的代码
-  if (!code.value.trim() || code.value === templateFor(lang.value)) code.value = templateFor(l)
   lang.value = l
 }
 
@@ -85,7 +84,7 @@ function doSubmit() {
       :font-size="codeFontSize"
       :font-family="codeFont"
       height="520px"
-      placeholder="在此编写或粘贴你的代码（偏好里设置的代码模板已填入）"
+      placeholder="在此编写或粘贴你的代码"
     />
     <p class="hint">提交间隔受全站限速约束；评测在 go-judge 沙箱中运行。</p>
     <template #footer>

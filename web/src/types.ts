@@ -375,6 +375,7 @@ export interface AssignmentListItem {
 export interface AssignmentProblem {
   id: number
   title: string
+  difficulty?: number // 难度档（2026-10-27 作业题目表新增难度列；缺省前端按 D3 兜底）
   contest_id?: number
   exam_id?: number
   submitted?: boolean
@@ -665,7 +666,8 @@ export interface ContestProblem {
   submitted?: boolean // 当前用户在本场次是否提交过（登录才返回）
   status?: string // 当前用户本场次最高分提交状态（结果可见时返回）
   my_score?: number
-  tags?: number[] // 标签节点 ID（结果隐藏时不返回）
+  tags?: number[] // 知识点节点 ID（结果隐藏或赛时隐藏难度/知识点时不返回，前端渲染横杠）
+  difficulty?: number // 难度档（同上，隐藏时不返回）
   submit_count?: number // 通过率（公开态提交；结果隐藏时不返回）
   accepted_count?: number
   result_hidden?: boolean // 该题结果/状态/标签/通过率是否对本视角隐藏
@@ -716,6 +718,7 @@ export interface ContestDetail {
   file_io?: boolean // 本场启用文件 IO（v0.5.2-3）
   scoreboard: boolean // v0.7：是否开启成绩表
   hide_during: boolean // v0.7：赛期内对参赛者隐藏结果
+  hide_meta?: boolean // 2026-10-27：发布前对参赛者隐藏难度与知识点（比赛默认开）
   result_hidden: boolean // 当前视角是否隐藏结果
   class_id?: number // 考试归属班级（v0.5.4 起两种详情同构返回）
   problems?: ContestProblem[]

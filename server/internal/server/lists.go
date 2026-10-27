@@ -537,6 +537,8 @@ func (h *Handlers) ReorderLists(c *gin.Context) {
 
 // GetListFlat 作业「从题单复制」拍平接口：去重保序、一律跳过隐藏题与已删题
 //（复制进班级作业不带隐藏题，与观察者权限无关——拍板 7）。
+// 可选查询参数圈定范围（2026-10-26 拍板）：chapter=章序号（详情接口的 no，1 起）、
+// section=小节 no（如 2.1，需与 chapter 同给）——只复制该章 / 该节，其余拍平全单。
 func (h *Handlers) GetListFlat(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -555,7 +557,27 @@ func (h *Handlers) GetListFlat(c *gin.Context) {
 		fail(c, http.StatusNotFound, "题单不存在")
 		return
 	}
-	sums, err := h.repo.ProblemSummariesByIDs(c.Request.Context(), repo.FlattenPIDs(l.Chapters))
+	chapters := l.Chapters
+	if q := c.Query("chapter"); q != "" {
+		ci, err := strconv.Atoi(q)
+		if err != nil || ci < 1 || ci > len(l.Chapters) {
+			fail(c, http.StatusBadRequest, "章节不存在")
+			return
+		}
+		ch := l.Chapters[ci-1]
+		if s := c.Query("section"); s != "" {
+			dot := strings.LastIndex(s, ".")
+			si, err := strconv.Atoi(s[dot+1:])
+			if err != nil || si < 1 || si > len(ch.Children) {
+				fail(c, http.StatusBadRequest, "小节不存在")
+				return
+			}
+			chapters = []repo.ListEntry{{Title: ch.Title, Children: []repo.ListEntry{ch.Children[si-1]}}}
+		} else {
+			chapters = []repo.ListEntry{ch}
+		}
+	}
+	sums, err := h.repo.ProblemSummariesByIDs(c.Request.Context(), repo.FlattenPIDs(chapters))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取题单失败")
 		return
@@ -563,7 +585,7 @@ func (h *Handlers) GetListFlat(c *gin.Context) {
 	items := make([]gin.H, 0, len(sums))
 	skippedHidden := 0
 	seen := map[int64]bool{}
-	for _, pid := range repo.FlattenPIDs(l.Chapters) {
+	for _, pid := range repo.FlattenPIDs(chapters) {
 		p := sums[pid]
 		if p == nil {
 			continue

@@ -374,7 +374,9 @@ func (h *Handlers) UpdateClass(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "班级公告过长（上限 256KB）")
 			return
 		}
-		set["intro"] = *req.Intro
+		// TrimSpace 归一（同 lists.go 题单简介口径）：Markdown 编辑器清空后会留 "\n"
+		// 这类空白串，原样入库会让前端的「暂无简介」兜底失效
+		set["intro"] = strings.TrimSpace(*req.Intro)
 	}
 	if req.Private != nil {
 		if !logged || !(uid == cl.OwnerID || role == repo.RoleRoot) {

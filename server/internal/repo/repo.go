@@ -361,6 +361,19 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		}
 		log.Printf("[boot] 比赛/考试已补默认开关（成绩表开、赛时隐藏成绩开）")
 	}
+	if !flagDone("contestHideMetaV1") {
+		// 2026-10-27：比赛新增「赛时隐藏难度与知识点」开关，默认开。存量比赛补 true
+		//（考试不同步启用——该开关面向比赛场景，考试保持原行为）。
+		if _, err := r.roundsCol(KindContest).UpdateMany(ctx,
+			bson.M{"hideMeta": bson.M{"$exists": false}},
+			bson.M{"$set": bson.M{"hideMeta": true}}); err != nil {
+			return err
+		}
+		if err := setFlag("contestHideMetaV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] 存量比赛已补默认开关（赛时隐藏难度与知识点开）")
+	}
 	if !flagDone("classLeaveV1") {
 		// v0.7.2：退出班级改为权限位（class.leave）管控，default 刻意不给；
 		// admin 角色补发该位（root 走 "*" 恒通，无需补）

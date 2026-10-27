@@ -128,7 +128,7 @@ func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, 
 			ProcLimit:   64,
 			CopyIn: map[string]sandbox.CopyFile{
 				"main":      {FileID: irID},
-				"input.txt": {Content: string(input)},
+				"input.txt": sandbox.CopyContent(string(input)),
 			},
 			CopyOut: []string{"stderr"},
 		}
@@ -149,7 +149,7 @@ func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, 
 		if l.NeedCompile {
 			userCmd.CopyIn = map[string]sandbox.CopyFile{"main": {FileID: fileID}}
 		} else {
-			userCmd.CopyIn = map[string]sandbox.CopyFile{l.SourceFile: {Content: sub.Code}}
+			userCmd.CopyIn = map[string]sandbox.CopyFile{l.SourceFile: sandbox.CopyContent(sub.Code)}
 		}
 
 		pipes := []sandbox.PipeMap{

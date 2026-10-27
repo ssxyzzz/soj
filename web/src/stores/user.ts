@@ -18,7 +18,7 @@ export const useUserStore = defineStore('user', () => {
   const perms = ref<string[]>(JSON.parse(localStorage.getItem('soj_perms') ?? '[]'))
 
   // 用户偏好（v0.4.8 个人设置）：登录后由布局层经 /me/profile 拉取，设置页保存后同步；
-  // 供提交弹窗/在线编程预填默认语言与模板消费。不落 localStorage。
+  // 供提交弹窗/在线编程预填默认语言、在线编程预填代码模板消费。不落 localStorage。
   const prefs = ref<UserPrefs>({})
 
   // 学生等级（v0.11）：顶栏徽章与补全门槛提示；/me/profile 随偏好一并下发

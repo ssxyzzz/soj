@@ -9,6 +9,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { submissionApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
+import CodePane from '@/components/CodePane.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtSec, isQueueStatus, statusDesc } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
@@ -208,7 +209,7 @@ watch(
         </template>
         <template v-else>
           <div class="detail-sub">代码</div>
-          <pre class="soj-codepane mono">{{ sub.code }}</pre>
+          <CodePane :code="sub.code" :language="sub.language" />
         </template>
         <template v-if="sub.detail?.length">
           <div class="detail-sub">测试点明细</div>

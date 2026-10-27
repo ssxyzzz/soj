@@ -149,6 +149,13 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 			item["kind"] = repo.SetKindSummary(p.Questions)
 		}
 		if vk := viewMap[p.ID]; vk != nil {
+			// 赛时隐藏难度/知识点（hideMeta，2026-10-27）：列表行同样不下发，
+			// 组织者与「题库全量可见」/题目可编辑者不受限（口径同题目详情接口）
+			if vk.Round.HideMeta && !vk.Round.Published &&
+				!privileged && !h.problemEditable(c, p) && !(logged && uid == vk.Round.CreatedBy) {
+				delete(item, "difficulty")
+				delete(item, "tags")
+			}
 			item["locked"] = true
 			item["lock_kind"] = vk.Kind
 			if vk.Kind == repo.KindExam {
@@ -311,6 +318,15 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	} else {
 		resp["submit_count"] = int64(0)
 		resp["accepted_count"] = int64(0)
+	}
+	// 赛时隐藏难度/知识点（hideMeta，2026-10-27）：题目被未发布的比赛/考试收录且该场
+	// 开启此开关时，非特权视角不下发难度与知识点标签——做题页/题库详情/悬停/开发者
+	// 工具均拿不到。组织者与「题库全量可见」（root/admin）不受限；题目可编辑者放行
+	//（编辑表单回填依赖完整字段）。
+	if vk != nil && vk.Round.HideMeta && !vk.Round.Published &&
+		!(logged && uid == vk.Round.CreatedBy) && !privileged && !h.problemEditable(c, p) {
+		delete(resp, "difficulty")
+		delete(resp, "tags")
 	}
 	if vk != nil {
 		resp["locked"] = true

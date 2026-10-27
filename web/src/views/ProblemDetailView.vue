@@ -20,7 +20,7 @@ import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import { useUserStore } from '@/stores/user'
-import { autocompleteOn, defaultLang, languageOptions, templateFor } from '@/utils/code'
+import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
 import { fmtRel, fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
 import type { ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/types'
 
@@ -123,12 +123,11 @@ watch(problem, (p) => {
   if (!p) return
   const lock = isFunction.value ? 'cpp' : isInteractive.value ? 'cpp' : undefined
   if (lock) railLang.value = lock
-  railCode.value = funcTemplate.value || templateFor(railLang.value)
+  // 仅函数题预填题面学生模板；个人代码模板只用于在线编程（2026-10-27），提交弹窗保持全空白
+  railCode.value = funcTemplate.value
 })
 
 function changeRailLang(l: string) {
-  // 仅在代码还是初始模板（未编辑）时跟随切换，避免覆盖已写的代码
-  if (!railCode.value.trim() || railCode.value === templateFor(railLang.value)) railCode.value = templateFor(l)
   railLang.value = l
 }
 
@@ -161,14 +160,13 @@ function openWorkbenchEntry() {
 }
 
 // 粘贴提交弹窗（2026-10-25 修复⑥）：副列去内嵌编辑器后的入口。
-// 个人模板在「打开弹窗」时回填（与在线编程同口径）——题目加载时 /me/profile 偏好常未就绪，
-// watch(problem) 的早填会拿到空模板；仅在未编辑过（空 / 仍是任一语言起始模板）时回填。
+// 打开弹窗时仅在未编辑过（空白 / 仍是函数题模板）的情况下回填函数题模板；
+// 个人代码模板只用于在线编程（2026-10-27），此处不再填入。
 const showRailSubmit = ref(false)
 
 const railUntouched = computed(() => {
   const code = railCode.value
-  if (!code.trim()) return true
-  return languageOptions.some((o) => templateFor(o.value) && code === templateFor(o.value))
+  return !code.trim() || (!!funcTemplate.value && code === funcTemplate.value)
 })
 
 function openRailSubmit() {
@@ -177,7 +175,7 @@ function openRailSubmit() {
     router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
-  if (railUntouched.value) railCode.value = funcTemplate.value || templateFor(railLang.value)
+  if (railUntouched.value) railCode.value = funcTemplate.value
   showRailSubmit.value = true
 }
 
@@ -344,23 +342,19 @@ onUnmounted(stopPolling)
           </div>
         </RailCard>
 
-        <!-- v3「提交本题」（2026-10-25 修复⑥）：副列不再内嵌编辑器，点「提交代码」进弹窗粘贴提交；
-             客观题换成操作入口卡 -->
+        <!-- v3「提交本题」（2026-10-25 修复⑥）：副列不再内嵌编辑器，点「提交」进弹窗粘贴提交；
+             客观题换成操作入口卡。按钮竖排全宽五连（2026-10-27 拍板：对齐比赛做题页本题操作卡，
+             弃「我的提交/所有代码」两列行与 small 档） -->
         <RailCard ov="评测" :title="isObjective ? '本题操作' : '提交本题'" class="aside-card">
           <template v-if="!isObjective">
             <div class="entry-actions">
-              <el-button type="primary" :disabled="submitDisabled" @click="openRailSubmit">提交代码</el-button>
-              <!-- 次级 CTA：primary plain 浅蓝款，与主 CTA 拉开层次（2026-10-25 用户反馈加色） -->
-              <el-button type="primary" plain :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
+              <el-button type="primary" :disabled="submitDisabled" @click="openRailSubmit">提交</el-button>
+              <el-button :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
+              <el-button @click="openSolutions">题解</el-button>
+              <el-button @click="openMine">我的提交</el-button>
+              <el-button @click="openOthers">所有代码</el-button>
             </div>
             <div v-if="submitDisabledReason" class="hint">{{ submitDisabledReason }}</div>
-            <div class="entry-extras">
-              <el-button size="small" @click="openSolutions">题解</el-button>
-              <div class="entry-row">
-                <el-button size="small" @click="openMine">我的提交</el-button>
-                <el-button size="small" @click="openOthers">所有代码</el-button>
-              </div>
-            </div>
           </template>
           <div v-else class="entry-actions">
             <div v-if="!userStore.token" class="hint center">登录后作答</div>
@@ -453,26 +447,6 @@ onUnmounted(stopPolling)
   color: var(--soj-blue);
 }
 
-/* 次要入口区（题解小按钮独占一行 + 我的提交/所有代码两列，2026-10-25 修复⑥）；
-   字号 15px 与上方按钮一致——12px 压缩与 small 档自带 13px 都被否（2026-10-25 二次回调） */
-.entry-extras {
-  margin-top: 8px;
-  display: grid;
-  gap: 8px;
-}
-
-.entry-extras .el-button {
-  width: 100%;
-  margin-left: 0;
-  font-size: 15px;
-}
-
-.entry-extras .entry-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
 /* 粘贴提交弹窗 */
 .dlg-lang {
   display: flex;
@@ -487,18 +461,6 @@ onUnmounted(stopPolling)
 
 .dlg-editor {
   margin-top: 12px;
-}
-
-/* 次要管理动作两列行：压掉 EP 的 el-button 联动 margin，间距走 grid gap */
-.entry-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  width: 100%;
-}
-
-.entry-row .el-button + .el-button {
-  margin-left: 0;
 }
 
 .hint {

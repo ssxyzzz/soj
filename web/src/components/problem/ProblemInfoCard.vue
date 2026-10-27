@@ -37,9 +37,10 @@ const acceptRate = computed(() => {
       <div class="k"><b>{{ problem.accepted_count ?? 0 }}</b><span>通过</span></div>
       <div class="k"><b>{{ acceptRate }}</b><span>通过率</span></div>
     </div>
-    <div class="diff-row">
-      <TierBadge :tier="problem.difficulty ?? 3" kind="difficulty" />
-      <span class="hint">难度第 {{ problem.difficulty ?? 3 }} 档</span>
+    <!-- 赛时隐藏难度（hideMeta）时服务端不下发 difficulty，整行隐藏而非按 D3 兜底 -->
+    <div v-if="problem.difficulty != null" class="diff-row">
+      <TierBadge :tier="problem.difficulty" kind="difficulty" />
+      <span class="hint">难度第 {{ problem.difficulty }} 档</span>
     </div>
     <div v-if="tagIds.length" class="tag-row">
       <span

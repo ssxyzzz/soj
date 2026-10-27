@@ -951,7 +951,24 @@ strong {
 }
 
 .soj-md .vditor-reset h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 1.35em;
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
+}
+
+/* md h1 章标题前缀：竖长渐变菱形（2026-10-27 用户拍板，回归尖角款）——
+   clip-path polygon 直接裁出菱形（无旋转＝无角溢出，不会被容器裁切），总高 22px；
+   填充沿用 h2 竖条同款 blue-hi→teal 渐变；flex 对齐口径同 h2 */
+.soj-md .vditor-reset h1::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 14px;
+  height: 22px;
+  background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-teal));
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
 }
 
 .soj-md .vditor-reset h2 {
@@ -1246,25 +1263,64 @@ strong {
   background: var(--el-fill-color-lighter);
 }
 
-/* ---- Vditor 工具栏 tooltip 翻向（2026-10-22 修复）----
-   Vditor 工具栏按钮的 tooltip 是 vditor-tooltipped__n（气泡在按钮上方 bottom:100%），
-   会伸出 .vditor 根的顶边之外：自生长编辑器（.md-field 给 .vditor 挂 overflow:hidden）
-   直接把气泡裁掉——表现为「提示被上面的内容盖住/偶发只见一条甚至不显示」；固定高
-   编辑器虽不裁，气泡也窜到编辑器上方与表单标签/卡片内容重叠。这里把工具栏内的
-   __n 镜像成 __s（南向）几何：气泡落在编辑器内容区内，永不越界，z-index 1000000
-   原生保证盖在正文上。范围限定 .md-editor .vditor-toolbar——内容区里 vditor 自用的
-   表格行列小 tooltip（同为 __n，浮层在正文中间，朝上是合理的）不受影响。
-   几何值逐条镜像 vditor 自身的 .vditor-tooltipped__s 规则（含 translateX(50%) 居中
-   与箭头 border 换向），特异度 (0,3,1) 压 vditor 的 (0,1,1)，不依赖加载顺序。 */
-.md-editor .vditor-toolbar .vditor-tooltipped__n::after {
+/* ---- Vditor 工具栏 tooltip 统一朝下（2026-10-22 修复，2026-10-26 扩全）----
+   Vditor 按每项 tipPosition 给工具栏按钮挂 vditor-tooltipped__n / __ne / __nw（上游
+   内置配置 15/6/12 个混用）与「更多」的 __e——气泡出现在按钮上方/侧方，会伸出 .vditor
+   根的顶边之外：自生长编辑器（.md-field 给 .vditor 挂 overflow:hidden）直接把气泡裁掉
+   ——表现为「提示被上面的内容盖住/偶发只见一条甚至不显示」；固定高编辑器虽不裁，气泡
+   也窜到编辑器上方与表单标签/卡片内容重叠，且 n 与 ne/nw 混排导致朝向不一致。这里把
+   工具栏内四类全部镜像成 __s（南向）几何：气泡统一落在编辑器内容区内，永不越界，
+   z-index 1000000 原生保证盖在正文上。范围限定 .md-editor .vditor-toolbar——内容区里
+   vditor 自用的表格行列小 tooltip（浮层在正文中间，朝上是合理的）不受影响。
+   几何值逐条镜像 vditor 自身的 __s / __se / __sw 规则（ne/nw 保留各自水平锚点、只翻
+   垂直向；e 右锚点防右缘溢出；含 translateX(50%) 居中与箭头 border 换向），特异度
+   (0,3,1) 压 vditor 的 (0,1,1)，不依赖加载顺序。 */
+.md-editor .vditor-toolbar .vditor-tooltipped__n::after,
+.md-editor .vditor-toolbar .vditor-tooltipped__ne::after,
+.md-editor .vditor-toolbar .vditor-tooltipped__nw::after {
   top: 100%;
   bottom: auto;
   margin-top: 5px;
+  margin-bottom: 0;
 }
-.md-editor .vditor-toolbar .vditor-tooltipped__n::before {
+.md-editor .vditor-toolbar .vditor-tooltipped__n::before,
+.md-editor .vditor-toolbar .vditor-tooltipped__ne::before,
+.md-editor .vditor-toolbar .vditor-tooltipped__nw::before {
   top: auto;
   bottom: -5px;
   border-top-color: transparent;
+  border-bottom-color: #3b3e43;
+}
+/* 行内/块级公式按钮（MdEditor 自定义项未配 tipPosition → 类名 __undefined）：
+   基础 ::after 无任何定位坐标，落点随浏览器默认——显式钉成完整南向几何 */
+.md-editor .vditor-toolbar .vditor-tooltipped__undefined::after {
+  top: 100%;
+  right: 50%;
+  margin-top: 5px;
+  transform: translateX(50%);
+}
+.md-editor .vditor-toolbar .vditor-tooltipped__undefined::before {
+  top: auto;
+  bottom: -5px;
+  right: 50%;
+  margin-right: -5px;
+  border-bottom-color: #3b3e43;
+}
+/* 「更多」（tipPosition:e）：原 east 几何整体换 south 右锚（对齐 __sw），贴右缘不溢出 */
+.md-editor .vditor-toolbar .vditor-tooltipped__e::after {
+  top: 100%;
+  bottom: auto;
+  left: auto;
+  right: 50%;
+  margin: 5px -15px 0 0;
+  transform: translateX(50%);
+}
+.md-editor .vditor-toolbar .vditor-tooltipped__e::before {
+  top: auto;
+  bottom: -5px;
+  right: 50%;
+  margin: 0 -5px 0 0;
+  border-right-color: transparent;
   border-bottom-color: #3b3e43;
 }
 

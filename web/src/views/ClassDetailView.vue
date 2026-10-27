@@ -25,6 +25,47 @@ const userStore = useUserStore()
 const cl = ref<ClassDetail | null>(null)
 const loading = ref(true)
 const section = ref<'assignments' | 'exams' | 'members'>('assignments')
+
+// 作业拖拽排序（仅班级管理员）：六点手柄武装 → 卡片可拖 → 悬停即时换位 →
+// 落下/收尾一次性保存全序（服务端逐个写 sort = 下标，列表 sort 升序 + 新者在前兜底）
+const armedA = ref<number | null>(null)
+const dragA = ref<number | null>(null)
+function armA(a: AssignmentListItem) {
+  if (cl.value?.manageable) armedA.value = a.id
+}
+function disarmA() {
+  armedA.value = null
+}
+function onADragstart(a: AssignmentListItem, e: DragEvent) {
+  if (armedA.value !== a.id || !cl.value?.manageable) {
+    e.preventDefault()
+    return
+  }
+  dragA.value = a.id
+  e.dataTransfer?.setData('text/plain', String(a.id))
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+function onADragover(a: AssignmentListItem, e: DragEvent) {
+  if (dragA.value == null || a.id === dragA.value) return
+  const from = assignments.value.findIndex((x) => x.id === dragA.value)
+  const to = assignments.value.findIndex((x) => x.id === a.id)
+  if (from < 0 || to < 0) return
+  e.preventDefault()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+  if (from === to) return
+  assignments.value.splice(to, 0, assignments.value.splice(from, 1)[0])
+}
+async function commitADrag() {
+  if (dragA.value == null || !cl.value) return
+  const ids = assignments.value.map((x) => x.id)
+  dragA.value = null
+  disarmA()
+  try {
+    await classApi.reorderAssignments(cl.value.id, ids)
+  } catch {
+    await loadAssignments() // 保存失败回滚为服务端现状（拦截器已 toast）
+  }
+}
 const assignments = ref<AssignmentListItem[]>([])
 const assignmentsVisible = ref(false)
 
@@ -331,7 +372,7 @@ onMounted(load)
             <el-tag v-if="cl.private" size="small" type="warning">私密班</el-tag>
             <el-tag v-if="cl.joined" size="small" type="success">已加入</el-tag>
           </div>
-          <div v-if="cl.intro" class="intro"><MdView :content="cl.intro" /></div>
+          <div v-if="cl.intro.trim()" class="intro"><MdView :content="cl.intro" /></div>
           <!-- 创建时间在右栏「班级信息」卡展示，名称卡不再重复（v0.7.2 验收反馈） -->
           <div v-if="!cl.joined && !cl.manageable" class="join-bar">
             <el-input
@@ -353,64 +394,84 @@ onMounted(load)
           </div>
         </div>
 
-        <el-card>
-          <template v-if="section === 'assignments'">
-            <el-alert
-              v-if="!assignmentsVisible"
-              title="加入班级后才能查看和完成作业"
-              type="info"
-              :closable="false"
-            />
-            <template v-else>
-              <el-table
-stripe
-                :data="assignments"
-                style="cursor: pointer"
-                @row-click="(row: AssignmentListItem) => router.push(`/assignments/${row.id}`)"
-              >
-                <el-table-column prop="title" label="作业" min-width="220" />
-                <el-table-column prop="intro" label="说明" min-width="220">
-                  <template #default="{ row }">{{ row.intro || '-' }}</template>
-                </el-table-column>
-                <el-table-column prop="problem_count" label="题数" width="90" />
-                <el-table-column label="布置时间" width="200">
-                  <template #default="{ row }">{{ fmtDate(row.created_at) }}</template>
-                </el-table-column>
-              </el-table>
-              <el-empty v-if="!assignments.length" description="还没有作业" :image-size="60" />
-            </template>
-          </template>
-
-          <template v-else-if="section === 'exams'">
-            <el-table
-stripe
-              v-if="examsVisible"
-              :data="exams"
-              style="cursor: pointer"
-              @row-click="openExam"
-            >
-              <el-table-column label="状态" width="100">
-                <template #default="{ row }">
-                  <el-tag :type="row.status === 'running' ? 'success' : row.status === 'scheduled' ? 'warning' : 'info'">
-                    {{ row.status === 'running' ? '进行中' : row.status === 'scheduled' ? '未开始' : '已结束' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="title" label="考试" min-width="200" />
-              <el-table-column label="时间" min-width="280">
-                <template #default="{ row }">
-                  {{ new Date(row.start).toLocaleString('zh-CN', { hour12: false }) }} ~
-                  {{ new Date(row.end).toLocaleString('zh-CN', { hour12: false }) }}
-                </template>
-              </el-table-column>
-              <el-table-column prop="problem_count" label="题数" width="80" />
-            </el-table>
-            <el-alert v-else title="加入班级后才能查看考试" type="info" :closable="false" />
-            <el-empty v-if="examsVisible && !exams.length" description="还没有考试" :image-size="60" />
-          </template>
-
+        <template v-if="section === 'assignments'">
+          <el-alert
+            v-if="!assignmentsVisible"
+            title="加入班级后才能查看和完成作业"
+            type="info"
+            :closable="false"
+          />
           <template v-else>
-            <el-table stripe :data="cl.members">
+            <!-- 作业长条卡直接落在页面上（2026-10-26 拍板：去外层大卡）；
+                 左侧日期色块（年月日），管理员可从六点手柄拖动排序（最新默认在最上） -->
+            <div v-if="assignments.length" class="strip-list">
+              <div
+                v-for="a in assignments"
+                :key="a.id"
+                class="card strip-card"
+                :class="{ dragging: dragA === a.id }"
+                :draggable="armedA === a.id"
+                @dragstart="onADragstart(a, $event)"
+                @dragover="onADragover(a, $event)"
+                @drop="commitADrag"
+                @dragend="commitADrag"
+                @click="router.push(`/assignments/${a.id}`)"
+              >
+                <div class="strip-main">
+                  <div class="strip-title-row">
+                    <h3>{{ a.title }}</h3>
+                  </div>
+                  <!-- 草图结构（2026-10-27 拍板）：日期大字｜竖线｜说明/题数纵排 -->
+                  <div class="a-body">
+                    <span class="a-date">{{ fmtDay(a.created_at) }}</span>
+                    <i class="a-divider"></i>
+                    <div class="a-info">
+                      <p class="strip-intro">{{ a.intro || '暂无说明' }}</p>
+                      <div class="strip-meta">{{ a.problem_count }} 题</div>
+                    </div>
+                  </div>
+                </div>
+                <span
+                  v-if="cl.manageable"
+                  class="drag-handle"
+                  title="拖动排序"
+                  @mousedown="armA(a)"
+                  @mouseup="disarmA"
+                  @click.stop
+                ></span>
+              </div>
+            </div>
+            <el-empty v-else description="还没有作业" :image-size="60" />
+          </template>
+        </template>
+
+        <template v-else-if="section === 'exams'">
+          <template v-if="examsVisible">
+            <!-- 考试长条卡：色块随状态（进行中绿 / 未开始橙 / 已结束灰），状态标签随标题 -->
+            <div v-if="exams.length" class="strip-list">
+              <div v-for="e in exams" :key="e.id" class="card strip-card" @click="openExam(e)">
+                <span class="strip-av" :class="`st-${e.status}`">{{ (e.title || '?').slice(0, 1) }}</span>
+                <div class="strip-main">
+                  <div class="strip-title-row">
+                    <h3>{{ e.title }}</h3>
+                    <el-tag size="small" :type="e.status === 'running' ? 'success' : e.status === 'scheduled' ? 'warning' : 'info'">
+                      {{ e.status === 'running' ? '进行中' : e.status === 'scheduled' ? '未开始' : '已结束' }}
+                    </el-tag>
+                  </div>
+                  <div class="strip-meta">
+                    {{ new Date(e.start).toLocaleString('zh-CN', { hour12: false }) }} ~
+                    {{ new Date(e.end).toLocaleString('zh-CN', { hour12: false }) }} · {{ e.problem_count }} 题
+                  </div>
+                </div>
+              </div>
+            </div>
+            <el-empty v-else description="还没有考试" :image-size="60" />
+          </template>
+          <el-alert v-else title="加入班级后才能查看考试" type="info" :closable="false" />
+        </template>
+
+        <el-card v-else>
+          <el-table stripe :data="cl.members">
               <el-table-column prop="uid" label="ID" width="100" />
               <el-table-column prop="username" label="用户名" min-width="160" />
               <el-table-column label="身份" width="200">
@@ -443,7 +504,6 @@ stripe
               />
               <el-button type="primary" :loading="importing" @click="importMembers">导入成员</el-button>
             </div>
-          </template>
         </el-card>
 
       <template #aside>
@@ -728,5 +788,145 @@ stripe
 /* 文本域吃满剩余宽、导入成员钮钉右侧末行——联想弹层向下展开不再盖钮 */
 .import-input {
   flex: 1;
+}
+
+/* ---- 作业/考试长条卡（2026-10-26 拍板：替代表格，对齐题单页横条卡范式）---- */
+.strip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.strip-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+
+.strip-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 4px rgba(11, 31, 69, 0.04),
+    0 14px 36px rgba(11, 31, 69, 0.1);
+}
+
+/* 首字色块：作业按 id 轮换色；考试随状态（进行中绿 / 未开始橙 / 已结束灰） */
+.strip-av {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  background: #75868f;
+}
+
+.strip-av.st-running {
+  background: #237e6b;
+}
+
+.strip-av.st-scheduled {
+  background: #d99141;
+}
+
+/* 作业卡日期行（2026-10-27 拍板草图）：日期大字｜竖线｜说明/题数纵排 */
+.a-body {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 10px;
+}
+
+.a-date {
+  flex: none;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--soj-navy, #0b1f45);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.a-divider {
+  flex: none;
+  width: 2px;
+  align-self: stretch;
+  min-height: 46px;
+  border-radius: 1px;
+  background: var(--el-border-color);
+}
+
+.a-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.a-info .strip-intro {
+  margin: 0;
+}
+
+/* 六点拖拽手柄（仅班级管理员可见）：grab 光标，hover 主蓝 */
+.strip-card > .drag-handle {
+  flex: none;
+  width: 10px;
+  height: 18px;
+  cursor: grab;
+  background-image: radial-gradient(circle, var(--soj-ink-3, #5b6b85) 1.2px, transparent 1.3px);
+  background-size: 5px 6px;
+}
+
+.strip-card > .drag-handle:hover {
+  background-image: radial-gradient(circle, var(--soj-blue, #2455da) 1.2px, transparent 1.3px);
+}
+
+.strip-card.dragging {
+  opacity: 0.55;
+}
+
+.strip-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.strip-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.strip-title-row h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--soj-navy, #0b1f45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip-intro {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--soj-ink-2, #22334d);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip-meta {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--soj-ink-3, #5b6b85);
 }
 </style>
