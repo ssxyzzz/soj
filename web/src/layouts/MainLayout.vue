@@ -9,6 +9,7 @@ import { useLevelsStore } from '@/stores/levels'
 import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { applyTheme, initTheme, type ThemeName } from '@/utils/theme'
+import { APP_VERSION as appVersion } from '@/utils/version'
 
 const route = useRoute()
 const router = useRouter()
@@ -112,7 +113,13 @@ function onCommand(command: string) {
       <router-view />
     </el-main>
     <el-footer class="footer">
-      <span>SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
+      <!-- 页脚版本与仓库链接（2026-10-26）：版本号发版时改 utils/version.ts 一处 -->
+      <span class="ver">
+        <a class="flink" href="https://github.com/ssxyzzz/soj" target="_blank" rel="noopener noreferrer">SOJ</a>
+        {{ appVersion }}
+      </span>
+      ·
+      <span>Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
       <!-- 主题切换（2026-10-26）：v5 版（默认）/ 原版，data-theme 整站变量换血 -->
       <span class="theme-switch">
         <span class="ts-label">主题</span>
@@ -371,6 +378,21 @@ function onCommand(command: string) {
   background: var(--soj-blue-soft);
   border-color: var(--soj-blue-line);
   font-weight: 600;
+}
+
+/* 页脚版本与仓库链接：弱化文字钮，悬停提主蓝；外链新窗 */
+.ver {
+  color: var(--soj-ink-3);
+}
+
+.flink {
+  color: var(--soj-ink-3);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.flink:hover {
+  color: var(--soj-blue);
 }
 
 /* 备案号外链：弱化为页脚次要信息，悬停才提色 */
