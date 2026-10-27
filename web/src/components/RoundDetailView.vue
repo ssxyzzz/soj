@@ -328,7 +328,7 @@ onUnmounted(() => {
               <span class="tlink" @click="problemRoute(row)">{{ row.title }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="难度" width="92">
+          <el-table-column label="难度" width="104">
             <template #default="{ row }">
               <TierBadge v-if="row.difficulty != null" :tier="row.difficulty" kind="difficulty" />
               <span v-else class="dim">—</span>

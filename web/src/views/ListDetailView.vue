@@ -227,7 +227,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
               <div v-show="expanded[`ch:${ch.no}`]" class="cbody">
                 <!-- 章直挂题 -->
                 <el-table v-if="ch.problems.length" :data="ch.problems" class="ptable">
-                  <el-table-column label="状态" width="128">
+                  <el-table-column label="状态" width="140">
                     <template #default="{ row }">
                       <SubStatus v-if="row.status" :status="row.status" :score="row.score" />
                       <span v-else class="dim">未做</span>
@@ -283,7 +283,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                   </button>
                   <div v-show="expanded[`sec:${ch.no}:${sec.no}`]" class="sec-table">
                     <el-table v-if="sec.problems.length" :data="sec.problems" class="ptable">
-                      <el-table-column label="状态" width="128">
+                      <el-table-column label="状态" width="140">
                         <template #default="{ row }">
                           <SubStatus v-if="row.status" :status="row.status" :score="row.score" />
                           <span v-else class="dim">未做</span>

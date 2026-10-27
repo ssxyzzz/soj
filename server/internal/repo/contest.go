@@ -194,7 +194,10 @@ func (r *Repo) ListUnpublishedContests(ctx context.Context) ([]*Contest, error) 
 }
 
 func listRounds(ctx context.Context, col *mongo.Collection, filter bson.M) ([]*Contest, error) {
-	cursor, err := col.Find(ctx, filter)
+	// 开始时间倒序（2026-10-27）：时间近的在上，与主题库比赛列表同口径
+	//（原裸 Find 按插入序，老考试垫底新考试在前纯靠运气；锁题判定消费方与顺序无关）
+	cursor, err := col.Find(ctx, filter,
+		options.Find().SetSort(bson.D{{Key: "start", Value: -1}}))
 	if err != nil {
 		return nil, err
 	}

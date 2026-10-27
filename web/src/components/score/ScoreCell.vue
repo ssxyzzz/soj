@@ -3,7 +3,7 @@ import { computed } from 'vue'
 
 import type { ScoreCellView } from './types'
 
-const props = defineProps<{ cell: ScoreCellView; canInspect: boolean; me?: boolean }>()
+const props = defineProps<{ cell: ScoreCellView; canInspect: boolean }>()
 const emit = defineEmits<{ (e: 'inspect'): void }>()
 
 const errorLabel = computed(() => (props.cell.errors > 99 ? '99+' : String(props.cell.errors)))
@@ -22,7 +22,7 @@ function onClick() {
 <template>
   <span
     class="score-cell"
-    :class="[`is-${cell.state}`, { clickable: canInspect, me: me }]"
+    :class="[`is-${cell.state}`, { clickable: canInspect }]"
     :title="tip"
     :aria-label="tip"
     :tabindex="canInspect ? 0 : undefined"
@@ -35,8 +35,9 @@ function onClick() {
 </template>
 
 <style scoped>
-/* v3 .sc：整格铺色（满分绿底 / 部分橙底 / 零分红底 / 未做灰字），圆角 8、mono；
-   角标（未满分次数）绝对定位在右下角 */
+/* v3 .sc：整格铺色（满分绿底 / 部分橙底 / 零分红底 / 未做灰字），圆角 8、mono。
+   得分恒居中（有无角标都对齐）；未满分次数 = 绝对定位角标，钉在背景右下圆弧内，
+   不参与布局、不撑宽药丸（2026-10-27 拍板：分数对齐优先，角标贴弧度） */
 .score-cell {
   position: relative;
   display: inline-flex;
@@ -44,7 +45,7 @@ function onClick() {
   justify-content: center;
   min-width: 36px;
   height: 26px;
-  padding: 0 8px;
+  padding: 0 7px;
   border-radius: 8px;
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -61,12 +62,6 @@ function onClick() {
 
 .score-cell.clickable:hover {
   filter: brightness(0.96);
-}
-
-/* 我的行：主蓝描边圈出（v3 .sc.me-cell） */
-.score-cell.me {
-  outline: 2px solid var(--soj-blue-line);
-  outline-offset: 1px;
 }
 
 .is-full {
@@ -88,12 +83,11 @@ function onClick() {
   color: var(--soj-ink-3);
 }
 
-/* 未满分次数角标（2026-10-27 拍板）：无背景纯数字，收在药丸右下角**内侧**——
-   旧款红底圆徽章带负偏移悬在药丸外，被表格 .cell 的 overflow 裁掉下半截 */
+/* 未满分次数：无背景纯数字，钉背景右下圆弧内（right 4px 起避开 8px 圆角），贴底缘 */
 .score-errors {
   position: absolute;
-  right: 3px;
-  bottom: 1px;
+  right: 4px;
+  bottom: 2px;
   color: var(--soj-wa);
   font-size: 10px;
   font-weight: var(--soj-fw-bold);

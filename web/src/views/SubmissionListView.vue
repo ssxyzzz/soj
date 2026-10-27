@@ -220,7 +220,7 @@ onUnmounted(() => {
 
     <el-card class="tbl-card">
       <el-table stripe v-loading="loading" :data="list">
-        <el-table-column label="状态" width="130">
+        <el-table-column label="状态" width="140">
           <template #default="{ row }">
             <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
               <template #content>

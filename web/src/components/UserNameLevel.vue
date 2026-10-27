@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// 昵称 + 等级一体渲染（v0.11）：整个「昵称 · Lv.10 极境」连名字一起装进一个等级胶囊——
-// 排名页与各成绩表的统一入口。胶囊复用 TierBadge（kind=level，v3-full 静态浅色形制），
-// 昵称与「·」经默认插槽进入胶囊内部；无等级时退纯昵称（不带胶囊）。
-// v0.17：传 uid 时整颗渲染为路由链接（跳 /users/:id 公开主页）——成绩表等消费端
+// 昵称 + 等级拆分渲染（2026-10-27 用户拍板，弃「名字装进等级胶囊」的聚合形态）：
+// 昵称平铺在外（纯文本/可点链接），等级单独一颗 TierBadge（kind=level，与顶栏/个人主页
+// 等处的独立等级徽章同款形制）；无等级时只渲染昵称。
+// 传 uid 时昵称渲染为路由链接（跳 /users/:id 公开主页）——成绩表等消费端
 // 行内自带点击的需自行 .stop（见 ScoreSummaryCard）。
 import { computed, onMounted } from 'vue'
 import { RouterLink } from 'vue-router'
@@ -14,7 +14,7 @@ const props = withDefaults(
   defineProps<{
     name: string
     level?: number | null // 学生等级 1–10；空则只渲染昵称
-    me?: boolean // 本人行：昵称主色加粗（Lv.10 渐变实底上改继承白字）
+    me?: boolean // 本人行：昵称主色加粗
     uid?: number | null // 用户 ID：传入则可点进公开主页（0/null = 纯展示）
   }>(),
   { level: null, me: false, uid: null },
@@ -36,20 +36,19 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
     class="unl-root"
     :title="fullText"
   >
-    <TierBadge v-if="level" :tier="tier" kind="level" size="sm" class="unl">
-      <span class="unl-name" :class="{ 'unl-me': me, 'unl-me-capsule': me }">{{ name }}</span>
-      <span class="unl-sep">·</span>
-      <span class="unl-tier-text">{{ tierText }}</span>
-    </TierBadge>
-    <span v-else class="unl-plain" :class="{ 'unl-me': me }">{{ name }}</span>
+    <span class="unl-name" :class="{ 'unl-me': me }">{{ name }}</span>
+    <TierBadge v-if="level" :tier="tier" kind="level" size="sm" class="unl">{{ tierText }}</TierBadge>
   </component>
 </template>
 
 <style scoped>
-/* 可点根：去链接下划线，悬停轻微降不透明度示意可进主页；限宽防表格溢出 */
+/* 根：内联弹性 + 限宽防表格溢出；可点根去链接下划线，悬停轻微降不透明度示意可进主页 */
 .unl-root {
   max-width: 100%;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   vertical-align: middle;
   text-decoration: none;
 }
@@ -63,29 +62,11 @@ a.unl-root:hover {
   opacity: 0.82;
 }
 
-/* 胶囊分支：限宽防溢出；名字列 overflow hidden 使 flex 项最小宽度归零，窄列可收缩出省略号 */
-.unl {
-  max-width: 100%;
-  vertical-align: middle;
-  justify-self: start;
-}
+/* 昵称列：overflow hidden 使 flex 项最小宽度归零，窄列可收缩出省略号 */
 .unl-name {
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.unl-sep {
-  margin: 0 4px;
-  opacity: 0.6;
-}
-
-/* 无等级：纯昵称，保持原截断行为 */
-.unl-plain {
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  vertical-align: middle;
 }
 
 .unl-me {
@@ -93,12 +74,11 @@ a.unl-root:hover {
   font-weight: var(--soj-fw-emphasis);
 }
 
-/* 等级胶囊（v0.21 实色炫彩版）内 me 高亮：主色蓝在实色底上不可读，改白字细下划线 */
-.unl-me-capsule {
-  color: #fff;
-  font-weight: var(--soj-fw-bold);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-color: rgba(255, 255, 255, 0.7);
+/* 等级徽章独立于昵称：不随昵称收缩 */
+.unl {
+  flex: none;
+  max-width: 100%;
+  vertical-align: middle;
+  justify-self: start;
 }
 </style>

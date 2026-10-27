@@ -285,7 +285,7 @@ onMounted(() => {
             </template>
           </el-table-column>
           <!-- 难度（2026-10-27）：TierBadge 与题库难度列同款（锁题隐藏期随行隐藏信息口径，不给难度也无妨——服务端已下发） -->
-          <el-table-column label="难度" width="104">
+          <el-table-column label="难度" width="110">
             <template #default="{ row }">
               <TierBadge :tier="(row as AssignmentProblem).difficulty || 3" kind="difficulty" />
             </template>

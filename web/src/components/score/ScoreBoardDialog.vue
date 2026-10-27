@@ -6,7 +6,7 @@ import UserNameLevel from '@/components/UserNameLevel.vue'
 import ScoreCell from './ScoreCell.vue'
 import type { ScoreBoardView, ScoreCellView, ScoreProblemView, ScoreRowView } from './types'
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     modelValue: boolean
     board: ScoreBoardView | null
@@ -54,13 +54,19 @@ function goProblem(p: ScoreProblemView) {
 function onInspect(row: ScoreRowView, p: ScoreProblemView) {
   emit('inspect', { uid: row.uid, name: row.name, pid: p.pid, title: p.title })
 }
+
+// 我的行整行淡蓝底（main.css .me-row 全局样式，与排名页/题单排名同款）——
+// 替代旧「我的行每格 2px 描边」的格级圈框（26 列即 26 个框，视觉噪音，2026-10-27 用户拍板去掉）
+function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
+  return { 'me-row': row.uid === props.myUid }
+}
 </script>
 
 <template>
   <el-dialog
     :model-value="modelValue"
     :title="title"
-    width="1020"
+    width="1200"
     top="4vh"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
@@ -86,9 +92,10 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
         stripe
         :data="board.rows"
         row-key="uid"
+        :row-class-name="rowClass as never"
         class="score-table"
       >
-        <el-table-column label="排名" width="54" align="center" fixed="left">
+        <el-table-column label="排名" width="60" align="center" fixed="left">
           <template #default="{ row }">{{ row.rank ?? '—' }}</template>
         </el-table-column>
         <el-table-column label="昵称" min-width="190" fixed="left">
@@ -103,8 +110,9 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
           v-for="p in board.problems"
           :key="p.pid"
           :label="p.label"
-          min-width="52"
+          min-width="64"
           align="center"
+          class-name="prob-col"
         >
           <template #header>
             <el-tooltip :content="p.title" placement="top" :show-after="200">
@@ -118,7 +126,6 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
             <ScoreCell
               :cell="cellOf(row as ScoreRowView, p)"
               :can-inspect="board.canInspect"
-              :me="row.uid === myUid"
               @inspect="onInspect(row as ScoreRowView, p)"
             />
           </template>
@@ -161,6 +168,15 @@ function onInspect(row: ScoreRowView, p: ScoreProblemView) {
   line-height: normal;
   padding-top: 5px;
   padding-bottom: 5px;
+}
+
+/* 题目列横向空间（2026-10-27）：.cell 默认左右内距 12px 把 52px 列宽吃到只剩 28px——
+   「T11」表头挤出省略点、36px 分数药丸两侧被裁、右下角错误次数角标整块落在裁切区外。
+   题目列内距收到 6px（64px 列宽 = 52px 内容，表头/药丸/角标全部放得下），行内看 26+ 列
+   依旧走表格横向滚动 */
+.score-table :deep(.prob-col .cell) {
+  padding-left: 6px;
+  padding-right: 6px;
 }
 
 .total {
