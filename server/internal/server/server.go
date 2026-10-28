@@ -339,6 +339,8 @@ func Run(ctx context.Context, deps *Deps) {
 				// 备份面板（v0.4.9）：按权限位鉴权；离线私钥接口的响应含一次性私钥
 				adminG.GET("/backup", RequirePerm(repo.PermBackupRun), h.BackupStatus)
 				adminG.POST("/backup/run", RequirePerm(repo.PermBackupRun), h.BackupRun)
+				adminG.POST("/backup/cancel", RequirePerm(repo.PermBackupRun), h.BackupCancel)
+				adminG.GET("/backup/download", RequirePerm(repo.PermBackupRun), h.BackupDownload)
 				adminG.POST("/backup/offline-key", RequirePerm(repo.PermBackupKeys), h.BackupOfflineKey)
 
 				// 标签树（v0.5.5）：仅 root 可改（硬编码不下放，同角色管理先例）；

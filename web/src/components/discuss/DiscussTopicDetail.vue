@@ -28,6 +28,11 @@ const replies = ref<DiscussReply[]>([])
 const gate = ref<{ code_threshold: number; can_view_code: boolean } | null>(null)
 const spoilerConfirmed = ref(false)
 
+// 主楼分页（v0.26）：顶层回复按页加载（楼中楼随本页主楼带出），replies 仍是扁平列表
+const REPLY_PAGE_SIZE = 20
+const replyPage = ref(1)
+const replyTotal = ref(0)
+
 // 回复框：replyTarget = 0 回主楼，否则楼中楼（回复某条顶层回复）
 const replyTarget = ref(0)
 const replyContent = ref('')
@@ -47,9 +52,10 @@ function childrenOf(rid: number): DiscussReply[] {
 async function load() {
   loading.value = true
   try {
-    const r = await discussApi.detail(props.tid)
+    const r = await discussApi.detail(props.tid, replyPage.value)
     topic.value = r.topic
     replies.value = r.replies
+    replyTotal.value = r.reply_total ?? r.replies.length
     gate.value = r.gate || null
     spoilerConfirmed.value = false
     editing.value = false
@@ -89,7 +95,12 @@ async function submitReply() {
     await discussApi.reply(topic.value.id, replyContent.value, replyTarget.value)
     ElMessage.success('回复成功')
     replyContent.value = ''
+    // 新主楼排在楼层末尾：跳到最后一页看自己的楼层；楼中楼留在本页
+    const isNewTop = replyTarget.value === 0
     replyTarget.value = 0
+    if (isNewTop) {
+      replyPage.value = Math.max(1, Math.ceil((replyTotal.value + 1) / REPLY_PAGE_SIZE))
+    }
     await load()
     emit('changed')
   } catch {
@@ -281,7 +292,7 @@ onMounted(load)
         <!-- 回复区 -->
         <div class="dtd-replies">
           <div class="dtd-replies-head">
-            回复 <span class="n">{{ replies.length }}</span>
+            回复 <span class="n">{{ replyTotal }}</span>
             <span v-if="topic.locked" class="lock-hint">（话题已锁定，不能回复）</span>
           </div>
           <el-empty v-if="!topLevel.length" description="还没有回复" :image-size="60" />
@@ -337,6 +348,21 @@ onMounted(load)
               </div>
             </div>
           </div>
+          <!-- 主楼分页（v0.26）：超过一页才出现 -->
+          <el-pagination
+            v-if="replyTotal > REPLY_PAGE_SIZE"
+            :current-page="replyPage"
+            :page-size="REPLY_PAGE_SIZE"
+            :total="replyTotal"
+            layout="prev, pager, next"
+            class="dtd-pager"
+            @current-change="
+              (p: number) => {
+                replyPage = p
+                load()
+              }
+            "
+          />
         </div>
 
         <!-- 回复框 -->
@@ -437,6 +463,14 @@ onMounted(load)
   border-radius: 10px;
   padding: 10px 12px;
   margin-bottom: 10px;
+}
+/* 主楼分页器：钉死宽度防 flex 祖先被撑开（与全站定宽列同款三件套） */
+.dtd-pager {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  justify-content: center;
+  margin-top: 4px;
 }
 .dtd-reply-head {
   display: flex;

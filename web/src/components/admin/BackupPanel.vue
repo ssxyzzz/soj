@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // 数据备份面板（v0.5.4 ② 拆分自 AdminView，v0.4.9/v0.5.1 实现）：
 // 状态卡 + 一键备份下载 + Tier 1 私钥一次性弹窗 + 内置使用说明。
+// v0.26 任务化：备份改后台任务（万题数据打包 GB 级不再占住请求）——run 启动即返、
+// 2s 轮询状态、可取消，完成后按文件名走下载接口流式取包。
 // 文案全部写死（2026-10-26 拍板）：不再提供站点自定义版本，原系统设置 backupGuide 字段退役。
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -10,7 +12,7 @@ import { adminApi } from '@/api'
 import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import { copyText } from '@/utils/clipboard'
-import { BACKUP_RUN_URL } from '@/types'
+import { BACKUP_DOWNLOAD_URL } from '@/types'
 import type { BackupStatus } from '@/types'
 
 const userStore = useUserStore()
@@ -59,6 +61,76 @@ const showOfflineKey = ref(false)
 const offlineKey = ref('')
 const keySaved = ref(false)
 
+// 备份任务（v0.26）：running 期 2s 轮询；终态提示一次后停表
+const jobState = computed(() => backupStatus.value?.job ?? null)
+const jobRunning = computed(() => jobState.value?.state === 'running')
+let pollTimer: ReturnType<typeof setInterval> | undefined
+
+function stopPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = undefined
+  }
+}
+
+function startPoll() {
+  stopPoll()
+  pollTimer = setInterval(async () => {
+    await loadBackup()
+    const st = jobState.value?.state
+    if (st && st !== 'running') {
+      stopPoll()
+      if (st === 'done') {
+        ElMessage.success('备份完成，服务器已留存；点文件名下载到本机')
+      } else if (st === 'cancelled') {
+        ElMessage.info('备份已取消')
+      } else {
+        ElMessage.error(`备份失败：${jobState.value?.error || '未知错误'}`)
+      }
+      backingUp.value = false
+    }
+  }, 2000)
+}
+
+async function runBackup() {
+  backingUp.value = true
+  try {
+    await adminApi.backupRun()
+    ElMessage.info('备份任务已启动，万题数据打包可能需要几分钟，可随时取消')
+    startPoll()
+  } catch {
+    backingUp.value = false // 拦截器已提示（如 409 已有任务进行中）
+  }
+}
+
+async function cancelBackup() {
+  await adminApi.backupCancel()
+  ElMessage.info('已请求取消')
+}
+
+// 下载服务器留存的归档（blob + 独立超时；鉴权头与全局同一身份源）
+async function downloadArchive(filename: string) {
+  const token = userStore.token
+  const r = await axios({
+    method: 'get',
+    url: BACKUP_DOWNLOAD_URL,
+    params: { file: filename },
+    responseType: 'blob',
+    timeout: 0,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  const url = URL.createObjectURL(r.data as Blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+  ElMessage.success(`已下载：${filename}`)
+}
+
+onMounted(loadBackup)
+onUnmounted(stopPoll)
+
 const backupModeMeta: Record<string, { label: string; type: 'info' | 'warning' | 'success'; desc: string }> = {
   uninitialized: {
     label: '尚未备份过',
@@ -83,34 +155,6 @@ async function loadBackup() {
     backupStatus.value = await adminApi.backupStatus()
   } finally {
     backupLoading.value = false
-  }
-}
-
-async function runBackup() {
-  backingUp.value = true
-  try {
-    // 密文归档可能不小且服务端同步生成：独立请求，放宽超时；鉴权头与全局同一身份源
-    const token = userStore.token
-    const r = await axios({
-      method: 'post',
-      url: BACKUP_RUN_URL,
-      responseType: 'blob',
-      timeout: 0,
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-    const cd = (r.headers['content-disposition'] as string) ?? ''
-    const m = /filename="?([^";]+)"?/.exec(cd)
-    const filename = m?.[1] ?? 'soj-backup.tar.age'
-    const url = URL.createObjectURL(r.data as Blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
-    ElMessage.success(`备份完成：${filename}（已下载到本机，服务器留存一份）`)
-    await loadBackup()
-  } finally {
-    backingUp.value = false
   }
 }
 
@@ -148,14 +192,12 @@ onMounted(loadBackup)
     <template #header>
       <div class="head">
         <span>数据备份</span>
-        <el-button
-          v-if="userStore.can('backup.run')"
-          type="primary"
-          :loading="backingUp"
-          @click="runBackup"
-        >
-          立即备份并下载到我的电脑
-        </el-button>
+        <template v-if="userStore.can('backup.run')">
+          <el-button v-if="jobRunning" type="warning" plain @click="cancelBackup">取消备份</el-button>
+          <el-button v-else type="primary" :loading="backingUp" @click="runBackup">
+            立即备份（服务器留存，完成后可下载）
+          </el-button>
+        </template>
       </div>
     </template>
     <div v-loading="backupLoading">
@@ -185,6 +227,24 @@ onMounted(loadBackup)
           </span>
         </template>
         <el-tag v-if="dbBackupStale" type="danger" size="small">库备超 25 小时——自动备份可能没在跑</el-tag>
+      </div>
+      <!-- 备份任务行（v0.26 任务化）：进行中常驻提示；终态给出产物下载入口 -->
+      <div v-if="jobState" class="job-row">
+        <template v-if="jobState.state === 'running'">
+          <el-tag type="primary" size="small">备份进行中（{{ jobState.tier }}）</el-tag>
+          <span class="muted">开始于 {{ new Date(jobState.started_at).toLocaleString() }}，万题数据打包可能需要几分钟</span>
+        </template>
+        <template v-else-if="jobState.state === 'done' && jobState.file">
+          <el-tag type="success" size="small">上次任务完成（{{ jobState.tier }}）</el-tag>
+          <el-button link type="primary" @click="downloadArchive(jobState.file!)">{{ jobState.file }}</el-button>
+        </template>
+        <template v-else-if="jobState.state === 'cancelled'">
+          <el-tag type="info" size="small">上次任务已取消</el-tag>
+        </template>
+        <template v-else>
+          <el-tag type="danger" size="small">上次任务失败</el-tag>
+          <span class="muted">{{ jobState.error }}</span>
+        </template>
       </div>
       <p class="backup-desc">{{ backupModeMeta[backupStatus?.mode ?? 'uninitialized']?.desc }}</p>
       <div v-if="userStore.can('backup.keys') && backupStatus?.mode !== 'tier1'" class="backup-actions">
@@ -281,6 +341,15 @@ onMounted(loadBackup)
 .backup-desc {
   margin: 12px 0;
   color: var(--el-text-color-regular);
+}
+
+/* 备份任务行（v0.26）：状态徽章 + 提示/下载链接，窄屏自动换行 */
+.job-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
 }
 
 .backup-actions {

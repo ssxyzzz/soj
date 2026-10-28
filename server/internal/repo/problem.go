@@ -3,6 +3,8 @@ package repo
 import (
 	"context"
 	"log"
+	"regexp"
+	"strconv"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -207,25 +209,107 @@ func (r *Repo) GetProblem(ctx context.Context, id int64) (*Problem, error) {
 	return &p, nil
 }
 
-// ListProblems 题库全量列表（v0.4 规模小，隐藏/锁题过滤与分页在 handler 按视角处理后切片）。
-func (r *Repo) ListProblems(ctx context.Context) ([]*Problem, error) {
-	// cases 元数据需随行返回（列表「无数据」标记取 len(Cases)，v0.6.1 验收反馈）——
-	// 单题几十 case 的元数据仅 KB 级，现实规模可接受；仍排除 statement 正文
-	cursor, err := r.Problems.Find(ctx, bson.M{},
-		options.Find().
-			SetProjection(bson.M{
-				"statement": 0,
-			}).
-			SetSort(bson.D{{Key: "_id", Value: 1}}))
+// ProblemListFilter 题库列表下推查询（v0.26）：搜索过滤 + 可见性反向排除，
+// 过滤与分页都在 DB 侧完成——原「全量 cursor.All 后内存过滤切片」在万题规模
+// 每请求传输几十 MB；下推后每请求只回当前页（≤100 条）。
+type ProblemListFilter struct {
+	ExcludeIDs []int64 // 反向排除（隐藏题 ∪ 非运行期锁题），由 handler 按视角算好（特权视角不排除）
+	Q          string  // 标题子串（不分大小写）∨ 题号精确匹配
+	Tags       []int64 // 知识标签并集
+	MetaTags   []int64 // 来源标签并集（子树展开后）
+	Difficulty []int   // 生效难度并集（EffDifficulty 语义：未设置/越界按 D3）
+}
+
+// ListProblemsPage 题库分页列表：DB 侧过滤 + _id 升序 + skip/limit，返回当前页与总数。
+func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, pageSize int) ([]*Problem, int64, error) {
+	query := bson.M{}
+	if len(f.ExcludeIDs) > 0 {
+		query["_id"] = bson.M{"$nin": f.ExcludeIDs}
+	}
+	if f.Q != "" {
+		// 题号口径与原实现一致：仅「纯数字且与格式化结果完全一致」按 ID 精确匹配（"0100" 不算 #100）
+		title := bson.M{"title": bson.M{"$regex": regexp.QuoteMeta(f.Q), "$options": "i"}}
+		if id, err := strconv.ParseInt(f.Q, 10, 64); err == nil && id > 0 && strconv.FormatInt(id, 10) == f.Q {
+			query["$or"] = bson.A{bson.M{"_id": id}, title}
+		} else {
+			query["title"] = title["title"]
+		}
+	}
+	if len(f.Tags) > 0 {
+		query["tags"] = bson.M{"$in": f.Tags}
+	}
+	if len(f.MetaTags) > 0 {
+		query["meta_tags"] = bson.M{"$in": f.MetaTags}
+	}
+	if len(f.Difficulty) > 0 {
+		// EffDifficulty 语义：difficulty 未设置/越界（非 1..10）按 D3——筛 D3 时须并上「无效值」文档；
+		// $nin 对缺失字段也命中，正好覆盖「未设置」
+		or := bson.A{bson.M{"difficulty": bson.M{"$in": f.Difficulty}}}
+		if intIn(f.Difficulty, 3) {
+			valid := bson.A{}
+			for d := 1; d <= 10; d++ {
+				valid = append(valid, d)
+			}
+			or = append(or, bson.M{"difficulty": bson.M{"$nin": valid}})
+		}
+		if prev, ok := query["$or"]; ok {
+			query["$and"] = bson.A{bson.M{"$or": prev}, bson.M{"$or": or}}
+			delete(query, "$or")
+		} else {
+			query["$or"] = or
+		}
+	}
+	total, err := r.Problems.CountDocuments(ctx, query)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	// cases 元数据需随行返回（列表「无数据」标记取 len(Cases)），仍排除 statement 正文
+	cursor, err := r.Problems.Find(ctx, query,
+		options.Find().
+			SetProjection(bson.M{"statement": 0}).
+			SetSort(bson.D{{Key: "_id", Value: 1}}).
+			SetSkip(int64((page - 1) * pageSize)).
+			SetLimit(int64(pageSize)))
+	if err != nil {
+		return nil, 0, err
 	}
 	defer cursor.Close(ctx)
 	list := make([]*Problem, 0)
 	if err := cursor.All(ctx, &list); err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
+// HiddenProblemIDs 全部隐藏题 ID（小集合：手动标记的备题/下架题），题库列表反向排除用。
+func (r *Repo) HiddenProblemIDs(ctx context.Context) ([]int64, error) {
+	cursor, err := r.Problems.Find(ctx, bson.M{"hidden": true},
+		options.Find().SetProjection(bson.M{"_id": 1}))
+	if err != nil {
 		return nil, err
 	}
-	return list, nil
+	defer cursor.Close(ctx)
+	var rows []struct {
+		ID int64 `bson:"_id"`
+	}
+	if err := cursor.All(ctx, &rows); err != nil {
+		return nil, err
+	}
+	ids := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ID)
+	}
+	return ids, nil
+}
+
+// intIn 定长小切片包含判断（避免为两处使用引入 slices 依赖口径分歧）。
+func intIn(xs []int, x int) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
 }
 
 // SetProblemHidden 设置主题库隐藏标记（权限由调用方校验）。

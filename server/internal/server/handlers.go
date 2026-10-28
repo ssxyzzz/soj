@@ -44,6 +44,10 @@ type Handlers struct {
 	// 批量导入（v0.15）：全站单任务（同一时刻仅一个导入任务）；job 在锁下创建/替换
 	batchMu sync.Mutex
 	batch   *batchImportJob
+
+	// 备份（v0.26 任务化）：与导入同款单任务骨架，后台打包不再占住 HTTP 请求
+	backupMu   sync.Mutex
+	backupTask *backupJob
 }
 
 // wakeJudge 提交/重测入队后唤醒判题 worker（多进程部署收不到，靠 1s 轮询兜底）。

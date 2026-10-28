@@ -561,8 +561,10 @@ export const adminApi = {
   updateRole: (id: string, body: { name?: string; perms?: string[] }) =>
     patch<{ id: string }>(`/admin/roles/${id}`, body),
   deleteRole: (id: string) => del<{ deleted: string }>(`/admin/roles/${id}`),
-  // 备份面板（v0.4.9）：密文归档下载在 AdminView 内联处理（blob + 独立超时）
+  // 备份面板（v0.26 任务化）：run 启动后台任务即返，轮询 status，完成后经 download 取包
   backupStatus: () => get<BackupStatus>('/admin/backup'),
+  backupRun: (tier?: 'db' | 'media' | 'all') => post<{ started: boolean; tier: string }>('/admin/backup/run', tier ? { tier } : {}),
+  backupCancel: () => post<{ cancel_requested: boolean }>('/admin/backup/cancel'),
   backupOfflineKey: () => post<{ private_key: string }>('/admin/backup/offline-key'),
 }
 
@@ -659,7 +661,7 @@ export const discussApi = {
   listGlobal: (params?: { category?: string; q?: string; page?: number }) =>
     get<DiscussListResult>('/discuss', params),
   createGlobal: (body: DiscussTopicBody) => post<{ id: number }>('/discuss', body),
-  detail: (tid: number) => get<DiscussTopicDetail>(`/discuss/${tid}`),
+  detail: (tid: number, page = 1) => get<DiscussTopicDetail>(`/discuss/${tid}`, { page }),
   update: (tid: number, body: DiscussTopicBody) => patch<{ updated: number }>(`/discuss/${tid}`, body),
   remove: (tid: number) => del<{ deleted: number }>(`/discuss/${tid}`),
   reply: (tid: number, content: string, replyTo?: number) =>

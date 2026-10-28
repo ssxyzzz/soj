@@ -3,6 +3,8 @@ package repo
 import (
 	"context"
 	"sort"
+	"strconv"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -260,7 +262,60 @@ type LeaderRow struct {
 	Problems    map[int64]*LeaderCell
 }
 
-// RoundSubmissions 某场比赛/考试的全部提交（榜单计算/组织者查看/选手赛后查看自己的）。
+// lbCache 已结束公布场次的榜单缓存（v0.26 userpage 收敛）：个人主页比赛历史每场现算
+// 完整榜单（全场提交聚合），多场次用户每次看主页都重算一遍。已结束场次的提交冻结，
+// 唯一变动源是管理端重测（RejudgeRound 清该场 / RejudgeProblem 清全部），TTL 兜底覆盖
+// 其余边缘（赛后收尾判题等最长 60s 延迟）。赛时榜单不经过缓存，保持现算口径。
+type lbCacheEntry struct {
+	rows []*LeaderRow
+	at   time.Time
+}
+
+var (
+	lbMu    sync.Mutex
+	lbCache = map[string]lbCacheEntry{}
+)
+
+const lbCacheTTL = time.Minute
+
+func lbCacheKey(kind string, roundID int64) string {
+	return kind + ":" + strconv.FormatInt(roundID, 10)
+}
+
+func invalidateLeaderboard(kind string, roundID int64) {
+	lbMu.Lock()
+	delete(lbCache, lbCacheKey(kind, roundID))
+	lbMu.Unlock()
+}
+
+func invalidateAllLeaderboards() {
+	lbMu.Lock()
+	lbCache = map[string]lbCacheEntry{}
+	lbMu.Unlock()
+}
+
+// RoundLeaderboardCached RoundLeaderboard 的 60s TTL 缓存版：仅供已结束场次的多读场景
+// （个人主页比赛历史），进行中场次必须用 RoundLeaderboard 现算（出分实时性）。
+func (r *Repo) RoundLeaderboardCached(ctx context.Context, kind string, roundID int64, fullScores map[int64]int) ([]*LeaderRow, error) {
+	key := lbCacheKey(kind, roundID)
+	lbMu.Lock()
+	if e, ok := lbCache[key]; ok && time.Since(e.at) < lbCacheTTL {
+		lbMu.Unlock()
+		return e.rows, nil
+	}
+	lbMu.Unlock()
+	rows, err := r.RoundLeaderboard(ctx, kind, roundID, fullScores)
+	if err != nil {
+		return nil, err
+	}
+	lbMu.Lock()
+	lbCache[key] = lbCacheEntry{rows: rows, at: time.Now()}
+	lbMu.Unlock()
+	return rows, nil
+}
+
+// RoundSubmissions 某场比赛/考试的全部提交（榜单计算/选手本人回看，调用方按 uid 过滤，
+// 天然有界——v0.26 修正注释：不存在「组织者整场」无界调用方）。
 func (r *Repo) RoundSubmissions(ctx context.Context, kind string, roundID int64, uid int64) ([]*Submission, error) {
 	filter := bson.M{roundsIDField(kind): roundID}
 	if uid > 0 {

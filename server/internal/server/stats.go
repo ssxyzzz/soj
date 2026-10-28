@@ -124,13 +124,16 @@ func (h *Handlers) userTier(ctx context.Context, uid int64) int {
 
 // GetSiteStats 站点统计（免登录可访；AuthOptional 供个性化今日一题读 uid）。
 // 60s 全局缓存防聚合压库；登录用户在缓存命中后按请求覆盖 Featured（不写回共享缓存）。
+// v0.26 缩界：聚合计算移出全局互斥锁（原持锁查库，Mongo 慢时统计请求串行排队）——
+// 锁只护缓存字段读写，缓存失效的并发请求各自计算、后写覆盖，代价可忽略。
 func (h *Handlers) GetSiteStats(c *gin.Context) {
-	statsMu.Lock()
-	defer statsMu.Unlock()
 	uid, _, _, logged := currentUser(c)
 
+	statsMu.Lock()
 	st := statsCache
-	if st == nil || time.Since(statsCacheAt) >= time.Minute {
+	fresh := st != nil && time.Since(statsCacheAt) < time.Minute
+	statsMu.Unlock()
+	if !fresh {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 		defer cancel()
 
@@ -180,7 +183,9 @@ func (h *Handlers) GetSiteStats(c *gin.Context) {
 		if pc > 0 {
 			st.Featured = h.pickFeatured(ctx, time.Now().Format("2006-01-02"), 0)
 		}
+		statsMu.Lock()
 		statsCache, statsCacheAt = st, time.Now()
+		statsMu.Unlock()
 	}
 
 	// 登录用户：按账号等级档推荐今日一题——种子 = 日期|uid（当天恒定），同档无题逐环外扩

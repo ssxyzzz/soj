@@ -204,11 +204,11 @@ func Run(ctx context.Context, o Options) (string, error) {
 	}
 	if tier == TierAll || tier == TierMedia {
 		tdPath := filepath.Join(tmp, testdataName)
-		if err := tarDirTo(o.DataDir, tdPath); err != nil {
+		if err := tarDirTo(ctx, o.DataDir, tdPath); err != nil {
 			return "", fmt.Errorf("打包测试数据失败: %w", err)
 		}
 		upPath := filepath.Join(tmp, uploadsName)
-		if err := tarDirTo(o.UploadsDir, upPath); err != nil {
+		if err := tarDirTo(ctx, o.UploadsDir, upPath); err != nil {
 			return "", fmt.Errorf("打包题面图片失败: %w", err)
 		}
 		files[testdataName] = tdPath
@@ -230,8 +230,11 @@ func Run(ctx context.Context, o Options) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := encryptArchive(tmpOut, rcpt, string(manifest), files); err != nil {
+	if err := encryptArchive(ctx, tmpOut, rcpt, string(manifest), files); err != nil {
 		os.Remove(tmpOut)
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("备份已取消")
+		}
 		return "", fmt.Errorf("加密打包失败: %w", err)
 	}
 	if err := os.Rename(tmpOut, out); err != nil {
@@ -243,6 +246,9 @@ func Run(ctx context.Context, o Options) (string, error) {
 
 // FormatTag 归档格式标识（restore.sh 按此识别）。
 func FormatTag() string { return "soj-backup" }
+
+// ArchivePrefix 归档文件名前缀（备份下载接口的白名单校验用，v0.26 任务化取包通道）。
+func ArchivePrefix() string { return archivePrefix }
 
 // FormatVersion 归档格式版本号（文件名 .v1 与 manifest 双重携带）。
 func FormatVersion() int { return 1 }
@@ -309,8 +315,24 @@ func runMongodump(ctx context.Context, uri, outPath string) error {
 	return nil
 }
 
+// ctxReader 每次读前检查取消（v0.26 任务化）：大文件流式拷贝（测试数据/图片 tar、
+// 加密打包）也能按 32KB 粒度及时中断，不必等整文件写完。mongodump 阶段保持原样
+//（库备体量小、cron 自动备份无取消场景），任务取消只覆盖 tar/加密两个大 pole。
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c *ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
+}
+
 // tarDirTo 把 src 目录打成 gzip 压缩 tar（条目相对 src 根；目录不存在时产出空包）。
-func tarDirTo(src, outPath string) error {
+// ctx 贯穿遍历与逐文件拷贝：任务取消即中断。
+func tarDirTo(ctx context.Context, src, outPath string) error {
 	f, err := os.Create(outPath)
 	if err != nil {
 		return err
@@ -332,6 +354,9 @@ func tarDirTo(src, outPath string) error {
 	err = filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if ctx.Err() != nil {
+			return ctx.Err() // 任务取消：中断遍历
 		}
 		if p == src {
 			return nil
@@ -360,18 +385,21 @@ func tarDirTo(src, outPath string) error {
 			return err
 		}
 		defer src.Close()
-		_, err = io.Copy(tw, src)
+		_, err = io.Copy(tw, &ctxReader{ctx: ctx, r: src})
 		return err
 	})
 	if err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("备份已取消")
+		}
 		return err
 	}
 	return closeAll()
 }
 
 // encryptArchive 流式加密：manifest 在前，其余文件按固定顺序从磁盘 io.Copy 进
-// tar+age 管道（万题库 testdata 包 10GB+，整读内存的旧实现会 OOM）。
-func encryptArchive(outPath string, rcpt age.Recipient, manifest string, files map[string]string) error {
+// tar+age 管道（万题库 testdata 包 10GB+，整读内存的旧实现会 OOM）。ctx 逐文件检查取消。
+func encryptArchive(ctx context.Context, outPath string, rcpt age.Recipient, manifest string, files map[string]string) error {
 	out, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
@@ -397,6 +425,9 @@ func encryptArchive(outPath string, rcpt age.Recipient, manifest string, files m
 		if !ok {
 			continue
 		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		fi, err := os.Stat(path)
 		if err != nil {
 			return err
@@ -408,7 +439,7 @@ func encryptArchive(outPath string, rcpt age.Recipient, manifest string, files m
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(tw, f); err != nil {
+		if _, err := io.Copy(tw, &ctxReader{ctx: ctx, r: f}); err != nil {
 			f.Close()
 			return err
 		}

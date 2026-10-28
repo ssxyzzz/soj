@@ -361,6 +361,9 @@ func (r *Repo) RejudgeProblem(ctx context.Context, pid int64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if res.ModifiedCount > 0 {
+		invalidateAllLeaderboards() // 重测会改已结束场次的名次，全量失效（缓存的是已冻结榜单）
+	}
 	return res.ModifiedCount, nil
 }
 
@@ -376,6 +379,9 @@ func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64,
 		rejudgeUpdate(PriorityLow))
 	if err != nil {
 		return 0, err
+	}
+	if res.ModifiedCount > 0 {
+		invalidateLeaderboard(kind, rid)
 	}
 	return res.ModifiedCount, nil
 }

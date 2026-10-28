@@ -299,9 +299,41 @@ func (r *Repo) InsertDiscussReply(ctx context.Context, rep *DiscussReply) error 
 	return err
 }
 
-// ListDiscussReplies 某主题的全部回复（按楼层正序，前端分组楼中楼）。
-func (r *Repo) ListDiscussReplies(ctx context.Context, tid int64) ([]*DiscussReply, error) {
-	cursor, err := r.DiscussReplies.Find(ctx, bson.M{"tid": tid},
+// DiscussReplyPageSize 话题详情主楼分页大小（v0.26）。
+const DiscussReplyPageSize = 20
+
+// ListDiscussReplyPage 主楼分页（v0.26）：返回一页顶层回复（楼层正序）与顶层总数——
+// 原「全部回复一次下发」在千楼热帖下响应大、前端渲染重；楼中楼由
+// ListDiscussReplyChildren 按本页主楼批量取（写入端已归一到顶层，单层查询即可）。
+// replyTo 带 omitempty：顶层楼字段缺失，$in [0, nil] 同时命中存量显式 0。
+func (r *Repo) ListDiscussReplyPage(ctx context.Context, tid int64, page int) ([]*DiscussReply, int64, error) {
+	filter := bson.M{"tid": tid, "replyTo": bson.M{"$in": bson.A{0, nil}}}
+	total, err := r.DiscussReplies.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	cursor, err := r.DiscussReplies.Find(ctx, filter,
+		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).
+			SetSkip(int64((page - 1) * DiscussReplyPageSize)).
+			SetLimit(int64(DiscussReplyPageSize)))
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+	list := make([]*DiscussReply, 0)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
+// ListDiscussReplyChildren 指定主楼集合的全部楼中楼（批量一次取，楼层正序）。
+func (r *Repo) ListDiscussReplyChildren(ctx context.Context, tid int64, topIDs []int64) ([]*DiscussReply, error) {
+	if len(topIDs) == 0 {
+		return nil, nil
+	}
+	cursor, err := r.DiscussReplies.Find(ctx,
+		bson.M{"tid": tid, "replyTo": bson.M{"$in": topIDs}},
 		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
 	if err != nil {
 		return nil, err

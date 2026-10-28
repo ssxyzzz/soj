@@ -678,8 +678,17 @@ export interface SolutionItem {
 
 // ---------- 备份（v0.4.9） ----------
 
-// 备份归档下载接口路径（集中在此：调用方引用常量名即可）
-export const BACKUP_RUN_URL = '/api/admin/backup/run'
+// 备份归档下载接口路径（v0.26 任务化取包通道：调用方引用常量名即可）
+export const BACKUP_DOWNLOAD_URL = '/api/admin/backup/download'
+
+export interface BackupJobState {
+  state: 'running' | 'done' | 'failed' | 'cancelled'
+  tier: string
+  error: string | null
+  file: string | null
+  started_at: string
+  ended_at: string | null
+}
 
 export interface BackupStatus {
   mode: 'uninitialized' | 'tier0' | 'tier1'
@@ -689,6 +698,7 @@ export interface BackupStatus {
   last_db_file?: string | null
   last_media_at?: string | null // 每周数据卷备最近一次
   last_media_file?: string | null
+  job?: BackupJobState | null // 当前/最近一次备份任务（v0.26；null = 尚未跑过）
 }
 
 // ---------- 角色与权限位（v0.4.7） ----------
@@ -910,6 +920,10 @@ export interface DiscussListResult {
 export interface DiscussTopicDetail {
   topic: DiscussTopic
   replies: DiscussReply[]
+  /** 顶层楼总数/当前页/总页数（v0.26 主楼分页；楼中楼随本页主楼带出） */
+  reply_total?: number
+  reply_page?: number
+  reply_pages?: number
   gate?: { code_threshold: number; can_view_code: boolean }
 }
 

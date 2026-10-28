@@ -85,7 +85,7 @@ onMounted(async () => {
     <section class="hero">
       <div class="kicker hero-kicker">SANDBOX JUDGED · INSTANT SCORED</div>
       <h1 class="title">每一次提交，<br />都是一次<em>成长</em>。</h1>
-      <p class="subtitle">面向班级与社团的轻量 Online Judge：提交代码，沙箱判题，实时出分。</p>
+      <p class="subtitle">面向班级与社团的顶级轻量 Online Judge：提交代码，沙箱判题，实时出分。</p>
       <div class="hero-search">
         <label class="searchbar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>

@@ -31,16 +31,6 @@ func atoiDefault(s string, def int) int {
 	return def
 }
 
-// hasAnyTag 题目标签是否命中任一选中 ID（并集、精确匹配）。
-func hasAnyTag(tags []int64, sel map[int64]bool) bool {
-	for _, id := range tags {
-		if sel[id] {
-			return true
-		}
-	}
-	return false
-}
-
 // orEmptyInt64 nil 切片转空切片，JSON 输出 [] 而非 null。
 func orEmptyInt64(s []int64) []int64 {
 	if s == nil {
@@ -49,27 +39,25 @@ func orEmptyInt64(s []int64) []int64 {
 	return s
 }
 
-// ListProblems 题库列表（按视角过滤）：
+// ListProblems 题库列表（按视角过滤，v0.26 起 DB 侧过滤分页）：
 //   - 题目隐藏（hidden）对无「题库全量可见」的视角一律不出现（v0.7 起任何场景均隐藏，比赛/考试也不可见）；
 //   - 被赛事收录（隐藏期=赛前/赛中/赛后未发布）的题：非 running 阶段对受影响视角不出现，
 //     running 阶段带锁标记由前端引导进赛事做题页；
 //   - admin/root 可见全部并带标记；
 //   - tags=1,5,9 标签筛选：并集、精确匹配节点 ID（v0.5.5）。
+//
+// 可见性用「反向排除」下推（v0.26）：隐藏题与非运行期锁题都是小集合，先取 ID 集放进
+// $nin，搜索/标签/难度/来源过滤与分页全在 Mongo 侧——每请求只回当前页（≤100 条）。
 func (h *Handlers) ListProblems(c *gin.Context) {
 	uid, _, role, logged := currentUser(c)
 	page, pageSize := queryPage(c)
 	privileged := hasPerm(c, repo.PermProblemViewAll)
 	// 题库搜索：标题包含（忽略大小写）或 ID 精确匹配
 	q := strings.TrimSpace(c.Query("q"))
-	ql := strings.ToLower(q)
 	tagSel, err := parseTagFilter(c.Query("tags"))
 	if err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
-	}
-	selSet := map[int64]bool{}
-	for _, id := range tagSel {
-		selSet[id] = true
 	}
 	// 难度筛选（v0.11）：difficulty=5 或逗号列表 difficulty=1,2,3
 	diffSel := map[int]bool{}
@@ -96,10 +84,6 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		}
 		metaSel = repo.CollectSubtreeIDs(metaNodes, metaSel)
 	}
-	metaSet := map[int64]bool{}
-	for _, id := range metaSel {
-		metaSet[id] = true
-	}
 	// 生效语义（非特权可见性过滤）与展示视角分开：view 版仅用于锁定标记字段，
 	// root/admin 的全量锁不得参与隐藏过滤
 	lockMap, err := h.loadLockMap(ctx, uid, role)
@@ -112,34 +96,32 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取比赛状态失败")
 		return
 	}
-	all, err := h.repo.ListProblems(ctx)
+
+	filter := repo.ProblemListFilter{Q: q, Tags: tagSel, MetaTags: metaSel}
+	for d := range diffSel {
+		filter.Difficulty = append(filter.Difficulty, d)
+	}
+	if !privileged {
+		hidden, err := h.repo.HiddenProblemIDs(ctx)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取题库失败")
+			return
+		}
+		filter.ExcludeIDs = append(filter.ExcludeIDs, hidden...)
+		for pid, lk := range lockMap {
+			if lk.Phase != "running" {
+				filter.ExcludeIDs = append(filter.ExcludeIDs, pid)
+			}
+		}
+	}
+	probs, total, err := h.repo.ListProblemsPage(ctx, filter, page, pageSize)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取题库失败")
 		return
 	}
 
-	items := make([]gin.H, 0)
-	for _, p := range all {
-		if q != "" && strconv.FormatInt(p.ID, 10) != q && !strings.Contains(strings.ToLower(p.Title), ql) {
-			continue
-		}
-		if len(selSet) > 0 && !hasAnyTag(p.Tags, selSet) {
-			continue
-		}
-		lk := lockMap[p.ID]
-		if !privileged {
-			// 题目隐藏：任何场景都对无权限视角隐藏（备题用，比赛/考试题目表同理）
-			// 赛事隐藏期的非 running 阶段（赛前/赛后未发布）同理不出现，running 交给前端引导
-			if p.Hidden || (lk != nil && lk.Phase != "running") {
-				continue
-			}
-		}
-		if len(diffSel) > 0 && !diffSel[p.EffDifficulty()] {
-			continue
-		}
-		if len(metaSet) > 0 && !hasAnyTag(p.MetaTags, metaSet) {
-			continue
-		}
+	items := make([]gin.H, 0, len(probs))
+	for _, p := range probs {
 		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags), "meta_tags": orEmptyInt64(p.MetaTags), "has_cases": len(p.Cases) > 0, "difficulty": p.EffDifficulty()}
 		// 题型徽章（v0.9）：客观题另带小类；函数/交互题只给 type（空 = 传统题不返回）
 		if p.Type != "" {
@@ -168,26 +150,16 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	total := len(items)
-	start := (page - 1) * pageSize
-	if start > total {
-		start = total
-	}
-	end := start + pageSize
-	if end > total {
-		end = total
-	}
-	pageItems := items[start:end]
 	// 通过率统计：只聚合当前页题目的公开态提交；失败不阻塞列表（前端显示 -）
-	pids := make([]int64, 0, len(pageItems))
-	for _, it := range pageItems {
+	pids := make([]int64, 0, len(items))
+	for _, it := range items {
 		pids = append(pids, it["id"].(int64))
 	}
 	stats, err := h.repo.ListProblemStats(ctx, pids)
 	if err != nil {
 		stats = map[int64]repo.ProblemStat{}
 	}
-	for _, it := range pageItems {
+	for _, it := range items {
 		st := stats[it["id"].(int64)]
 		it["submit_count"] = st.Total
 		it["accepted_count"] = st.Accepted
@@ -196,7 +168,7 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 	// 失败不阻塞列表（该列回退未做）
 	if logged {
 		if bests, err := h.repo.UserBestStatuses(ctx, uid, pids); err == nil {
-			for _, it := range pageItems {
+			for _, it := range items {
 				if st := bests[it["id"].(int64)]; st.Status != "" {
 					it["status"] = st.Status
 					it["my_score"] = st.Score
@@ -204,7 +176,7 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 			}
 		}
 	}
-	ok(c, gin.H{"list": pageItems, "total": total})
+	ok(c, gin.H{"list": items, "total": total})
 }
 
 // GetProblem 题目详情（含按视角的锁题/隐藏判定与样例按需读取）。

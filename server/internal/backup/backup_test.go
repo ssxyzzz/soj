@@ -5,6 +5,7 @@ package backup
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -68,7 +69,7 @@ func TestStreamingEncryptRoundTrip(t *testing.T) {
 
 	tmp := t.TempDir()
 	tdTar := filepath.Join(tmp, testdataName)
-	if err := tarDirTo(src, tdTar); err != nil {
+	if err := tarDirTo(context.Background(), src, tdTar); err != nil {
 		t.Fatal(err)
 	}
 	id, err := age.GenerateX25519Identity()
@@ -76,7 +77,7 @@ func TestStreamingEncryptRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	enc := filepath.Join(tmp, "enc.tar.age")
-	if err := encryptArchive(enc, id.Recipient(), `{"tier":"media"}`, map[string]string{
+	if err := encryptArchive(context.Background(), enc, id.Recipient(), `{"tier":"media"}`, map[string]string{
 		testdataName: tdTar,
 	}); err != nil {
 		t.Fatal(err)

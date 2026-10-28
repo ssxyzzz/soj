@@ -767,11 +767,24 @@ func (h *Handlers) GetDiscussTopic(c *gin.Context) {
 		}
 	}
 
-	replies, err := h.repo.ListDiscussReplies(c.Request.Context(), tid)
+	// 主楼分页（v0.26）：顶层回复按页取，楼中楼随本页主楼批量带出——前端收到的仍是
+	// 扁平 replies（分组逻辑不变），总量/页码单发供分页器使用
+	replyPage := atoiDefault(c.Query("page"), 1)
+	tops, replyTotal, err := h.repo.ListDiscussReplyPage(c.Request.Context(), tid, replyPage)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取回复失败")
 		return
 	}
+	topIDs := make([]int64, 0, len(tops))
+	for _, r := range tops {
+		topIDs = append(topIDs, r.ID)
+	}
+	children, err := h.repo.ListDiscussReplyChildren(c.Request.Context(), tid, topIDs)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取回复失败")
+		return
+	}
+	replies := append(tops, children...)
 	uids := authorUIDsReplies(replies)
 	uids = append(uids, t.UID)
 	users := h.discussAuthors(c.Request.Context(), uids)
@@ -801,7 +814,13 @@ func (h *Handlers) GetDiscussTopic(c *gin.Context) {
 	for _, r := range replies {
 		items = append(items, replyJSON(r, users, replyLiked, threshold, canViewCode))
 	}
-	resp := gin.H{"topic": tj, "replies": items}
+	resp := gin.H{
+		"topic":       tj,
+		"replies":     items,
+		"reply_total": replyTotal, // 顶层楼总数（分页口径，不含楼中楼）
+		"reply_page":  replyPage,
+		"reply_pages": (replyTotal + int64(repo.DiscussReplyPageSize) - 1) / int64(repo.DiscussReplyPageSize),
+	}
 	if t.Scope == repo.DiscussScopeProblem {
 		resp["gate"] = gin.H{"code_threshold": threshold, "can_view_code": canViewCode}
 	}

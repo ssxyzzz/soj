@@ -131,8 +131,15 @@ func (h *Handlers) AdminReplaceTagTree(c *gin.Context) {
 				}
 				details = append(details, gin.H{"id": p.ID, "title": p.Title, "tags": tagNames})
 			}
+			// 明细限量（v0.26）：删大标签时全部引用题的清单可能数 MB（错误响应体），
+			// 截到 500 与「一键解绑」单次上限对齐，总数仍在提示文案里
+			truncated := ""
+			if len(details) > 500 {
+				details = details[:500]
+				truncated = "（明细仅列前 500 题，请按标签逐批解绑）"
+			}
 			failData(c, http.StatusBadRequest,
-				fmt.Sprintf("标签「%s」被 %d 道题使用，请先在题目上解绑再删除", names[firstID], len(refs)),
+				fmt.Sprintf("标签「%s」被 %d 道题使用，请先在题目上解绑再删除%s", names[firstID], len(refs), truncated),
 				gin.H{"problems": details, "removed_ids": removed})
 			return
 		}
