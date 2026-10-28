@@ -3,6 +3,15 @@
 # 构建版本（v0.28 发版可追溯）：注入二进制的 soj/internal/server.Version，/api/health 回显
 VERSION ?= $(shell git describe --always --dirty 2>/dev/null || echo dev)
 
+# 工具链自举路径（scripts/toolchain.sh 装到 ~/.local/opt；其 .bashrc PATH 行在
+# 非交互 ssh 远程命令下不生效——Ubuntu .bashrc 顶部对非交互 shell 提前 return）。
+# 服务器 make up → check 需要 go/npm，这里按存在性显式前置；本机/CI 已有系统
+# 工具链时 wildcard 为空、PATH 原样
+empty :=
+space := $(empty) $(empty)
+TOOLCHAIN_PATH := $(subst $(space),:,$(wildcard $(HOME)/.local/opt/go/bin $(HOME)/.local/opt/node-*/bin))
+export PATH := $(TOOLCHAIN_PATH)$(if $(TOOLCHAIN_PATH),:)$(PATH)
+
 check: ## 全量门禁：lint + go test + 前端 typecheck + build（CI 与 make up 共用）
 	$(MAKE) lint
 	cd server && go test ./...
@@ -28,7 +37,7 @@ ps: ## 查看服务状态
 backup: ## 备份 MongoDB 与测试数据到 ./backups/
 	./scripts/backup.sh
 
-image: ## 重建 soj 镜像并重启容器（让镜像内版本追上热替换版本，平时不必跑）
+image: ## 重建 soj 镜像并重启容器（不编译前端：嵌入的是 webui/dist 现有产物——单独用它部署前先 make web-building，否则拿旧前端；make up 已含构建与对齐）
 	SOJ_VERSION=$(VERSION) docker compose up -d --build soj
 
 bin: ## 快速编译发版，不过门禁不重建镜像（仅限开发机调试；服务器例行发版一律 make up）
