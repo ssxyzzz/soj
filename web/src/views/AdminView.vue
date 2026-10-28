@@ -141,7 +141,7 @@ async function switchSubTab(target: SubTab) {
         @click="switchSection('settings')"
       >
         <span class="nav-title">系统设置</span>
-        <span class="nav-sub">提交限速等</span>
+        <span class="nav-sub">基础 / 邮箱 / 讨论区 / 账号</span>
       </div>
       <div
         v-if="userStore.can('backup.run') || userStore.can('backup.keys')"
