@@ -39,12 +39,13 @@ const (
 	SecDiscussDelete = "discuss_delete" // v0.24：讨论区管理删帖
 	SecDiscussMute   = "discuss_mute"   // v0.24：禁言/解禁
 	SecBroadcast     = "broadcast"      // v0.24：全站公告广播
+	SecUserImport    = "user_import"    // v0.24 小批：CSV 批量建号
 )
 
 var SecurityLogTypes = []string{
 	SecLoginSuccess, SecLoginFailure, SecLoginLocked,
 	SecPwdChange, SecPwdResetAdmin, SecPwdReset, SecEmailBind, SecEmailUnbind, SecRateLimited,
-	SecDiscussDelete, SecDiscussMute, SecBroadcast,
+	SecDiscussDelete, SecDiscussMute, SecBroadcast, SecUserImport,
 }
 
 func (r *Repo) AddSecurityLog(ctx context.Context, e SecurityLog) error {

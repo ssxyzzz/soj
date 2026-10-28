@@ -427,6 +427,15 @@ export const adminApi = {
     }),
   createUser: (username: string, password: string, nickname: string, role: string, id?: number) =>
     post<{ id: number }>('/admin/users', { username, password, nickname, role, id }),
+  // 批量建号（v0.24 小批）：CSV 上传逐行 best-effort，失败行全量返回；模板下载走 download.ts 的 downloadFile
+  importUsers: (form: FormData) =>
+    client
+      .post<ApiResponse<{ total: number; success: number; failed: { row: number; username: string; reason: string }[] }>>(
+        '/admin/users/import',
+        form,
+        { timeout: 0 },
+      )
+      .then((r) => r.data.data),
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; username?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>

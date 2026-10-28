@@ -5,9 +5,11 @@
 // 角色胶囊色：root 红 / admin 橙 / teacher 蓝 / 其余（自定义角色、default）灰。
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { UploadUserFile } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 
 import { adminApi } from '@/api'
+import { downloadFile } from '@/api/download'
 import { verifyApi } from '@/api/verify'
 import TierBadge from '@/components/TierBadge.vue'
 import { useAdminRolesStore } from '@/stores/adminRoles'
@@ -115,6 +117,48 @@ async function create() {
   } finally {
     creating.value = false
   }
+}
+
+// ---- 批量建号（CSV 表格导入，v0.24 小批）----
+const showImport = ref(false)
+const importing = ref(false)
+const importFile = ref<UploadUserFile[]>([])
+const importResult = ref<{ total: number; success: number; failed: { row: number; username: string; reason: string }[] } | null>(null)
+
+function downloadTemplate() {
+  downloadFile('/admin/users/import-template', 'SOJ批量建号模板.csv')
+}
+
+function onImportFile(file: UploadUserFile) {
+  importFile.value = [file]
+}
+
+async function runImport() {
+  const f = importFile.value[0]?.raw as File | undefined
+  if (!f) {
+    ElMessage.warning('请先选择 CSV 文件')
+    return
+  }
+  importing.value = true
+  importResult.value = null
+  try {
+    const fd = new FormData()
+    fd.append('file', f)
+    importResult.value = await adminApi.importUsers(fd)
+    if (importResult.value.success > 0) {
+      ElMessage.success(`批量建号完成：成功 ${importResult.value.success} 个`)
+      await load()
+    } else {
+      ElMessage.warning('没有一个账号创建成功，请查看失败明细')
+    }
+  } finally {
+    importing.value = false
+  }
+}
+
+function resetImport() {
+  importFile.value = []
+  importResult.value = null
 }
 
 // ---- 编辑弹窗：用户名 / 昵称 / 密码 / 确认密码 ----
@@ -281,6 +325,7 @@ defineExpose({ refresh: () => load() })
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input v-model="keyword" placeholder="搜索用户（用户名 / 昵称）" />
         </label>
+        <el-button size="small" @click="showImport = true; resetImport()">批量导入</el-button>
         <el-button type="primary" size="small" @click="showCreate = true">新建用户</el-button>
       </div>
     </div>
@@ -330,6 +375,47 @@ defineExpose({ refresh: () => load() })
       :description="keyword ? `没有匹配「${keyword.trim()}」的用户` : '暂无用户'"
       :image-size="60"
     />
+
+    <!-- 批量建号（v0.24 小批）：下载模板 → 填表 → 上传 CSV；逐行 best-effort，失败行全量明细 -->
+    <el-dialog v-model="showImport" title="批量导入用户" width="640">
+      <el-alert
+        title="三步：下载模板 → 按列填写（id 可留空自动分配，从 100 起）→ 上传 CSV"
+        type="info"
+        :closable="false"
+        style="margin-bottom: 14px"
+      />
+      <div class="import-actions">
+        <el-button @click="downloadTemplate">⬇ 下载模板</el-button>
+        <el-upload
+          :file-list="importFile"
+          accept=".csv"
+          :auto-upload="false"
+          :limit="1"
+          :on-change="onImportFile"
+          :on-remove="() => (importFile = [])"
+          style="flex: 1"
+        >
+          <el-button>选择 CSV 文件</el-button>
+        </el-upload>
+      </div>
+      <template v-if="importResult">
+        <el-divider content-position="left">导入结果</el-divider>
+        <p class="import-summary">
+          共 {{ importResult.total }} 行 · 成功
+          <b class="ok">{{ importResult.success }}</b> · 失败
+          <b class="bad">{{ importResult.failed.length }}</b>
+        </p>
+        <el-table v-if="importResult.failed.length" :data="importResult.failed" size="small" max-height="240">
+          <el-table-column label="表格行号" prop="row" width="90" />
+          <el-table-column label="用户名" prop="username" width="150" show-overflow-tooltip />
+          <el-table-column label="失败原因" prop="reason" min-width="180" show-overflow-tooltip />
+        </el-table>
+      </template>
+      <template #footer>
+        <el-button @click="showImport = false">关闭</el-button>
+        <el-button type="primary" :loading="importing" @click="runImport">开始导入</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="showCreate" title="新建用户" width="560">
       <el-form label-position="top">
@@ -526,5 +612,25 @@ defineExpose({ refresh: () => load() })
 
 .xp-loading {
   color: var(--el-text-color-secondary);
+}
+
+/* 批量建号（v0.24 小批） */
+.import-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.import-summary {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+.import-summary .ok {
+  color: var(--el-color-success);
+}
+
+.import-summary .bad {
+  color: var(--el-color-danger);
 }
 </style>

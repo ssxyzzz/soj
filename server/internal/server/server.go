@@ -323,6 +323,9 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.GET("/users", RequirePerm(repo.PermAdminUserManage), h.AdminListUsers)
 				adminG.POST("/users", RequirePerm(repo.PermAdminUserManage), h.AdminCreateUser)
 				adminG.PATCH("/users/:id", RequirePerm(repo.PermAdminUserManage), h.AdminUpdateUser)
+				// 批量建号（v0.24 小批）：CSV 模板下载 + 表格导入，与建号同权限位
+				adminG.GET("/users/import-template", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportTemplate)
+				adminG.POST("/users/import", RequirePerm(repo.PermAdminUserManage), h.AdminImportUsers)
 				// 解绑邮箱（v0.16）：root 硬编码（学生换邮箱场景，不设权限位）
 				adminG.DELETE("/users/:id/email", RequireRoot(), h.AdminUnbindEmail)
 				adminG.GET("/settings", RequirePerm(repo.PermAdminSettings), h.GetSettings)

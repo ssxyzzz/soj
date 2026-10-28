@@ -16,6 +16,10 @@ const typeMeta: Record<string, { label: string; kind: 'success' | 'danger' | 'wa
   email_bind: { label: '绑定邮箱', kind: 'primary' },
   email_unbind: { label: '解绑邮箱', kind: 'warning' },
   rate_limited: { label: '限流拦截', kind: 'info' },
+  discuss_delete: { label: '删除讨论', kind: 'danger' },
+  discuss_mute: { label: '讨论禁言', kind: 'warning' },
+  broadcast: { label: '全站广播', kind: 'primary' },
+  user_import: { label: '批量建号', kind: 'primary' },
 }
 
 const list = ref<SecurityLogItem[]>([])
