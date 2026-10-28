@@ -10,8 +10,12 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    # 单节点副本集：既是"一个 MongoDB"，又解锁事务能力（见 DEVELOPMENT.md 4.2）
-    command: ["--replSet", "rs0", "--bind_ip_all"]
+    # 单节点副本集：既是"一个 MongoDB"，又解锁事务能力（见 DEVELOPMENT.md 4.2）；
+    # WT 缓存显式限 1G（默认吃掉宿主约一半内存，会挤压判题与前端），生产按机在
+    # docker-compose.override.yml 调大（v0.28 资源上限批）
+    command: ["--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "1"]
+    # 资源上限（v0.28）：与 WT 缓存匹配留出连接/排序开销，防内存挤压整机
+    mem_limit: 2g
     volumes:
       - mongo-data:/data/db
     ports:
@@ -41,7 +45,14 @@ services:
       context: ./server
       additional_contexts:
         web: ./web
+      args:
+        # 构建版本注入（v0.28 发版可追溯）：make up/image 会带上 git describe，
+        # 裸 compose build 时为 dev
+        SOJ_VERSION: ${SOJ_VERSION:-dev}
     restart: unless-stopped
+    # 资源上限（v0.28）：判题/导入/备份均流式化，常规 RSS 远低于此；溢出会被
+    # OOM kill（restart 拉起 + 租约自愈），好过拖垮宿主上的 mongo/沙箱
+    mem_limit: 1g
     logging: *default-logging
     healthcheck:
       # v0.27：Health 在 db/sandbox 任一不通时返回 503，容器态直接反映依赖健康

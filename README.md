@@ -154,10 +154,12 @@ make lint     # ESLint + go vet（+ staticcheck 如已安装）
 rsync -a --exclude node_modules --exclude .git --exclude backups --exclude .env \
   --exclude .mimosa --exclude docker-compose.override.yml \
   --exclude plan.md --exclude private_doc --exclude AGENTS.md --exclude web-design.md --exclude web-design-v3.md --exclude web-design-v3-full.md --exclude notes.md ~/soj 服务器别名:~/
-ssh 服务器别名 'cd ~/soj && make up && docker compose up -d --build soj'
+ssh 服务器别名 'cd ~/soj && make up'
 ```
 
 （`plan.md` / `notes.md` / `private_doc/` / `AGENTS.md` / 各设计文档（web-design*）只留开发机，不随部署上服务器；rsync 只加不删，改排除项后记得手动清一次服务器上的旧副本。）
+
+**发版口径（v0.28 收紧）**：服务器例行发版一律 `make up`（先过全量门禁 lint/test/typecheck/build，再热替换并重建镜像，容器重建/宿主机重启不回退）；`make bin` 仅限开发机快速调试（不过门禁、不重建镜像）。每次构建都会把 `git describe` 版本注入二进制，`curl localhost/api/health` 的 `version` 字段可随时核对线上跑的是哪个提交。
 
 建议封装成本地 `scripts/sync-to-server.sh`（**不入库**，各机自建：目标别名因机而异）——完成上面两步并做 `/api/health` 健康检查；`--no-build` 只同步不构建，`SOJ_HOST` 覆盖目标机。
 

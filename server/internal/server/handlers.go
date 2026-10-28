@@ -15,6 +15,10 @@ import (
 	"soj/internal/testdata"
 )
 
+// Version 构建版本（v0.28 发版可追溯）：web-building.sh 与镜像构建经 ldflags 注入
+// `git describe --always --dirty`，本地 go run 时为 dev；/api/health 回显供线上核对。
+var Version = "dev"
+
 // leaderEntry 比赛榜单缓存条目（TTL/容量治理见 round.go 的 leaderCachePut）。
 type leaderEntry struct {
 	at   time.Time
@@ -81,7 +85,7 @@ func (h *Handlers) Health(c *gin.Context) {
 	defer cancel()
 	dbOK := h.repo.Ping(ctx) == nil
 	sbOK := h.sandbox.Available(ctx)
-	body := gin.H{"code": 0, "data": gin.H{"db": dbOK, "sandbox": sbOK}}
+	body := gin.H{"code": 0, "data": gin.H{"db": dbOK, "sandbox": sbOK, "version": Version}}
 	if dbOK && sbOK {
 		c.JSON(http.StatusOK, body)
 		return

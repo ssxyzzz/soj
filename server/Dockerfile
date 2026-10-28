@@ -6,6 +6,9 @@
 FROM golang:1.26-alpine AS build
 ARG GOPROXY=https://goproxy.cn,direct
 ENV GOPROXY=${GOPROXY}
+# 构建版本（v0.28 发版可追溯）：compose 构建时经 build args 注入 git describe，
+# 与 web-building.sh 热替换二进制同源；默认 dev（裸 docker compose build 场景）
+ARG SOJ_VERSION=dev
 WORKDIR /src
 
 # 缓存挂载（A）：模块与编译缓存在多次构建间持久——嵌入前端变化导致的必然重编译
@@ -16,7 +19,7 @@ COPY . .
 COPY --from=web ./dist ./internal/webui/dist
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/soj ./cmd/soj
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X soj/internal/server.Version=${SOJ_VERSION}" -o /out/soj ./cmd/soj
 
 # 运行阶段
 FROM alpine:3.21

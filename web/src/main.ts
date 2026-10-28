@@ -1,8 +1,13 @@
 import { createPinia } from 'pinia'
 import { createApp } from 'vue'
-import ElementPlus from 'element-plus'
-import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
-import 'element-plus/dist/index.css'
+
+// Element Plus 按需（v0.28 打包批）：模板组件由 unplugin-vue-components 自动按需
+// 引入（含样式），全量注册与 dist/index.css 退役；此处只补模板解析器覆盖不到的
+// 样式——程序化调用的 ElMessage / ElMessageBox 与 v-loading 指令（直接 import JS
+// 不带样式）。中文 locale 移至 App.vue 的 ElConfigProvider。
+import 'element-plus/es/components/message-box/style/css'
+import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/loading/style/css'
 
 import App from './App.vue'
 import router from './router'
@@ -14,5 +19,4 @@ initTheme() // 主题（默认 v5 新案）在挂载前落到 <html data-theme>�
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
-app.use(ElementPlus, { locale: zhCn })
 app.mount('#app')

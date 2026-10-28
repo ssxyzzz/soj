@@ -87,8 +87,10 @@ sync_embed() {
 }
 go_build() {
   cd "$ROOT/server"
-  # -v 把正在编译的包名打进行日志：实时区有真实进度可看；热缓存时几乎无输出、秒完
-  CGO_ENABLED=0 go build -v -trimpath -ldflags="-s -w" -o bin/soj ./cmd/soj
+  # 版本注入（v0.28 发版可追溯）：与镜像构建同源（git describe），/api/health 回显核对
+  local ver
+  ver="$(git -C "$ROOT" describe --always --dirty 2>/dev/null || echo dev)"
+  CGO_ENABLED=0 go build -v -trimpath -ldflags="-s -w -X soj/internal/server.Version=$ver" -o bin/soj ./cmd/soj
 }
 deploy_swap() {
   docker cp "$ROOT/server/bin/soj" "$SOJ_CID":/app/soj
@@ -113,7 +115,7 @@ SOJ_CID="$(cd "$ROOT" && docker compose ps -q soj)"
 if [ -n "$SOJ_CID" ]; then
   run_live "热替换+重启" "$LOG" deploy_swap
   ok "部署完成！浏览器 Ctrl+F5 强刷即可看到最新版本"
-  echo -e "    镜像内版本暂落后于热替换版本（容器重建会回退），定期 ${C_INFO}make image${C_END} 对齐"
+  echo -e "    版本核对：curl localhost/api/health 的 version 字段；例行发版用 ${C_INFO}make up${C_END}（先过门禁、镜像恒对齐，容器重建不回退）"
 else
   step "  未检测到运行中的 SOJ 容器，兜底重建镜像并启动"
   run_live "镜像重建+启动" "$DOCKER_LOG" docker_up
