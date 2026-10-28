@@ -17,6 +17,7 @@ import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import type { UserPrefs } from '@/types'
 import { bindCopyFeedback } from '@/utils/md'
+import { VDITOR_CDN } from '@/utils/vditorCdn'
 
 const props = withDefaults(
   defineProps<{
@@ -266,7 +267,7 @@ onMounted(async () => {
   vd = new Vditor(el.value, {
     mode: initialMode,
     lang: 'zh_CN',
-    cdn: '/vditor',
+    cdn: VDITOR_CDN,
     height: props.autoHeight ? '132px' : props.height,
     placeholder: 'Markdown 编辑：工具栏排版、直接粘贴/拖入图片；公式用 $…$ / $$…$$',
     toolbar: toolbar() as never,
@@ -365,7 +366,7 @@ onBeforeUnmount(() => {
   vd = null
   // 内容主题是全局单例 <link>：编辑器用了非 light 主题时不复位，会把背后的
   // 查看端（如题解弹窗里的 MdView）也染成暗色。关闭编辑器即回到站内 light。
-  VditorCtor?.setContentTheme('light', '/vditor/dist/css/content-theme')
+  VditorCtor?.setContentTheme('light', `${VDITOR_CDN}/dist/css/content-theme`)
 })
 </script>
 
