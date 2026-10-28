@@ -380,7 +380,14 @@ func Run(ctx context.Context, deps *Deps) {
 
 	log.Printf("[web] SOJ 启动: %s (判题并发 %d, 沙箱 %s)", cfg.Addr, cfg.JudgeWorkers, cfg.SandboxAddr)
 
-	srv := &http.Server{Addr: cfg.Addr, Handler: r}
+	// v0.25 万题体检：原无任何超时，慢客户端可无限占用连接/goroutine。
+	// 刻意不设 Read/WriteTimeout——多题导出与备份是长流式下载，会被 WriteTimeout 掐断。
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("[web] HTTP 服务异常退出: %v", err)

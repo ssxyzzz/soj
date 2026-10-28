@@ -1,11 +1,14 @@
 package repo
 
-// 重复题扫描（v0.18.1 验收追加）：按「标题 + 题面 markdown」双键判重，题库规模
-// 几百题，全表读入内存分组即可（不值得为偶发操作建聚合管道/哈希索引）。
-// 只列疑似重复供管理员自行处置（编辑/隐藏），不做任何自动删除。
+// 重复题扫描（v0.18.1 验收追加）：按「标题 + 题面 markdown」双键判重，只列疑似重复
+// 供管理员自行处置（编辑/隐藏），不做任何自动删除。
+// v0.25 万题体检：原「全表读入内存分组」在万题规模峰值 ~2.5GB（单题题面上限 256KB），
+// 改游标流式扫描；分组键用题面 sha256 定长摘要——判重语义（题面逐字相同）不变，
+// 内存只随题目数线性小步增长，与题面长度脱钩。
 
 import (
 	"context"
+	"crypto/sha256"
 	"sort"
 	"time"
 
@@ -39,7 +42,15 @@ func (r *Repo) ScanDuplicateProblems(ctx context.Context) ([]DuplicateProblemGro
 	if err != nil {
 		return nil, err
 	}
-	var rows []struct {
+	defer cursor.Close(ctx)
+
+	type key struct {
+		title string
+		sum   [sha256.Size]byte
+	}
+	groups := map[key][]ProblemInfo{}
+	previews := map[key]string{} // 组内首条题面前 80 字（展示用）
+	var row struct {
 		ID        int64     `bson:"_id"`
 		Title     string    `bson:"title"`
 		Statement string    `bson:"statement"`
@@ -48,34 +59,29 @@ func (r *Repo) ScanDuplicateProblems(ctx context.Context) ([]DuplicateProblemGro
 		CreatedBy int64     `bson:"createdBy"`
 		CreatedAt time.Time `bson:"createdAt"`
 	}
-	if err := cursor.All(ctx, &rows); err != nil {
-		return nil, err
-	}
-	type key struct{ title, statement string }
-	groups := map[key][]ProblemInfo{}
-	for _, row := range rows {
-		k := key{row.Title, row.Statement}
-		preview := []rune(row.Statement)
-		if len(preview) > 80 {
-			preview = preview[:80]
+	for cursor.Next(ctx) {
+		if err := cursor.Decode(&row); err != nil {
+			return nil, err
+		}
+		k := key{row.Title, sha256.Sum256([]byte(row.Statement))}
+		if _, seen := groups[k]; !seen {
+			previews[k] = truncateRunes(row.Statement, 80)
 		}
 		groups[k] = append(groups[k], ProblemInfo{
 			ID: row.ID, Title: row.Title, Type: row.Type, Hidden: row.Hidden,
 			CreatedBy: row.CreatedBy, CreatedAt: row.CreatedAt.Format(time.RFC3339),
 		})
-		_ = preview // preview 取组内第一条时用
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
 	}
 	out := make([]DuplicateProblemGroup, 0, 4)
 	for k, ps := range groups {
 		if len(ps) < 2 {
 			continue
 		}
-		preview := []rune(k.statement)
-		if len(preview) > 80 {
-			preview = preview[:80]
-		}
 		out = append(out, DuplicateProblemGroup{
-			Title: k.title, Preview: string(preview), Problems: ps,
+			Title: k.title, Preview: previews[k], Problems: ps,
 		})
 	}
 	// 组内题数降序，同数量按标题稳定输出

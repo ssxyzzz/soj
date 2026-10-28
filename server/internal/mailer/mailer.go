@@ -5,11 +5,15 @@ package mailer
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"log"
+	"net"
 	"net/smtp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Provider 邮件发送通道。实现必须可并发调用。
@@ -52,11 +56,20 @@ type SMTP struct {
 
 func NewSMTP(cfg SMTPConfig) *SMTP { return &SMTP{cfg: cfg} }
 
+// SMTP 会话超时（v0.25 万题体检）：验证码发送在 HTTP 请求内同步执行，通知走 goroutine，
+// 原 smtp.SendMail 裸拨号无任何超时——SMTP 端口被防火墙 drop 时请求挂起 2 分钟+，
+// goroutine 版则无限泄漏。会话各步与 smtp.SendMail 同口径（STARTTLS 自动升级等）。
+const (
+	smtpDialTimeout  = 10 * time.Second
+	smtpSendDeadline = 30 * time.Second // 拨号成功后的会话整体 deadline
+)
+
 func (s *SMTP) Send(to, subject, body string) error {
 	if !s.cfg.Ready() {
 		return fmt.Errorf("SMTP 配置不完整")
 	}
-	addr := fmt.Sprintf("%s:%d", s.cfg.Host, s.cfg.Port)
+	host := s.cfg.Host
+	addr := net.JoinHostPort(host, strconv.Itoa(s.cfg.Port))
 	from := s.cfg.From
 	// Header 用 UTF-8 base64 编码主题，避免中文主题被投递链路咬掉
 	msg := strings.Join([]string{
@@ -71,9 +84,54 @@ func (s *SMTP) Send(to, subject, body string) error {
 	}, "\r\n")
 	var a smtp.Auth
 	if s.cfg.Username != "" {
-		a = smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, s.cfg.Host)
+		a = smtp.PlainAuth("", s.cfg.Username, s.cfg.Password, host)
 	}
-	return smtp.SendMail(addr, a, from, []string{to}, []byte(msg))
+
+	conn, err := net.DialTimeout("tcp", addr, smtpDialTimeout)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(smtpSendDeadline))
+
+	c, err := smtp.NewClient(conn, host)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	if err = c.Hello("localhost"); err != nil {
+		return err
+	}
+	if ok, _ := c.Extension("STARTTLS"); ok {
+		if err = c.StartTLS(&tls.Config{ServerName: host}); err != nil {
+			return err
+		}
+	}
+	if a != nil {
+		if ok, _ := c.Extension("AUTH"); !ok {
+			return fmt.Errorf("smtp: server doesn't support AUTH")
+		}
+		if err = c.Auth(a); err != nil {
+			return err
+		}
+	}
+	if err = c.Mail(from); err != nil {
+		return err
+	}
+	if err = c.Rcpt(to); err != nil {
+		return err
+	}
+	w, err := c.Data()
+	if err != nil {
+		return err
+	}
+	if _, err = w.Write([]byte(msg)); err != nil {
+		return err
+	}
+	if err = w.Close(); err != nil {
+		return err
+	}
+	return c.Quit()
 }
 
 // ---- log 模式 ----

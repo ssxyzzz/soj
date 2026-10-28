@@ -99,8 +99,28 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "contestId", Value: 1}, {Key: "uid", Value: 1}}},
+		// v0.25 万题体检：考试侧提交查询（榜单/整场/单人明细）与 contestId 同构，
+		// 缺了它 examId 查询全表扫描，考试进行中每次刷提交都扫全库
+		{Keys: bson.D{{Key: "examId", Value: 1}, {Key: "_id", Value: -1}}},
 	})
 	if err != nil {
+		return err
+	}
+	// v0.25 万题体检补索引：IsMember 逐班成员查询（原集合扫描，题库列表每请求都跑锁题评估）、
+	// 作业列表排序（filter classId + sort sort,_id 降序）、导入同标题查重（skip_same_title 逐题 CountDocuments）
+	if _, err := r.db.Collection("classmembers").Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "classId", Value: 1}, {Key: "uid", Value: 1}}},
+	}); err != nil {
+		return err
+	}
+	if _, err := r.db.Collection("assignments").Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "classId", Value: 1}, {Key: "sort", Value: 1}, {Key: "_id", Value: -1}}},
+	}); err != nil {
+		return err
+	}
+	if _, err := r.Problems.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "title", Value: 1}}},
+	}); err != nil {
 		return err
 	}
 	_, err = r.Users.Indexes().CreateOne(ctx, mongo.IndexModel{

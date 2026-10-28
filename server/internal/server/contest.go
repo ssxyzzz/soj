@@ -32,6 +32,17 @@ func (h *Handlers) loadLockMap(ctx context.Context, uid int64, role string) (map
 	if err != nil {
 		return nil, err
 	}
+	// 同一个班的多个锁题只查一次成员关系（v0.25 万题体检收敛 N+1：原逐 pid FindOne，
+	// 每场考试的每道题都各查一次库，题库列表每请求都跑此段）
+	memberOf := map[int64]bool{}
+	if uid > 0 {
+		for _, lk := range all {
+			if !lk.Bank && !memberOf[lk.Round.ClassID] {
+				member, _ := h.repo.IsMember(ctx, lk.Round.ClassID, uid)
+				memberOf[lk.Round.ClassID] = member
+			}
+		}
+	}
 	out := make(map[int64]*contestLock, len(all))
 	for pid, lk := range all {
 		if lk.Bank {
@@ -39,10 +50,7 @@ func (h *Handlers) loadLockMap(ctx context.Context, uid int64, role string) (map
 				continue // 主题库比赛对 root 不锁
 			}
 		} else {
-			if uid <= 0 {
-				continue
-			}
-			if member, _ := h.repo.IsMember(ctx, lk.Round.ClassID, uid); !member {
+			if uid <= 0 || !memberOf[lk.Round.ClassID] {
 				continue
 			}
 		}
