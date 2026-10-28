@@ -63,6 +63,7 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 		Password string `json:"password" binding:"required"`
 		Nickname string `json:"nickname"`
 		Role     string `json:"role"`
+		ID       *int64 `json:"id"` // 手动指定用户 ID（v0.24 小批；缺省自动从 100 起取号）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数不完整")
@@ -74,6 +75,10 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 	}
 	if msg := passwordProblem(req.Password); msg != "" {
 		fail(c, http.StatusBadRequest, msg)
+		return
+	}
+	if req.ID != nil && (*req.ID < 1 || *req.ID > 1_000_000_000) {
+		fail(c, http.StatusBadRequest, "用户 ID 需为正整数（上限 10 亿）")
 		return
 	}
 	role := req.Role
@@ -91,10 +96,28 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 	if nickname == "" {
 		nickname = req.Username
 	}
-	uid, err := h.repo.CreateUserWithPassword(c.Request.Context(), req.Username, req.Password, nickname, role)
+	var (
+		uid int64
+		err error
+	)
+	if req.ID != nil {
+		// 手动指定 ID：占用冲突在唯一索引层兜底（用户名/ID 两个唯一键都可能撞）
+		uid, err = h.repo.CreateUserWithID(c.Request.Context(), *req.ID, req.Username, req.Password, nickname, role)
+	} else {
+		uid, err = h.repo.CreateUserWithPassword(c.Request.Context(), req.Username, req.Password, nickname, role)
+	}
 	if err != nil {
 		if isDupKey(err) {
-			fail(c, http.StatusBadRequest, "用户名已存在")
+			// 两个唯一键都可能撞（uname / _id）：先分辨给准确提示
+			if _, _, uerr := h.repo.GetUserByUsername(c.Request.Context(), req.Username); uerr == nil {
+				fail(c, http.StatusConflict, "用户名已存在")
+				return
+			}
+			if req.ID != nil {
+				fail(c, http.StatusConflict, "该用户 ID 已被占用")
+				return
+			}
+			fail(c, http.StatusConflict, "用户已存在")
 			return
 		}
 		fail(c, http.StatusInternalServerError, "创建用户失败")

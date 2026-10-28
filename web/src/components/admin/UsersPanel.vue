@@ -88,7 +88,7 @@ function roleClass(role: string): string {
 // ---- 新建用户 ----
 const showCreate = ref(false)
 const creating = ref(false)
-const createForm = reactive({ username: '', password: '', nickname: '', role: 'default' })
+const createForm = reactive({ username: '', password: '', nickname: '', role: 'default', id: undefined as number | undefined })
 
 async function create() {
   if (!createForm.username || !createForm.password) {
@@ -102,6 +102,7 @@ async function create() {
       createForm.password,
       createForm.nickname,
       createForm.role,
+      createForm.id,
     )
     ElMessage.success('用户已创建')
     showCreate.value = false
@@ -109,6 +110,7 @@ async function create() {
     createForm.password = ''
     createForm.nickname = ''
     createForm.role = 'default'
+    createForm.id = undefined
     await load()
   } finally {
     creating.value = false
@@ -339,6 +341,17 @@ defineExpose({ refresh: () => load() })
         </el-form-item>
         <el-form-item label="昵称">
           <el-input v-model="createForm.nickname" placeholder="默认与用户名相同" />
+        </el-form-item>
+        <el-form-item label="用户 ID">
+          <el-input-number
+            v-model="createForm.id"
+            :min="1"
+            :max="1000000000"
+            :controls="false"
+            placeholder="留空自动分配"
+            style="width: 240px"
+          />
+          <span class="dim" style="margin-left: 8px">留空自动分配（注册号从 100 起）；手动指定后后续自动取号会避开该号</span>
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="createForm.role" style="width: 100%">

@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -165,6 +166,57 @@ func (r *Repo) CreateUser(ctx context.Context, username, passwordHash, nickname,
 		return 0, err
 	}
 	return uid, nil
+}
+
+// DefaultUserSeqStart 注册取号起点（v0.24 小批）：计数器垫到 99 后首个注册号 = 100。
+const DefaultUserSeqStart int64 = 100
+
+// SeedUserCounter 注册取号起点守卫（Bootstrap 每次启动执行）：user 计数器 $max 到
+// DefaultUserSeqStart-1。全新部署首个注册号即 100；存量部署计数器若低于 100 则跳到
+// 100（只前进不回退，与 syncProblemCounter 同款幂等守卫），已超 100 的不受影响。
+func (r *Repo) SeedUserCounter(ctx context.Context) error {
+	var before struct {
+		Seq int64 `bson:"seq"`
+	}
+	err := r.Counters.FindOneAndUpdate(ctx,
+		bson.M{"_id": "user"},
+		bson.M{"$max": bson.M{"seq": DefaultUserSeqStart - 1}},
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before),
+	).Decode(&before)
+	if IsNotFound(err) {
+		return nil // 全新计数器，本次 $max 已写入 99
+	}
+	if err == nil && before.Seq < DefaultUserSeqStart-1 {
+		log.Printf("[boot] user 计数器已从 %d 垫到 %d（注册取号起点 %d）", before.Seq, DefaultUserSeqStart-1, DefaultUserSeqStart)
+	}
+	return err
+}
+
+// CreateUserWithID 管理端手动指定 ID 建号：落库后把 user 计数器 $max 到该 ID，
+// 保证后续自增取号不会撞上手动占用的号（$max 幂等只会前进）。
+func (r *Repo) CreateUserWithID(ctx context.Context, id int64, username, password, nickname, role string) (int64, error) {
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return 0, err
+	}
+	_, err = r.Users.InsertOne(ctx, bson.M{
+		"_id": id, "uname": username, "pwdHash": hash,
+		"nickname": nickname, "role": role, "createdAt": time.Now(),
+	})
+	if err != nil {
+		return 0, err
+	}
+	var doc struct {
+		Seq int64 `bson:"seq"`
+	}
+	if err := r.Counters.FindOneAndUpdate(ctx,
+		bson.M{"_id": "user"},
+		bson.M{"$max": bson.M{"seq": id}},
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
+	).Decode(&doc); err != nil {
+		return id, err
+	}
+	return id, nil
 }
 
 // CreateUserWithEmail 注册建号（v0.16）：邮箱验证码注册路径——验证通过后带邮箱落库。

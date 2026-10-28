@@ -425,8 +425,8 @@ export const adminApi = {
       ...(q ? { q } : {}),
       ...(role ? { role } : {}),
     }),
-  createUser: (username: string, password: string, nickname: string, role: string) =>
-    post<{ id: number }>('/admin/users', { username, password, nickname, role }),
+  createUser: (username: string, password: string, nickname: string, role: string, id?: number) =>
+    post<{ id: number }>('/admin/users', { username, password, nickname, role, id }),
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; username?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () =>
