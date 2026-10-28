@@ -146,7 +146,7 @@ async function submitForgot() {
     <div class="login-stage">
       <div class="login-card">
         <div class="login-brand">
-          <span class="brand-mark">S</span>
+          <img class="brand-mark" src="/favicon.svg" alt="SOJ" />
           <span class="brand-word">SOJ</span>
           <span class="login-sub">登录 SOJ，开始你的刷题之旅</span>
         </div>
@@ -310,19 +310,11 @@ async function submitForgot() {
   text-align: center;
 }
 
-/* 品牌双色（与顶栏同款放大版；此处独立 scoped 复刻一份，登录页无顶栏上下文） */
+/* 品牌标志（与顶栏同款放大版；此处独立 scoped 复刻一份，登录页无顶栏上下文） */
 .brand-mark {
   width: 46px;
   height: 46px;
   border-radius: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
-  color: #fff;
-  font-size: 19px;
-  font-weight: var(--soj-fw-heavy);
-  box-shadow: 0 8px 20px rgb(var(--soj-blue-rgb) / 0.3);
 }
 
 .brand-word {

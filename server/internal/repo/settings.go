@@ -60,6 +60,9 @@ type SystemSettings struct {
 	// 注册取号起点（v0.24 小批）：自动分配的用户 ID 从该号起（默认 100）；只抬高不回退
 	// ——计数器已超过起点时从计数器继续；手动指定 ID 不受此限。
 	UserSeqStart *int `bson:"userSeqStart,omitempty"`
+	// 自动题号起点：自动分配的题目 ID 从该号起（默认 1001，1~1000 惯例留给导入题包）；
+	// 只抬高不回退——计数器已超过起点时从计数器继续；导入/建题指定题号不受此限。
+	ProblemSeqStart *int `bson:"problemSeqStart,omitempty"`
 }
 
 const (
@@ -178,6 +181,10 @@ func (s *SystemSettings) normalizeDiscuss() {
 		v := int(DefaultUserSeqStart)
 		s.UserSeqStart = &v
 	}
+	if s.ProblemSeqStart == nil || *s.ProblemSeqStart < 1 || *s.ProblemSeqStart > 1_000_000_000 {
+		v := int(DefaultProblemSeqStart)
+		s.ProblemSeqStart = &v
+	}
 }
 
 // 讨论区开关取值（nil 已在读取时兜底，防御直接构造的零值结构体）。
@@ -249,6 +256,14 @@ func (s *SystemSettings) UserSeqStartVal() int64 {
 	return int64(*s.UserSeqStart)
 }
 
+// ProblemSeqStartVal 自动题号起点（默认 1001；越界回默认）。
+func (s *SystemSettings) ProblemSeqStartVal() int64 {
+	if s.ProblemSeqStart == nil || *s.ProblemSeqStart < 1 || *s.ProblemSeqStart > 1_000_000_000 {
+		return DefaultProblemSeqStart
+	}
+	return int64(*s.ProblemSeqStart)
+}
+
 func intPtr(v int) *int { return &v }
 
 // UpdateSystemSettings 更新系统设置（文档不存在时创建）。
@@ -286,6 +301,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"notifyRetentionDays":    s.NotifyRetentionDaysVal(),
 			"notifyBroadcastPerDay":  s.NotifyBroadcastPerDayVal(),
 			"userSeqStart":           s.UserSeqStartVal(),
+			"problemSeqStart":        s.ProblemSeqStartVal(),
 		}},
 	)
 	return err

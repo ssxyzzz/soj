@@ -2,9 +2,10 @@
 // 导航栏讨论区（v0.24）：全站学习分享（心得/路线/讲解/反馈）。
 // 版式对齐题单/比赛列表页：page-head（kicker + 大标题）+ soj-seg 分段筛选 + 副列动作卡。
 // 纯学习导向不做水区：发帖必选类型 + 新号冷静期 + 限速（服务端闸门）。
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
+import { useSiteStore } from '@/stores/site'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import DiscussTopicList from '@/components/discuss/DiscussTopicList.vue'
@@ -15,6 +16,10 @@ import type { DiscussTopic } from '@/types'
 const router = useRouter()
 const category = ref('')
 const q = ref('')
+const site = useSiteStore()
+const siteReady = ref(false)
+// 总开关关闭：导航项已隐藏，直达 URL 也只显示空态（接口本身另有闸门）
+const closed = computed(() => siteReady.value && !site.discussGlobalEnabled)
 const refreshToken = ref(0)
 const postVisible = ref(false)
 const disabled = ref(false)
@@ -48,11 +53,16 @@ function onPosted(id: number) {
 watch([category], () => {
   refreshToken.value++
 })
-onMounted(() => refreshToken.value++)
+onMounted(async () => {
+  await site.ensure()
+  siteReady.value = true
+  refreshToken.value++
+})
 </script>
 
 <template>
-  <PageShell>
+  <el-empty v-if="closed" description="讨论区未开放" />
+  <PageShell v-else>
     <div class="page-head">
       <div class="kicker">DISCUSS</div>
       <h1 class="page-title">

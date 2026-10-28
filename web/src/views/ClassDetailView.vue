@@ -408,7 +408,7 @@ onMounted(load)
               <div
                 v-for="a in assignments"
                 :key="a.id"
-                class="card strip-card"
+                class="card strip-card a-card"
                 :class="{ dragging: dragA === a.id }"
                 :draggable="armedA === a.id"
                 @dragstart="onADragstart(a, $event)"
@@ -808,6 +808,11 @@ onMounted(load)
     box-shadow 0.15s;
 }
 
+/* 作业卡更紧凑（2026-10-28 反馈）：压上下内边距，日期字号同步收小 */
+.strip-card.a-card {
+  padding: 10px 20px;
+}
+
 .strip-card:hover {
   transform: translateY(-2px);
   box-shadow:
@@ -842,12 +847,12 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 18px;
-  margin-top: 10px;
+  margin-top: 5px;
 }
 
 .a-date {
   flex: none;
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--soj-navy, #0b1f45);
   font-variant-numeric: tabular-nums;
@@ -859,7 +864,7 @@ onMounted(load)
   flex: none;
   width: 2px;
   align-self: stretch;
-  min-height: 46px;
+  min-height: 30px;
   border-radius: 1px;
   background: var(--el-border-color);
 }
@@ -869,6 +874,7 @@ onMounted(load)
   display: flex;
   flex-direction: column;
   gap: 2px;
+  line-height: 1.35;
 }
 
 .a-info .strip-intro {

@@ -174,6 +174,9 @@ export const siteApi = {
       icp_number: string
       register_verify_mode: 'none' | 'email'
       password_reset_enabled: boolean
+      discuss_global_enabled: boolean
+      discuss_problem_enabled: boolean
+      discuss_contest_enabled: boolean
     }>('/site'),
   // 公开站点统计（v0.19 首页对齐 v3 预览）：计数 + 平均判题时长 + 今日一题（可空，含标签名）
   stats: () =>
@@ -471,6 +474,7 @@ export const adminApi = {
       notify_retention_days: number
       notify_broadcast_per_day: number
       user_seq_start: number
+      problem_seq_start: number
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
@@ -502,6 +506,7 @@ export const adminApi = {
     notify_retention_days?: number
     notify_broadcast_per_day?: number
     user_seq_start?: number
+    problem_seq_start?: number
   }) =>
     put<{
       rate_limit_per_minute: number

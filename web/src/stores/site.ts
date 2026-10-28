@@ -12,6 +12,10 @@ export const useSiteStore = defineStore('site', () => {
   // 注册验证方式与找回开关（v0.16）：登录页注册表单出邮箱+验证码、忘记密码入口显隐
   const registerVerifyMode = ref<'none' | 'email'>('none')
   const passwordResetEnabled = ref(false)
+  // 讨论区三区总开关（后台「讨论区」设置）：关掉的区，导航项/入口卡片直接隐藏（默认开）
+  const discussGlobalEnabled = ref(true)
+  const discussProblemEnabled = ref(true)
+  const discussContestEnabled = ref(true)
   let fetched = false
   let fetching: Promise<void> | null = null
 
@@ -25,6 +29,9 @@ export const useSiteStore = defineStore('site', () => {
           icpNumber.value = r.icp_number || ''
           registerVerifyMode.value = r.register_verify_mode ?? 'none'
           passwordResetEnabled.value = !!r.password_reset_enabled
+          discussGlobalEnabled.value = r.discuss_global_enabled ?? true
+          discussProblemEnabled.value = r.discuss_problem_enabled ?? true
+          discussContestEnabled.value = r.discuss_contest_enabled ?? true
           fetched = true
         })
         .catch(() => {})
@@ -41,5 +48,9 @@ export const useSiteStore = defineStore('site', () => {
     return ensure()
   }
 
-  return { registerOpen, icpNumber, registerVerifyMode, passwordResetEnabled, ensure, refresh }
+  return {
+    registerOpen, icpNumber, registerVerifyMode, passwordResetEnabled,
+    discussGlobalEnabled, discussProblemEnabled, discussContestEnabled,
+    ensure, refresh,
+  }
 })

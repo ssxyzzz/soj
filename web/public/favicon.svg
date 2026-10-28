@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- R7 "渐变闪电" 透明底描边版：无贴片，墨描边保证深浅背景可见，favicon/导航栏同源 -->
+  <defs>
+    <linearGradient id="bolt" x1="37" y1="4" x2="23" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3ddc97"/>
+      <stop offset="0.55" stop-color="#22b8e8"/>
+      <stop offset="1" stop-color="#0069d9"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(32 32) rotate(14) scale(0.92) translate(-32 -32)">
+    <path d="M37 4 L11 36 H26 L23 60 L49 26 H33 Z"
+          fill="none" stroke="#10233b" stroke-width="8.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M37 4 L11 36 H26 L23 60 L49 26 H33 Z"
+          fill="url(#bolt)" stroke="url(#bolt)" stroke-width="3.5" stroke-linejoin="round" stroke-linecap="round"/>
+  </g>
+</svg>

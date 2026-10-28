@@ -130,9 +130,9 @@ function onCommand(command: string) {
     <AmbientGrid />
     <el-header class="header">
       <div class="header-inner">
-        <!-- 品牌（v3-full 恒定形态）：渐变方块 + 流彩渐变字（旧「极境特效胶囊」态已退役） -->
+        <!-- 品牌：渐变闪电标志（与 /favicon.svg 同源）+ 流彩渐变字 -->
         <div class="brand" @click="router.push('/')">
-          <span class="brand-mark">S</span><span class="brand-word">SOJ</span>
+          <img class="brand-mark" src="/favicon.svg" alt="SOJ" /><span class="brand-word">SOJ</span>
         </div>
         <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
           <el-menu-item index="/">首页</el-menu-item>
@@ -140,7 +140,7 @@ function onCommand(command: string) {
           <el-menu-item index="/lists">题单</el-menu-item>
           <el-menu-item index="/contests">比赛</el-menu-item>
           <el-menu-item index="/classes">班级</el-menu-item>
-          <el-menu-item index="/discuss">讨论</el-menu-item>
+          <el-menu-item v-if="site.discussGlobalEnabled" index="/discuss">讨论</el-menu-item>
           <el-menu-item index="/rank">排名</el-menu-item>
           <el-menu-item v-if="userStore.can('submission.view.all')" index="/submissions">提交记录</el-menu-item>
         </el-menu>
@@ -284,19 +284,11 @@ function onCommand(command: string) {
   white-space: nowrap;
 }
 
-/* 品牌双色（v3-full）：34px 渐变方块（蓝→青）+ 24/900 流彩渐变字（7s 流动，reduced-motion 退静态） */
+/* 品牌标志：渐变闪电 favicon 同源（透明底），34px */
 .brand-mark {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
-  color: #fff;
-  font-size: 15px;
-  font-weight: var(--soj-fw-heavy);
-  box-shadow: 0 6px 16px rgb(var(--soj-blue-rgb) / 0.32);
 }
 
 .brand-word {

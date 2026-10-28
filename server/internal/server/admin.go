@@ -280,6 +280,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"notify_retention_days":      s.NotifyRetentionDaysVal(),
 		"notify_broadcast_per_day":   s.NotifyBroadcastPerDayVal(),
 		"user_seq_start":             s.UserSeqStartVal(),
+		"problem_seq_start":          s.ProblemSeqStartVal(),
 	})
 }
 
@@ -297,6 +298,10 @@ func (h *Handlers) GetSiteInfo(c *gin.Context) {
 		// 注册验证方式与找回开关（v0.16）：登录页注册表单出邮箱验证码、忘记密码入口显隐
 		"register_verify_mode":   s.RegisterVerifyModeVal(),
 		"password_reset_enabled": s.PasswordResetOpen(),
+		// 讨论区三区总开关（公开 UI 显隐用）：关掉的区，导航项/入口卡片直接隐藏
+		"discuss_global_enabled":  s.DiscussGlobalOpen(),
+		"discuss_problem_enabled": s.DiscussProblemOpen(),
+		"discuss_contest_enabled": s.DiscussContestOpen(),
 	})
 }
 
@@ -344,6 +349,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		NotifyRetentionDays     *int  `json:"notify_retention_days"`
 		NotifyBroadcastPerDay   *int  `json:"notify_broadcast_per_day"`
 		UserSeqStart            *int  `json:"user_seq_start"` // 注册取号起点（v0.24 小批）
+		ProblemSeqStart         *int  `json:"problem_seq_start"` // 自动题号起点
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -541,6 +547,13 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.UserSeqStart = req.UserSeqStart
+	}
+	if req.ProblemSeqStart != nil {
+		if *req.ProblemSeqStart < 1 || *req.ProblemSeqStart > 1_000_000_000 {
+			fail(c, http.StatusBadRequest, "自动题号起点需为正整数（上限 10 亿）")
+			return
+		}
+		s.ProblemSeqStart = req.ProblemSeqStart
 	}
 	// 与启动校验同一口径：smtp 通道开着但配置不全不让存——否则重启直接拒绝启动，
 	// 管理员把自己锁在门外（运行期 Mailer() 会降级 log，但重启过不去）。

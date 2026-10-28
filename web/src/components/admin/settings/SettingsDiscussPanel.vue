@@ -4,6 +4,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { adminApi } from '@/api'
+import { useSiteStore } from '@/stores/site'
 
 const discussGlobalEnabled = ref(true)
 const discussProblemEnabled = ref(true)
@@ -52,6 +53,8 @@ async function save() {
       discuss_accept_xp: discussAcceptXp.value,
     })
     ElMessage.success('讨论区设置已保存')
+    // 导航项/入口卡片显隐走公开站点缓存，改完即时生效
+    useSiteStore().refresh()
   } finally {
     saving.value = false
   }

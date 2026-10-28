@@ -21,6 +21,7 @@ import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import AnswerAnalysisCard from '@/components/problem/AnswerAnalysisCard.vue'
 import DiscussDialog from '@/components/discuss/DiscussDialog.vue'
+import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
 import { fmtRel, fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
@@ -28,6 +29,7 @@ import type { ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/
 
 const route = useRoute()
 const router = useRouter()
+const site = useSiteStore()
 const userStore = useUserStore()
 
 const problem = ref<ProblemDetail | null>(null)
@@ -317,7 +319,7 @@ onUnmounted(stopPolling)
 <template>
   <div v-loading="loading">
     <template v-if="problem">
-      <PageShell rail-wide>
+      <PageShell>
         <!-- v3 面包屑 -->
         <div class="crumbs">
           <router-link to="/problems">题库</router-link>
@@ -414,7 +416,7 @@ onUnmounted(stopPolling)
         </RailCard>
 
         <!-- 讨论入口（v0.24）：题内思路讨论弹窗；赛时整题锁定（服务端闸门，弹窗内提示） -->
-        <RailCard v-if="!problem.locked" ov="互助" title="本题讨论" class="aside-card">
+        <RailCard v-if="!problem.locked && site.discussProblemEnabled" ov="互助" title="本题讨论" class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" plain @click="showDiscuss = true">讨论本题</el-button>
           </div>

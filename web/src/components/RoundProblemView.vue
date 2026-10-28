@@ -225,7 +225,7 @@ onUnmounted(() => {
 
 <template>
   <div v-loading="loading">
-    <PageShell v-if="round && problem" rail-wide>
+    <PageShell v-if="round && problem">
       <template #standalone>
         <el-card class="standalone-card round-head" :body-style="{ padding: '14px 20px' }">
           <div class="sa-head">

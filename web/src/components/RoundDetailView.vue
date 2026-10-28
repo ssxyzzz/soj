@@ -22,6 +22,7 @@ import ScoreSummaryCard from '@/components/score/ScoreSummaryCard.vue'
 import type { ScoreBoardView } from '@/components/score/types'
 import UserSubmissionsDialog from '@/components/score/UserSubmissionsDialog.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
+import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { fmtDate } from '@/utils/format'
 import type { ContestDetail, LeaderRow, Submission } from '@/types'
@@ -31,6 +32,7 @@ const props = defineProps<{ kind: RoundKind }>()
 
 const route = useRoute()
 const router = useRouter()
+const site = useSiteStore()
 const userStore = useUserStore()
 const tagStore = useTagTreeStore()
 
@@ -382,7 +384,7 @@ onUnmounted(() => {
         </RailCard>
 
         <!-- 讨论入口（v0.24）：仅主题库比赛配讨论区（考试不配，考试题走题内讨论赛时锁定） -->
-        <RailCard v-if="kind === 'contest'" ov="互动" title="比赛讨论" class="aside-card">
+        <RailCard v-if="kind === 'contest' && site.discussContestEnabled" ov="互动" title="比赛讨论" class="aside-card">
           <div class="entry-actions">
             <el-button type="primary" plain style="width: 100%" @click="showDiscuss = true">
               进入讨论区

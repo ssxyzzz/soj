@@ -210,6 +210,11 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		return err
 	}
 
+	// 自动题号起点守卫：problem 计数器 $max 到起点-1（默认 1000），首个自动题号 = 1001
+	if err := r.SeedProblemCounter(ctx); err != nil {
+		return err
+	}
+
 	// v0.7.1 队列优先级回填：存量提交补默认高档（幂等，只有升级后首次有改动）
 	if res, err := r.Submissions.UpdateMany(ctx,
 		bson.M{"priority": bson.M{"$exists": false}},

@@ -16,6 +16,8 @@ const icpNumber = ref('')
 // 批量导入限额（v0.15）：单题数据 / 整包 zip（MB）
 const batchProblemMB = ref(100)
 const batchZipMB = ref(2048)
+// 自动题号起点：无前缀自动取号的最小题号（默认 1001，1~起点-1 留给带题号的导入题包）
+const problemSeqStart = ref(1001)
 
 const saving = ref(false)
 
@@ -28,6 +30,7 @@ onMounted(async () => {
     icpNumber.value = s.icp_number || ''
     batchProblemMB.value = s.batch_import_problem_mb
     batchZipMB.value = s.batch_import_zip_mb
+    problemSeqStart.value = s.problem_seq_start ?? 1001
   } catch {
     // 加载失败保留默认值展示
   }
@@ -43,6 +46,7 @@ async function save() {
       icp_number: icpNumber.value.trim(),
       batch_import_problem_mb: batchProblemMB.value,
       batch_import_zip_mb: batchZipMB.value,
+      problem_seq_start: problemSeqStart.value,
     })
     ElMessage.success('基础设置已保存')
     // ICP 改了页脚要即时跟随：重置站点公开状态缓存
@@ -86,6 +90,12 @@ async function save() {
       <el-form-item label="批量导入整包上限（MB）">
         <el-input-number v-model="batchZipMB" :min="1" :max="8192" />
         <span class="dim" style="margin-left: 8px">单次上传题包 zip 的体积上限；题多请分批传</span>
+      </el-form-item>
+      <el-form-item label="自动题号起点">
+        <el-input-number v-model="problemSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
+        <span class="dim" style="margin-left: 8px">
+          无前缀自动取号的最小题号（默认 1001）；1~起点-1 的保留段留给带题号的导入题包；调大即时生效、只前进不回退；导入/建题指定题号不受此限
+        </span>
       </el-form-item>
       <el-form-item label="ICP 备案号">
         <el-input

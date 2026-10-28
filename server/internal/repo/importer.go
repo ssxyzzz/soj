@@ -268,7 +268,7 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 	}
 
 	if pid == 0 {
-		if pid, err = im.Repo.nextSeq(ctx, "problem"); err != nil {
+		if pid, err = im.Repo.nextProblemSeq(ctx); err != nil {
 			return nil, err
 		}
 	}
@@ -512,7 +512,7 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 	}
 	var err error
 	if pid == 0 {
-		if pid, err = im.Repo.nextSeq(ctx, "problem"); err != nil {
+		if pid, err = im.Repo.nextProblemSeq(ctx); err != nil {
 			return nil, err
 		}
 	}

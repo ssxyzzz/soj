@@ -202,10 +202,11 @@ async function switchSubTab(target: SubTab) {
   align-items: stretch;
 }
 
-/* v3 导航列：整列一张白卡（圆角 16 + hairline + 柔影），条目胶囊态 */
+/* v3 导航列：整列一张白卡（圆角 16 + hairline + 柔影），条目胶囊态；
+   宽度对齐 PageShell 右列 320px（2026-10-28 反馈：252 偏窄） */
 .admin-nav {
-  flex: 0 0 252px;
-  width: 252px;
+  flex: 0 0 320px;
+  width: 320px;
   display: flex;
   flex-direction: column;
   gap: 3px;

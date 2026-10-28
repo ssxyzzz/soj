@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -132,13 +133,69 @@ func (r *Repo) UpsertProblem(ctx context.Context, p *Problem) error {
 // CreateProblemShell 无测试数据建壳题（v0.6.1 验收反馈：zip 可缺省直接创建题面）：
 // 取号插入 problem 文档（Cases 空），测试数据后续在编辑页整包上传补齐。
 func (r *Repo) CreateProblemShell(ctx context.Context, p *Problem) error {
-	id, err := r.nextSeq(ctx, "problem")
+	id, err := r.nextProblemSeq(ctx)
 	if err != nil {
 		return err
 	}
 	p.ID = id
 	p.CreatedAt = time.Now()
 	_, err = r.Problems.InsertOne(ctx, p)
+	return err
+}
+
+// DefaultProblemSeqStart 自动题号起点默认值（后台「自动题号起点」可调，见 SystemSettings.ProblemSeqStart）。
+// 1~1000 惯例保留给导入题包：无前缀自动取号从 1001 起。
+const DefaultProblemSeqStart int64 = 1001
+
+// nextProblemSeq 自动分配题号：计数器低于后台设定的「自动题号起点」时垫到 start-1 重取
+// ——管理员运行期调大起点即时生效（首个自动题号 = 起点）；计数器已超起点（或起点调小）
+// 时从计数器继续，只前进不回退。导入/建题指定题号走 UpsertProblem，不经过此处。
+func (r *Repo) nextProblemSeq(ctx context.Context) (int64, error) {
+	start := DefaultProblemSeqStart
+	if s, err := r.GetSystemSettings(ctx); err == nil {
+		start = s.ProblemSeqStartVal()
+	}
+	pid, err := r.nextSeq(ctx, "problem")
+	if err != nil {
+		return 0, err
+	}
+	if pid < start {
+		var doc struct {
+			Seq int64 `bson:"seq"`
+		}
+		if merr := r.Counters.FindOneAndUpdate(ctx,
+			bson.M{"_id": "problem"},
+			bson.M{"$max": bson.M{"seq": start - 1}},
+			options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
+		).Decode(&doc); merr == nil {
+			return r.nextSeq(ctx, "problem")
+		}
+	}
+	return pid, nil
+}
+
+// SeedProblemCounter 自动题号起点守卫（Bootstrap 幂等快路径）：problem 计数器 $max 到起点-1，
+// 让首题免走 nextProblemSeq 的垫高重取；运行期改动由 nextProblemSeq 兜底，两者口径一致。
+// 与 syncProblemCounter 的空集跳过不同：题集合为空也写入，保证全新库首题 = 起点。
+func (r *Repo) SeedProblemCounter(ctx context.Context) error {
+	start := DefaultProblemSeqStart
+	if s, err := r.GetSystemSettings(ctx); err == nil {
+		start = s.ProblemSeqStartVal()
+	}
+	var before struct {
+		Seq int64 `bson:"seq"`
+	}
+	err := r.Counters.FindOneAndUpdate(ctx,
+		bson.M{"_id": "problem"},
+		bson.M{"$max": bson.M{"seq": start - 1}},
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before),
+	).Decode(&before)
+	if IsNotFound(err) {
+		return nil // 全新计数器，本次 $max 已写入起点-1
+	}
+	if err == nil && before.Seq < start-1 {
+		log.Printf("[boot] problem 计数器已从 %d 垫到 %d（自动题号起点 %d）", before.Seq, start-1, start)
+	}
 	return err
 }
 
