@@ -990,6 +990,27 @@ func (r *Repo) MatchMetaTags(ctx context.Context, hint SourceHint) []int64 {
 	return ids
 }
 
+// CollectTagIDsByName 收集名字包含 nameContain（不分大小写）的节点 ID（v0.26.1
+// 题目搜索：搜「贪心」命中知识点「贪心」，配合 CollectSubtreeIDs 展开子孙）。
+func CollectTagIDsByName(nodes []TagNode, nameContain string) []int64 {
+	q := strings.ToLower(nameContain)
+	if q == "" {
+		return nil
+	}
+	ids := make([]int64, 0, 8)
+	var walk func(list []TagNode)
+	walk = func(list []TagNode) {
+		for _, n := range list {
+			if strings.Contains(strings.ToLower(n.Name), q) {
+				ids = append(ids, n.ID)
+			}
+			walk(n.Children)
+		}
+	}
+	walk(nodes)
+	return ids
+}
+
 // CollectSubtreeIDs 汇集 wanted 各节点自身与其全部子孙的 ID（来源筛选选父节点
 // 含子节点：选「合肥市」命中全部区县），返回去重后的 ID 集。
 func CollectSubtreeIDs(nodes []TagNode, wanted []int64) []int64 {

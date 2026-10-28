@@ -99,4 +99,49 @@ func TestListProblemsPage(t *testing.T) {
 	if total != 4 {
 		t.Fatalf("越界页: total=%d", total)
 	}
+
+	// ---- v0.26.1 搜索命中知识点/标签（与标题/题号并集，与显式筛选 AND 正交） ----
+	// SearchTags=1 命中 101/103；与 Q=贪心（标题命中 101）并集仍为 101/103
+	_, total, _ = r.ListProblemsPage(ctx, ProblemListFilter{Q: "贪心", SearchTags: []int64{1}}, 1, 20)
+	if total != 2 {
+		t.Fatalf("搜索并集（标题∨知识点）: total=%d", total)
+	}
+	// 与显式筛选 AND：显式 tags=3 只留 104，搜索命中集不含它 → 空
+	_, total, _ = r.ListProblemsPage(ctx, ProblemListFilter{Q: "贪心", SearchTags: []int64{1}, Tags: []int64{3}}, 1, 20)
+	if total != 0 {
+		t.Fatalf("搜索与显式筛选正交（AND）: total=%d", total)
+	}
+	// SearchMetaTags 并集：meta=10 命中 101，与 Q=二分（标题命中 103）并集为 101/103
+	_, total, _ = r.ListProblemsPage(ctx, ProblemListFilter{Q: "二分", SearchMetaTags: []int64{10}}, 1, 20)
+	if total != 2 {
+		t.Fatalf("搜索并集（标题∨来源标签）: total=%d", total)
+	}
+	// 搜索条件与反向排除叠加：排除 101 后并集只剩 103
+	f2 := ProblemListFilter{Q: "贪心", SearchTags: []int64{1}, ExcludeIDs: []int64{101}}
+	_, total, _ = r.ListProblemsPage(ctx, f2, 1, 20)
+	if total != 1 {
+		t.Fatalf("搜索+排除叠加: total=%d", total)
+	}
+
+	// 树名字收集（不分大小写）+ 子树展开
+	tree := []TagNode{
+		{ID: 1, Name: "算法", Children: []TagNode{
+			{ID: 11, Name: "贪心"},
+			{ID: 12, Name: "DP", Children: []TagNode{{ID: 121, Name: "区间DP"}}},
+		}},
+		{ID: 2, Name: "数据结构"},
+	}
+	if got := CollectTagIDsByName(tree, "dp"); len(got) != 2 || got[0] != 12 || got[1] != 121 {
+		t.Fatalf("CollectTagIDsByName(dp): %v", got)
+	}
+	if got := CollectTagIDsByName(tree, "贪心"); len(got) != 1 || got[0] != 11 {
+		t.Fatalf("CollectTagIDsByName(贪心): %v", got)
+	}
+	if got := CollectTagIDsByName(tree, ""); got != nil {
+		t.Fatalf("空搜索词应返回 nil: %v", got)
+	}
+	// 命中父节点 → 子树全收（搜「算法」= 1/11/12/121）
+	if got := CollectSubtreeIDs(tree, CollectTagIDsByName(tree, "算法")); len(got) != 4 {
+		t.Fatalf("子树展开(算法): %v", got)
+	}
 }

@@ -215,9 +215,13 @@ func (r *Repo) GetProblem(ctx context.Context, id int64) (*Problem, error) {
 type ProblemListFilter struct {
 	ExcludeIDs []int64 // 反向排除（隐藏题 ∪ 非运行期锁题），由 handler 按视角算好（特权视角不排除）
 	Q          string  // 标题子串（不分大小写）∨ 题号精确匹配
-	Tags       []int64 // 知识标签并集
-	MetaTags   []int64 // 来源标签并集（子树展开后）
-	Difficulty []int   // 生效难度并集（EffDifficulty 语义：未设置/越界按 D3）
+	// 搜索命中的知识点/来源标签（v0.26.1：搜索词命中树节点名 → 子树展开），与 Q 并集；
+	// 与下方 Tags/MetaTags 显式筛选（AND）正交——搜索从宽、筛选从严
+	SearchTags     []int64
+	SearchMetaTags []int64
+	Tags           []int64 // 知识标签并集
+	MetaTags       []int64 // 来源标签并集（子树展开后）
+	Difficulty     []int   // 生效难度并集（EffDifficulty 语义：未设置/越界按 D3）
 }
 
 // ListProblemsPage 题库分页列表：DB 侧过滤 + _id 升序 + skip/limit，返回当前页与总数。
@@ -226,20 +230,27 @@ func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, 
 	if len(f.ExcludeIDs) > 0 {
 		query["_id"] = bson.M{"$nin": f.ExcludeIDs}
 	}
+	// 搜索条件组（v0.26.1）：标题/题号/知识点/来源标签命中取并集，与其余过滤条件 AND
+	var searchOr bson.A
 	if f.Q != "" {
 		// 题号口径与原实现一致：仅「纯数字且与格式化结果完全一致」按 ID 精确匹配（"0100" 不算 #100）
-		title := bson.M{"title": bson.M{"$regex": regexp.QuoteMeta(f.Q), "$options": "i"}}
 		if id, err := strconv.ParseInt(f.Q, 10, 64); err == nil && id > 0 && strconv.FormatInt(id, 10) == f.Q {
-			query["$or"] = bson.A{bson.M{"_id": id}, title}
-		} else {
-			query["title"] = title["title"]
+			searchOr = append(searchOr, bson.M{"_id": id})
 		}
+		searchOr = append(searchOr, bson.M{"title": bson.M{"$regex": regexp.QuoteMeta(f.Q), "$options": "i"}})
 	}
-	if len(f.Tags) > 0 {
-		query["tags"] = bson.M{"$in": f.Tags}
+	if len(f.SearchTags) > 0 {
+		searchOr = append(searchOr, bson.M{"tags": bson.M{"$in": f.SearchTags}})
 	}
-	if len(f.MetaTags) > 0 {
-		query["meta_tags"] = bson.M{"$in": f.MetaTags}
+	if len(f.SearchMetaTags) > 0 {
+		searchOr = append(searchOr, bson.M{"meta_tags": bson.M{"$in": f.SearchMetaTags}})
+	}
+	var andClauses bson.A
+	switch {
+	case len(searchOr) == 1:
+		andClauses = append(andClauses, searchOr[0])
+	case len(searchOr) > 1:
+		andClauses = append(andClauses, bson.M{"$or": searchOr})
 	}
 	if len(f.Difficulty) > 0 {
 		// EffDifficulty 语义：difficulty 未设置/越界（非 1..10）按 D3——筛 D3 时须并上「无效值」文档；
@@ -252,12 +263,16 @@ func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, 
 			}
 			or = append(or, bson.M{"difficulty": bson.M{"$nin": valid}})
 		}
-		if prev, ok := query["$or"]; ok {
-			query["$and"] = bson.A{bson.M{"$or": prev}, bson.M{"$or": or}}
-			delete(query, "$or")
-		} else {
-			query["$or"] = or
-		}
+		andClauses = append(andClauses, bson.M{"$or": or})
+	}
+	if len(andClauses) > 0 {
+		query["$and"] = andClauses
+	}
+	if len(f.Tags) > 0 {
+		query["tags"] = bson.M{"$in": f.Tags}
+	}
+	if len(f.MetaTags) > 0 {
+		query["meta_tags"] = bson.M{"$in": f.MetaTags}
 	}
 	total, err := r.Problems.CountDocuments(ctx, query)
 	if err != nil {
@@ -268,7 +283,7 @@ func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, 
 		options.Find().
 			SetProjection(bson.M{"statement": 0}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}).
-			SetSkip(int64((page - 1) * pageSize)).
+			SetSkip(int64((page-1)*pageSize)).
 			SetLimit(int64(pageSize)))
 	if err != nil {
 		return nil, 0, err

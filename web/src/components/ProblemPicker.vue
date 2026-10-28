@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 统一选题器（v0.7.3）：创建比赛 / 发起考试 / 布置作业 / 调整题目四处共用。
-// 左列 = 候选多选（搜索框走题库 q 参数：标题关键字/题号；TagFilter 标签多选；
-// 无分页、搜索驱动、单次 100 条；排除隐藏题维持现口径）；
+// 左列 = 候选多选（搜索框走题库 q 参数：标题/题号/知识点/标签名——命中节点子树计入，
+// v0.26.1；TagFilter 标签多选；无分页、搜索驱动、单次 100 条；排除隐藏题维持现口径）；
 // 右列 = 已选清单（拖动 ⠿ 排序 / 删除，沿用调整题目弹窗交互）。
 // v-model 为带标题的已选数组（保序）；已选中的隐藏题（组织者 edit_problems）原样保留展示。
 import { onMounted, ref, watch } from 'vue'
@@ -83,7 +83,7 @@ onMounted(search)
 <template>
   <div class="picker">
     <div class="picker-search">
-      <el-input v-model="q" placeholder="搜索标题关键字或题号" clearable />
+      <el-input v-model="q" placeholder="搜索标题、题号、知识点或标签" clearable />
     </div>
     <div class="picker-tags">
       <TagFilter :selected="tags" @change="(ids: number[]) => (tags = ids)" />

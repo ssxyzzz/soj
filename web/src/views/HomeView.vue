@@ -89,7 +89,7 @@ onMounted(async () => {
       <div class="hero-search">
         <label class="searchbar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-          <input v-model="q" placeholder="搜索题号或关键词，回车直达" @keyup.enter="submitSearch" />
+          <input v-model="q" placeholder="搜索题号、关键词或知识点，回车直达" @keyup.enter="submitSearch" />
         </label>
         <button class="orb" title="搜索" @click="submitSearch">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>

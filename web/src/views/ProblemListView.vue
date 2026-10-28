@@ -231,7 +231,7 @@ onMounted(() => {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
           <input
             v-model="keyword"
-            placeholder="搜索标题关键词或题号"
+            placeholder="搜索标题、题号、知识点或标签"
             @keyup.enter="search"
           />
         </label>

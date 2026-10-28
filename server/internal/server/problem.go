@@ -98,6 +98,16 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 	}
 
 	filter := repo.ProblemListFilter{Q: q, Tags: tagSel, MetaTags: metaSel}
+	// 搜索词命中知识点/标签名（v0.26.1）：名字包含搜索词的节点，子树全部计入，与标题/题号并集。
+	// 搜索从宽（含子孙）、显式标签筛选从严（AND）正交；读树失败退化为纯标题/题号搜索（尽力增强不阻塞）
+	if q != "" {
+		if kn, kerr := h.repo.GetTagTree(ctx); kerr == nil {
+			filter.SearchTags = repo.CollectSubtreeIDs(kn, repo.CollectTagIDsByName(kn, q))
+		}
+		if mn, merr := h.repo.GetMetaTagTree(ctx); merr == nil {
+			filter.SearchMetaTags = repo.CollectSubtreeIDs(mn, repo.CollectTagIDsByName(mn, q))
+		}
+	}
 	for d := range diffSel {
 		filter.Difficulty = append(filter.Difficulty, d)
 	}
