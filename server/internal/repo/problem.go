@@ -10,6 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/mdrender"
 )
 
 // 可见性（v0.2 仅 public；v0.3 班级引入后扩展）
@@ -40,40 +42,41 @@ const (
 func ValidCompare(c string) bool { return c == CompareExact || c == CompareTolerant }
 
 type Problem struct {
-	ID               int64               `bson:"_id"`
-	Title            string              `bson:"title"`
-	Statement        string              `bson:"statement"`            // 题面（Markdown，v0.8 起单一事实源；v0.6–v0.7 富文本时代的 contentHtml 已启动回迁）
-	Type             string              `bson:"type,omitempty"`       // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
-	Questions        []ObjectiveQuestion `bson:"questions,omitempty"`  // 客观题小题列表（v0.9.3；单题时代的 question 由启动迁移并入）
-	Difficulty       int                 `bson:"difficulty,omitempty"` // 难度 1–10（v0.11；0 = 未设置，展示按 D3）
-	TimeLimitMS      int                 `bson:"timeLimitMs"`
-	MemoryLimitKB    int                 `bson:"memoryLimitKb"`
-	Visibility       string              `bson:"visibility"`
-	Hidden           bool                `bson:"hidden"`              // 题目隐藏：无「题库全量可见」权限的视角看不到也不可交（备题用）
-	CreatedBy        int64               `bson:"createdBy"`           // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
-	Tags             []int64             `bson:"tags"`                // 知识树节点 ID（v0.5.5，2026-10-25 更名），名字与层级由 tags 集合知识树实时解析
-	MetaTags         []int64             `bson:"meta_tags,omitempty"` // 来源标签树节点 ID（2026-10-25 双树：地区/赛事/题库/年份/其他），名字由来源树实时解析
-	Subtasks         []Subtask           `bson:"subtasks,omitempty"`  // nil = 单点等分
-	Cases            []CaseMeta          `bson:"cases"`
-	Compare          string              `bson:"compare,omitempty"`        // 比对模式，空 = exact
-	FloatTolerance   float64             `bson:"floatTolerance,omitempty"` // tolerant 时的浮点容差，0 = 默认 1e-4
-	CheckerFile      string              `bson:"checkerFile,omitempty"`    // 校验器源文件（存测试数据卷，非空 = checker 判定）
-	CheckerSHA       string              `bson:"checkerSha,omitempty"`
-	CheckerFileID    string              `bson:"checkerFileId,omitempty"` // 沙箱编译产物缓存（失效自动重编）
-	DriverFile       string              `bson:"driverFile,omitempty"`    // 函数题驱动器（卷内固定名 driver.cpp，含 main 调用学生函数）
-	DriverSHA        string              `bson:"driverSha,omitempty"`
-	TemplateFile     string              `bson:"templateFile,omitempty"`   // 函数题学生端模板（卷内固定名 template.cpp，提交页预填）
-	InteractorFile   string              `bson:"interactorFile,omitempty"` // 交互题交互器（卷内固定名 interactor.cpp）
-	InteractorSHA    string              `bson:"interactorSha,omitempty"`
-	InteractorFileID string              `bson:"interactorFileId,omitempty"` // 交互器编译产物缓存（同 checker 懒编译）
-	FileIO           bool                `bson:"fileIo,omitempty"`           // 文件 IO 模式（v0.5.2-3 生效）
-	FileIOInput      string              `bson:"fileIoInput,omitempty"`
-	FileIOOutput     string              `bson:"fileIoOutput,omitempty"`
-	ChallengeTimeSec int                 `bson:"challengeTimeSec,omitempty"` // 挑战时长秒（v0.23；0 = 按难度×5min 默认，60–14400 生效）
-	VideoURL         string              `bson:"videoUrl,omitempty"`         // 答案解析视频链接（v0.23；B 站/直链 mp4，题解同门槛可见）
-	DiscussCodeThreshold int             `bson:"discussCodeThreshold,omitempty"` // 题内讨论代码门槛覆盖（v0.24；0 = 跟随全局默认，1–100 生效）
-	CreatedAt        time.Time           `bson:"createdAt"`
-	UpdatedAt        time.Time           `bson:"updatedAt"`
+	ID                   int64               `bson:"_id"`
+	Title                string              `bson:"title"`
+	Statement            string              `bson:"statement"`               // 题面（Markdown，v0.8 起单一事实源；v0.6–v0.7 富文本时代的 contentHtml 已启动回迁）
+	StatementHtml        string              `bson:"statementHtml,omitempty"` // 渲染缓存（v0.30 写入时渲染；与 v0.8 contentHtml 编辑源语义无关，缺失时前端回退 md 渲染）
+	Type                 string              `bson:"type,omitempty"`          // 题目类型（v0.9）：空 = 传统题；objective = 客观题族
+	Questions            []ObjectiveQuestion `bson:"questions,omitempty"`     // 客观题小题列表（v0.9.3；单题时代的 question 由启动迁移并入）
+	Difficulty           int                 `bson:"difficulty,omitempty"`    // 难度 1–10（v0.11；0 = 未设置，展示按 D3）
+	TimeLimitMS          int                 `bson:"timeLimitMs"`
+	MemoryLimitKB        int                 `bson:"memoryLimitKb"`
+	Visibility           string              `bson:"visibility"`
+	Hidden               bool                `bson:"hidden"`              // 题目隐藏：无「题库全量可见」权限的视角看不到也不可交（备题用）
+	CreatedBy            int64               `bson:"createdBy"`           // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
+	Tags                 []int64             `bson:"tags"`                // 知识树节点 ID（v0.5.5，2026-10-25 更名），名字与层级由 tags 集合知识树实时解析
+	MetaTags             []int64             `bson:"meta_tags,omitempty"` // 来源标签树节点 ID（2026-10-25 双树：地区/赛事/题库/年份/其他），名字由来源树实时解析
+	Subtasks             []Subtask           `bson:"subtasks,omitempty"`  // nil = 单点等分
+	Cases                []CaseMeta          `bson:"cases"`
+	Compare              string              `bson:"compare,omitempty"`        // 比对模式，空 = exact
+	FloatTolerance       float64             `bson:"floatTolerance,omitempty"` // tolerant 时的浮点容差，0 = 默认 1e-4
+	CheckerFile          string              `bson:"checkerFile,omitempty"`    // 校验器源文件（存测试数据卷，非空 = checker 判定）
+	CheckerSHA           string              `bson:"checkerSha,omitempty"`
+	CheckerFileID        string              `bson:"checkerFileId,omitempty"` // 沙箱编译产物缓存（失效自动重编）
+	DriverFile           string              `bson:"driverFile,omitempty"`    // 函数题驱动器（卷内固定名 driver.cpp，含 main 调用学生函数）
+	DriverSHA            string              `bson:"driverSha,omitempty"`
+	TemplateFile         string              `bson:"templateFile,omitempty"`   // 函数题学生端模板（卷内固定名 template.cpp，提交页预填）
+	InteractorFile       string              `bson:"interactorFile,omitempty"` // 交互题交互器（卷内固定名 interactor.cpp）
+	InteractorSHA        string              `bson:"interactorSha,omitempty"`
+	InteractorFileID     string              `bson:"interactorFileId,omitempty"` // 交互器编译产物缓存（同 checker 懒编译）
+	FileIO               bool                `bson:"fileIo,omitempty"`           // 文件 IO 模式（v0.5.2-3 生效）
+	FileIOInput          string              `bson:"fileIoInput,omitempty"`
+	FileIOOutput         string              `bson:"fileIoOutput,omitempty"`
+	ChallengeTimeSec     int                 `bson:"challengeTimeSec,omitempty"`     // 挑战时长秒（v0.23；0 = 按难度×5min 默认，60–14400 生效）
+	VideoURL             string              `bson:"videoUrl,omitempty"`             // 答案解析视频链接（v0.23；B 站/直链 mp4，题解同门槛可见）
+	DiscussCodeThreshold int                 `bson:"discussCodeThreshold,omitempty"` // 题内讨论代码门槛覆盖（v0.24；0 = 跟随全局默认，1–100 生效）
+	CreatedAt            time.Time           `bson:"createdAt"`
+	UpdatedAt            time.Time           `bson:"updatedAt"`
 }
 
 // ValidDifficulty 难度是否在 1–10 档内。
@@ -110,6 +113,7 @@ type Subtask struct {
 func (r *Repo) UpsertProblem(ctx context.Context, p *Problem) error {
 	now := time.Now()
 	p.UpdatedAt = now
+	p.StatementHtml = mdrender.Render(p.Statement)
 	// 新建时补 createdAt 并把计数器推进到已占用的最大 pid
 	if err := r.Problems.FindOne(ctx, bson.M{"_id": p.ID}).Err(); IsNotFound(err) {
 		p.CreatedAt = now
@@ -141,6 +145,7 @@ func (r *Repo) CreateProblemShell(ctx context.Context, p *Problem) error {
 	}
 	p.ID = id
 	p.CreatedAt = time.Now()
+	p.StatementHtml = mdrender.Render(p.Statement)
 	_, err = r.Problems.InsertOne(ctx, p)
 	return err
 }
@@ -344,7 +349,7 @@ func (r *Repo) SetProblemHidden(ctx context.Context, pid int64, hidden bool) err
 func (r *Repo) SetProblemStatement(ctx context.Context, pid int64, statement string) error {
 	res, err := r.Problems.UpdateOne(ctx,
 		bson.M{"_id": pid},
-		bson.M{"$set": bson.M{"statement": statement, "updatedAt": time.Now()}})
+		bson.M{"$set": bson.M{"statement": statement, "statementHtml": mdrender.Render(statement), "updatedAt": time.Now()}})
 	if err != nil {
 		return err
 	}

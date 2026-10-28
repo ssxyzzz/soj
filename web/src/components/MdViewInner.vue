@@ -1,23 +1,134 @@
 <script setup lang="ts">
-// 查看端内芯（v0.8）：Vditor.preview 客户端直渲 Markdown（取代 v0.6 的服务端转 HTML +
-// DOMPurify/KaTeX/lowlight 管道）。Lute 渲染自带 XSS 过滤（preview.markdown.sanitize 默认开），
-// 公式/代码高亮由 Vditor 懒加载子资源渲染（自托管 /vditor）；内容列限宽 860 居中。
-// 排版在 main.css .soj-md（与编辑端共用一套站内字阶与行内代码样式）。
-// 查看端固定 light 内容主题：内容主题是全局单例 <link>，跟着编辑器偏好走会把
-// 全站题面/公告染成暗色（阅读面与站点整体视觉应保持一致）。
-// 超限拒渲染（256KB，防病态内容卡死主线程——口径延续 v0.6 之前）。
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+// 查看端内芯（v0.8；v0.30 增 html 模式）：
+//   html 模式（写入时渲染）：服务端 lute 渲染 + 消毒的 HTML 直插（v-html），客户端
+//     只做增强——KaTeX 节点渲染 / hljs 高亮 + 行号 / 复制按钮，零 md 引擎零渲染 pass；
+//     html 为空时自动回退 md 模式（存量数据迁移前的兜底，双模式天然回滚安全）。
+//   md 模式：Vditor.preview 客户端直渲（讨论区等 UGC 场景仍在用）。
+// 排版在 main.css .soj-md .vditor-reset（html 模式手动挂 vditor-reset 类——lute 输出
+//   DOM 与 vditor.preview 同源，CSS 零适配）；行号照抄 vditor-linenumber 结构。
+// 超限拒渲染（256KB，防病态内容卡死主线程——口径延续 v0.6 之前；html 为服务端
+//   已消毒的渲染产物，无解析成本，不再检查）。
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import 'vditor/dist/index.css'
 
 import { MAX_CONTENT_BYTES, bindCopyFeedback, contentBytes } from '@/utils/md'
+import { VDITOR_CDN } from '@/utils/vditorCdn'
 
-const props = defineProps<{ content: string }>()
+const props = defineProps<{ content: string; html?: string }>()
 
 const el = ref<HTMLDivElement>()
 const notice = ref('')
 let unbindCopy: (() => void) | null = null
 
+const useHtml = computed(() => !!props.html)
+
+// ---- 动态子资源加载（katex / hljs，自托管 vditor dist；会话内只加载一次） ----
+const loaded = new Map<string, Promise<void>>()
+function loadScript(url: string): Promise<void> {
+  if (!loaded.has(url)) {
+    loaded.set(
+      url,
+      new Promise((resolve, reject) => {
+        const s = document.createElement('script')
+        s.src = url
+        s.onload = () => resolve()
+        s.onerror = () => {
+          loaded.delete(url)
+          reject(new Error(`加载失败: ${url}`))
+        }
+        document.head.appendChild(s)
+      }),
+    )
+  }
+  return loaded.get(url)!
+}
+function loadCss(url: string): Promise<void> {
+  if (!document.querySelector(`link[href="${url}"]`)) {
+    const l = document.createElement('link')
+    l.rel = 'stylesheet'
+    l.href = url
+    document.head.appendChild(l)
+  }
+  return Promise.resolve()
+}
+
+// KaTeX 节点渲染（与 vditor 内部做法同源）：lute 输出 .language-math 节点，
+// 逐个 katex.render（比扫 $ 定界符精确，不误伤正文 $ 符号）；语法错误保留原文
+async function renderMath(root: HTMLElement) {
+  const nodes = root.querySelectorAll<HTMLElement>('.language-math')
+  if (!nodes.length) return
+  await Promise.all([
+    loadScript(`${VDITOR_CDN}/dist/js/katex/katex.min.js`),
+    loadCss(`${VDITOR_CDN}/dist/js/katex/katex.min.css`),
+  ])
+  const katex = (window as unknown as { katex?: { render: (tex: string, el: HTMLElement, opts?: object) => void } }).katex
+  if (!katex) return
+  nodes.forEach((node) => {
+    const tex = node.textContent ?? ''
+    try {
+      katex.render(tex, node, { displayMode: node.tagName === 'DIV', throwOnError: false })
+    } catch {
+      // 极端病态公式（throwOnError:false 之外的解析崩溃）：保留原文
+    }
+  })
+}
+
+// hljs 高亮 + 行号（结构照抄 vditor-linenumber，CSS 在 vditor index.css + main.css 现成）
+async function highlightCode(root: HTMLElement) {
+  const codes = root.querySelectorAll<HTMLElement>('pre > code[class*="language-"]')
+  if (!codes.length) return
+  await Promise.all([
+    loadScript(`${VDITOR_CDN}/dist/js/highlight.js/highlight.min.js`),
+    loadScript(`${VDITOR_CDN}/dist/js/highlight.js/third-languages.js`),
+  ])
+  const hljs = (window as unknown as { hljs?: { highlightElement: (el: HTMLElement) => void } }).hljs
+  if (!hljs) return
+  codes.forEach((code) => {
+    try {
+      hljs.highlightElement(code)
+    } catch {
+      // 未知语言：保持纯文本
+    }
+    // 行号覆盖层（每行一个空 span，::before counter 画数字；代码文本不动，复制不受影响）
+    code.classList.add('vditor-linenumber')
+    const rows = document.createElement('span')
+    rows.className = 'vditor-linenumber__rows'
+    const lines = (code.textContent ?? '').split('\n').length
+    for (let i = 0; i < lines; i++) rows.appendChild(document.createElement('span'))
+    code.appendChild(rows)
+  })
+}
+
+async function renderHtml() {
+  if (!el.value) return
+  el.value.innerHTML = props.html ?? ''
+  notice.value = ''
+  if (!el.value.childNodes.length) return
+  try {
+    await highlightCode(el.value)
+    await renderMath(el.value)
+  } catch {
+    // 增强失败（子资源加载不了）：正文已就位，公式/高亮退化展示
+  }
+}
+
+// ```chart / ```wavedrom 围栏剥离（v0.28 安全加固）：vditor preview 对这两类代码块
+// 的「配置」走 looseJsonParse = new Function(text) 动态执行（上游无关闭开关，sanitize
+// 只滤原始 HTML、管不到代码块）——任何可发帖用户可借此在查看者浏览器执行任意脚本。
+// SOJ 内容从不使用这两类图表，渲染前整块剥离；剥离失败的最坏情形 = 图表块不显示（良性）。
+// 反引号数回溯（\2）保证 4+ 反引号围栏也按同长闭合匹配；行中出现的 ```chart 不是
+// 合法围栏（CommonMark），本就不渲染，无需处理。
+// 注：html 模式无需剥离——服务端 lute 输出的是纯 <pre><code> 文本（无图表执行链路）。
+const EXEC_FENCE = /(^|\n)(`{3,})(?:chart|wavedrom)\b[^\n]*\n[\s\S]*?\2[ \t]*\n?/gi
+function stripExecFences(md: string): string {
+  return md.replace(EXEC_FENCE, '$1')
+}
+
 async function render() {
+  if (useHtml.value) {
+    await renderHtml()
+    return
+  }
   if (!el.value) return
   if (!props.content) {
     // 空内容直接留白（v0.9.3）：不显示「暂无内容」占位文案
@@ -33,10 +144,10 @@ async function render() {
   notice.value = ''
   const { default: Vditor } = await import('vditor')
   if (!el.value) return // 等待懒加载期间组件可能已卸载
-  Vditor.preview(el.value, props.content, {
+  Vditor.preview(el.value, stripExecFences(props.content), {
     mode: 'light',
     lang: 'zh_CN',
-    cdn: '/vditor',
+    cdn: VDITOR_CDN,
     theme: { current: 'light' },
     hljs: { lineNumber: true }, // 多行代码行号（Vditor 内置数字列覆盖层，不动代码文本；间距/配色在 main.css 调）
     math: { engine: 'KaTeX', inlineDigit: true }, // inlineDigit: $ 后允许数字开头（默认 false，会让 $1 \le N$ 不被识别）
@@ -49,7 +160,7 @@ onMounted(() => {
   if (el.value) unbindCopy = bindCopyFeedback(el.value)
   render()
 })
-watch(() => props.content, render)
+watch(() => [props.content, props.html], render)
 
 onBeforeUnmount(() => {
   unbindCopy?.()
@@ -59,11 +170,11 @@ onBeforeUnmount(() => {
 
 <template>
   <!-- soj-md = 站内 Markdown 排版（main.css），md-light = light 主题下的站内配色。
-       挂在 .md-view 外层：Vditor.preview 会给内容容器追加 vditor-reset 类，
-       排版规则是 .soj-md .vditor-reset 后代选择器 -->
+       挂在 .md-view 外层：md 模式 Vditor.preview 会给内容容器追加 vditor-reset 类，
+       html 模式手动挂同一个类——lute 输出 DOM 与 vditor.preview 同源，排版零适配 -->
   <div class="md-view soj-md md-light">
     <div v-if="notice" class="md-view-notice">{{ notice }}</div>
-    <div ref="el" class="md-view-body"></div>
+    <div ref="el" class="md-view-body" :class="{ 'vditor-reset': useHtml }"></div>
   </div>
 </template>
 

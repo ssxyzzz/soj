@@ -15,6 +15,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/mdrender"
 )
 
 // ListEntry 章节树节点：章/节共用一层结构，层级由位置决定——
@@ -31,6 +33,7 @@ type ProblemList struct {
 	ID        int64       `bson:"_id" json:"id"`
 	Title     string      `bson:"title" json:"title"`
 	Intro     string      `bson:"intro,omitempty" json:"intro,omitempty"` // 简介 Markdown（单一事实源，前端渲染）
+	IntroHtml string      `bson:"introHtml,omitempty" json:"-"`           // 渲染缓存（v0.30 写入时渲染；json 不下发——列表接口不带、详情由 handler 显式给）
 	Hidden    bool        `bson:"hidden,omitempty" json:"hidden"`         // 隐藏开关：隐藏期间学生不可见（创建者/root 可见）
 	Sort      int64       `bson:"sort" json:"sort"`                       // 手动排序键（列表页按 sort asc, _id asc）
 	CreatedBy int64       `bson:"createdBy" json:"created_by"`
@@ -105,6 +108,7 @@ func (r *Repo) CreateProblemList(ctx context.Context, l *ProblemList) error {
 	if l.Chapters == nil {
 		l.Chapters = []ListEntry{}
 	}
+	l.IntroHtml = mdrender.Render(l.Intro)
 	_, err = r.Lists.InsertOne(ctx, l)
 	return err
 }
@@ -135,6 +139,7 @@ func (r *Repo) ListProblemLists(ctx context.Context) ([]*ProblemList, error) {
 
 // UpdateProblemList 更新题单（指针语义由 handler 组装 $set；chapters 整体覆盖）。
 func (r *Repo) UpdateProblemList(ctx context.Context, id int64, set bson.M) error {
+	setRenderedHtml(set, "intro", "introHtml")
 	res, err := r.Lists.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {
 		return err
@@ -218,9 +223,9 @@ func (r *Repo) ListParticipantPairs(ctx context.Context, pids []int64) ([]ListPa
 	}
 	pipe := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{
-			"pid":    bson.M{"$in": pids},
+			"pid":       bson.M{"$in": pids},
 			"published": true,
-			"status": bson.M{"$ne": StatusCancelled},
+			"status":    bson.M{"$ne": StatusCancelled},
 		}}},
 		{{Key: "$project", Value: bson.M{"uid": 1, "pid": 1}}},
 		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
@@ -245,7 +250,7 @@ type ListRankRow struct {
 }
 
 // ListRankRows 题单完成排名聚合：仅收 solved > 0 的用户，solved 降序、uid 升序决胜
-//（并列同名次由 handler 侧按同分跳号计算）。口径与全站榜单一致（Accepted ∧ published）。
+// （并列同名次由 handler 侧按同分跳号计算）。口径与全站榜单一致（Accepted ∧ published）。
 func (r *Repo) ListRankRows(ctx context.Context, pids []int64) ([]ListRankRow, error) {
 	if len(pids) == 0 {
 		return nil, nil

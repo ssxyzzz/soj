@@ -372,7 +372,7 @@ onMounted(load)
             <el-tag v-if="cl.private" size="small" type="warning">私密班</el-tag>
             <el-tag v-if="cl.joined" size="small" type="success">已加入</el-tag>
           </div>
-          <div v-if="cl.intro.trim()" class="intro"><MdView :content="cl.intro" /></div>
+          <div v-if="cl.intro.trim()" class="intro"><MdView :content="cl.intro" :html="cl.intro_html" /></div>
           <!-- 创建时间在右栏「班级信息」卡展示，名称卡不再重复（v0.7.2 验收反馈） -->
           <div v-if="!cl.joined && !cl.manageable" class="join-bar">
             <el-input

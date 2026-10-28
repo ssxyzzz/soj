@@ -254,6 +254,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"type":               p.Type, // 空 = 传统题（前端按 default 处理）
 		"title":              p.Title,
 		"description":        p.Statement, // 题面（Markdown，v0.8 起单一事实源）
+		"description_html": p.StatementHtml, // 渲染缓存（v0.30 写入时渲染；空 = 前端回退 md 客户端渲染）
 		"time_limit_ms":      p.TimeLimitMS,
 		"memory_limit_kb":    p.MemoryLimitKB,
 		"difficulty":         p.EffDifficulty(),

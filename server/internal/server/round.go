@@ -176,6 +176,7 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 		"id":            ct.ID,
 		"title":         ct.Title,
 		"intro":         ct.Intro, // 赛事说明（Markdown，v0.8 起单一事实源）
+		"intro_html":    ct.IntroHtml, // 渲染缓存（v0.30）
 		"class_id":      ct.ClassID,
 		"status":        status,
 		"start":         ct.Start,
@@ -532,11 +533,12 @@ func (h *Handlers) UpdateExam(c *gin.Context) { h.roundUpdate(c, scopeExam) }
 // 文件 IO 英文文件名（比赛/考试开启文件 IO 后才展示）；meta_tags（2026-10-25 双树，打印带来源）。
 func paperProblemJSON(p *repo.Problem, withFileIO bool) gin.H {
 	item := gin.H{
-		"id":          p.ID,
-		"title":       p.Title,
-		"type":        p.Type,
-		"description": p.Statement,
-		"meta_tags":   orEmptyInt64(p.MetaTags),
+		"id":               p.ID,
+		"title":            p.Title,
+		"type":             p.Type,
+		"description":      p.Statement,
+		"description_html": p.StatementHtml, // 渲染缓存（v0.30）
+		"meta_tags":        orEmptyInt64(p.MetaTags),
 	}
 	if p.IsObjective() {
 		qs := make([]gin.H, 0, len(p.Questions))
@@ -1091,6 +1093,7 @@ func (h *Handlers) ListClassExams(c *gin.Context) {
 			"id":            e.ID,
 			"title":         e.Title,
 			"intro":         e.Intro,
+			"intro_html":    e.IntroHtml, // 渲染缓存（v0.30）
 			"status":        e.Status(now),
 			"start":         e.Start,
 			"end":           e.End,

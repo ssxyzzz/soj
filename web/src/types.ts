@@ -168,6 +168,7 @@ export interface ProblemDetail {
   id: number
   title: string
   description: string // 题面（Markdown，v0.8 起单一事实源）
+  description_html?: string // 渲染缓存（v0.30 写入时渲染；空 = 回退 md 客户端渲染）
   type?: string // 题目类型（v0.9）：空/default = 传统题；objective = 客观题；function = 函数题
   questions?: ObjectiveQuestionView[] // 客观题整卷（脱敏视图）
   questions_full?: ObjectiveQuestionFull[] // 完整定义（满分∨老师门槛）
@@ -456,6 +457,7 @@ export interface AssignmentDetail {
   class_id: number
   title: string
   intro: string // 作业说明（Markdown，v0.8 起单一事实源）
+  intro_html?: string // 渲染缓存（v0.30 写入时渲染；空 = 回退 md 客户端渲染）
   problems: AssignmentProblem[]
   edit_problems?: { id: number; title: string; hidden?: boolean }[] // 管理员调整题目用完整清单
   manageable: boolean
@@ -493,6 +495,7 @@ export interface ClassDetail {
   id: number
   name: string
   intro: string // 班级公告（Markdown，v0.8 起单一事实源）
+  intro_html?: string // 渲染缓存（v0.30）
   owner_id: number
   private: boolean
   created_at: string
@@ -602,6 +605,7 @@ export interface ListDetail {
   id: number
   title: string
   intro: string
+  intro_html?: string // 渲染缓存（v0.30）
   hidden?: boolean
   created_at: string
   manageable: boolean
@@ -671,6 +675,7 @@ export interface SolutionItem {
   uid: number
   nickname: string
   content: string // 题解正文（Markdown，v0.8 起单一事实源）
+  content_html?: string // 渲染缓存（v0.30）
   pinned: boolean
   created_at: string
   updated_at: string
@@ -765,6 +770,7 @@ export interface PaperProblem {
   title: string
   type?: string // 空 = 传统题；objective = 客观题
   description: string
+  description_html?: string // 渲染缓存（v0.30）
   questions?: PaperQuestion[] // 客观题公开字段（无答案/解析/分值）
   file_io_input?: string // 比赛/考试开启文件 IO 时的英文文件名
   file_io_output?: string
@@ -784,6 +790,7 @@ export interface ContestDetail {
   id: number
   title: string
   intro: string // 赛事说明（Markdown，v0.8 起单一事实源）
+  intro_html?: string // 渲染缓存（v0.30）
   status: 'scheduled' | 'running' | 'ended'
   start: string
   end: string

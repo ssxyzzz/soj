@@ -33,6 +33,7 @@ func solutionJSON(s *repo.Solution, nickname string) gin.H {
 		"uid":        s.UID,
 		"nickname":   nickname,
 		"content":    s.Content, // 题解正文（Markdown，v0.8 起单一事实源）
+		"content_html": s.ContentHtml, // 渲染缓存（v0.30）
 		"pinned":     s.Pinned,
 		"created_at": s.CreatedAt.Format(time.RFC3339),
 		"updated_at": s.UpdatedAt.Format(time.RFC3339),

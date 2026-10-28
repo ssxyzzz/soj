@@ -8,6 +8,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/mdrender"
 )
 
 // Assignment 班级作业：一组题库题目的引用清单。
@@ -18,7 +20,8 @@ type Assignment struct {
 	ID        int64     `bson:"_id"`
 	ClassID   int64     `bson:"classId"`
 	Title     string    `bson:"title"`
-	Intro     string    `bson:"intro"` // 作业说明（Markdown，v0.8 起单一事实源）
+	Intro     string    `bson:"intro"`               // 作业说明（Markdown，v0.8 起单一事实源）
+	IntroHtml string    `bson:"introHtml,omitempty"` // 渲染缓存（v0.30 写入时渲染；缺失时前端回退 md 渲染）
 	Problems  []int64   `bson:"problems"`
 	CreatedAt time.Time `bson:"createdAt"`
 	Sort      int64     `bson:"sort,omitempty"`
@@ -40,7 +43,7 @@ func (r *Repo) CreateAssignment(ctx context.Context, classID int64, title, intro
 		sort = *minSort.Sort - 1
 	}
 	a := &Assignment{
-		ID: id, ClassID: classID, Title: title, Intro: intro,
+		ID: id, ClassID: classID, Title: title, Intro: intro, IntroHtml: mdrender.Render(intro),
 		Problems: []int64{}, CreatedAt: time.Now(), Sort: sort,
 	}
 	_, err = r.db.Collection("assignments").InsertOne(ctx, a)
@@ -60,6 +63,7 @@ func (r *Repo) GetAssignment(ctx context.Context, id int64) (*Assignment, error)
 
 // UpdateAssignment 编辑作业名称/说明（set 键值由 handler 校验）。
 func (r *Repo) UpdateAssignment(ctx context.Context, id int64, set bson.M) error {
+	setRenderedHtml(set, "intro", "introHtml")
 	res, err := r.db.Collection("assignments").UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {
 		return err
@@ -83,7 +87,7 @@ func (r *Repo) DeleteAssignment(ctx context.Context, id int64) error {
 }
 
 // ListAssignments 班级作业列表：sort 升序（拖动后的自定义序）+ id 降序
-//（同序号新者在前——未拖过序全 0 时即默认最新在最上，2026-10-26 拍板）。
+// （同序号新者在前——未拖过序全 0 时即默认最新在最上，2026-10-26 拍板）。
 func (r *Repo) ListAssignments(ctx context.Context, classID int64) ([]*Assignment, error) {
 	cursor, err := r.db.Collection("assignments").Find(ctx,
 		bson.M{"classId": classID},

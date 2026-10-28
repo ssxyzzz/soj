@@ -131,7 +131,7 @@ const bigNo = computed(() => String(props.problem.id))
       show-icon
       title="本题暂无测试数据，不可提交"
     />
-    <MdView :content="problem.description" />
+    <MdView :content="problem.description" :html="problem.description_html" />
   </div>
 </template>
 

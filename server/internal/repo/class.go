@@ -10,6 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/mdrender"
 )
 
 // ClassProblemRef 班级对题库题目的引用。Hidden=true 表示仅本班成员可见
@@ -24,7 +26,8 @@ type ClassProblemRef struct {
 type Class struct {
 	ID         int64             `bson:"_id"`
 	Name       string            `bson:"name"`
-	Intro      string            `bson:"intro"` // 班级公告（Markdown，v0.8 起单一事实源）
+	Intro      string            `bson:"intro"`               // 班级公告（Markdown，v0.8 起单一事实源）
+	IntroHtml  string            `bson:"introHtml,omitempty"` // 渲染缓存（v0.30 写入时渲染；缺失时前端回退 md 渲染）
 	OwnerID    int64             `bson:"ownerId"`
 	InviteCode string            `bson:"inviteCode"`
 	Private    bool              `bson:"private"`
@@ -73,6 +76,7 @@ func (r *Repo) CreateClass(ctx context.Context, name, intro string, private bool
 		ID:         0,
 		Name:       name,
 		Intro:      intro,
+		IntroHtml:  mdrender.Render(intro),
 		OwnerID:    ownerID,
 		InviteCode: code,
 		Private:    private,
@@ -244,6 +248,7 @@ func (r *Repo) JoinClass(ctx context.Context, classID, uid int64, uname, code st
 
 // UpdateClass 更新班级字段（名称/富文本公告，v0.7.3 编辑班级）。
 func (r *Repo) UpdateClass(ctx context.Context, classID int64, set bson.M) error {
+	setRenderedHtml(set, "intro", "introHtml")
 	res, err := r.db.Collection("classes").UpdateOne(ctx, bson.M{"_id": classID}, bson.M{"$set": set})
 	if err != nil {
 		return err

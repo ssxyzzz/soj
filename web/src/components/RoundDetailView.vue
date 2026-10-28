@@ -299,7 +299,7 @@ onUnmounted(() => {
             :closable="false"
             class="mt8"
           />
-          <div v-if="round.intro" class="intro"><MdView :content="round.intro" /></div>
+          <div v-if="round.intro" class="intro"><MdView :content="round.intro" :html="round.intro_html" /></div>
           <!-- 起止时间在右栏「时间」卡展示，名称卡只留赛后隐藏期提示（v0.7.2 验收反馈） -->
           <div v-if="round.hidden_until" class="meta">
             <el-tag size="small" type="info">

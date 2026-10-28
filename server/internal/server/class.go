@@ -223,6 +223,7 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		"id":         cl.ID,
 		"name":       cl.Name,
 		"intro":      cl.Intro, // 班级公告（Markdown，v0.8 起单一事实源）
+		"intro_html": cl.IntroHtml, // 渲染缓存（v0.30）
 		"owner_id":   cl.OwnerID,
 		"private":    cl.Private,
 		"created_at": cl.CreatedAt,

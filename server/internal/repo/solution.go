@@ -12,16 +12,19 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/mdrender"
 )
 
 type Solution struct {
-	ID        int64     `bson:"_id"`
-	PID       int64     `bson:"pid"`
-	UID       int64     `bson:"uid"`
-	Content   string    `bson:"content"` // 题解正文（Markdown，v0.8 起单一事实源）
-	Pinned    bool      `bson:"pinned,omitempty"`
-	CreatedAt time.Time `bson:"createdAt"`
-	UpdatedAt time.Time `bson:"updatedAt"`
+	ID          int64     `bson:"_id"`
+	PID         int64     `bson:"pid"`
+	UID         int64     `bson:"uid"`
+	Content     string    `bson:"content"`               // 题解正文（Markdown，v0.8 起单一事实源）
+	ContentHtml string    `bson:"contentHtml,omitempty"` // 渲染缓存（v0.30 写入时渲染；缺失时前端回退 md 渲染）
+	Pinned      bool      `bson:"pinned,omitempty"`
+	CreatedAt   time.Time `bson:"createdAt"`
+	UpdatedAt   time.Time `bson:"updatedAt"`
 }
 
 func (r *Repo) InsertSolution(ctx context.Context, s *Solution) error {
@@ -30,6 +33,7 @@ func (r *Repo) InsertSolution(ctx context.Context, s *Solution) error {
 		return err
 	}
 	s.ID = id
+	s.ContentHtml = mdrender.Render(s.Content)
 	_, err = r.Solutions.InsertOne(ctx, s)
 	return err
 }
@@ -137,7 +141,7 @@ func (r *Repo) GetSolution(ctx context.Context, sid int64) (*Solution, error) {
 func (r *Repo) UpdateSolutionContent(ctx context.Context, sid int64, content string) error {
 	res, err := r.Solutions.UpdateOne(ctx,
 		bson.M{"_id": sid},
-		bson.M{"$set": bson.M{"content": content, "updatedAt": time.Now()}})
+		bson.M{"$set": bson.M{"content": content, "contentHtml": mdrender.Render(content), "updatedAt": time.Now()}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
 	}

@@ -11,30 +11,39 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"soj/internal/mdrender"
 	"soj/internal/richtext"
 	"soj/internal/testdata"
 )
 
+// setRenderedHtml 增量更新 set 里含 md 字段时补对应 html 渲染缓存（v0.30 写入时渲染：
+// md 永远是唯一事实源，html 是可随时重算的缓存；缺失时前端回退 md 客户端渲染，不坏）。
+func setRenderedHtml(set bson.M, mdKey, htmlKey string) {
+	if v, ok := set[mdKey].(string); ok {
+		set[htmlKey] = mdrender.Render(v)
+	}
+}
+
 // Repo 聚合所有集合的访问入口。
 type Repo struct {
-	cli         *mongo.Client
-	db          *mongo.Database
-	Users       *mongo.Collection
-	Roles       *mongo.Collection
-	Problems    *mongo.Collection
-	Submissions *mongo.Collection
-	Counters    *mongo.Collection
-	Uploads     *mongo.Collection
-	Solutions   *mongo.Collection
-	Tags        *mongo.Collection
-	Lists       *mongo.Collection // 题单（v0.18.3 章节化自学导航）
-	Challenges  *mongo.Collection // 挑战模式会话/记录（v0.23）
-	Discussions   *mongo.Collection // 讨论区主题帖（v0.24，scope+scopeId 通用模型）
+	cli            *mongo.Client
+	db             *mongo.Database
+	Users          *mongo.Collection
+	Roles          *mongo.Collection
+	Problems       *mongo.Collection
+	Submissions    *mongo.Collection
+	Counters       *mongo.Collection
+	Uploads        *mongo.Collection
+	Solutions      *mongo.Collection
+	Tags           *mongo.Collection
+	Lists          *mongo.Collection // 题单（v0.18.3 章节化自学导航）
+	Challenges     *mongo.Collection // 挑战模式会话/记录（v0.23）
+	Discussions    *mongo.Collection // 讨论区主题帖（v0.24，scope+scopeId 通用模型）
 	DiscussReplies *mongo.Collection // 讨论区回复（两层楼中楼）
-	DiscussLikes  *mongo.Collection // 讨论点赞（topic/reply × id × uid 唯一）
+	DiscussLikes   *mongo.Collection // 讨论点赞（topic/reply × id × uid 唯一）
 	DiscussReports *mongo.Collection // 讨论举报队列
-	DiscussMutes  *mongo.Collection // 讨论禁言记录
-	Notifications *mongo.Collection // 站内通知（v0.24）
+	DiscussMutes   *mongo.Collection // 讨论禁言记录
+	Notifications  *mongo.Collection // 站内通知（v0.24）
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -63,18 +72,18 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 	}
 	db := cli.Database(dbName)
 	return &Repo{
-		cli:         cli,
-		db:          db,
-		Users:       db.Collection("users"),
-		Roles:       db.Collection("roles"),
-		Problems:    db.Collection("problems"),
-		Submissions: db.Collection("submissions"),
-		Counters:    db.Collection("counters"),
-		Uploads:     db.Collection("uploads"),
-		Solutions:   db.Collection("solutions"),
-		Tags:        db.Collection("tags"),
-		Lists:       db.Collection("lists"),
-		Challenges:  db.Collection("challenges"),
+		cli:            cli,
+		db:             db,
+		Users:          db.Collection("users"),
+		Roles:          db.Collection("roles"),
+		Problems:       db.Collection("problems"),
+		Submissions:    db.Collection("submissions"),
+		Counters:       db.Collection("counters"),
+		Uploads:        db.Collection("uploads"),
+		Solutions:      db.Collection("solutions"),
+		Tags:           db.Collection("tags"),
+		Lists:          db.Collection("lists"),
+		Challenges:     db.Collection("challenges"),
 		Discussions:    db.Collection("discussions"),
 		DiscussReplies: db.Collection("discussReplies"),
 		DiscussLikes:   db.Collection("discussLikes"),
@@ -250,6 +259,9 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if err == nil && res.ModifiedCount > 0 {
 		log.Printf("[boot] 已把 %d 条遗留 Judging 提交重新排队", res.ModifiedCount)
 	}
+
+	// 存量 md 渲染缓存迁移（v0.30）：后台渐进补齐，不阻塞启动
+	r.bootstrapRenderedHtmlAsync()
 	return err
 }
 

@@ -291,7 +291,7 @@ func (h *Handlers) GetListDetail(c *gin.Context) {
 		}
 	}
 	ok(c, gin.H{
-		"id": l.ID, "title": l.Title, "intro": l.Intro, "hidden": l.Hidden,
+		"id": l.ID, "title": l.Title, "intro": l.Intro, "intro_html": l.IntroHtml, "hidden": l.Hidden,
 		"created_at": l.CreatedAt, "manageable": manage,
 		"total": len(seen), "solved": solved, "difficulties": difficulties,
 		"chapters": chapters,

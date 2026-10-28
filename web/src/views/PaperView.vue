@@ -121,7 +121,7 @@ async function printPaper() {
         <div v-if="p.file_io_input" class="paper-file-io">
           文件 IO：{{ p.file_io_input }} / {{ p.file_io_output }}
         </div>
-        <MdView v-if="p.description" :content="p.description" />
+        <MdView v-if="p.description" :content="p.description" :html="p.description_html" />
 
         <div v-if="p.type === 'objective' && p.questions?.length" class="paper-objective">
           <div v-for="(q, qi) in p.questions" :key="qi" class="paper-question">

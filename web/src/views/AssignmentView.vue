@@ -257,7 +257,7 @@ onMounted(() => {
             <el-link class="back" type="primary" @click="router.push(`/classes/${assignment.class_id}`)">返回班级</el-link>
           </div>
           <div v-if="assignment.intro" class="intro">
-            <MdView :content="assignment.intro" />
+            <MdView :content="assignment.intro" :html="assignment.intro_html" />
           </div>
         </div>
       </el-card>

@@ -10,6 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/mdrender"
 )
 
 // 比赛约束（2026-10-15 定稿：时长与隐藏期上限均 7 天）
@@ -28,22 +30,23 @@ const (
 
 // Contest 比赛（主题库）。
 type Contest struct {
-	ID          int64            `bson:"_id"`
-	ClassID     int64            `bson:"classId"` // 恒为 0（历史字段，班级赛事已拆分为 Exam）
-	Title       string           `bson:"title"`
-	Intro       string           `bson:"intro"` // 赛事说明（Markdown，v0.8 起单一事实源）
-	Start       time.Time        `bson:"start"`
-	End         time.Time        `bson:"end"`
-	HiddenUntil time.Time        `bson:"hiddenUntil"` // 零值 = 无赛后隐藏期
-	Problems    []ContestProblem `bson:"problems"`
-	CreatedBy   int64            `bson:"createdBy"`
-	Published   bool             `bson:"published"`        // 隐藏期结束，提交/榜单已并入公开态
-	FileIO      bool             `bson:"fileIo,omitempty"` // 本场启用文件 IO：场内所有题按各题文件名对以文件读写方式判题（v0.5.2-3）
-	Scoreboard  bool             `bson:"scoreboard"`       // 是否开启成绩表（v0.7；默认开，关闭后参与者不看榜单，组织者仍可见）
-	HideDuring  bool             `bson:"hideDuring"`       // 赛期内对参赛者隐藏结果/状态/标签/通过率（v0.7；默认开，保持 OI 现状）
-	HideMeta    bool             `bson:"hideMeta"`         // 发布前对参赛者隐藏难度与知识点（2026-10-27；比赛默认开，服务端不下发，悬停不可见；组织者/题库全量可见视角不受限）
-	StartNotified bool           `bson:"startNotified,omitempty"` // 开赛提醒已发标记（v0.24 通知中心防重发）
-	CreatedAt   time.Time        `bson:"createdAt"`
+	ID            int64            `bson:"_id"`
+	ClassID       int64            `bson:"classId"` // 恒为 0（历史字段，班级赛事已拆分为 Exam）
+	Title         string           `bson:"title"`
+	Intro         string           `bson:"intro"`               // 赛事说明（Markdown，v0.8 起单一事实源）
+	IntroHtml     string           `bson:"introHtml,omitempty"` // 渲染缓存（v0.30 写入时渲染；缺失时前端回退 md 渲染）
+	Start         time.Time        `bson:"start"`
+	End           time.Time        `bson:"end"`
+	HiddenUntil   time.Time        `bson:"hiddenUntil"` // 零值 = 无赛后隐藏期
+	Problems      []ContestProblem `bson:"problems"`
+	CreatedBy     int64            `bson:"createdBy"`
+	Published     bool             `bson:"published"`               // 隐藏期结束，提交/榜单已并入公开态
+	FileIO        bool             `bson:"fileIo,omitempty"`        // 本场启用文件 IO：场内所有题按各题文件名对以文件读写方式判题（v0.5.2-3）
+	Scoreboard    bool             `bson:"scoreboard"`              // 是否开启成绩表（v0.7；默认开，关闭后参与者不看榜单，组织者仍可见）
+	HideDuring    bool             `bson:"hideDuring"`              // 赛期内对参赛者隐藏结果/状态/标签/通过率（v0.7；默认开，保持 OI 现状）
+	HideMeta      bool             `bson:"hideMeta"`                // 发布前对参赛者隐藏难度与知识点（2026-10-27；比赛默认开，服务端不下发，悬停不可见；组织者/题库全量可见视角不受限）
+	StartNotified bool             `bson:"startNotified,omitempty"` // 开赛提醒已发标记（v0.24 通知中心防重发）
+	CreatedAt     time.Time        `bson:"createdAt"`
 }
 
 // Exam 班级考试：与比赛同构（规则见 DEVELOPMENT.md「比赛」节）。
@@ -101,6 +104,7 @@ func (r *Repo) CreateRound(ctx context.Context, kind string, c *Contest) error {
 		return err
 	}
 	c.CreatedAt = time.Now()
+	c.IntroHtml = mdrender.Render(c.Intro)
 	_, err = r.roundsCol(kind).InsertOne(ctx, c)
 	return err
 }
@@ -143,6 +147,7 @@ func (r *Repo) SetRoundFileIO(ctx context.Context, kind string, id int64, enable
 // UpdateRoundFields 组织者编辑比赛/考试（时间、题目集合/顺序、成绩表与赛时隐藏成绩开关）。
 // set 的键值由 handler 校验；题目清单整体替换（评分在 handler 内按原值保留）。
 func (r *Repo) UpdateRoundFields(ctx context.Context, kind string, id int64, set bson.M) error {
+	setRenderedHtml(set, "intro", "introHtml")
 	res, err := r.roundsCol(kind).UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {
 		return err

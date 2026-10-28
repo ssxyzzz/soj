@@ -128,7 +128,7 @@ async function togglePin(s: SolutionItem) {
           </el-button>
         </span>
       </div>
-      <MdView :content="s.content" />
+      <MdView :content="s.content" :html="s.content_html" />
     </div>
     <el-empty v-if="!solutions.length" description="还没有题解，快来发第一篇" :image-size="48" />
     <div v-if="solutionsTotal > PAGE_SIZE" class="side-pager">

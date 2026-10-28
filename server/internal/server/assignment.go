@@ -157,7 +157,7 @@ func (h *Handlers) ListClassAssignments(c *gin.Context) {
 	items := make([]gin.H, 0, len(list))
 	for _, a := range list {
 		items = append(items, gin.H{
-			"id": a.ID, "title": a.Title, "intro": a.Intro,
+			"id": a.ID, "title": a.Title, "intro": a.Intro, "intro_html": a.IntroHtml, // 渲染缓存（v0.30）
 			"problem_count": len(a.Problems), "created_at": a.CreatedAt,
 		})
 	}
@@ -331,7 +331,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 		}
 	}
 	resp := gin.H{
-		"id": a.ID, "class_id": a.ClassID, "title": a.Title, "intro": a.Intro,
+		"id": a.ID, "class_id": a.ClassID, "title": a.Title, "intro": a.Intro, "intro_html": a.IntroHtml,
 		"problems": problems, "manageable": manage,
 	}
 	// 管理员调整题目用完整清单：含赛前/隐藏期/主题库隐藏题，避免保存时悄悄丢失。

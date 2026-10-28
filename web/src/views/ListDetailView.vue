@@ -172,7 +172,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                   {{ detail.total }} 题 · {{ detail.chapters.length }} 章 · 创建于 {{ fmtDay(detail.created_at) }}
                 </div>
                 <div v-if="detail.intro" class="intro">
-                  <MdView :content="detail.intro" />
+                  <MdView :content="detail.intro" :html="detail.intro_html" />
                 </div>
                 <div class="progress-block">
                   <div class="progress-txt">
