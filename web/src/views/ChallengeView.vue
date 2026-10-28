@@ -168,15 +168,24 @@ onMounted(async () => {
   startTick()
 })
 
+const countdownNum = ref(0)
+let cdTimer: number | null = null
+// v0.27 卸载守卫：3-2-1 倒计时窗口内离页时，beginChallenge 的续段不得在已卸载组件上
+// 启动快照 interval（曾致永无人清理的 1s 定时器钉住整份组件闭包）
+let alive = true
+
 onBeforeUnmount(() => {
+  alive = false
   stopTick()
   stopSnapshots()
   if (pollTimer != null) window.clearTimeout(pollTimer)
   if (saveTimer != null) window.clearTimeout(saveTimer)
+  if (cdTimer != null) {
+    window.clearInterval(cdTimer)
+    cdTimer = null
+  }
 })
 
-const countdownNum = ref(0)
-let cdTimer: number | null = null
 async function beginChallenge() {
   let startedAt = 0
   try {
@@ -206,6 +215,7 @@ async function beginChallenge() {
       }
     }, 1000)
   })
+  if (!alive) return // 倒计时中被卸载：会话留给服务端懒清扫（timeout/quit 口径）
   startMs.value = startedAt
   phase.value = 'running'
   startSnapshots()

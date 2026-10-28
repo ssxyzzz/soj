@@ -44,6 +44,7 @@ func main() {
 	if err := r.Bootstrap(ctx, store); err != nil {
 		log.Fatalf("[boot] 初始化失败: %v", err)
 	}
+	cleanupStaleTemp(cfg)
 
 	sb := sandbox.New(cfg.SandboxAddr)
 
@@ -150,4 +151,18 @@ func hostname() string {
 		return "judge"
 	}
 	return h
+}
+
+// cleanupStaleTemp 清扫上次异常退出残留的临时文件（v0.27 长跑体检）：容器被 kill 时
+// defer 清理不会执行——导入 zip/解压目录（单次合计最高约 6GB）与备份临时目录（含未
+// 加密的 testdata 全量 tar）常驻可写层/备份卷。只清 2 小时前的，避开并行中的任务
+// （cron 备份与面板备份互为独立进程）。
+func cleanupStaleTemp(cfg *config.Config) {
+	const olderThan = 2 * time.Hour
+	if n := server.CleanupStaleImportTemp(olderThan); n > 0 {
+		log.Printf("[boot] 已清扫 %d 个残留导入临时文件", n)
+	}
+	if n := backup.CleanupStaleTemp(cfg.BackupDir, olderThan); n > 0 {
+		log.Printf("[boot] 已清扫 %d 个残留备份临时目录", n)
+	}
 }

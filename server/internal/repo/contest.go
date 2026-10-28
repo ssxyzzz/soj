@@ -281,7 +281,10 @@ var (
 	lbCache = map[string]lbCacheEntry{}
 )
 
-const lbCacheTTL = time.Minute
+const (
+	lbCacheTTL = time.Minute
+	lbCacheCap = 128
+)
 
 func lbCacheKey(kind string, roundID int64) string {
 	return kind + ":" + strconv.FormatInt(roundID, 10)
@@ -304,9 +307,13 @@ func invalidateAllLeaderboards() {
 func (r *Repo) RoundLeaderboardCached(ctx context.Context, kind string, roundID int64, fullScores map[int64]int) ([]*LeaderRow, error) {
 	key := lbCacheKey(kind, roundID)
 	lbMu.Lock()
-	if e, ok := lbCache[key]; ok && time.Since(e.at) < lbCacheTTL {
-		lbMu.Unlock()
-		return e.rows, nil
+	if e, ok := lbCache[key]; ok {
+		if time.Since(e.at) < lbCacheTTL {
+			lbMu.Unlock()
+			return e.rows, nil
+		}
+		// 过期即删不驻留（v0.27：原只覆盖同键，无人再访问的历史场次条目永占内存）
+		delete(lbCache, key)
 	}
 	lbMu.Unlock()
 	rows, err := r.RoundLeaderboard(ctx, kind, roundID, fullScores)
@@ -314,9 +321,33 @@ func (r *Repo) RoundLeaderboardCached(ctx context.Context, kind string, roundID 
 		return nil, err
 	}
 	lbMu.Lock()
-	lbCache[key] = lbCacheEntry{rows: rows, at: time.Now()}
+	lbCachePut(key, lbCacheEntry{rows: rows, at: time.Now()})
 	lbMu.Unlock()
 	return rows, nil
+}
+
+// lbCachePut 覆盖写入并防膨胀（调用方持 lbMu）：键空间随用户历史场次只增（个人主页会
+// 触及每个用户参加过的全部场次），超上限先清一轮过期，仍超丢最旧（v0.27）。
+func lbCachePut(key string, e lbCacheEntry) {
+	if _, exists := lbCache[key]; !exists {
+		if len(lbCache) >= lbCacheCap {
+			for k, v := range lbCache {
+				if time.Since(v.at) >= lbCacheTTL {
+					delete(lbCache, k)
+				}
+			}
+		}
+		for len(lbCache) >= lbCacheCap {
+			oldestKey, oldestAt := "", time.Time{}
+			for k, v := range lbCache {
+				if oldestKey == "" || v.at.Before(oldestAt) {
+					oldestKey, oldestAt = k, v.at
+				}
+			}
+			delete(lbCache, oldestKey)
+		}
+	}
+	lbCache[key] = e
 }
 
 // RoundSubmissions 某场比赛/考试的全部提交（榜单计算/选手本人回看，调用方按 uid 过滤，

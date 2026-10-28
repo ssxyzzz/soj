@@ -4,6 +4,12 @@ services:
   mongo:
     image: mongo:7
     restart: unless-stopped
+    # 日志轮转（v0.27）：json-file 默认不设限，长跑可写满磁盘——三服务统一 10m×3
+    logging: &default-logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # 单节点副本集：既是"一个 MongoDB"，又解锁事务能力（见 DEVELOPMENT.md 4.2）
     command: ["--replSet", "rs0", "--bind_ip_all"]
     volumes:
@@ -25,6 +31,7 @@ services:
     restart: unless-stopped
     privileged: true
     shm_size: 256m
+    logging: *default-logging
     ports:
       - "5050:5050" # 本地开发时供宿主机连接，上云建议移除
 
@@ -35,6 +42,15 @@ services:
       additional_contexts:
         web: ./web
     restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      # v0.27：Health 在 db/sandbox 任一不通时返回 503，容器态直接反映依赖健康
+      #（镜像为 alpine，wget 即 busybox 自带）
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/api/health | grep -q '\"db\":true.*\"sandbox\":true' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       TZ: Asia/Shanghai # 容器默认 UTC：备份归档文件名/日志/manifest 时间戳会差 8 小时，对不上「几点几分备份的」
       SOJ_ADDR: ":8080"

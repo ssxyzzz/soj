@@ -4,7 +4,7 @@
 // submission（列表已带代码与明细时直接传入，避免多余请求）。
 // 教师级权限（submission.view.all）可重测：重置 Pending 交还判题池，轮询至终态。
 // v0.7.1：队列态（排队/评测/取消中）可取消评测——本人 ∨ submission.view.all。
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { submissionApi } from '@/api'
@@ -128,6 +128,12 @@ function pollUntilDone(id: number, doneMsg: string) {
   }
   window.setTimeout(tick, 1200)
 }
+
+// v0.27：父页直接卸载（切路由）时也停轮询——原只在关弹窗时失效 token，
+// 卸载后 1.2s 轮询会一直发到判题出终态
+onUnmounted(() => {
+  pollToken++
+})
 
 watch(
   () => props.modelValue,

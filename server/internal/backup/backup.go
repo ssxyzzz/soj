@@ -466,6 +466,29 @@ func pruneArchives(backupDir string, tier Tier) {
 
 // guardDiskSpace 磁盘护栏：可用空间低于「最近同层归档 ×2 + 1GB」时拒绝开跑
 //（防大备份把盘写爆；首次备份（无历史）跳过）。
+// CleanupStaleTemp 清扫 BackupDir 下残留的 .tmp-backup-* 临时目录（v0.27 长跑体检）：
+// 进程被 kill 时 Run 的 defer RemoveAll 不会执行，残留目录含未加密的 testdata 全量
+// tar。只清 olderThan 之前创建的，避开恰好并行中的备份任务（cron 备份与面板备份是
+// 两个进程，runMu 互不互斥）。返回清理数量。
+func CleanupStaleTemp(backupDir string, olderThan time.Duration) int {
+	matches, err := filepath.Glob(filepath.Join(backupDir, ".tmp-backup-*"))
+	if err != nil {
+		return 0
+	}
+	cutoff := time.Now().Add(-olderThan)
+	removed := 0
+	for _, m := range matches {
+		fi, err := os.Stat(m)
+		if err != nil || !fi.IsDir() || fi.ModTime().After(cutoff) {
+			continue
+		}
+		if os.RemoveAll(m) == nil {
+			removed++
+		}
+	}
+	return removed
+}
+
 func guardDiskSpace(backupDir string, tier Tier) error {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(backupDir, &stat); err != nil {

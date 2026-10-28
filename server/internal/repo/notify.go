@@ -227,8 +227,10 @@ func (r *Repo) InsertBroadcastRecord(ctx context.Context, byUID int64, title, bo
 	return id, err
 }
 
-// CountBroadcastsToday 当天已发广播数（频控）。
+// CountBroadcastsToday 当天已发广播数（频控；本地零点起算——Truncate(24h) 是 UTC 零点
+// = 北京 08:00 切窗，v0.27 根修为 time.Local 零点）。
 func (r *Repo) CountBroadcastsToday(ctx context.Context) (int64, error) {
-	dayStart := time.Now().Truncate(24 * time.Hour)
+	now := time.Now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	return r.db.Collection("broadcasts").CountDocuments(ctx, bson.M{"at": bson.M{"$gte": dayStart}})
 }

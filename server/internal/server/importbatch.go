@@ -164,6 +164,34 @@ func (h *Handlers) ImportCancel(c *gin.Context) {
 	ok(c, gin.H{"cancel_requested": true})
 }
 
+// CleanupStaleImportTemp 清扫容器临时目录下残留的导入产物（v0.27 长跑体检）：导入 zip
+// 与解压目录单次合计最高约 6GB，进程被 kill 时 defer 清理不会执行、compose restart 又
+// 保留可写层，泄漏常驻。只清 olderThan 之前的，避开并行中的导入任务。返回清理数量。
+func CleanupStaleImportTemp(olderThan time.Duration) int {
+	removed := 0
+	cutoff := time.Now().Add(-olderThan)
+	patterns := []string{
+		filepath.Join(os.TempDir(), "soj-import-*.zip"),
+		filepath.Join(os.TempDir(), "soj-import-dir-*"),
+	}
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			continue
+		}
+		for _, m := range matches {
+			fi, err := os.Stat(m)
+			if err != nil || fi.ModTime().After(cutoff) {
+				continue
+			}
+			if os.RemoveAll(m) == nil {
+				removed++
+			}
+		}
+	}
+	return removed
+}
+
 // StartImport 上传题包 zip 并启动导入（全站单任务，进行中 409）。
 func (h *Handlers) StartImport(c *gin.Context) {
 	uid, uname, _, logged := currentUser(c)

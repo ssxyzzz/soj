@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onScopeDispose, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -35,6 +35,10 @@ function useCountdown() {
       }
     }, 1000)
   }
+  // v0.27：发码后 60s 内登录成功跳走是最常见路径，卸载时清掉残留倒计时
+  onScopeDispose(() => {
+    if (timer !== undefined) clearInterval(timer)
+  })
   return { seconds, start }
 }
 const regCd = useCountdown()

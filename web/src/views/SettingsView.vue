@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 
@@ -228,6 +228,11 @@ function startBindCd() {
     }
   }, 1000)
 }
+
+// v0.27：发码后 60s 内离开设置页，倒计时 interval 不再钉住已卸载组件
+onUnmounted(() => {
+  if (bindTimer !== undefined) clearInterval(bindTimer)
+})
 
 async function sendBindCode(toOld = false) {
   // toOld：旧邮箱验证码模式的「发送至旧邮箱」按钮——目标固定为当前绑定邮箱

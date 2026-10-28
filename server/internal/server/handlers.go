@@ -15,11 +15,10 @@ import (
 	"soj/internal/testdata"
 )
 
-// leaderEntry 比赛榜单缓存条目。
+// leaderEntry 比赛榜单缓存条目（TTL/容量治理见 round.go 的 leaderCachePut）。
 type leaderEntry struct {
-	at        time.Time
-	published bool
-	rows      any
+	at   time.Time
+	rows any
 }
 
 type Handlers struct {
@@ -38,6 +37,8 @@ type Handlers struct {
 	ipLimitGlobal *ipLimiter
 	ipLimitAuth   *ipLimiter
 
+	// 榜单进程缓存（v0.27 治理）：条目为全场「人 × 题」的 MB 级树，键随历史场次只增——
+	// TTL 30s 统一新鲜度（发布前后同口径，发布冻结曾致 rejudge 后榜单不刷新）+ 容量上限
 	leaderMu    sync.Mutex
 	leaderCache map[string]leaderEntry
 
@@ -73,12 +74,17 @@ func failData(c *gin.Context, status int, message string, data any) {
 	c.JSON(status, gin.H{"code": 1, "message": message, "data": data})
 }
 
-// Health 返回数据库与沙箱的连通状态。
+// Health 返回数据库与沙箱的连通状态；任一不通时返回 503（v0.27：原恒 200，compose
+// healthcheck 与外部监控只能靠解析正文判活）。响应体形状不变（脚本按 "db":true 抓取）。
 func (h *Handlers) Health(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
 	defer cancel()
-	ok(c, gin.H{
-		"db":      h.repo.Ping(ctx) == nil,
-		"sandbox": h.sandbox.Available(ctx),
-	})
+	dbOK := h.repo.Ping(ctx) == nil
+	sbOK := h.sandbox.Available(ctx)
+	body := gin.H{"code": 0, "data": gin.H{"db": dbOK, "sandbox": sbOK}}
+	if dbOK && sbOK {
+		c.JSON(http.StatusOK, body)
+		return
+	}
+	c.JSON(http.StatusServiceUnavailable, body)
 }

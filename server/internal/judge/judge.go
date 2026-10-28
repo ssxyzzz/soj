@@ -577,28 +577,32 @@ func partialScore(passed, total int) int {
 func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (fileID, status, info string, err error) {
 	const maxAttempts = 2
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		// 方案二：编译串行化
-		select {
-		case compileGate <- struct{}{}:
-		case <-ctx.Done():
-			return "", "", "", ctx.Err()
-		}
-		cmd := sandbox.Cmd{
-			Args: l.CompileArgs,
-			Env:  []string{"PATH=/usr/local/bin:/usr/bin:/bin", "TMPDIR=."}, // 方案三：临时文件写入本次判题目录
-			Files: []sandbox.File{
-				sandbox.Stdin(code),            // stdin：源码
-				sandbox.Pipe("stdout", 64<<10), // 管道收集
-				sandbox.Pipe("stderr", 256<<10),
-			},
-			CPULimit:      compileCPULimit,
-			MemoryLimit:   compileMemoryLimit,
-			ProcLimit:     64,
-			CopyOut:       []string{"stdout", "stderr"},
-			CopyOutCached: []string{"main"},
-		}
-		results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
-		<-compileGate
+		// 方案二：编译串行化。持闸段收进闭合并 defer 释放：Run 内部 panic 时外层
+		// runOneSafely 的 recover 会救活 worker，闸若不释放将永久占死全部判题与自测
+		// 编译（v0.27：原裸 <-compileGate 在 panic 路径上漏放）。
+		results, err := func() (res []sandbox.Result, err error) {
+			select {
+			case compileGate <- struct{}{}:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			defer func() { <-compileGate }()
+			cmd := sandbox.Cmd{
+				Args: l.CompileArgs,
+				Env:  []string{"PATH=/usr/local/bin:/usr/bin:/bin", "TMPDIR=."}, // 方案三：临时文件写入本次判题目录
+				Files: []sandbox.File{
+					sandbox.Stdin(code),            // stdin：源码
+					sandbox.Pipe("stdout", 64<<10), // 管道收集
+					sandbox.Pipe("stderr", 256<<10),
+				},
+				CPULimit:      compileCPULimit,
+				MemoryLimit:   compileMemoryLimit,
+				ProcLimit:     64,
+				CopyOut:       []string{"stdout", "stderr"},
+				CopyOutCached: []string{"main"},
+			}
+			return j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
+		}()
 		if err != nil || len(results) == 0 {
 			return "", "", "", err
 		}

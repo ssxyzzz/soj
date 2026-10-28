@@ -898,6 +898,36 @@ func roundFullScores(ct *repo.Contest) map[int64]int {
 	return out
 }
 
+// 榜单进程缓存治理（v0.27 长跑体检）：条目是全场「人 × 题」的 MB 级树，键空间随历史
+// 场次只增——TTL 30s 统一新鲜度（赛时与发布后同口径）+ 容量上限防膨胀。
+const (
+	leaderCacheTTL = 30 * time.Second
+	leaderCacheCap = 64
+)
+
+// leaderCachePut 覆盖写入并防膨胀（调用方持 leaderMu）：超上限先清一轮过期，仍超丢最旧。
+func leaderCachePut(m map[string]leaderEntry, key string, e leaderEntry) {
+	if _, exists := m[key]; !exists {
+		if len(m) >= leaderCacheCap {
+			for k, v := range m {
+				if time.Since(v.at) >= leaderCacheTTL {
+					delete(m, k)
+				}
+			}
+		}
+		for len(m) >= leaderCacheCap {
+			oldestKey, oldestAt := "", time.Time{}
+			for k, v := range m {
+				if oldestKey == "" || v.at.Before(oldestAt) {
+					oldestKey, oldestAt = k, v.at
+				}
+			}
+			delete(m, oldestKey)
+		}
+	}
+	m[key] = e
+}
+
 func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 	uid, _, role, logged := currentUser(c)
 	id, okID := parseID(c, "id")
@@ -944,7 +974,8 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 	h.leaderMu.Lock()
 	entry, cached := h.leaderCache[cacheKey]
 	h.leaderMu.Unlock()
-	if !cached || (!ct.Published && time.Since(entry.at) > 30*time.Second) {
+	// TTL 30s 对发布前后统一生效：原「发布后条件恒假」曾致发布/rejudge 后榜单冻结到重启
+	if !cached || time.Since(entry.at) > leaderCacheTTL {
 		rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID, roundFullScores(ct))
 		if err != nil {
 			fail(c, http.StatusInternalServerError, "计算榜单失败")
@@ -982,9 +1013,9 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 			}
 			items = append(items, item)
 		}
-		entry = leaderEntry{at: time.Now(), published: ct.Published, rows: items}
+		entry = leaderEntry{at: time.Now(), rows: items}
 		h.leaderMu.Lock()
-		h.leaderCache[cacheKey] = entry
+		leaderCachePut(h.leaderCache, cacheKey, entry)
 		h.leaderMu.Unlock()
 	}
 	ok(c, entry.rows)

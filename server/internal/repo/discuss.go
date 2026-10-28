@@ -171,9 +171,11 @@ func (r *Repo) ListScopeTopics(ctx context.Context, scope string, scopeID, viewe
 	return r.listDiscussTopics(ctx, filter, page, pageSize)
 }
 
-// CountUserDiscussTopicsToday 某用户当天（本地零点起）发布的主楼数（限速用）。
+// CountUserDiscussTopicsToday 某用户当天（本地零点起）发布的主楼数（限速用；
+// v0.27 根修：原 Truncate(24h) 是 UTC 零点=北京 08:00 切窗，与注释语义相反）。
 func (r *Repo) CountUserDiscussTopicsToday(ctx context.Context, uid int64) (int64, error) {
-	dayStart := time.Now().Truncate(24 * time.Hour)
+	now := time.Now()
+	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	return r.Discussions.CountDocuments(ctx, bson.M{"uid": uid, "createdAt": bson.M{"$gte": dayStart}})
 }
 
