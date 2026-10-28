@@ -52,3 +52,35 @@ func TestSeedUserCounterAndManualID(t *testing.T) {
 		t.Fatalf("重复守卫后自增号 = %d，期望 %d（不应回退）", again, next+1)
 	}
 }
+
+// TestUserSeqStartRuntime 运行期调大起点即时生效：设置 500 后下一个自动号 ≥ 500；
+// 调小起点不回退（从计数器继续）。
+func TestUserSeqStartRuntime(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+
+	start := 300
+	if err := r.UpdateSystemSettings(ctx, &SystemSettings{RateLimitPerMinute: DefaultRateLimitPerMinute, UserSeqStart: &start}); err != nil {
+		t.Fatalf("UpdateSystemSettings: %v", err)
+	}
+	uid, err := r.CreateUser(ctx, "erin", "hash", "Erin", RoleDefault)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if uid < 300 {
+		t.Fatalf("起点 300 下首个自动号 = %d，应 ≥ 300", uid)
+	}
+
+	// 调小起点：计数器已超过，不回退
+	lower := 5
+	if err := r.UpdateSystemSettings(ctx, &SystemSettings{RateLimitPerMinute: DefaultRateLimitPerMinute, UserSeqStart: &lower}); err != nil {
+		t.Fatalf("UpdateSystemSettings lower: %v", err)
+	}
+	uid2, err := r.CreateUser(ctx, "frank", "hash", "Frank", RoleDefault)
+	if err != nil {
+		t.Fatalf("CreateUser second: %v", err)
+	}
+	if uid2 != uid+1 {
+		t.Fatalf("调小起点后自动号 = %d，期望 %d（从计数器继续不回退）", uid2, uid+1)
+	}
+}

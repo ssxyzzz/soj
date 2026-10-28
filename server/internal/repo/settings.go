@@ -57,6 +57,9 @@ type SystemSettings struct {
 	NotifyRetentionDays *int `bson:"notifyRetentionDays,omitempty"`
 	// root 全站广播每日上限；0 = 不限。
 	NotifyBroadcastPerDay *int `bson:"notifyBroadcastPerDay,omitempty"`
+	// 注册取号起点（v0.24 小批）：自动分配的用户 ID 从该号起（默认 100）；只抬高不回退
+	// ——计数器已超过起点时从计数器继续；手动指定 ID 不受此限。
+	UserSeqStart *int `bson:"userSeqStart,omitempty"`
 }
 
 const (
@@ -171,6 +174,10 @@ func (s *SystemSettings) normalizeDiscuss() {
 	if s.NotifyBroadcastPerDay == nil || *s.NotifyBroadcastPerDay < 0 {
 		s.NotifyBroadcastPerDay = intPtr(DefaultNotifyBroadcastPerDay)
 	}
+	if s.UserSeqStart == nil || *s.UserSeqStart < 1 || *s.UserSeqStart > 1_000_000_000 {
+		v := int(DefaultUserSeqStart)
+		s.UserSeqStart = &v
+	}
 }
 
 // 讨论区开关取值（nil 已在读取时兜底，防御直接构造的零值结构体）。
@@ -234,6 +241,14 @@ func (s *SystemSettings) NotifyBroadcastPerDayVal() int {
 	return *s.NotifyBroadcastPerDay
 }
 
+// UserSeqStartVal 注册取号起点（默认 100；越界回默认）。
+func (s *SystemSettings) UserSeqStartVal() int64 {
+	if s.UserSeqStart == nil || *s.UserSeqStart < 1 || *s.UserSeqStart > 1_000_000_000 {
+		return DefaultUserSeqStart
+	}
+	return int64(*s.UserSeqStart)
+}
+
 func intPtr(v int) *int { return &v }
 
 // UpdateSystemSettings 更新系统设置（文档不存在时创建）。
@@ -270,6 +285,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"discussAcceptXp":        int(s.DiscussAcceptXpVal()),
 			"notifyRetentionDays":    s.NotifyRetentionDaysVal(),
 			"notifyBroadcastPerDay":  s.NotifyBroadcastPerDayVal(),
+			"userSeqStart":           s.UserSeqStartVal(),
 		}},
 	)
 	return err

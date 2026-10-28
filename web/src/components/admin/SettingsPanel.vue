@@ -42,6 +42,7 @@ const discussReportFold = ref(3)
 const discussAcceptXp = ref(10)
 const notifyRetentionDays = ref(90)
 const notifyBroadcastPerDay = ref(1)
+const userSeqStart = ref(100)
 
 const savingSettings = ref(false)
 
@@ -75,6 +76,7 @@ onMounted(async () => {
     discussAcceptXp.value = s.discuss_accept_xp ?? 10
     notifyRetentionDays.value = s.notify_retention_days ?? 90
     notifyBroadcastPerDay.value = s.notify_broadcast_per_day ?? 1
+    userSeqStart.value = s.user_seq_start ?? 100
   } catch {
     // 加载失败保留默认值展示
   }
@@ -113,6 +115,7 @@ async function saveSettings() {
       discuss_accept_xp: discussAcceptXp.value,
       notify_retention_days: notifyRetentionDays.value,
       notify_broadcast_per_day: notifyBroadcastPerDay.value,
+      user_seq_start: userSeqStart.value,
     })
     ElMessage.success('设置已保存')
     // 备案号/注册验证方式/找回开关改了登录页要跟着变：重置站点公开状态缓存
@@ -279,6 +282,14 @@ async function saveSettings() {
       <el-form-item label="全站广播每日上限">
         <el-input-number v-model="notifyBroadcastPerDay" :min="0" :max="100" />
         <span class="dim" style="margin-left: 8px">root 全员公告的每日频次上限（0 = 不限制）</span>
+      </el-form-item>
+
+      <el-divider content-position="left">账号</el-divider>
+      <el-form-item label="注册取号起点">
+        <el-input-number v-model="userSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
+        <span class="dim" style="margin-left: 8px">
+          自动分配的用户 ID 从该号起（默认 100）；调大即时生效、只前进不回退（计数器已超过起点时从计数器继续）；后台手动指定 ID 不受此限
+        </span>
       </el-form-item>
     </el-form>
   </el-card>

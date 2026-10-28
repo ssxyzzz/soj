@@ -154,7 +154,7 @@ func (r *Repo) ClearLoginFailures(ctx context.Context, uid int64) error {
 }
 
 func (r *Repo) CreateUser(ctx context.Context, username, passwordHash, nickname, role string) (int64, error) {
-	uid, err := r.nextSeq(ctx, "user")
+	uid, err := r.nextUserSeq(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -168,26 +168,56 @@ func (r *Repo) CreateUser(ctx context.Context, username, passwordHash, nickname,
 	return uid, nil
 }
 
-// DefaultUserSeqStart 注册取号起点（v0.24 小批）：计数器垫到 99 后首个注册号 = 100。
+// DefaultUserSeqStart 注册取号起点默认值（后台「注册取号起点」可调，见 SystemSettings.UserSeqStart）。
 const DefaultUserSeqStart int64 = 100
 
-// SeedUserCounter 注册取号起点守卫（Bootstrap 每次启动执行）：user 计数器 $max 到
-// DefaultUserSeqStart-1。全新部署首个注册号即 100；存量部署计数器若低于 100 则跳到
-// 100（只前进不回退，与 syncProblemCounter 同款幂等守卫），已超 100 的不受影响。
+// nextUserSeq 自动分配用户 ID：计数器低于后台设定的「注册取号起点」时垫到 start-1 重取
+// ——管理员运行期调大起点即时生效（首个注册号 = 起点）；计数器已超起点（或起点调小）
+// 时从计数器继续，只前进不回退。手动指定 ID 走 CreateUserWithID，不经过此处。
+func (r *Repo) nextUserSeq(ctx context.Context) (int64, error) {
+	start := DefaultUserSeqStart
+	if s, err := r.GetSystemSettings(ctx); err == nil {
+		start = s.UserSeqStartVal()
+	}
+	uid, err := r.nextSeq(ctx, "user")
+	if err != nil {
+		return 0, err
+	}
+	if uid < start {
+		var doc struct {
+			Seq int64 `bson:"seq"`
+		}
+		if merr := r.Counters.FindOneAndUpdate(ctx,
+			bson.M{"_id": "user"},
+			bson.M{"$max": bson.M{"seq": start - 1}},
+			options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
+		).Decode(&doc); merr == nil {
+			return r.nextSeq(ctx, "user")
+		}
+	}
+	return uid, nil
+}
+
+// SeedUserCounter 注册取号起点守卫（Bootstrap 幂等快路径）：user 计数器 $max 到起点-1，
+// 让首个注册免走 nextUserSeq 的垫高重取；运行期改动由 nextUserSeq 兜底，两者口径一致。
 func (r *Repo) SeedUserCounter(ctx context.Context) error {
+	start := DefaultUserSeqStart
+	if s, err := r.GetSystemSettings(ctx); err == nil {
+		start = s.UserSeqStartVal()
+	}
 	var before struct {
 		Seq int64 `bson:"seq"`
 	}
 	err := r.Counters.FindOneAndUpdate(ctx,
 		bson.M{"_id": "user"},
-		bson.M{"$max": bson.M{"seq": DefaultUserSeqStart - 1}},
+		bson.M{"$max": bson.M{"seq": start - 1}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before),
 	).Decode(&before)
 	if IsNotFound(err) {
-		return nil // 全新计数器，本次 $max 已写入 99
+		return nil // 全新计数器，本次 $max 已写入起点-1
 	}
-	if err == nil && before.Seq < DefaultUserSeqStart-1 {
-		log.Printf("[boot] user 计数器已从 %d 垫到 %d（注册取号起点 %d）", before.Seq, DefaultUserSeqStart-1, DefaultUserSeqStart)
+	if err == nil && before.Seq < start-1 {
+		log.Printf("[boot] user 计数器已从 %d 垫到 %d（注册取号起点 %d）", before.Seq, start-1, start)
 	}
 	return err
 }
@@ -225,7 +255,7 @@ func (r *Repo) CreateUserWithEmail(ctx context.Context, username, password, nick
 	if err != nil {
 		return 0, err
 	}
-	uid, err := r.nextSeq(ctx, "user")
+	uid, err := r.nextUserSeq(ctx)
 	if err != nil {
 		return 0, err
 	}

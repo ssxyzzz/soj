@@ -379,7 +379,7 @@ defineExpose({ refresh: () => load() })
     <!-- 批量建号（v0.24 小批）：下载模板 → 填表 → 上传 CSV；逐行 best-effort，失败行全量明细 -->
     <el-dialog v-model="showImport" title="批量导入用户" width="640">
       <el-alert
-        title="三步：下载模板 → 按列填写（id 可留空自动分配，从 100 起）→ 上传 CSV"
+        title="三步：下载模板 → 按列填写（id 可留空自动分配，起点见系统设置-注册取号起点）→ 上传 CSV"
         type="info"
         :closable="false"
         style="margin-bottom: 14px"
@@ -437,7 +437,7 @@ defineExpose({ refresh: () => load() })
             placeholder="留空自动分配"
             style="width: 240px"
           />
-          <span class="dim" style="margin-left: 8px">留空自动分配（注册号从 100 起）；手动指定后后续自动取号会避开该号</span>
+          <span class="dim" style="margin-left: 8px">留空自动分配（起点见系统设置）；手动指定后后续自动取号会避开该号</span>
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="createForm.role" style="width: 100%">

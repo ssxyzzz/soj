@@ -28,7 +28,7 @@ const (
 func (h *Handlers) AdminUserImportTemplate(c *gin.Context) {
 	rows := [][]string{
 		{"# SOJ 批量建号模板：每行一个账号，以 # 开头的行会被忽略"},
-		{"# 列说明：id 可留空（自动分配，从 100 起，也可手动指定）；username 需 3-32 位字母/数字/下划线；password 至少 8 位；nickname 留空默认同用户名；role 留空默认 default"},
+		{"# 列说明：id 可留空（自动分配，起点见后台「系统设置-注册取号起点」，默认 100，也可手动指定）；username 需 3-32 位字母/数字/下划线；password 至少 8 位；nickname 留空默认同用户名；role 留空默认 default"},
 		{"id", "username", "password", "nickname", "role"},
 		{"1001", "zhangsan", "Passw0rd!", "张三", "default"},
 		{"", "lisi", "Passw0rd!", "李四", "default"},

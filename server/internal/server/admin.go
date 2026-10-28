@@ -279,6 +279,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"discuss_accept_xp":          int(s.DiscussAcceptXpVal()),
 		"notify_retention_days":      s.NotifyRetentionDaysVal(),
 		"notify_broadcast_per_day":   s.NotifyBroadcastPerDayVal(),
+		"user_seq_start":             s.UserSeqStartVal(),
 	})
 }
 
@@ -342,6 +343,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		DiscussAcceptXp         *int  `json:"discuss_accept_xp"`
 		NotifyRetentionDays     *int  `json:"notify_retention_days"`
 		NotifyBroadcastPerDay   *int  `json:"notify_broadcast_per_day"`
+		UserSeqStart            *int  `json:"user_seq_start"` // 注册取号起点（v0.24 小批）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -532,6 +534,13 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.NotifyBroadcastPerDay = req.NotifyBroadcastPerDay
+	}
+	if req.UserSeqStart != nil {
+		if *req.UserSeqStart < 1 || *req.UserSeqStart > 1_000_000_000 {
+			fail(c, http.StatusBadRequest, "注册取号起点需为正整数（上限 10 亿）")
+			return
+		}
+		s.UserSeqStart = req.UserSeqStart
 	}
 	// 与启动校验同一口径：smtp 通道开着但配置不全不让存——否则重启直接拒绝启动，
 	// 管理员把自己锁在门外（运行期 Mailer() 会降级 log，但重启过不去）。

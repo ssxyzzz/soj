@@ -470,6 +470,7 @@ export const adminApi = {
       discuss_accept_xp: number
       notify_retention_days: number
       notify_broadcast_per_day: number
+      user_seq_start: number
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
@@ -500,6 +501,7 @@ export const adminApi = {
     discuss_accept_xp?: number
     notify_retention_days?: number
     notify_broadcast_per_day?: number
+    user_seq_start?: number
   }) =>
     put<{
       rate_limit_per_minute: number
