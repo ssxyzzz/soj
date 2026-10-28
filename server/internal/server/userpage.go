@@ -69,7 +69,7 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 		out["rank"] = gin.H{"rank": rank, "solved": solved}
 	}
 
-	// 统计卡：提交总数（排除 Cancelled 作废件）/ AC 条数 / AC 率
+	// 统计卡：提交总数（排除 Cancelled 作废件）/ AC 条数 / AC 率 / 讨论被采纳解答数（v0.24）
 	total, accepted, err := h.repo.UserSubmissionStats(ctx, id)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "统计失败")
@@ -79,7 +79,11 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 	if total > 0 {
 		acRate = float64(accepted) / float64(total)
 	}
-	out["stats"] = gin.H{"submissions": total, "accepted": accepted, "ac_rate": acRate}
+	stats := gin.H{"submissions": total, "accepted": accepted, "ac_rate": acRate}
+	if answers, err := h.repo.CountUserAcceptedAnswers(ctx, id); err == nil {
+		stats["answers_accepted"] = answers
+	}
+	out["stats"] = stats
 
 	// 近期提交 20 条（published；投影不带代码/明细，点击进提交详情走既有权限规则）
 	if recent, err := h.repo.UserRecentSubmissions(ctx, id, 20); err == nil {

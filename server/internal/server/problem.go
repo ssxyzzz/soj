@@ -296,6 +296,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	if h.problemEditable(c, p) {
 		resp["challenge_time_sec"] = p.ChallengeTimeSec
 		resp["video_url"] = p.VideoURL // 编辑回填（展示侧的可见性门控在下方 canViewSolutions 分支）
+		resp["discuss_code_threshold"] = p.DiscussCodeThreshold // 题内讨论门槛覆盖回填（v0.24；0 = 跟全局）
 	}
 	// 答案解析视频（v0.23 验收调整）：默认可看（不设 AC 门槛，题目可见即可看）；
 	// 文字题解仍维持满分∨老师群体门槛；无链接不下发

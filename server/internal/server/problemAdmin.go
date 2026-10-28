@@ -659,6 +659,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		QuestionsJSON    *string  `json:"questions_json"`     // 客观题整卷定义编辑（仅客观题可带）
 		VideoURL         *string  `json:"video_url"`          // 答案解析视频链接（v0.23；空串清除）
 		ChallengeTimeSec *int     `json:"challenge_time_sec"` // 挑战时长秒（v0.23；0 = 按难度默认）
+		DiscussCodeThr   *int     `json:"discuss_code_threshold"` // 题内讨论代码门槛覆盖（v0.24；0 = 跟随全局）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -831,6 +832,15 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			ids = []int64{}
 		}
 		set["tags"] = ids
+	}
+	// 题内讨论代码门槛覆盖（v0.24）：0 = 跟随全局默认；1–100 生效
+	if req.DiscussCodeThr != nil {
+		n := *req.DiscussCodeThr
+		if n < 0 || n > 100 {
+			fail(c, http.StatusBadRequest, "讨论代码门槛需在 0–100 之间（0 = 跟随全局默认）")
+			return
+		}
+		set["discussCodeThreshold"] = n
 	}
 	if len(set) == 0 {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")

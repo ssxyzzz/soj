@@ -9,6 +9,7 @@ import { useRoute } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 
 import BackupPanel from '@/components/admin/BackupPanel.vue'
+import DiscussPanel from '@/components/admin/DiscussPanel.vue'
 import DuplicateProblemsPanel from '@/components/admin/DuplicateProblemsPanel.vue'
 import LevelPanel from '@/components/admin/LevelPanel.vue'
 import NoticePanel from '@/components/admin/NoticePanel.vue'
@@ -22,7 +23,7 @@ import { useUserStore } from '@/stores/user'
 const userStore = useUserStore()
 const route = useRoute()
 
-const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'settings', 'backup'] as const
+const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'discuss', 'settings', 'backup'] as const
 type Section = (typeof sections)[number]
 // 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描三面板同页 tab 切换（2026-10-25 双树）；
 // tags/sources 旧深链值映射到 problems 的对应子页
@@ -126,6 +127,15 @@ async function switchSubTab(target: SubTab) {
         <span class="nav-sub">首页公告（Markdown）</span>
       </div>
       <div
+        v-if="userStore.can('discussion.manage')"
+        class="nav-item"
+        :class="{ active: section === 'discuss' }"
+        @click="switchSection('discuss')"
+      >
+        <span class="nav-title">讨论管理</span>
+        <span class="nav-sub">举报队列 / 禁言</span>
+      </div>
+      <div
         class="nav-item"
         :class="{ active: section === 'settings' }"
         @click="switchSection('settings')"
@@ -168,6 +178,7 @@ async function switchSubTab(target: SubTab) {
       </div>
       <LevelPanel v-else-if="section === 'levels'" />
       <NoticePanel v-else-if="section === 'notice'" />
+      <DiscussPanel v-else-if="section === 'discuss'" />
       <SettingsPanel v-else-if="section === 'settings'" />
       <BackupPanel v-else-if="section === 'backup'" />
       <SecurityLogsPanel v-else-if="section === 'security'" />

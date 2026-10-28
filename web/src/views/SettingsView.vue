@@ -3,7 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 
-import { authApi } from '@/api'
+import { authApi, notifyApi } from '@/api'
 import { verifyApi } from '@/api/verify'
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
@@ -36,6 +36,16 @@ const prefsForm = reactive<{
 
 // 模板编辑器当前编辑的语言（按语言各存一套，切换带出对应模板）
 const tplLang = ref('cpp')
+
+// 通知邮件转发偏好（v0.24）：仅 1:1 互动类支持邮件；默认全关
+const notifyCats = reactive<{ type: string; label: string; enabled: boolean }[]>([
+  { type: 'reply', label: '讨论被回复', enabled: false },
+  { type: 'mention', label: '讨论中被 @', enabled: false },
+  { type: 'like', label: '收到点赞', enabled: false },
+  { type: 'accept', label: '回答被采纳', enabled: false },
+])
+const hasEmail = ref(false)
+const savingNotify = ref(false)
 
 async function load() {
   loading.value = true
@@ -117,7 +127,27 @@ async function savePrefs() {
 onMounted(() => {
   load()
   loadEmail()
+  notifyApi
+    .prefs()
+    .then((r) => {
+      hasEmail.value = r.has_email
+      for (const c of notifyCats) {
+        const found = r.categories.find((x) => x.type === c.type)
+        if (found) c.enabled = found.enabled
+      }
+    })
+    .catch(() => {})
 })
+
+async function saveNotifyPrefs() {
+  savingNotify.value = true
+  try {
+    await notifyApi.savePrefs(notifyCats.filter((c) => c.enabled).map((c) => c.type))
+    ElMessage.success('通知偏好已保存')
+  } finally {
+    savingNotify.value = false
+  }
+}
 
 // ---- 修改密码（v0.14）：旧密码 + 新密码两次确认；成功后全部登录态失效，强制重新登录 ----
 const savingPwd = ref(false)
@@ -243,11 +273,6 @@ async function submitBind() {
     bindLoading.value = false
   }
 }
-
-onMounted(() => {
-  load()
-  loadEmail()
-})
 </script>
 
 <template>
@@ -399,6 +424,29 @@ onMounted(() => {
         <div class="frow">
           <span class="fl">换绑须知<div class="fd">需旧邮箱或密码验证</div></span>
           <span class="fd-inline">绑定后可用于找回密码（需管理员开启）；换绑需验证旧邮箱，换绑成功会向原邮箱发通知</span>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- 通知偏好（v0.24）：站内通知必达；此处只控制是否同时发邮件（1:1 互动类） -->
+    <el-card shadow="never" class="fcard">
+      <div class="panel-h" style="padding-left: 0"><span class="pt">通知偏好</span></div>
+      <div class="fbody">
+        <div class="frow" v-for="c in notifyCats" :key="c.type">
+          <span class="fl">{{ c.label }}</span>
+          <div class="fctrl">
+            <el-switch v-model="c.enabled" :disabled="!hasEmail" />
+            <span class="fd-inline">同时发一封邮件提醒（站内通知恒定送达消息中心）</span>
+          </div>
+        </div>
+        <div class="frow">
+          <span class="fl"></span>
+          <div class="fctrl">
+            <span v-if="!hasEmail" class="fd-inline">先绑定邮箱后可开启邮件提醒</span>
+            <el-button v-else type="primary" size="small" :loading="savingNotify" @click="saveNotifyPrefs">
+              保存通知偏好
+            </el-button>
+          </div>
         </div>
       </div>
     </el-card>

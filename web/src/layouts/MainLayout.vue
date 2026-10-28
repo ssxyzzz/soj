@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import AmbientGrid from '@/components/AmbientGrid.vue'
 import TierBadge from '@/components/TierBadge.vue'
-import { authApi } from '@/api'
+import { authApi, notifyApi } from '@/api'
+import { notifyTypeMeta } from '@/components/discuss/discussMeta'
 import { useLevelsStore } from '@/stores/levels'
 import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { applyTheme, initTheme, type ThemeName } from '@/utils/theme'
 import { APP_VERSION as appVersion } from '@/utils/version'
+import { fmtRel } from '@/utils/format'
+import type { NotificationItem } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -19,6 +22,60 @@ const site = useSiteStore()
 
 const active = computed(() => route.path)
 const adminActive = computed(() => route.path.startsWith('/admin'))
+
+// 站内通知铃铛（v0.24）：未读角标 60s 轮询 + 下拉最近 10 条；点条目跳深链并标已读
+const unread = ref(0)
+const recent = ref<NotificationItem[]>([])
+
+async function refreshBadge() {
+  if (!userStore.token) return
+  try {
+    const b = await notifyApi.badge()
+    unread.value = b.unread
+  } catch {
+    /* 静默 */
+  }
+}
+
+async function loadRecent() {
+  if (!userStore.token) return
+  try {
+    const r = await notifyApi.list({ page: 1 })
+    recent.value = r.list.slice(0, 10)
+    unread.value = r.unread
+  } catch {
+    /* 静默 */
+  }
+}
+
+let badgePoll: ReturnType<typeof setInterval> | undefined
+
+function onBellVisible() {
+  loadRecent()
+}
+
+async function openNotification(n: NotificationItem) {
+  if (!n.read) {
+    n.read = true
+    unread.value = Math.max(0, unread.value - 1)
+    try {
+      await notifyApi.read([n.id])
+    } catch {
+      /* 静默 */
+    }
+  }
+  if (n.link) router.push(n.link)
+  else router.push('/notifications')
+}
+
+async function readAllRecent() {
+  try {
+    await notifyApi.read()
+    await loadRecent()
+  } catch {
+    /* 静默 */
+  }
+}
 
 // 站点主题（2026-10-26）：v5 新案（默认）/ 原版 · 深海军蓝，页脚切换、localStorage 持久化
 const theme = ref<ThemeName>(initTheme())
@@ -47,6 +104,12 @@ onMounted(() => {
       userStore.setAvatarUrl(p.avatar_url ?? '') // QQ 头像（v0.23）：顶栏同步
     })
     .catch(() => {})
+  refreshBadge() // 通知角标首刷（v0.24）
+  badgePoll = setInterval(refreshBadge, 60_000)
+})
+
+onUnmounted(() => {
+  if (badgePoll) clearInterval(badgePoll)
 })
 
 function onCommand(command: string) {
@@ -77,6 +140,7 @@ function onCommand(command: string) {
           <el-menu-item index="/lists">题单</el-menu-item>
           <el-menu-item index="/contests">比赛</el-menu-item>
           <el-menu-item index="/classes">班级</el-menu-item>
+          <el-menu-item index="/discuss">讨论</el-menu-item>
           <el-menu-item index="/rank">排名</el-menu-item>
           <el-menu-item v-if="userStore.can('submission.view.all')" index="/submissions">提交记录</el-menu-item>
         </el-menu>
@@ -84,6 +148,49 @@ function onCommand(command: string) {
           管理后台
         </router-link>
         <template v-if="userStore.token">
+          <!-- 通知铃铛（v0.24）：hover 下拉最近 10 条 + 全部已读 + 消息中心入口 -->
+          <el-popover placement="bottom-end" :width="360" trigger="hover" @show="onBellVisible">
+            <template #reference>
+              <button type="button" class="bell" :class="{ ringing: unread > 0 }" title="消息中心">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+                </svg>
+                <span v-if="unread > 0" class="bell-badge">{{ unread > 99 ? '99+' : unread }}</span>
+              </button>
+            </template>
+            <div class="bell-panel">
+              <div class="bell-head">
+                <span class="bh-title">通知</span>
+                <el-button v-if="unread > 0" text size="small" type="primary" @click="readAllRecent">全部已读</el-button>
+              </div>
+              <el-empty
+                v-if="!recent.length"
+                description="暂无通知"
+                :image-size="48"
+                style="padding: 12px 0"
+              />
+              <div
+                v-for="n in recent"
+                :key="n.id"
+                class="bell-item"
+                :class="{ unread: !n.read }"
+                @click="openNotification(n)"
+              >
+                <span class="bi-icon">{{ notifyTypeMeta(n.type).icon }}</span>
+                <div class="bi-body">
+                  <div class="bi-title">{{ n.title }}</div>
+                  <div class="bi-text">{{ n.body }}</div>
+                </div>
+                <span class="bi-time">{{ fmtRel(n.created_at) }}</span>
+              </div>
+              <div class="bell-foot">
+                <el-button text size="small" type="primary" @click="router.push('/notifications')">
+                  查看全部 →
+                </el-button>
+              </div>
+            </div>
+          </el-popover>
           <el-dropdown class="user-dropdown" @command="onCommand">
             <span class="user-chip">
               <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" />
@@ -282,6 +389,118 @@ function onCommand(command: string) {
   border-color: var(--soj-blue-line);
   color: var(--soj-blue);
   background: var(--soj-blue-soft);
+}
+
+/* v0.24 通知铃铛：描边圆钮 + 未读角标；hover 下拉面板列表 */
+.bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--soj-line-2);
+  background: transparent;
+  color: var(--soj-ink-2);
+  cursor: pointer;
+  transition: all 0.18s;
+  flex: 0 0 auto;
+}
+
+.bell:hover,
+.bell.ringing {
+  color: var(--soj-blue);
+  border-color: var(--soj-blue-line);
+  background: var(--soj-blue-soft);
+}
+
+.bell-badge {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--el-color-danger, #f56c6c);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+}
+
+.bell-panel {
+  margin: -6px;
+}
+
+.bell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 6px 8px;
+  border-bottom: 1px solid var(--soj-line);
+}
+
+.bh-title {
+  font-weight: var(--soj-fw-emphasis);
+  font-size: 14px;
+}
+
+.bell-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.bell-item:hover {
+  background: var(--soj-blue-soft);
+}
+
+.bell-item.unread .bi-title {
+  font-weight: var(--soj-fw-emphasis);
+}
+
+.bi-icon {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.bi-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.bi-title {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bi-text {
+  font-size: 12px;
+  color: var(--soj-ink-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bi-time {
+  font-size: 11px;
+  color: var(--soj-ink-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bell-foot {
+  border-top: 1px solid var(--soj-line);
+  padding-top: 6px;
+  text-align: center;
 }
 
 /* v3-full .user-chip：白底描边胶囊（渐变圆头像 30px + 昵称 700 + 等级徽章同装一体） */

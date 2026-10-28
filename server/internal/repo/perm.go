@@ -26,6 +26,10 @@ const (
 	PermSubmissionViewUser   = "submission.view.user"   // 榜单/进度表中点看指定用户在某题的提交明细（含代码）
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
 	PermSolutionManage       = "solution.manage"        // 题解管理：置顶/删除他人题解（v0.5.2-1）
+	PermDiscussManage        = "discussion.manage"      // 讨论管理：删帖/置顶/加精/锁定/处理举报与禁言（v0.24）
+	PermDiscussRateExempt    = "discussion.rate_exempt" // 发帖不受讨论区限速（v0.24）
+	PermDiscussCodeBypass    = "discussion.code.bypass" // 题内讨论代码块查看不受分数门槛（v0.24）
+	PermNotifyBroadcast      = "notify.broadcast"       // 全站公告广播（v0.24，默认仅 root）
 	PermUserNicknameEdit     = "user.nickname.edit"     // 本人自助修改昵称（默认用户默认开启）
 	PermUserUsernameEdit     = "user.username.edit"     // 用户管理中修改登录用户名（身份标识；默认仅 root，admin 无此位）
 	PermAdminUserManage      = "admin.user.manage"      // 管理端用户管理
@@ -60,6 +64,7 @@ var PermGroups = []PermGroup{
 	{"class", "班级权限"},
 	{"rank", "排名权限"},
 	{"submission", "提交记录权限"},
+	{"discussion", "讨论权限"},
 	{"user", "用户权限"},
 	{"admin", "管理后台权限"},
 }
@@ -85,6 +90,10 @@ var PermCatalog = []PermInfo{
 	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码", "submission"},
 	{PermSubmissionViewUser, "查看用户提交明细", "榜单/进度表中点看指定用户在某题的全部提交（含代码与测试点明细）", "submission"},
 	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},
+	{PermDiscussManage, "讨论管理", "讨论区：删帖/置顶/加精/锁定/处理举报与禁言（三区通用）", "discussion"},
+	{PermDiscussRateExempt, "发帖不限速", "讨论发帖/回复不受全站讨论限速约束", "discussion"},
+	{PermDiscussCodeBypass, "讨论代码门槛豁免", "题内讨论中查看被分数门槛隐藏的代码块（教师群体本就不受限）", "discussion"},
+	{PermNotifyBroadcast, "全站公告广播", "向全员发站内通知公告（受每日频次约束）；默认仅 root", "discussion"},
 	{PermUserNicknameEdit, "修改昵称", "允许用户在本人的个人设置中修改昵称；关闭后只能由管理员在用户管理中修改", "user"},
 	{PermUserUsernameEdit, "修改用户名", "在用户管理中修改任意用户的登录用户名（改名后原用户名即释放，登录与展示即时切换）；默认仅 root 开启，admin 无此位", "user"},
 	{PermAdminUserManage, "用户管理", "管理后台：建号/改角色/重置密码", "admin"},

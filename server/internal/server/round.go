@@ -158,6 +158,7 @@ func (h *Handlers) createRound(c *gin.Context, s roundScope, classID int64) {
 		fail(c, http.StatusInternalServerError, "创建"+s.Name+"失败")
 		return
 	}
+	go h.notifyRoundCreated(ct, s.Kind) // 发布通知扇出（v0.24）：失败不阻塞创建
 	ok(c, gin.H{"id": ct.ID})
 }
 

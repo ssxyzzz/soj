@@ -68,6 +68,7 @@ type Problem struct {
 	FileIOOutput     string              `bson:"fileIoOutput,omitempty"`
 	ChallengeTimeSec int                 `bson:"challengeTimeSec,omitempty"` // 挑战时长秒（v0.23；0 = 按难度×5min 默认，60–14400 生效）
 	VideoURL         string              `bson:"videoUrl,omitempty"`         // 答案解析视频链接（v0.23；B 站/直链 mp4，题解同门槛可见）
+	DiscussCodeThreshold int             `bson:"discussCodeThreshold,omitempty"` // 题内讨论代码门槛覆盖（v0.24；0 = 跟随全局默认，1–100 生效）
 	CreatedAt        time.Time           `bson:"createdAt"`
 	UpdatedAt        time.Time           `bson:"updatedAt"`
 }

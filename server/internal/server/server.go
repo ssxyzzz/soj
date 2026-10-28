@@ -225,6 +225,32 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.DELETE("/problems/:id/solutions/:sid", h.DeleteSolution)
 			authed.PATCH("/problems/:id/solutions/:sid/pinned", h.PinSolution)
 
+			// 讨论区（v0.24）：三区通用话题操作挂 /discuss/:tid；题内与比赛各有列表/发帖入口。
+			// 门槛在 handler 内判：设置开关 / 禁言 / 限速 / 冷静期 / 赛时锁定 / 代码分数门槛
+			authed.GET("/discuss", h.ListGlobalDiscuss)
+			authed.POST("/discuss", h.CreateGlobalDiscuss)
+			authed.GET("/discuss/:tid", h.GetDiscussTopic)
+			authed.PATCH("/discuss/:tid", h.UpdateDiscussTopic)
+			authed.DELETE("/discuss/:tid", h.DeleteDiscussTopic)
+			authed.POST("/discuss/:tid/replies", h.CreateDiscussReply)
+			authed.DELETE("/discuss/:tid/replies/:rid", h.DeleteDiscussReply)
+			authed.POST("/discuss/:tid/replies/:rid/accept", h.AcceptDiscussReply)
+			authed.POST("/discuss/:tid/replies/:rid/like", h.LikeDiscussReply)
+			authed.POST("/discuss/:tid/like", h.LikeDiscussTopic)
+			authed.POST("/discuss/:tid/mod", h.ModDiscussTopic)
+			authed.POST("/discuss/:tid/report", h.ReportDiscussTarget)
+			authed.GET("/problems/:id/discuss", h.ListProblemDiscuss)
+			authed.POST("/problems/:id/discuss", h.CreateProblemDiscuss)
+			authed.GET("/contests/:id/discuss", h.ListContestDiscuss)
+			authed.POST("/contests/:id/discuss", h.CreateContestDiscuss)
+
+			// 站内通知中心（v0.24）：铃铛角标 / 消息中心 / 已读 / 邮件转发偏好
+			authed.GET("/me/notifications", h.ListNotifications)
+			authed.GET("/me/notifications/badge", h.NotificationBadge)
+			authed.POST("/me/notifications/read", h.ReadNotifications)
+			authed.GET("/me/notify-prefs", h.GetNotifyPrefs)
+			authed.PUT("/me/notify-prefs", h.UpdateNotifyPrefs)
+
 			authed.POST("/classes", RequirePerm(repo.PermClassCreate), h.CreateClass)
 			authed.POST("/classes/:id/join", h.JoinClass)
 			authed.POST("/classes/join-by-code", h.JoinByCode)
@@ -328,6 +354,14 @@ func Run(ctx context.Context, deps *Deps) {
 				// 安全日志（v0.14）：登录/锁定/改密/重置/限流事件，仅 root
 				adminG.GET("/security-logs", RequireRoot(), h.AdminListSecurityLogs)
 
+				// 讨论区管理（v0.24）：举报队列 / 禁言 / 全站广播，按权限位鉴权
+				adminG.GET("/discuss/reports", RequirePerm(repo.PermDiscussManage), h.AdminDiscussReports)
+				adminG.POST("/discuss/reports/resolve", RequirePerm(repo.PermDiscussManage), h.AdminResolveDiscussReports)
+				adminG.GET("/discuss/mutes", RequirePerm(repo.PermDiscussManage), h.AdminDiscussMutes)
+				adminG.POST("/discuss/mutes", RequirePerm(repo.PermDiscussManage), h.AdminCreateDiscussMute)
+				adminG.DELETE("/discuss/mutes/:id", RequirePerm(repo.PermDiscussManage), h.AdminLiftDiscussMute)
+				adminG.POST("/broadcast", RequirePerm(repo.PermNotifyBroadcast), h.AdminBroadcast)
+
 				// 经验调整（用户管理界面）：查等级 + 加/减经验，用户管理权限位
 				adminG.GET("/users/:id/level", RequirePerm(repo.PermAdminUserManage), h.AdminGetUserLevel)
 				adminG.POST("/users/:id/xp-adjust", RequirePerm(repo.PermAdminUserManage), h.AdminAdjustUserXp)
@@ -337,6 +371,9 @@ func Run(ctx context.Context, deps *Deps) {
 
 	// 前端静态资源（embed），API 未命中的路径走 SPA 回退
 	registerStatic(r)
+
+	// 开赛/开考提醒扫描（v0.24）：Web 进程内每分钟一扫，判题进程（--judge-only）不启
+	go h.notifyStartLoop(ctx)
 
 	log.Printf("[web] SOJ 启动: %s (判题并发 %d, 沙箱 %s)", cfg.Addr, cfg.JudgeWorkers, cfg.SandboxAddr)
 

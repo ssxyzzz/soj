@@ -50,6 +50,12 @@ import type {
   ChallengeStartResult,
   ChallengeSessionView,
   SelfTestResult,
+  DiscussListResult,
+  DiscussMuteItem,
+  DiscussReportItem,
+  DiscussTopicDetail,
+  NotificationItem,
+  NotifyPrefsResult,
 } from '@/types'
 
 const client = axios.create({ baseURL: '/api', timeout: 20000 })
@@ -442,6 +448,19 @@ export const adminApi = {
       smtp_from: string
       register_verify_mode: 'none' | 'email'
       password_reset_enabled: boolean
+      // 讨论区与通知（v0.24）
+      discuss_global_enabled: boolean
+      discuss_problem_enabled: boolean
+      discuss_contest_enabled: boolean
+      discuss_global_locked: boolean
+      discuss_code_threshold: number
+      discuss_topic_daily_limit: number
+      discuss_reply_interval_sec: number
+      discuss_newbie_hours: number
+      discuss_report_fold: number
+      discuss_accept_xp: number
+      notify_retention_days: number
+      notify_broadcast_per_day: number
     }>('/admin/settings'),
   updateSettings: (patch: {
     rate_limit_per_minute?: number
@@ -460,6 +479,18 @@ export const adminApi = {
     smtp_from?: string
     register_verify_mode?: 'none' | 'email'
     password_reset_enabled?: boolean
+    discuss_global_enabled?: boolean
+    discuss_problem_enabled?: boolean
+    discuss_contest_enabled?: boolean
+    discuss_global_locked?: boolean
+    discuss_code_threshold?: number
+    discuss_topic_daily_limit?: number
+    discuss_reply_interval_sec?: number
+    discuss_newbie_hours?: number
+    discuss_report_fold?: number
+    discuss_accept_xp?: number
+    notify_retention_days?: number
+    notify_broadcast_per_day?: number
   }) =>
     put<{
       rate_limit_per_minute: number
@@ -594,4 +625,70 @@ export interface CreateExamPayload {
 
 export const noticeApi = {
   get: () => get<{ content: string }>('/notice'),
+}
+
+// ---------- 讨论区（v0.24）：三区通用话题操作 + 题内/比赛独立列表入口 ----------
+
+export interface DiscussTopicBody {
+  title: string
+  kind: string
+  content: string
+  related_pids?: number[]
+  list_id?: number
+  tag_id?: number
+  private?: boolean
+}
+
+export const discussApi = {
+  listGlobal: (params?: { category?: string; q?: string; page?: number }) =>
+    get<DiscussListResult>('/discuss', params),
+  createGlobal: (body: DiscussTopicBody) => post<{ id: number }>('/discuss', body),
+  detail: (tid: number) => get<DiscussTopicDetail>(`/discuss/${tid}`),
+  update: (tid: number, body: DiscussTopicBody) => patch<{ updated: number }>(`/discuss/${tid}`, body),
+  remove: (tid: number) => del<{ deleted: number }>(`/discuss/${tid}`),
+  reply: (tid: number, content: string, replyTo?: number) =>
+    post<{ id: number }>(`/discuss/${tid}/replies`, { content, reply_to: replyTo || 0 }),
+  deleteReply: (tid: number, rid: number) => del<{ deleted: number }>(`/discuss/${tid}/replies/${rid}`),
+  accept: (tid: number, rid: number) => post<{ accepted: number }>(`/discuss/${tid}/replies/${rid}/accept`),
+  likeTopic: (tid: number) => post<{ liked: boolean; like_count: number }>(`/discuss/${tid}/like`),
+  likeReply: (tid: number, rid: number) =>
+    post<{ liked: boolean; like_count: number }>(`/discuss/${tid}/replies/${rid}/like`),
+  mod: (tid: number, body: { pinned?: boolean; featured?: boolean; locked?: boolean; private?: boolean }) =>
+    post<{ updated: number }>(`/discuss/${tid}/mod`, body),
+  report: (tid: number, targetType: 'topic' | 'reply', targetId: number, reason: string) =>
+    post<{ count: number; folded: boolean }>(`/discuss/${tid}/report`, {
+      target_type: targetType,
+      target_id: targetId,
+      reason,
+    }),
+  listProblem: (pid: number, page = 1) => get<DiscussListResult>(`/problems/${pid}/discuss`, { page }),
+  createProblem: (pid: number, body: DiscussTopicBody) =>
+    post<{ id: number }>(`/problems/${pid}/discuss`, body),
+  listContest: (cid: number, page = 1) => get<DiscussListResult>(`/contests/${cid}/discuss`, { page }),
+  createContest: (cid: number, body: DiscussTopicBody) =>
+    post<{ id: number; private: boolean }>(`/contests/${cid}/discuss`, body),
+}
+
+// ---------- 站内通知中心（v0.24） ----------
+
+export const notifyApi = {
+  badge: () => get<{ unread: number }>('/me/notifications/badge'),
+  list: (params?: { filter?: string; type?: string; page?: number }) =>
+    get<{ list: NotificationItem[]; total: number; unread: number }>('/me/notifications', params),
+  read: (ids?: number[]) => post<{ unread: number }>('/me/notifications/read', ids ? { ids } : { all: true }),
+  prefs: () => get<NotifyPrefsResult>('/me/notify-prefs'),
+  savePrefs: (email: string[]) => put<{ saved: boolean }>('/me/notify-prefs', { email }),
+}
+
+// ---------- 讨论区管理（v0.24）：举报队列 / 禁言 / 全站广播 ----------
+
+export const discussAdminApi = {
+  reports: (params?: { status?: string; page?: number }) =>
+    get<{ list: DiscussReportItem[]; total: number }>('/admin/discuss/reports', params),
+  resolve: (body: { ids: number[]; action: string; days?: number; message?: string }) =>
+    post<{ resolved: number }>('/admin/discuss/reports/resolve', body),
+  mutes: () => get<{ list: DiscussMuteItem[] }>('/admin/discuss/mutes'),
+  addMute: (body: { uid: number; days: number; reason: string }) => post<{ muted: number }>('/admin/discuss/mutes', body),
+  liftMute: (id: number) => del<{ lifted: number }>(`/admin/discuss/mutes/${id}`),
+  broadcast: (title: string, body: string) => post<{ count: number }>('/admin/broadcast', { title, body }),
 }

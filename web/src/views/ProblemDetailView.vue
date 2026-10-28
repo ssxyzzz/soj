@@ -20,6 +20,7 @@ import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import AnswerAnalysisCard from '@/components/problem/AnswerAnalysisCard.vue'
+import DiscussDialog from '@/components/discuss/DiscussDialog.vue'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
 import { fmtRel, fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
@@ -40,6 +41,7 @@ const showMine = ref(false)
 const showOthers = ref(false)
 const showSolutions = ref(false)
 const showVideo = ref(false)
+const showDiscuss = ref(false)
 const mineDialogRef = ref<InstanceType<typeof MySubmissionsDialog>>()
 
 // 赛事隐藏期自动重定向（v0.7.3 优先级模型）：比赛收录的题一律进比赛做题页，
@@ -411,6 +413,14 @@ onUnmounted(stopPolling)
           </div>
         </RailCard>
 
+        <!-- 讨论入口（v0.24）：题内思路讨论弹窗；赛时整题锁定（服务端闸门，弹窗内提示） -->
+        <RailCard v-if="!problem.locked" ov="互助" title="本题讨论" class="aside-card">
+          <div class="entry-actions">
+            <el-button type="primary" plain @click="showDiscuss = true">讨论本题</el-button>
+          </div>
+          <p class="hint">交流思路、求助与纠错；代码块按讨论门槛展示。</p>
+        </RailCard>
+
         <RailCard ov="说明" title="评测须知" class="aside-card">
           <p class="hint">
             代码在 go-judge 沙箱中编译运行，全文比对输出；提交间隔受全站限速约束。请勿读写约定之外的文件。
@@ -430,6 +440,14 @@ onUnmounted(stopPolling)
     />
 
     <SolutionsDialog v-model="showSolutions" :problem-id="problem.id" />
+
+    <!-- 题内讨论弹窗（v0.24） -->
+    <DiscussDialog
+      v-model="showDiscuss"
+      scope="problem"
+      :scope-id="problem.id"
+      :title="`P${problem.id} ${problem.title} · 讨论`"
+    />
 
     <!-- 视频讲解弹窗（答案解析卡入口） -->
     <el-dialog v-model="showVideo" title="视频讲解" width="880px" top="6vh" destroy-on-close>

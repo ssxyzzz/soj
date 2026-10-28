@@ -29,6 +29,20 @@ const smtpFrom = ref('')
 const registerVerifyMode = ref<'none' | 'email'>('none')
 const passwordResetEnabled = ref(false)
 
+// ---- 讨论区与通知（v0.24）----
+const discussGlobalEnabled = ref(true)
+const discussProblemEnabled = ref(true)
+const discussContestEnabled = ref(true)
+const discussGlobalLocked = ref(false)
+const discussCodeThreshold = ref(60)
+const discussTopicDailyLimit = ref(5)
+const discussReplyIntervalSec = ref(30)
+const discussNewbieHours = ref(48)
+const discussReportFold = ref(3)
+const discussAcceptXp = ref(10)
+const notifyRetentionDays = ref(90)
+const notifyBroadcastPerDay = ref(1)
+
 const savingSettings = ref(false)
 
 onMounted(async () => {
@@ -49,6 +63,18 @@ onMounted(async () => {
     smtpFrom.value = s.smtp_from || ''
     registerVerifyMode.value = s.register_verify_mode ?? 'none'
     passwordResetEnabled.value = !!s.password_reset_enabled
+    discussGlobalEnabled.value = s.discuss_global_enabled ?? true
+    discussProblemEnabled.value = s.discuss_problem_enabled ?? true
+    discussContestEnabled.value = s.discuss_contest_enabled ?? true
+    discussGlobalLocked.value = !!s.discuss_global_locked
+    discussCodeThreshold.value = s.discuss_code_threshold ?? 60
+    discussTopicDailyLimit.value = s.discuss_topic_daily_limit ?? 5
+    discussReplyIntervalSec.value = s.discuss_reply_interval_sec ?? 30
+    discussNewbieHours.value = s.discuss_newbie_hours ?? 48
+    discussReportFold.value = s.discuss_report_fold ?? 3
+    discussAcceptXp.value = s.discuss_accept_xp ?? 10
+    notifyRetentionDays.value = s.notify_retention_days ?? 90
+    notifyBroadcastPerDay.value = s.notify_broadcast_per_day ?? 1
   } catch {
     // 加载失败保留默认值展示
   }
@@ -74,6 +100,19 @@ async function saveSettings() {
       smtp_from: smtpFrom.value.trim(),
       register_verify_mode: registerVerifyMode.value,
       password_reset_enabled: passwordResetEnabled.value,
+      // 讨论区与通知（v0.24）
+      discuss_global_enabled: discussGlobalEnabled.value,
+      discuss_problem_enabled: discussProblemEnabled.value,
+      discuss_contest_enabled: discussContestEnabled.value,
+      discuss_global_locked: discussGlobalLocked.value,
+      discuss_code_threshold: discussCodeThreshold.value,
+      discuss_topic_daily_limit: discussTopicDailyLimit.value,
+      discuss_reply_interval_sec: discussReplyIntervalSec.value,
+      discuss_newbie_hours: discussNewbieHours.value,
+      discuss_report_fold: discussReportFold.value,
+      discuss_accept_xp: discussAcceptXp.value,
+      notify_retention_days: notifyRetentionDays.value,
+      notify_broadcast_per_day: notifyBroadcastPerDay.value,
     })
     ElMessage.success('设置已保存')
     // 备案号/注册验证方式/找回开关改了登录页要跟着变：重置站点公开状态缓存
@@ -186,6 +225,60 @@ async function saveSettings() {
         <span class="dim" style="margin-left: 8px">
           开启后登录页出现「忘记密码」入口（验证码重置，防枚举）；关闭时学生找回请联系老师重置
         </span>
+      </el-form-item>
+
+      <el-divider content-position="left">讨论区（学习分享 / 题内 / 比赛三区）</el-divider>
+      <el-form-item label="导航栏讨论区">
+        <el-switch v-model="discussGlobalEnabled" />
+        <span class="dim" style="margin-left: 8px">全站学习分享区总开关</span>
+      </el-form-item>
+      <el-form-item label="临时锁定讨论区">
+        <el-switch v-model="discussGlobalLocked" />
+        <span class="dim" style="margin-left: 8px">
+          考试期间一键锁区防考题外流（只封导航栏区发帖/入口提示，历史帖仍可读；题内/比赛不受影响）
+        </span>
+      </el-form-item>
+      <el-form-item label="题内讨论">
+        <el-switch v-model="discussProblemEnabled" />
+        <span class="dim" style="margin-left: 8px">题目页「讨论」入口与接口总开关</span>
+      </el-form-item>
+      <el-form-item label="比赛讨论区">
+        <el-switch v-model="discussContestEnabled" />
+        <span class="dim" style="margin-left: 8px">主题库比赛讨论区总开关（班级考试无讨论区）</span>
+      </el-form-item>
+      <el-form-item label="讨论代码门槛（分）">
+        <el-input-number v-model="discussCodeThreshold" :min="0" :max="100" />
+        <span class="dim" style="margin-left: 8px">
+          题内讨论代码块：本题最高得分 ≥ 该值才可见（0 = 不隐藏）；每题可在编辑页覆盖
+        </span>
+      </el-form-item>
+      <el-form-item label="每人每日发帖上限">
+        <el-input-number v-model="discussTopicDailyLimit" :min="0" :max="100" />
+        <span class="dim" style="margin-left: 8px">三区合计（0 = 不限制）</span>
+      </el-form-item>
+      <el-form-item label="回复间隔（秒）">
+        <el-input-number v-model="discussReplyIntervalSec" :min="0" :max="3600" />
+        <span class="dim" style="margin-left: 8px">相邻两次回复的最小间隔（0 = 不限制）</span>
+      </el-form-item>
+      <el-form-item label="新号冷静期（小时）">
+        <el-input-number v-model="discussNewbieHours" :min="0" :max="720" />
+        <span class="dim" style="margin-left: 8px">注册未满该时长不能在导航栏讨论区发主楼（0 = 不限制）</span>
+      </el-form-item>
+      <el-form-item label="举报自动折叠阈值">
+        <el-input-number v-model="discussReportFold" :min="0" :max="100" />
+        <span class="dim" style="margin-left: 8px">同一内容未处理举报达到该人数自动折叠（0 = 不自动折叠）</span>
+      </el-form-item>
+      <el-form-item label="采纳经验奖励">
+        <el-input-number v-model="discussAcceptXp" :min="0" :max="1000" />
+        <span class="dim" style="margin-left: 8px">回复被楼主采纳加的经验值（0 = 不奖励）</span>
+      </el-form-item>
+      <el-form-item label="通知保留天数">
+        <el-input-number v-model="notifyRetentionDays" :min="7" :max="365" />
+        <span class="dim" style="margin-left: 8px">站内通知过期自动清理（改动只影响新通知）</span>
+      </el-form-item>
+      <el-form-item label="全站广播每日上限">
+        <el-input-number v-model="notifyBroadcastPerDay" :min="0" :max="100" />
+        <span class="dim" style="margin-left: 8px">root 全员公告的每日频次上限（0 = 不限制）</span>
       </el-form-item>
     </el-form>
   </el-card>

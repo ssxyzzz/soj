@@ -38,6 +38,9 @@ type UserPrefs struct {
 	CodeFontSize  int               `bson:"codeFontSize,omitempty" json:"codeFontSize,omitempty"` // 编辑器字号 px（12-48），0 为默认 15
 	MdEditMode    string            `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"`     // Markdown 编辑器默认模式：wysiwyg / ir / sv，空为 wysiwyg（v0.8.1）
 	MdTheme       string            `bson:"mdTheme,omitempty" json:"mdTheme,omitempty"`           // Markdown 内容主题：light / ant-design / dark / wechat，空为 light（v0.8.1）
+	// 通知邮件转发（v0.24）：开通的类型列表（NotifyMailCategories 子集），空 = 全关（默认）。
+	// 仅 1:1 互动类支持邮件；发布/广播类是扇出，不做邮件。
+	NotifyEmail []string `bson:"notifyEmail,omitempty" json:"notifyEmail,omitempty"`
 }
 
 type User struct {
@@ -354,6 +357,14 @@ func (r *Repo) UpdateUser(ctx context.Context, id int64, set bson.M) error {
 		return mongo.ErrNoDocuments
 	}
 	return nil
+}
+
+// UpdateNotifyEmailPrefs 通知邮件转发偏好（v0.24）：点路径 $set，prefs 子文档缺失时自动创建。
+func (r *Repo) UpdateNotifyEmailPrefs(ctx context.Context, id int64, cats []string) error {
+	if cats == nil {
+		cats = []string{}
+	}
+	return r.UpdateUser(ctx, id, bson.M{"prefs.notifyEmail": cats})
 }
 
 // migrateRoles 一次性迁移：v0.3 之前的 user/teacher/admin 角色体系 → default/admin/root。

@@ -60,6 +60,7 @@ func (h *Handlers) CreateAssignment(c *gin.Context) {
 			return
 		}
 	}
+	go h.notifyAssignmentCreated(classID, a.Title) // 发布通知扇出（v0.24）：失败不阻塞创建
 	ok(c, gin.H{"id": a.ID, "title": a.Title})
 }
 

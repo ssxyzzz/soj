@@ -243,6 +243,19 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"smtp_from":              s.SMTP.From,
 		"register_verify_mode":   s.RegisterVerifyModeVal(),
 		"password_reset_enabled": s.PasswordResetOpen(),
+		// 讨论区与通知（v0.24）
+		"discuss_global_enabled":     s.DiscussGlobalOpen(),
+		"discuss_problem_enabled":    s.DiscussProblemOpen(),
+		"discuss_contest_enabled":    s.DiscussContestOpen(),
+		"discuss_global_locked":      s.DiscussGlobalLocked,
+		"discuss_code_threshold":     s.DiscussCodeThresholdVal(),
+		"discuss_topic_daily_limit":  s.DiscussTopicDailyLimitVal(),
+		"discuss_reply_interval_sec": s.DiscussReplyIntervalVal(),
+		"discuss_newbie_hours":       s.DiscussNewbieHoursVal(),
+		"discuss_report_fold":        int(s.DiscussReportFoldVal()),
+		"discuss_accept_xp":          int(s.DiscussAcceptXpVal()),
+		"notify_retention_days":      s.NotifyRetentionDaysVal(),
+		"notify_broadcast_per_day":   s.NotifyBroadcastPerDayVal(),
 	})
 }
 
@@ -293,6 +306,19 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		SMTPFrom             *string `json:"smtp_from"`
 		RegisterVerifyMode   *string `json:"register_verify_mode"`
 		PasswordResetEnabled *bool   `json:"password_reset_enabled"`
+		// 讨论区与通知（v0.24）
+		DiscussGlobalEnabled    *bool `json:"discuss_global_enabled"`
+		DiscussProblemEnabled   *bool `json:"discuss_problem_enabled"`
+		DiscussContestEnabled   *bool `json:"discuss_contest_enabled"`
+		DiscussGlobalLocked     *bool `json:"discuss_global_locked"`
+		DiscussCodeThreshold    *int  `json:"discuss_code_threshold"`
+		DiscussTopicDailyLimit  *int  `json:"discuss_topic_daily_limit"`
+		DiscussReplyIntervalSec *int  `json:"discuss_reply_interval_sec"`
+		DiscussNewbieHours      *int  `json:"discuss_newbie_hours"`
+		DiscussReportFold       *int  `json:"discuss_report_fold"`
+		DiscussAcceptXp         *int  `json:"discuss_accept_xp"`
+		NotifyRetentionDays     *int  `json:"notify_retention_days"`
+		NotifyBroadcastPerDay   *int  `json:"notify_broadcast_per_day"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -414,6 +440,75 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	}
 	if req.PasswordResetEnabled != nil {
 		s.PasswordResetEnabled = req.PasswordResetEnabled
+	}
+	// ---- 讨论区与通知（v0.24）----
+	if req.DiscussGlobalEnabled != nil {
+		s.DiscussGlobalEnabled = req.DiscussGlobalEnabled
+	}
+	if req.DiscussProblemEnabled != nil {
+		s.DiscussProblemEnabled = req.DiscussProblemEnabled
+	}
+	if req.DiscussContestEnabled != nil {
+		s.DiscussContestEnabled = req.DiscussContestEnabled
+	}
+	if req.DiscussGlobalLocked != nil {
+		s.DiscussGlobalLocked = *req.DiscussGlobalLocked
+	}
+	if req.DiscussCodeThreshold != nil {
+		if *req.DiscussCodeThreshold < 0 || *req.DiscussCodeThreshold > 100 {
+			fail(c, http.StatusBadRequest, "讨论代码门槛需在 0-100 之间（0 = 不隐藏代码）")
+			return
+		}
+		s.DiscussCodeThreshold = req.DiscussCodeThreshold
+	}
+	if req.DiscussTopicDailyLimit != nil {
+		if *req.DiscussTopicDailyLimit < 0 || *req.DiscussTopicDailyLimit > 100 {
+			fail(c, http.StatusBadRequest, "每日发帖上限需在 0-100 之间（0 为不限制）")
+			return
+		}
+		s.DiscussTopicDailyLimit = req.DiscussTopicDailyLimit
+	}
+	if req.DiscussReplyIntervalSec != nil {
+		if *req.DiscussReplyIntervalSec < 0 || *req.DiscussReplyIntervalSec > 3600 {
+			fail(c, http.StatusBadRequest, "回复间隔需在 0-3600 秒之间（0 为不限制）")
+			return
+		}
+		s.DiscussReplyIntervalSec = req.DiscussReplyIntervalSec
+	}
+	if req.DiscussNewbieHours != nil {
+		if *req.DiscussNewbieHours < 0 || *req.DiscussNewbieHours > 24*30 {
+			fail(c, http.StatusBadRequest, "新号冷静期需在 0-720 小时之间（0 为不限制）")
+			return
+		}
+		s.DiscussNewbieHours = req.DiscussNewbieHours
+	}
+	if req.DiscussReportFold != nil {
+		if *req.DiscussReportFold < 0 || *req.DiscussReportFold > 100 {
+			fail(c, http.StatusBadRequest, "举报折叠阈值需在 0-100 之间（0 为不自动折叠）")
+			return
+		}
+		s.DiscussReportFold = req.DiscussReportFold
+	}
+	if req.DiscussAcceptXp != nil {
+		if *req.DiscussAcceptXp < 0 || *req.DiscussAcceptXp > 1000 {
+			fail(c, http.StatusBadRequest, "采纳经验奖励需在 0-1000 之间（0 为不奖励）")
+			return
+		}
+		s.DiscussAcceptXp = req.DiscussAcceptXp
+	}
+	if req.NotifyRetentionDays != nil {
+		if *req.NotifyRetentionDays < 7 || *req.NotifyRetentionDays > 365 {
+			fail(c, http.StatusBadRequest, "通知保留天数需在 7-365 之间")
+			return
+		}
+		s.NotifyRetentionDays = req.NotifyRetentionDays
+	}
+	if req.NotifyBroadcastPerDay != nil {
+		if *req.NotifyBroadcastPerDay < 0 || *req.NotifyBroadcastPerDay > 100 {
+			fail(c, http.StatusBadRequest, "广播每日上限需在 0-100 之间（0 为不限制）")
+			return
+		}
+		s.NotifyBroadcastPerDay = req.NotifyBroadcastPerDay
 	}
 	// 与启动校验同一口径：smtp 通道开着但配置不全不让存——否则重启直接拒绝启动，
 	// 管理员把自己锁在门外（运行期 Mailer() 会降级 log，但重启过不去）。

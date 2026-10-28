@@ -28,6 +28,9 @@ import ListsView from '@/views/ListsView.vue'
 import ListDetailView from '@/views/ListDetailView.vue'
 import ListEditView from '@/views/ListEditView.vue'
 import ChallengeView from '@/views/ChallengeView.vue'
+import DiscussView from '@/views/DiscussView.vue'
+import DiscussTopicView from '@/views/DiscussTopicView.vue'
+import NotificationsView from '@/views/NotificationsView.vue'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -48,6 +51,24 @@ const router = createRouter({
       children: [
         { path: '', name: 'home', component: HomeView, meta: { title: '首页' } },
         { path: 'problems', name: 'problems', component: ProblemListView, meta: { title: '题库' } },
+        {
+          path: 'discuss',
+          name: 'discuss',
+          component: DiscussView,
+          meta: { title: '讨论', requiresAuth: true },
+        },
+        {
+          path: 'discuss/:tid',
+          name: 'discuss-topic',
+          component: DiscussTopicView,
+          meta: { title: '讨论', requiresAuth: true },
+        },
+        {
+          path: 'notifications',
+          name: 'notifications',
+          component: NotificationsView,
+          meta: { title: '消息中心', requiresAuth: true },
+        },
         {
           path: 'lists',
           name: 'lists',

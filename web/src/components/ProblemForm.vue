@@ -38,6 +38,7 @@ export interface ProblemFormPayload {
   tag_ids: number[]
   challenge_time_sec: number // 挑战时长秒（v0.23；0 = 按难度×5min 默认）
   video_url: string // 答案解析视频链接（v0.23；B 站/直链 mp4，可空）
+  discuss_code_threshold: number // 题内讨论代码门槛覆盖（v0.24；0 = 跟随全局默认）
   zip: File | null
   checker: File | null
   questions: ObjectiveQuestionDraft[] | null
@@ -114,6 +115,7 @@ const form = reactive({
   tag_ids: props.initial.tag_ids ?? [],
   challenge_time_sec: props.initial.challenge_time_sec ?? 0,
   video_url: props.initial.video_url ?? '',
+  discuss_code_threshold: props.initial.discuss_code_threshold ?? 0,
 })
 
 // 时限输入以秒为单位（站点展示口径统一用 s），提交/存储仍为毫秒
@@ -631,6 +633,30 @@ function onSubmitClick() {
               placeholder="https://www.bilibili.com/video/BV… 或 https://…/solution.mp4"
               maxlength="1024"
             />
+          </el-form-item>
+
+          <el-form-item>
+            <template #label>
+              <span class="label-with-tip">
+                讨论代码门槛（可选）
+                <el-tooltip
+                  placement="top"
+                  content="题内讨论中代码块的可见门槛：查看者本题最高得分 ≥ 该值才可见；0 = 跟随全站默认（系统设置里配，默认 60 分）"
+                >
+                  <el-icon class="dim"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </span>
+            </template>
+            <div class="limits">
+              <el-input-number
+                v-model="form.discuss_code_threshold"
+                :controls="false"
+                :min="0"
+                :max="100"
+                placeholder="默认"
+              />
+              <span class="dim">分（0 = 跟随全站默认）</span>
+            </div>
           </el-form-item>
 
           <el-form-item v-if="mode === 'create'">

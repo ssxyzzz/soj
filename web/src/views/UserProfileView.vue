@@ -174,6 +174,11 @@ function openDetail(id: number) {
                 <b class="mono">{{ page.stats.accepted }}</b>
                 <span>AC</span>
               </div>
+              <div class="stat" :title="page.stats.answers_accepted ? '讨论区被采纳的解答数' : ''">
+                <b v-if="page.stats.answers_accepted" class="mono">{{ page.stats.answers_accepted }}</b>
+                <b v-else>—</b>
+                <span>解答</span>
+              </div>
               <div class="stat">
                 <b class="mono">{{ acRate }}</b>
                 <span>AC 率</span>

@@ -34,6 +34,7 @@ const editInitial = ref<{
   file_io_name?: string
   challenge_time_sec?: number
   video_url?: string
+  discuss_code_threshold?: number
   tag_ids?: number[]
   meta_tag_ids?: number[]
   questions?: {
@@ -73,6 +74,7 @@ onMounted(async () => {
       file_io_name: (p.file_io_input || 'problem.in').replace(/\.in$/, ''),
       challenge_time_sec: p.challenge_time_sec ?? 0,
       video_url: p.video_url ?? '',
+      discuss_code_threshold: p.discuss_code_threshold ?? 0,
       tag_ids: p.tags ? [...p.tags] : [],
       // 客观题整卷完整定义回填（编辑者门槛下 GetProblem 附带 questions_full）
       questions: (p.questions_full ?? []).map((q) => ({
@@ -202,6 +204,7 @@ async function onSubmit(p: ProblemFormPayload) {
       tag_ids: p.tag_ids,
       video_url: p.video_url ?? '',
       challenge_time_sec: p.challenge_time_sec ?? 0,
+      discuss_code_threshold: p.discuss_code_threshold ?? 0,
       ...(p.compare === 'tolerant' ? { float_tolerance: p.float_tolerance } : {}),
     })
     if (p.zip) {

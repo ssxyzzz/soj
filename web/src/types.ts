@@ -203,6 +203,7 @@ export interface ProblemDetail {
   challenge_time_sec?: number // 原始覆盖配置（编辑回填；0/缺省 = 按难度默认）——仅编辑者下发
   video_url?: string // 答案解析视频原始链接（编辑回填）——仅编辑者下发
   solution_video_url?: string // 答案解析视频（展示侧，满分∨老师门槛；无链接缺省）
+  discuss_code_threshold?: number // 题内讨论代码门槛覆盖（编辑回填；0 = 跟随全局）——仅编辑者下发
 }
 
 // 挑战模式（v0.23）
@@ -358,7 +359,12 @@ export interface UserPage {
   avatar_url?: string // QQ 头像直链（绑定开关开 + 已填 QQ 时下发；缺省回退首字头像）
   level?: LevelBadgeInfo
   rank?: { rank: number; solved: number } // 全站排名（同排行榜口径）
-  stats: { submissions: number; accepted: number; ac_rate: number }
+  stats: {
+    submissions: number
+    accepted: number
+    ac_rate: number
+    answers_accepted?: number // 讨论区被采纳解答数（v0.24；无记录缺省）
+  }
   recent?: UserPageRecent[]
   first_ac?: UserPageFirstAC[]
   contests?: UserPageContest[]
@@ -830,4 +836,121 @@ export interface LeaderRow {
   last_scoring_at?: string
   level?: number // 学生等级（v0.11；聚合失败省略）
   problems: LeaderCell[]
+}
+
+// ---------- 讨论区 + 站内通知（v0.24） ----------
+
+export type DiscussScope = 'problem' | 'contest' | 'global'
+
+export interface DiscussTopic {
+  id: number
+  scope: DiscussScope
+  scope_id: number
+  uid: number
+  kind: string
+  title: string
+  content?: string
+  related_pids?: number[]
+  list_id?: number
+  tag_id?: number
+  reply_count: number
+  like_count: number
+  pinned?: boolean
+  featured?: boolean
+  locked?: boolean
+  folded?: boolean
+  official?: boolean
+  private?: boolean
+  public_at?: string
+  accepted_reply_id?: number
+  edited?: boolean
+  deleted?: boolean
+  created_at: string
+  last_active_at: string
+  liked?: boolean
+  nickname?: string
+  username?: string
+  can_edit?: boolean
+  can_manage?: boolean
+  can_accept?: boolean
+  is_organizer?: boolean
+}
+
+export interface DiscussReply {
+  id: number
+  tid: number
+  uid: number
+  content: string
+  reply_to: number
+  like_count: number
+  accepted?: boolean
+  folded?: boolean
+  deleted?: boolean
+  edited?: boolean
+  created_at: string
+  liked?: boolean
+  nickname?: string
+  username?: string
+}
+
+export interface DiscussListResult {
+  list: DiscussTopic[]
+  total: number
+  enabled?: boolean
+  disabled_reason?: string
+  code_threshold?: number
+  can_view_code?: boolean
+  locked?: boolean
+  running?: boolean
+  ended?: boolean
+  is_organizer?: boolean
+  title?: string
+}
+
+export interface DiscussTopicDetail {
+  topic: DiscussTopic
+  replies: DiscussReply[]
+  gate?: { code_threshold: number; can_view_code: boolean }
+}
+
+export interface NotificationItem {
+  id: number
+  type: string
+  title: string
+  body: string
+  link?: string
+  agg_count: number
+  read?: boolean
+  created_at: string
+}
+
+export interface NotifyPrefsResult {
+  categories: { type: string; enabled: boolean }[]
+  has_email: boolean
+}
+
+export interface DiscussReportItem {
+  id: number
+  target_type: 'topic' | 'reply'
+  target_id: number
+  tid: number
+  reason: string
+  status: string
+  at: string
+  action?: string
+  reporter?: { uid: number; nickname: string; username: string }
+  snippet?: string
+  target_uid?: number
+}
+
+export interface DiscussMuteItem {
+  id: number
+  uid: number
+  nickname?: string
+  username?: string
+  until: string
+  permanent: boolean
+  reason: string
+  by?: string
+  at: string
 }

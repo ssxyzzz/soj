@@ -36,11 +36,15 @@ const (
 	SecEmailBind     = "email_bind"     // v0.16：绑定/换绑邮箱
 	SecEmailUnbind   = "email_unbind"   // v0.16：root 解绑邮箱
 	SecRateLimited   = "rate_limited"
+	SecDiscussDelete = "discuss_delete" // v0.24：讨论区管理删帖
+	SecDiscussMute   = "discuss_mute"   // v0.24：禁言/解禁
+	SecBroadcast     = "broadcast"      // v0.24：全站公告广播
 )
 
 var SecurityLogTypes = []string{
 	SecLoginSuccess, SecLoginFailure, SecLoginLocked,
 	SecPwdChange, SecPwdResetAdmin, SecPwdReset, SecEmailBind, SecEmailUnbind, SecRateLimited,
+	SecDiscussDelete, SecDiscussMute, SecBroadcast,
 }
 
 func (r *Repo) AddSecurityLog(ctx context.Context, e SecurityLog) error {

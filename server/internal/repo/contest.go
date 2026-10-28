@@ -40,6 +40,7 @@ type Contest struct {
 	Scoreboard  bool             `bson:"scoreboard"`       // 是否开启成绩表（v0.7；默认开，关闭后参与者不看榜单，组织者仍可见）
 	HideDuring  bool             `bson:"hideDuring"`       // 赛期内对参赛者隐藏结果/状态/标签/通过率（v0.7；默认开，保持 OI 现状）
 	HideMeta    bool             `bson:"hideMeta"`         // 发布前对参赛者隐藏难度与知识点（2026-10-27；比赛默认开，服务端不下发，悬停不可见；组织者/题库全量可见视角不受限）
+	StartNotified bool           `bson:"startNotified,omitempty"` // 开赛提醒已发标记（v0.24 通知中心防重发）
 	CreatedAt   time.Time        `bson:"createdAt"`
 }
 

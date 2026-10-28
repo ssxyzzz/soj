@@ -35,6 +35,28 @@ type SystemSettings struct {
 	RegisterVerifyMode string `bson:"registerVerifyMode,omitempty"`
 	// 忘记密码自助找回开关（v0.16）：默认关——开启前登录页不展示入口（老师重置仍是主路径）。
 	PasswordResetEnabled *bool `bson:"passwordResetEnabled,omitempty"`
+	// 讨论区（v0.24）：三区总开关默认开；GlobalLocked = root 一键临时锁定导航栏讨论区
+	//（班级考试期间防考题外流，锁定只封导航栏区，题内/比赛讨论不受影响）。
+	DiscussGlobalEnabled *bool `bson:"discussGlobalEnabled,omitempty"`
+	DiscussProblemEnabled *bool `bson:"discussProblemEnabled,omitempty"`
+	DiscussContestEnabled *bool `bson:"discussContestEnabled,omitempty"`
+	DiscussGlobalLocked   bool  `bson:"discussGlobalLocked,omitempty"`
+	// 题内讨论代码门槛全局默认（0–100 分）：查看者本题历史最高分（published）≥ 阈值才可见
+	// 代码块；0 = 不隐藏。每题可覆盖（problems.discussCodeThreshold，0 = 跟随全局）。
+	DiscussCodeThreshold *int `bson:"discussCodeThreshold,omitempty"`
+	// 发帖限速：主楼每日上限 / 回复最小间隔秒；0 = 不限。
+	DiscussTopicDailyLimit *int `bson:"discussTopicDailyLimit,omitempty"`
+	DiscussReplyIntervalSec *int `bson:"discussReplyIntervalSec,omitempty"`
+	// 新号冷静期（小时）：注册未满 N 小时不能在导航栏讨论区发主楼（题内求助不受限）；0 = 不限。
+	DiscussNewbieHours *int `bson:"discussNewbieHours,omitempty"`
+	// 举报自动折叠阈值：同一目标未处理举报达到 N 条自动折叠；0 = 不自动折叠。
+	DiscussReportFold *int `bson:"discussReportFold,omitempty"`
+	// 回复被采纳的经验奖励（走 xpAdjust 流水）；0 = 不奖励。
+	DiscussAcceptXp *int `bson:"discussAcceptXp,omitempty"`
+	// 通知保留天数（TTL 在插入时按当时值写死）；0 = 按默认 90。
+	NotifyRetentionDays *int `bson:"notifyRetentionDays,omitempty"`
+	// root 全站广播每日上限；0 = 不限。
+	NotifyBroadcastPerDay *int `bson:"notifyBroadcastPerDay,omitempty"`
 }
 
 const (
@@ -44,6 +66,16 @@ const (
 	DefaultAllowRegister        = true
 	DefaultBatchImportProblemMB = 100  // 单题数据 100MB
 	DefaultBatchImportZipMB     = 2048 // 整包 zip 2GB
+
+	// 讨论区（v0.24）默认值。
+	DefaultDiscussCodeThreshold   = 60 // 题内代码门槛：最高分 ≥ 60 可见代码块
+	DefaultDiscussTopicDailyLimit = 5  // 主楼每日上限
+	DefaultDiscussReplyInterval   = 30 // 回复间隔秒
+	DefaultDiscussNewbieHours     = 48 // 新号冷静期
+	DefaultDiscussReportFold      = 3  // 举报折叠阈值
+	DefaultDiscussAcceptXp        = 10 // 采纳经验奖励
+	DefaultNotifyRetentionDays    = 90 // 通知保留天数
+	DefaultNotifyBroadcastPerDay  = 1  // 广播每日上限
 
 	MailChannelLog      = "log"
 	MailChannelSMTP     = "smtp"
@@ -100,7 +132,106 @@ func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
 	if s.RegisterVerifyMode != RegisterVerifyEmail {
 		s.RegisterVerifyMode = RegisterVerifyNone
 	}
+	s.normalizeDiscuss()
 	return &s, nil
+}
+
+// normalizeDiscuss 讨论区设置兜底（存量文档缺字段回默认）。
+func (s *SystemSettings) normalizeDiscuss() {
+	if s.DiscussGlobalEnabled == nil {
+		s.DiscussGlobalEnabled = boolPtr(true)
+	}
+	if s.DiscussProblemEnabled == nil {
+		s.DiscussProblemEnabled = boolPtr(true)
+	}
+	if s.DiscussContestEnabled == nil {
+		s.DiscussContestEnabled = boolPtr(true)
+	}
+	if s.DiscussCodeThreshold == nil || *s.DiscussCodeThreshold < 0 || *s.DiscussCodeThreshold > 100 {
+		s.DiscussCodeThreshold = intPtr(DefaultDiscussCodeThreshold)
+	}
+	if s.DiscussTopicDailyLimit == nil || *s.DiscussTopicDailyLimit < 0 {
+		s.DiscussTopicDailyLimit = intPtr(DefaultDiscussTopicDailyLimit)
+	}
+	if s.DiscussReplyIntervalSec == nil || *s.DiscussReplyIntervalSec < 0 {
+		s.DiscussReplyIntervalSec = intPtr(DefaultDiscussReplyInterval)
+	}
+	if s.DiscussNewbieHours == nil || *s.DiscussNewbieHours < 0 {
+		s.DiscussNewbieHours = intPtr(DefaultDiscussNewbieHours)
+	}
+	if s.DiscussReportFold == nil || *s.DiscussReportFold < 0 {
+		s.DiscussReportFold = intPtr(DefaultDiscussReportFold)
+	}
+	if s.DiscussAcceptXp == nil || *s.DiscussAcceptXp < 0 {
+		s.DiscussAcceptXp = intPtr(DefaultDiscussAcceptXp)
+	}
+	if s.NotifyRetentionDays == nil || *s.NotifyRetentionDays <= 0 {
+		s.NotifyRetentionDays = intPtr(DefaultNotifyRetentionDays)
+	}
+	if s.NotifyBroadcastPerDay == nil || *s.NotifyBroadcastPerDay < 0 {
+		s.NotifyBroadcastPerDay = intPtr(DefaultNotifyBroadcastPerDay)
+	}
+}
+
+// 讨论区开关取值（nil 已在读取时兜底，防御直接构造的零值结构体）。
+func (s *SystemSettings) DiscussGlobalOpen() bool  { return s.DiscussGlobalEnabled == nil || *s.DiscussGlobalEnabled }
+func (s *SystemSettings) DiscussProblemOpen() bool { return s.DiscussProblemEnabled == nil || *s.DiscussProblemEnabled }
+func (s *SystemSettings) DiscussContestOpen() bool { return s.DiscussContestEnabled == nil || *s.DiscussContestEnabled }
+
+func (s *SystemSettings) DiscussCodeThresholdVal() int {
+	if s.DiscussCodeThreshold == nil || *s.DiscussCodeThreshold < 0 || *s.DiscussCodeThreshold > 100 {
+		return DefaultDiscussCodeThreshold
+	}
+	return *s.DiscussCodeThreshold
+}
+
+func (s *SystemSettings) DiscussTopicDailyLimitVal() int {
+	if s.DiscussTopicDailyLimit == nil || *s.DiscussTopicDailyLimit < 0 {
+		return DefaultDiscussTopicDailyLimit
+	}
+	return *s.DiscussTopicDailyLimit
+}
+
+func (s *SystemSettings) DiscussReplyIntervalVal() int {
+	if s.DiscussReplyIntervalSec == nil || *s.DiscussReplyIntervalSec < 0 {
+		return DefaultDiscussReplyInterval
+	}
+	return *s.DiscussReplyIntervalSec
+}
+
+func (s *SystemSettings) DiscussNewbieHoursVal() int {
+	if s.DiscussNewbieHours == nil || *s.DiscussNewbieHours < 0 {
+		return DefaultDiscussNewbieHours
+	}
+	return *s.DiscussNewbieHours
+}
+
+func (s *SystemSettings) DiscussReportFoldVal() int64 {
+	if s.DiscussReportFold == nil || *s.DiscussReportFold < 0 {
+		return DefaultDiscussReportFold
+	}
+	return int64(*s.DiscussReportFold)
+}
+
+func (s *SystemSettings) DiscussAcceptXpVal() int64 {
+	if s.DiscussAcceptXp == nil || *s.DiscussAcceptXp < 0 {
+		return DefaultDiscussAcceptXp
+	}
+	return int64(*s.DiscussAcceptXp)
+}
+
+func (s *SystemSettings) NotifyRetentionDaysVal() int {
+	if s.NotifyRetentionDays == nil || *s.NotifyRetentionDays <= 0 {
+		return DefaultNotifyRetentionDays
+	}
+	return *s.NotifyRetentionDays
+}
+
+func (s *SystemSettings) NotifyBroadcastPerDayVal() int {
+	if s.NotifyBroadcastPerDay == nil || *s.NotifyBroadcastPerDay < 0 {
+		return DefaultNotifyBroadcastPerDay
+	}
+	return *s.NotifyBroadcastPerDay
 }
 
 func intPtr(v int) *int { return &v }
@@ -127,6 +258,18 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"smtp":                   s.SMTP,
 			"registerVerifyMode":     s.RegisterVerifyMode,
 			"passwordResetEnabled":   s.PasswordResetOpen(),
+			"discussGlobalEnabled":   s.DiscussGlobalOpen(),
+			"discussProblemEnabled":  s.DiscussProblemOpen(),
+			"discussContestEnabled":  s.DiscussContestOpen(),
+			"discussGlobalLocked":    s.DiscussGlobalLocked,
+			"discussCodeThreshold":   s.DiscussCodeThresholdVal(),
+			"discussTopicDailyLimit": s.DiscussTopicDailyLimitVal(),
+			"discussReplyIntervalSec": s.DiscussReplyIntervalVal(),
+			"discussNewbieHours":     s.DiscussNewbieHoursVal(),
+			"discussReportFold":      int(s.DiscussReportFoldVal()),
+			"discussAcceptXp":        int(s.DiscussAcceptXpVal()),
+			"notifyRetentionDays":    s.NotifyRetentionDaysVal(),
+			"notifyBroadcastPerDay":  s.NotifyBroadcastPerDayVal(),
 		}},
 	)
 	return err

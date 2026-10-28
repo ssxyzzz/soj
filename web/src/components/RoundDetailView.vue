@@ -25,6 +25,7 @@ import { useTagTreeStore } from '@/stores/tagtree'
 import { useUserStore } from '@/stores/user'
 import { fmtDate } from '@/utils/format'
 import type { ContestDetail, LeaderRow, Submission } from '@/types'
+import DiscussDialog from '@/components/discuss/DiscussDialog.vue'
 
 const props = defineProps<{ kind: RoundKind }>()
 
@@ -43,6 +44,7 @@ const leaders = ref<LeaderRow[]>([])
 const leadersLoading = ref(false)
 const myUid = ref<number | null>(null)
 const showScoreBoard = ref(false)
+const showDiscuss = ref(false)
 
 // 榜单单元格点看用户提交明细：组织者本人 ∨「查看用户提交明细」∨「查看比赛/考试成绩表详情」
 const canInspectSubs = computed(
@@ -379,6 +381,16 @@ onUnmounted(() => {
           <div class="range dim">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }} · {{ progressHint }}</div>
         </RailCard>
 
+        <!-- 讨论入口（v0.24）：仅主题库比赛配讨论区（考试不配，考试题走题内讨论赛时锁定） -->
+        <RailCard v-if="kind === 'contest'" ov="互动" title="比赛讨论" class="aside-card">
+          <div class="entry-actions">
+            <el-button type="primary" plain style="width: 100%" @click="showDiscuss = true">
+              进入讨论区
+            </el-button>
+          </div>
+          <p class="range dim">赛时提问仅组织者可见，可被升格公开答复；赛后转公开复盘。</p>
+        </RailCard>
+
         <ScoreSummaryCard
           v-if="boardVisible"
           class="aside-card"
@@ -393,6 +405,16 @@ onUnmounted(() => {
         />
       </template>
     </PageShell>
+
+    <!-- 比赛讨论弹窗（v0.24） -->
+    <DiscussDialog
+      v-if="round && kind === 'contest'"
+      v-model="showDiscuss"
+      scope="contest"
+      :scope-id="round.id"
+      :title="`${round.title} · 讨论`"
+      :contest-running="round.status === 'running'"
+    />
 
     <EditRoundDialog
       v-if="round"

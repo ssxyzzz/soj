@@ -29,6 +29,12 @@ type Repo struct {
 	Tags        *mongo.Collection
 	Lists       *mongo.Collection // 题单（v0.18.3 章节化自学导航）
 	Challenges  *mongo.Collection // 挑战模式会话/记录（v0.23）
+	Discussions   *mongo.Collection // 讨论区主题帖（v0.24，scope+scopeId 通用模型）
+	DiscussReplies *mongo.Collection // 讨论区回复（两层楼中楼）
+	DiscussLikes  *mongo.Collection // 讨论点赞（topic/reply × id × uid 唯一）
+	DiscussReports *mongo.Collection // 讨论举报队列
+	DiscussMutes  *mongo.Collection // 讨论禁言记录
+	Notifications *mongo.Collection // 站内通知（v0.24）
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -69,6 +75,12 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		Tags:        db.Collection("tags"),
 		Lists:       db.Collection("lists"),
 		Challenges:  db.Collection("challenges"),
+		Discussions:    db.Collection("discussions"),
+		DiscussReplies: db.Collection("discussReplies"),
+		DiscussLikes:   db.Collection("discussLikes"),
+		DiscussReports: db.Collection("discussReports"),
+		DiscussMutes:   db.Collection("discussMutes"),
+		Notifications:  db.Collection("notifications"),
 	}, nil
 }
 
@@ -131,6 +143,17 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	// 挑战模式（v0.23）：会话查询 + 题内榜聚合
 	if err := r.ensureChallengeIndexes(ctx); err != nil {
 		return err
+	}
+	// 讨论区 + 通知中心（v0.24）：三区通用索引 + purgeAt TTL
+	if err := r.EnsureDiscussIndexes(ctx); err != nil {
+		return err
+	}
+	// v0.24 验收修复清理：早期 upsert 未显式赋 _id，Mongo 自动生成的 ObjectId 主机
+	// 文档会让读取侧 int64 解码失败（角标正常、列表报错）；重启一次性清掉
+	if res, err := r.Notifications.DeleteMany(ctx, bson.M{"_id": bson.M{"$type": "objectId"}}); err != nil {
+		return err
+	} else if res.DeletedCount > 0 {
+		log.Printf("[boot] 已清理 %d 条 ObjectId 主机的通知脏数据（v0.24 验收期产生）", res.DeletedCount)
 	}
 	// 安全审计日志（v0.14）：at 上 TTL 索引滚动保留 90 天（mongod 后台清扫，无需应用层定时）；
 	// type+at 复合索引供后台按类型筛选
@@ -430,6 +453,21 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		log.Printf("[boot] admin 角色已补发题单管理权限位（list.manage）")
+	}
+	if !flagDone("discussPermV1") {
+		// v0.24：讨论三权限位（管理/免限速/代码门槛豁免），初始归属 admin（root 恒通；
+		// notify.broadcast 默认仅 root，不在补发之列）
+		if _, err := r.Roles.UpdateOne(ctx,
+			bson.M{"_id": RoleAdmin},
+			bson.M{"$addToSet": bson.M{"perms": bson.M{"$each": []string{
+				PermDiscussManage, PermDiscussRateExempt, PermDiscussCodeBypass,
+			}}}}); err != nil {
+			return err
+		}
+		if err := setFlag("discussPermV1"); err != nil {
+			return err
+		}
+		log.Printf("[boot] admin 角色已补发讨论权限位（discussion.manage / rate_exempt / code.bypass）")
 	}
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次
@@ -872,6 +910,19 @@ func (r *Repo) nextSeq(ctx context.Context, name string) (int64, error) {
 	err := r.Counters.FindOneAndUpdate(ctx,
 		bson.M{"_id": name},
 		bson.M{"$inc": bson.M{"seq": 1}},
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
+	).Decode(&doc)
+	return doc.Seq, err
+}
+
+// nextSeqBatch 一次取 n 个连续序号（批量插入用）：返回段落末值，n 条用 [end-n+1, end]。
+func (r *Repo) nextSeqBatch(ctx context.Context, name string, n int64) (int64, error) {
+	var doc struct {
+		Seq int64 `bson:"seq"`
+	}
+	err := r.Counters.FindOneAndUpdate(ctx,
+		bson.M{"_id": name},
+		bson.M{"$inc": bson.M{"seq": n}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
 	).Decode(&doc)
 	return doc.Seq, err
