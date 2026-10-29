@@ -15,9 +15,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"soj/internal/repo"
 )
@@ -47,42 +44,27 @@ var (
 // pickFeatured 按种子从可见题池挑一道（difficulty>0 时限同难度档），装配标签名与通过率。
 // 池为空（或查询失败）返回 nil，由调用方扩大范围/兜底。种子 = 日期（全局）或 日期|uid（个性化）。
 func (h *Handlers) pickFeatured(ctx context.Context, seed string, difficulty int) *featuredProblem {
-	q := bson.M{"hidden": bson.M{"$ne": true}}
-	if difficulty > 0 {
-		q["difficulty"] = difficulty
-	}
-	n, err := h.repo.Problems.CountDocuments(ctx, q)
+	n, err := h.repo.CountVisibleProblems(ctx, difficulty)
 	if err != nil || n == 0 {
 		return nil
 	}
 	hseed := fnv.New32a()
 	_, _ = hseed.Write([]byte(seed))
 	skip := int64(hseed.Sum32()) % n
-	fcur, err := h.repo.Problems.Find(ctx, q,
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetSkip(skip).SetLimit(1))
-	if err != nil {
-		return nil
-	}
-	defer fcur.Close(ctx)
-	var rows []struct {
-		ID         int64   `bson:"_id"`
-		Title      string  `bson:"title"`
-		Difficulty int     `bson:"difficulty,omitempty"`
-		Tags       []int64 `bson:"tags"`
-	}
-	if err := fcur.All(ctx, &rows); err != nil || len(rows) == 0 {
+	row, err := h.repo.VisibleProblemAt(ctx, difficulty, skip)
+	if err != nil || row == nil {
 		return nil
 	}
 	fp := &featuredProblem{
-		ID:         rows[0].ID,
-		Title:      rows[0].Title,
-		Difficulty: rows[0].Difficulty,
+		ID:         row.ID,
+		Title:      row.Title,
+		Difficulty: row.Difficulty,
 	}
 	// 标签树节点名（首页今日一题 meta 展示，最多 4 个；树读取失败静默跳过）
-	if len(rows[0].Tags) > 0 {
+	if len(row.Tags) > 0 {
 		if nodes, terr := h.repo.GetTagTree(ctx); terr == nil {
 			names := repo.TagIDNames(nodes)
-			for _, id := range rows[0].Tags {
+			for _, id := range row.Tags {
 				if n, found := names[id]; found {
 					fp.Tags = append(fp.Tags, n)
 					if len(fp.Tags) >= 4 {
@@ -93,9 +75,7 @@ func (h *Handlers) pickFeatured(ctx context.Context, seed string, difficulty int
 		}
 	}
 	// 通过率（AC / 总提交，题库同口径）；两次 count 开销可忽略
-	total, _ := h.repo.Submissions.CountDocuments(ctx, bson.M{"pid": fp.ID})
-	if total > 0 {
-		ac, _ := h.repo.Submissions.CountDocuments(ctx, bson.M{"pid": fp.ID, "status": "Accepted"})
+	if total, ac, err := h.repo.ProblemSubmitCounts(ctx, fp.ID); err == nil && total > 0 {
 		fp.AcceptRate = float64(ac) / float64(total) * 100
 	}
 	return fp
@@ -130,45 +110,29 @@ func (h *Handlers) GetSiteStats(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 		defer cancel()
 
-		visible := bson.M{"hidden": bson.M{"$ne": true}}
-		pc, err := h.repo.Problems.CountDocuments(ctx, visible)
+		pc, err := h.repo.CountVisibleProblems(ctx, 0)
 		if err != nil {
 			fail(c, http.StatusInternalServerError, "服务器内部错误")
 			return
 		}
-		uc, err := h.repo.Users.CountDocuments(ctx, bson.M{})
+		uc, err := h.repo.CountAllUsers(ctx)
 		if err != nil {
 			fail(c, http.StatusInternalServerError, "服务器内部错误")
 			return
 		}
 		y, m, d := time.Now().Date()
 		dayStart := time.Date(y, m, d, 0, 0, 0, 0, time.Local)
-		ts, err := h.repo.Submissions.CountDocuments(ctx, bson.M{"createdAt": bson.M{"$gte": dayStart}})
+		ts, err := h.repo.CountSubmissionsSince(ctx, dayStart)
 		if err != nil {
 			fail(c, http.StatusInternalServerError, "服务器内部错误")
 			return
 		}
 
-		// 平均判题时长：最近 1000 条已完成（timeMs>0）的窗口平均，避免全表聚合
-		avg := 0.0
-		cur, err := h.repo.Submissions.Aggregate(ctx, mongo.Pipeline{
-			{{Key: "$match", Value: bson.M{"timeMs": bson.M{"$gt": 0}}}},
-			{{Key: "$sort", Value: bson.D{{Key: "createdAt", Value: -1}}}},
-			{{Key: "$limit", Value: 1000}},
-			{{Key: "$group", Value: bson.M{"_id": nil, "avg": bson.M{"$avg": "$timeMs"}}}},
-		})
-		if err == nil {
-			var rows []struct {
-				Avg float64 `bson:"avg"`
-			}
-			if err := cur.All(ctx, &rows); err != nil {
-				slog.Warn("首页统计：判题时长窗口读取失败，均值按 0 展示", "component", "web", "error", err)
-			} else if len(rows) > 0 {
-				avg = rows[0].Avg
-			}
-			cur.Close(ctx)
-		} else {
-			slog.Warn("首页统计：平均判题时长聚合失败，均值按 0 展示", "component", "web", "error", err)
+		// 平均判题时长：最近 1000 条已完成窗口平均（查询契约在 repo.AvgJudgeMSRecent），
+		// 失败降级按 0 展示（v0.32 起留 Warn 观测）
+		avg, avgErr := h.repo.AvgJudgeMSRecent(ctx)
+		if avgErr != nil {
+			slog.Warn("首页统计：平均判题时长聚合失败，均值按 0 展示", "component", "web", "error", avgErr)
 		}
 
 		st = &siteStats{

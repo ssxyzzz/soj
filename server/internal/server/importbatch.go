@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"gopkg.in/yaml.v3"
 
 	"soj/internal/archive"
@@ -340,7 +339,7 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 		// 不存在 → 以该题号落库（下方 Importer 认前缀）。无前缀目录恒走自动取号新建。
 		if job.SkipExistingPID {
 			if pid := repo.DirPID(name); pid > 0 {
-				if n, err := h.repo.Problems.CountDocuments(ctx, bson.M{"_id": pid}); err == nil && n > 0 {
+				if exists, err := h.repo.ProblemIDExists(ctx, pid); err == nil && exists {
 					job.addResult(batchResult{Name: name, Status: "skipped", Title: title,
 						Reason: fmt.Sprintf("题号 %d 已存在，跳过（不覆盖既有题）", pid)})
 					continue
@@ -348,7 +347,7 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 			}
 		}
 		if skipSame && title != "" {
-			if n, err := h.repo.Problems.CountDocuments(ctx, bson.M{"title": title}); err == nil && n > 0 {
+			if exists, err := h.repo.ProblemTitleExists(ctx, title); err == nil && exists {
 				job.addResult(batchResult{Name: name, Status: "skipped", Title: title, Reason: "题库已存在同标题题，按开关跳过"})
 				continue
 			}
