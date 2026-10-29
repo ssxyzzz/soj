@@ -285,14 +285,14 @@ func (h *Handlers) generateHint(c *gin.Context, p *repo.Problem, level int) (str
 	return h.aiCall(c, aiHintPrompt, user)
 }
 
-// AiDebug POST /api/submissions/:sid/ai-debug —— 对一次未 AC 提交找 bug。
+// AiDebug POST /api/submissions/:id/ai-debug —— 对一次未 AC 提交找 bug。
 func (h *Handlers) AiDebug(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
 	if !logged {
 		fail(c, http.StatusUnauthorized, "未登录")
 		return
 	}
-	sid, okID := parseID(c, "sid")
+	sid, okID := parseID(c, "id")
 	if !okID {
 		return
 	}
