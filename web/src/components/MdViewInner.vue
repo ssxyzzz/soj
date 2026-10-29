@@ -91,8 +91,14 @@ async function highlightCode(root: HTMLElement) {
     code.classList.add('vditor-linenumber')
     const rows = document.createElement('span')
     rows.className = 'vditor-linenumber__rows'
-    const lines = (code.textContent ?? '').split('\n').length
-    for (let i = 0; i < lines; i++) rows.appendChild(document.createElement('span'))
+    // 行数必须剔除尾空段：围栏内容总以 \n 收尾，而 HTML 忽略闭合标签前的换行
+    // （不构成新行）——直接按 split 段数生成会多出一条幻影行号，行号列比正文
+    // 高一行（Chrome 不把绝对定位行号列计入滚动溢出，Firefox 计入→样例卡内
+    // 纵向滚动条）。vditor 内置行号同有 pop 处理；这里仅在尾段为空时剔除，
+    // 无尾换行的输入不会因此少数一行（比无条件 pop 稳）。
+    const parts = (code.textContent ?? '').split('\n')
+    if (parts.length > 1 && parts[parts.length - 1] === '') parts.pop()
+    for (let i = 0; i < parts.length; i++) rows.appendChild(document.createElement('span'))
     code.appendChild(rows)
   })
 }
