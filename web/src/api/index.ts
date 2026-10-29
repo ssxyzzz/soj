@@ -91,6 +91,12 @@ client.interceptors.response.use(
     // 这里只能 toast 泛化的「网络错误」，会双重弹窗）；401 处理照常
     const silent = error.config?.responseType === 'blob'
     if (error.response?.status === 401) {
+      // 仅 /auth/login 的 401 要提示——登录失败（后端带「还剩 N 次机会」递进文案，
+      // v0.14 设计本意）。其余 401 = 会话过期（60s 轮询过期后连环 401），保持静默
+      // 登出+跳转，防刷屏
+      if (String(error.config?.url || '').includes('/auth/login')) {
+        ElMessage.error(error.response?.data?.message || '用户名或密码错误')
+      }
       useUserStore().logout() // 清本标签页内存态与 localStorage（角色/权限一并清）
       if (!location.pathname.startsWith('/login')) {
         location.href = '/login'
