@@ -8,10 +8,13 @@ package repo
 
 import (
 	"context"
+	"embed"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -332,481 +335,10 @@ func TagNameLookup(nodes []TagNode) map[string]int64 {
 // DefaultTagTreeContent 默认标签树：2026-10-24 起与生产站点标签树对齐
 // （知识点体系：10 大类 384 节点、最深 4 层；此前是约 50 节点的两级 NOI 大纲树）。
 // 只在树为空时注入一次，之后随 root 自由编辑；「重置为默认」按钮二期。
-var DefaultTagTreeContent = []TagNode{
-	{Name: "基础语法", Children: []TagNode{
-		{Name: "顺序结构", Children: []TagNode{
-			{Name: "简单输出"},
-			{Name: "输入输出"},
-			{Name: "数位分离"},
-			{Name: "交换变量"},
-			{Name: "小数处理"},
-			{Name: "数学计算"},
-			{Name: "模拟过程"},
-		}},
-		{Name: "分支结构", Children: []TagNode{
-			{Name: "单分支"},
-			{Name: "双分支"},
-			{Name: "多分支"},
-			{Name: "分支嵌套"},
-			{Name: "switch语句"},
-		}},
-		{Name: "循环结构", Children: []TagNode{
-			{Name: "for循环"},
-			{Name: "while循环"},
-			{Name: "do-while循环"},
-			{Name: "循环输入"},
-			{Name: "循环嵌套"},
-		}},
-		{Name: "数组", Children: []TagNode{
-			{Name: "一维数组"},
-			{Name: "增删改"},
-			{Name: "数组标记"},
-			{Name: "数组计数"},
-			{Name: "连续性"},
-			{Name: "字符数组"},
-			{Name: "字符串"},
-			{Name: "二维数组"},
-			{Name: "多维数组"},
-		}},
-		{Name: "函数", Children: []TagNode{
-			{Name: "形参与实参"},
-			{Name: "变量作用域"},
-			{Name: "引用传递"},
-			{Name: "常用库函数"},
-		}},
-		{Name: "结构体", Children: []TagNode{
-			{Name: "结构体数组"},
-			{Name: "结构体排序"},
-		}},
-		{Name: "STL", Children: []TagNode{
-			{Name: "vector"},
-			{Name: "stack"},
-			{Name: "queue"},
-			{Name: "priority_queue"},
-			{Name: "deque"},
-			{Name: "set/multiset"},
-			{Name: "map/multimap"},
-			{Name: "pair"},
-			{Name: "bitset"},
-		}},
-		{Name: "复杂度分析", Children: []TagNode{
-			{Name: "时间复杂度"},
-			{Name: "空间复杂度"},
-		}},
-	}},
-	{Name: "基础算法", Children: []TagNode{
-		{Name: "贪心", Children: []TagNode{
-			{Name: "简单贪心"},
-			{Name: "区间贪心"},
-			{Name: "反悔贪心"},
-			{Name: "排序贪心"},
-		}},
-		{Name: "枚举", Children: []TagNode{
-			{Name: "简单枚举"},
-			{Name: "嵌套枚举"},
-		}},
-		{Name: "二分", Children: []TagNode{
-			{Name: "二分查找"},
-			{Name: "二分答案"},
-			{Name: "三分法"},
-			{Name: "01分数规划"},
-			{Name: "整体二分"},
-		}},
-		{Name: "前后缀", Children: []TagNode{
-			{Name: "前缀和"},
-			{Name: "后缀和"},
-			{Name: "前缀积"},
-			{Name: "后缀积"},
-			{Name: "前后缀最值"},
-			{Name: "前后缀异或"},
-			{Name: "二维前缀"},
-		}},
-		{Name: "差分", Children: []TagNode{
-			{Name: "一维差分"},
-			{Name: "二维差分"},
-		}},
-		{Name: "递推", Children: []TagNode{
-			{Name: "顺序递推"},
-			{Name: "倒序递推"},
-		}},
-		{Name: "递归", Children: []TagNode{
-			{Name: "记忆化递归"},
-		}},
-		{Name: "排序", Children: []TagNode{
-			{Name: "冒泡排序"},
-			{Name: "选择排序"},
-			{Name: "插入排序"},
-			{Name: "桶排序"},
-			{Name: "计数排序"},
-			{Name: "基数排序"},
-			{Name: "堆排序"},
-			{Name: "sort函数", Children: []TagNode{
-				{Name: "自定义比较"},
-			}},
-		}},
-		{Name: "分治", Children: []TagNode{
-			{Name: "归并排序"},
-			{Name: "快速排序"},
-			{Name: "快速选择"},
-			{Name: "逆序对"},
-			{Name: "CDQ分治"},
-		}},
-		{Name: "倍增", Children: []TagNode{
-			{Name: "倍增思想"},
-			{Name: "快速幂"},
-		}},
-		{Name: "高精度", Children: []TagNode{
-			{Name: "高精度加法"},
-			{Name: "高精度减法"},
-			{Name: "高精度乘法"},
-			{Name: "高精度除法"},
-		}},
-		{Name: "位运算", Children: []TagNode{
-			{Name: "位运算基础"},
-			{Name: "位运算技巧"},
-			{Name: "状态压缩"},
-		}},
-		{Name: "离散化"},
-	}},
-	{Name: "搜索", Children: []TagNode{
-		{Name: "DFS", Children: []TagNode{
-			{Name: "指数型枚举"},
-			{Name: "排列型枚举"},
-			{Name: "组合型枚举"},
-			{Name: "网格搜索"},
-			{Name: "连通块搜索"},
-			{Name: "回溯法"},
-		}},
-		{Name: "BFS", Children: []TagNode{
-			{Name: "网格最短路"},
-			{Name: "多源BFS"},
-			{Name: "状态压缩搜索"},
-		}},
-		{Name: "剪枝", Children: []TagNode{
-			{Name: "可行性剪枝"},
-			{Name: "最优性剪枝"},
-			{Name: "搜索顺序剪枝"},
-			{Name: "排除等效冗余"},
-		}},
-		{Name: "迭代加深", Children: []TagNode{
-			{Name: "迭代加深DFS"},
-			{Name: "IDA*"},
-		}},
-		{Name: "A*算法"},
-		{Name: "双向搜索"},
-	}},
-	{Name: "数据结构", Children: []TagNode{
-		{Name: "栈", Children: []TagNode{
-			{Name: "括号匹配"},
-			{Name: "表达式求值"},
-			{Name: "单调栈"},
-		}},
-		{Name: "队列", Children: []TagNode{
-			{Name: "循环队列"},
-			{Name: "单调队列"},
-			{Name: "双端队列"},
-		}},
-		{Name: "链表", Children: []TagNode{
-			{Name: "单链表"},
-			{Name: "双链表"},
-			{Name: "循环链表"},
-		}},
-		{Name: "哈希表", Children: []TagNode{
-			{Name: "哈希函数"},
-			{Name: "拉链法"},
-			{Name: "开放寻址法"},
-		}},
-		{Name: "树", Children: []TagNode{
-			{Name: "树的存储"},
-			{Name: "树的遍历"},
-			{Name: "二叉树", Children: []TagNode{
-				{Name: "先序遍历"},
-				{Name: "中序遍历"},
-				{Name: "后序遍历"},
-				{Name: "层序遍历"},
-			}},
-		}},
-		{Name: "堆", Children: []TagNode{
-			{Name: "二叉堆"},
-			{Name: "对顶堆"},
-			{Name: "懒删除堆"},
-			{Name: "左偏树"},
-		}},
-		{Name: "并查集", Children: []TagNode{
-			{Name: "路径压缩"},
-			{Name: "按秩合并"},
-			{Name: "带权并查集"},
-			{Name: "扩展域并查集"},
-		}},
-		{Name: "ST表"},
-		{Name: "树状数组", Children: []TagNode{
-			{Name: "单点修改区间查询"},
-			{Name: "区间修改单点查询"},
-			{Name: "区间修改区间查询"},
-		}},
-		{Name: "线段树", Children: []TagNode{
-			{Name: "懒标记"},
-			{Name: "权值线段树"},
-			{Name: "动态开点"},
-			{Name: "扫描线"},
-			{Name: "区间合并"},
-			{Name: "李超线段树"},
-			{Name: "线段树合并"},
-		}},
-		{Name: "平衡树", Children: []TagNode{
-			{Name: "Treap"},
-			{Name: "Splay"},
-			{Name: "无旋Treap"},
-		}},
-		{Name: "字典树", Children: []TagNode{
-			{Name: "01字典树"},
-		}},
-		{Name: "可持久化", Children: []TagNode{
-			{Name: "可持久化线段树"},
-		}},
-		{Name: "分块", Children: []TagNode{
-			{Name: "数列分块"},
-		}},
-		{Name: "莫队", Children: []TagNode{
-			{Name: "普通莫队"},
-			{Name: "带修改莫队"},
-			{Name: "树上莫队"},
-			{Name: "回滚莫队"},
-		}},
-		{Name: "树链剖分", Children: []TagNode{
-			{Name: "重链剖分"},
-			{Name: "长链剖分"},
-		}},
-	}},
-	{Name: "图论", Children: []TagNode{
-		{Name: "图的存储", Children: []TagNode{
-			{Name: "邻接矩阵"},
-			{Name: "邻接表"},
-			{Name: "链式前向星"},
-		}},
-		{Name: "图的遍历", Children: []TagNode{
-			{Name: "DFS遍历"},
-			{Name: "BFS遍历"},
-			{Name: "连通块"},
-		}},
-		{Name: "拓扑排序"},
-		{Name: "最短路", Children: []TagNode{
-			{Name: "Dijkstra", Children: []TagNode{
-				{Name: "朴素Dijkstra"},
-				{Name: "堆优化Dijkstra"},
-			}},
-			{Name: "Bellman-Ford"},
-			{Name: "SPFA"},
-			{Name: "Floyd"},
-			{Name: "差分约束"},
-			{Name: "分层图最短路"},
-			{Name: "负环判定"},
-		}},
-		{Name: "最小生成树", Children: []TagNode{
-			{Name: "Prim"},
-			{Name: "Kruskal"},
-			{Name: "次小生成树"},
-		}},
-		{Name: "树上问题", Children: []TagNode{
-			{Name: "树的直径"},
-			{Name: "树的重心"},
-			{Name: "最近公共祖先", Children: []TagNode{
-				{Name: "倍增LCA"},
-				{Name: "Tarjan离线LCA"},
-			}},
-			{Name: "树上差分"},
-			{Name: "树上启发式合并"},
-			{Name: "点分治"},
-			{Name: "虚树"},
-			{Name: "基环树"},
-		}},
-		{Name: "连通性", Children: []TagNode{
-			{Name: "强连通分量", Children: []TagNode{
-				{Name: "Tarjan"},
-				{Name: "Kosaraju"},
-			}},
-			{Name: "割点与桥"},
-			{Name: "边双连通分量"},
-			{Name: "点双连通分量"},
-			{Name: "缩点"},
-		}},
-		{Name: "欧拉图", Children: []TagNode{
-			{Name: "欧拉路径"},
-			{Name: "欧拉回路"},
-		}},
-		{Name: "网络流", Children: []TagNode{
-			{Name: "最大流", Children: []TagNode{
-				{Name: "EK算法"},
-				{Name: "Dinic算法"},
-			}},
-			{Name: "最小割"},
-			{Name: "费用流"},
-		}},
-		{Name: "二分图", Children: []TagNode{
-			{Name: "二分图判定"},
-			{Name: "匈牙利算法"},
-			{Name: "二分图最大权匹配"},
-		}},
-		{Name: "2-SAT"},
-	}},
-	{Name: "动态规划", Children: []TagNode{
-		{Name: "线性DP", Children: []TagNode{
-			{Name: "数字三角形"},
-			{Name: "最长上升子序列"},
-			{Name: "最长公共子序列"},
-			{Name: "最大子段和"},
-			{Name: "状态机DP"},
-		}},
-		{Name: "背包DP", Children: []TagNode{
-			{Name: "01背包"},
-			{Name: "完全背包"},
-			{Name: "多重背包", Children: []TagNode{
-				{Name: "二进制优化"},
-				{Name: "单调队列优化"},
-			}},
-			{Name: "分组背包"},
-			{Name: "二维费用背包"},
-			{Name: "有依赖的背包"},
-		}},
-		{Name: "区间DP", Children: []TagNode{
-			{Name: "环形区间DP"},
-		}},
-		{Name: "树形DP", Children: []TagNode{
-			{Name: "树上背包"},
-			{Name: "换根DP"},
-		}},
-		{Name: "状态压缩DP", Children: []TagNode{
-			{Name: "集合状压DP"},
-			{Name: "插头DP"},
-		}},
-		{Name: "数位DP"},
-		{Name: "概率期望DP"},
-		{Name: "记忆化搜索"},
-		{Name: "DP优化", Children: []TagNode{
-			{Name: "单调队列优化"},
-			{Name: "斜率优化"},
-			{Name: "决策单调性"},
-			{Name: "矩阵加速"},
-			{Name: "线段树优化"},
-			{Name: "wqs二分"},
-		}},
-	}},
-	{Name: "数学", Children: []TagNode{
-		{Name: "数论", Children: []TagNode{
-			{Name: "因数倍数约数"},
-			{Name: "质数与合数"},
-			{Name: "质数筛", Children: []TagNode{
-				{Name: "埃氏筛法"},
-				{Name: "线性筛法"},
-			}},
-			{Name: "分解质因数"},
-			{Name: "约数个数与约数和"},
-			{Name: "最大公约数", Children: []TagNode{
-				{Name: "辗转相除法"},
-			}},
-			{Name: "最小公倍数"},
-			{Name: "同余"},
-			{Name: "乘法逆元"},
-			{Name: "费马小定理"},
-			{Name: "欧拉函数"},
-			{Name: "裴蜀定理"},
-			{Name: "扩展欧几里得"},
-			{Name: "中国剩余定理"},
-			{Name: "BSGS算法"},
-			{Name: "整除分块"},
-			{Name: "积性函数"},
-			{Name: "莫比乌斯反演"},
-			{Name: "杜教筛"},
-		}},
-		{Name: "组合数学", Children: []TagNode{
-			{Name: "加法与乘法原理"},
-			{Name: "排列与组合"},
-			{Name: "组合数计算", Children: []TagNode{
-				{Name: "杨辉三角递推"},
-				{Name: "逆元求组合数"},
-				{Name: "卢卡斯定理"},
-			}},
-			{Name: "容斥原理"},
-			{Name: "抽屉原理"},
-			{Name: "卡特兰数"},
-			{Name: "错位排列"},
-		}},
-		{Name: "线性代数", Children: []TagNode{
-			{Name: "矩阵", Children: []TagNode{
-				{Name: "矩阵乘法"},
-				{Name: "矩阵快速幂"},
-			}},
-			{Name: "高斯消元", Children: []TagNode{
-				{Name: "异或方程组"},
-			}},
-			{Name: "线性基"},
-		}},
-		{Name: "多项式", Children: []TagNode{
-			{Name: "FFT"},
-			{Name: "NTT"},
-			{Name: "拉格朗日插值"},
-			{Name: "多项式求逆"},
-			{Name: "多项式开根"},
-		}},
-		{Name: "进制转换"},
-		{Name: "博弈论", Children: []TagNode{
-			{Name: "巴什博弈"},
-			{Name: "Nim游戏"},
-			{Name: "威佐夫博弈"},
-			{Name: "SG函数"},
-		}},
-		{Name: "概率与期望", Children: []TagNode{
-			{Name: "概率基础"},
-			{Name: "期望的线性性"},
-		}},
-	}},
-	{Name: "计算几何", Children: []TagNode{
-		{Name: "二维几何基础", Children: []TagNode{
-			{Name: "点与向量"},
-			{Name: "点积与叉积"},
-			{Name: "极角排序"},
-		}},
-		{Name: "多边形", Children: []TagNode{
-			{Name: "凸包", Children: []TagNode{
-				{Name: "Graham扫描法"},
-				{Name: "Andrew算法"},
-			}},
-			{Name: "多边形面积"},
-			{Name: "点与多边形位置关系"},
-		}},
-		{Name: "半平面交"},
-		{Name: "旋转卡壳"},
-		{Name: "平面最近点对"},
-		{Name: "自适应辛普森积分"},
-	}},
-	{Name: "字符串", Children: []TagNode{
-		{Name: "字符串哈希"},
-		{Name: "KMP", Children: []TagNode{
-			{Name: "前缀函数"},
-			{Name: "失配树"},
-		}},
-		{Name: "扩展KMP"},
-		{Name: "Manacher"},
-		{Name: "AC自动机", Children: []TagNode{
-			{Name: "fail指针"},
-		}},
-		{Name: "后缀数组", Children: []TagNode{
-			{Name: "height数组与LCP"},
-		}},
-		{Name: "后缀自动机"},
-		{Name: "回文自动机"},
-		{Name: "最小表示法"},
-	}},
-	{Name: "杂项", Children: []TagNode{
-		{Name: "构造"},
-		{Name: "打表"},
-		{Name: "对拍"},
-		{Name: "交互题"},
-		{Name: "随机化", Children: []TagNode{
-			{Name: "模拟退火"},
-		}},
-	}},
-}
+// v0.32 巨型文件治理：500+ 行 Go 字面量外移 tags_default.json（go:embed），
+// 内容由原字面量经 json.Marshal 机械生成（搬家零漂移）；运行时惰性解码，
+// 防漂移由 tagtree_default_test.go 的结构断言承担（大类数/节点总数/深度/代表枝）。
+var DefaultTagTreeContent = sync.OnceValue(mustDecodeDefaultTree("tags_default.json"))
 
 // EnsureDefaultTagTree 树不存在或为空时注入默认树（节点现场取号），已有树返回 false 不动。
 func (r *Repo) EnsureDefaultTagTree(ctx context.Context) (bool, error) {
@@ -833,7 +365,7 @@ func (r *Repo) EnsureDefaultTagTree(ctx context.Context) (bool, error) {
 		}
 		return res, nil
 	}
-	nodes, err := assign(DefaultTagTreeContent)
+	nodes, err := assign(DefaultTagTreeContent())
 	if err != nil {
 		return false, err
 	}
@@ -890,28 +422,26 @@ func (r *Repo) ReconcileTagTreeDoc(ctx context.Context, docID, counterKey string
 
 // DefaultMetaTagTreeContent 来源标签树种子：地区（合肥市域为主）/ 赛事 / 题库 / 年份 / 其他。
 // 年份枝 root 手动维护（种子预置 2018–2026，不加不自动建）。
-var DefaultMetaTagTreeContent = []TagNode{
-	{Name: "地区", Children: []TagNode{
-		{Name: "合肥市", Children: []TagNode{
-			{Name: "瑶海区"}, {Name: "庐阳区"}, {Name: "蜀山区"}, {Name: "包河区"},
-			{Name: "经开区"}, {Name: "高新区"}, {Name: "新站区"},
-			{Name: "肥东县"}, {Name: "肥西县"}, {Name: "长丰县"}, {Name: "庐江县"}, {Name: "巢湖市"},
-		}},
-	}},
-	{Name: "赛事", Children: []TagNode{
-		{Name: "NOI"}, {Name: "NOIP"}, {Name: "CSP-J"}, {Name: "CSP-S"}, {Name: "APIO"}, {Name: "蓝桥杯"},
-	}},
-	{Name: "题库", Children: []TagNode{
-		{Name: "洛谷"}, {Name: "Codeforces"}, {Name: "USACO"}, {Name: "AtCoder"}, {Name: "牛客"},
-	}},
-	{Name: "年份", Children: []TagNode{
-		{Name: "2018"}, {Name: "2019"}, {Name: "2020"}, {Name: "2021"}, {Name: "2022"},
-		{Name: "2023"}, {Name: "2024"}, {Name: "2025"}, {Name: "2026"},
-	}},
-	{Name: "校内·自编", Children: []TagNode{
-		{Name: "校内考试"}, {Name: "教师自编"},
-	}},
-	{Name: "其他"},
+// v0.32 巨型文件治理：字面量外移 meta_default.json，同知识树口径。
+var DefaultMetaTagTreeContent = sync.OnceValue(mustDecodeDefaultTree("meta_default.json"))
+
+//go:embed tags_default.json meta_default.json
+var defaultTreesFS embed.FS
+
+// mustDecodeDefaultTree 从 embed FS 解码默认树：JSON 坏内容属构建期资产损坏，
+// 首次使用时 panic（tagtree_default_test.go 启动即解码兜底，坏不了线上）。
+func mustDecodeDefaultTree(name string) func() []TagNode {
+	return func() []TagNode {
+		b, err := defaultTreesFS.ReadFile(name)
+		if err != nil {
+			panic(err)
+		}
+		var nodes []TagNode
+		if err := json.Unmarshal(b, &nodes); err != nil {
+			panic(err)
+		}
+		return nodes
+	}
 }
 
 // EnsureDefaultMetaTagTree 来源标签树不存在或为空时注入种子（取号 counter tag_meta），
@@ -940,7 +470,7 @@ func (r *Repo) EnsureDefaultMetaTagTree(ctx context.Context) (bool, error) {
 		}
 		return res, nil
 	}
-	nodes, err := assign(DefaultMetaTagTreeContent)
+	nodes, err := assign(DefaultMetaTagTreeContent())
 	if err != nil {
 		return false, err
 	}
