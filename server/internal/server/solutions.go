@@ -27,17 +27,56 @@ func (h *Handlers) solutionAllowed(c *gin.Context, uid, pid int64) bool {
 	return err == nil && solved
 }
 
-func solutionJSON(s *repo.Solution, nickname string) gin.H {
-	return gin.H{
-		"id":         s.ID,
-		"uid":        s.UID,
-		"nickname":   nickname,
-		"content":    s.Content, // 题解正文（Markdown，v0.8 起单一事实源）
-		"content_html": s.ContentHtml, // 渲染缓存（v0.30）
-		"pinned":     s.Pinned,
-		"created_at": s.CreatedAt.Format(time.RFC3339),
-		"updated_at": s.UpdatedAt.Format(time.RFC3339),
+// solutionJSON 题解行 JSON。withContent = 携带 md 正文（编辑场景的单条详情用）；
+// 列表不带（快赢批⑥）：查看端走 content_html，md 双发让列表 payload 翻倍。
+func solutionJSON(s *repo.Solution, nickname string, withContent bool) gin.H {
+	j := gin.H{
+		"id":            s.ID,
+		"uid":           s.UID,
+		"nickname":      nickname,
+		"content_html":  s.ContentHtml, // 渲染缓存（v0.30）
+		"pinned":        s.Pinned,
+		"created_at":    s.CreatedAt.Format(time.RFC3339),
+		"updated_at":    s.UpdatedAt.Format(time.RFC3339),
 	}
+	if withContent {
+		j["content"] = s.Content // 题解正文（Markdown，v0.8 起单一事实源）
+	}
+	return j
+}
+
+// GetSolution 单条题解详情（含 md 正文）：列表已去 md 双发，编辑/复制场景按需取。
+func (h *Handlers) GetSolution(c *gin.Context) {
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	pid, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	sid, okSid := parseID(c, "sid")
+	if !okSid {
+		return
+	}
+	if !h.solutionAllowed(c, uid, pid) {
+		fail(c, http.StatusForbidden, "该题拿到满分后才能查看题解")
+		return
+	}
+	s, err := h.repo.GetSolution(c.Request.Context(), sid)
+	if respondRepoErr(c, err, "题解不存在", "读取题解失败") {
+		return
+	}
+	if s.PID != pid {
+		fail(c, http.StatusNotFound, "题解不存在")
+		return
+	}
+	uname := ""
+	if u, err := h.repo.GetUserByID(c.Request.Context(), s.UID); err == nil {
+		uname = u.Nickname
+	}
+	ok(c, solutionJSON(s, uname, true))
 }
 
 // ListSolutions 某题的题解列表（置顶优先，按时间倒序；分页）。
@@ -75,7 +114,7 @@ func (h *Handlers) ListSolutions(c *gin.Context) {
 		if u, ok := users[s.UID]; ok {
 			nickname = u.Nickname
 		}
-		items = append(items, solutionJSON(s, nickname))
+		items = append(items, solutionJSON(s, nickname, false))
 	}
 	// 每人每题一篇（2026-10-26）：下发当前用户已发布那篇的 ID（0 = 未发布），
 	// 前端据此隐藏「发表题解」入口
@@ -167,12 +206,7 @@ func (h *Handlers) UpdateSolution(c *gin.Context) {
 		return
 	}
 	s, err := h.repo.GetSolution(c.Request.Context(), sid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题解不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题解失败")
+	if respondRepoErr(c, err, "题解不存在", "读取题解失败") {
 		return
 	}
 	if s.UID != uid {
@@ -202,12 +236,7 @@ func (h *Handlers) DeleteSolution(c *gin.Context) {
 		return
 	}
 	s, err := h.repo.GetSolution(c.Request.Context(), sid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题解不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题解失败")
+	if respondRepoErr(c, err, "题解不存在", "读取题解失败") {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), pid)

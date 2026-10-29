@@ -94,12 +94,7 @@ func (h *Handlers) UpdateAssignment(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	a, err := h.repo.GetAssignment(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "作业不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取作业失败")
+	if respondRepoErr(c, err, "作业不存在", "读取作业失败") {
 		return
 	}
 	cl, cerr := h.repo.GetClass(ctx, a.ClassID)
@@ -214,12 +209,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 	uid, _, role, logged := currentUser(c)
 	ctx := c.Request.Context()
 	a, err := h.repo.GetAssignment(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "作业不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取作业失败")
+	if respondRepoErr(c, err, "作业不存在", "读取作业失败") {
 		return
 	}
 	if !h.assignmentAccessible(ctx, a.ClassID, uid, role, logged) {
@@ -262,7 +252,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 		}
 		rs := &roundSubs{submitted: map[int64]bool{}, best: map[int64]repo.UserBestStatus{}}
 		if logged {
-			if subs, err := h.repo.RoundSubmissions(ctx, lk.Kind, lk.RefID, uid); err == nil {
+			if subs, err := h.repo.RoundSubmissionStubs(ctx, lk.Kind, lk.RefID, uid); err == nil {
 				for _, sub := range subs {
 					rs.submitted[sub.ProblemID] = true
 					if old, ok := rs.best[sub.ProblemID]; !ok || sub.Score > old.Score {
@@ -533,12 +523,7 @@ func (h *Handlers) AssignmentUserSubmissions(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	a, err := h.repo.GetAssignment(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "作业不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取作业失败")
+	if respondRepoErr(c, err, "作业不存在", "读取作业失败") {
 		return
 	}
 	if !h.assignmentAccessible(ctx, a.ClassID, uid, role, logged) {
@@ -595,12 +580,7 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	a, err := h.repo.GetAssignment(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "作业不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取作业失败")
+	if respondRepoErr(c, err, "作业不存在", "读取作业失败") {
 		return
 	}
 	cl, cerr := h.repo.GetClass(ctx, a.ClassID)

@@ -220,6 +220,7 @@ func Run(ctx context.Context, deps *Deps) {
 
 			// 题解（v0.5.2-1，多作者）：满分 ∨ 老师群体可看可写；置顶/删他人需 solution.manage
 			authed.GET("/problems/:id/solutions", h.ListSolutions)
+			authed.GET("/problems/:id/solutions/:sid", h.GetSolution) // 单条详情（含 md，编辑用；列表已去双发）
 			authed.POST("/problems/:id/solutions", h.PostSolution)
 			authed.PATCH("/problems/:id/solutions/:sid", h.UpdateSolution)
 			authed.DELETE("/problems/:id/solutions/:sid", h.DeleteSolution)
@@ -351,6 +352,10 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.POST("/tagtree/unbind", RequireRoot(), h.AdminUnbindTags)
 				// 重复题扫描（v0.18.1）：按标题+题面双键，只列出供管理员处置
 				adminG.GET("/problems/duplicates", RequirePerm(repo.PermProblemEditAll), h.AdminScanDuplicateProblems)
+				// 种子题管理：清除 / 重新部署种子目录题包，root 专属（部署级操作，同标签树先例）
+				adminG.GET("/seed", RequireRoot(), h.AdminSeedStatus)
+				adminG.POST("/seed/deploy", RequireRoot(), h.AdminSeedDeploy)
+				adminG.POST("/seed/clear", RequireRoot(), h.AdminSeedClear)
 
 				// 等级面板（v0.11）：名称/阈值/衰减系数/特效开关，仅 root
 				adminG.GET("/levelconfig", RequireRoot(), h.AdminGetLevelConfig)

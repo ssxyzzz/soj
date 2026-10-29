@@ -13,46 +13,8 @@ LOG=/tmp/soj-web-npm.log            # 编译与热替换各步
 DOCKER_LOG=/tmp/soj-web-docker.log  # 兜底镜像重建
 CUR_LOG=$LOG                        # on_fail 展示当前失败步骤的日志（run_live 每步更新）
 
-C_INFO='\033[1;36m' C_OK='\033[1;32m' C_ERR='\033[1;31m' C_END='\033[0m'
-banner() { echo -e "${C_INFO}════════════════════════════════════════════\n  🚀 $1\n════════════════════════════════════════════${C_END}"; }
-step()   { echo -e "${C_INFO}==> $1${C_END}"; }
-ok()     { echo -e "${C_OK}✅ $1${C_END}"; }
-err()    { echo -e "${C_ERR}❌ $1${C_END}"; }
-
-# ── 实时进度区 ──────────────────────────────────────────────────────────
-# run_live <说明> <日志文件> <命令...>：命令后台执行、输出全量落日志；
-# 前台每秒重画「计时 1 行 + 日志最新 LIVE_LINES 行」（光标上移重画，不刷屏）。
-# 失败时打 ❌ + 用时后返回非零，交由 on_fail 展示日志；Ctrl+C 会一并杀掉后台命令。
-LIVE_LINES=3
-run_live() {
-  local label="$1" log="$2"; shift 2
-  local pid start rc=0 e last have first=1
-  CUR_LOG="$log"
-  start=$(date +%s)
-  "$@" >"$log" 2>&1 &
-  pid=$!
-  trap 'kill "$pid" 2>/dev/null || true' INT TERM
-  while kill -0 "$pid" 2>/dev/null; do
-    e=$(( $(date +%s) - start )); (( e > 0 )) || e=0  # WSL2 NTP 校时会整秒回拨，钳非负
-    last="$(tail -n "$LIVE_LINES" "$log" 2>/dev/null | cut -c1-"${COLUMNS:-110}")"
-    have=0; [ -n "$last" ] && have=$(printf '%s\n' "$last" | wc -l)
-    if [ "$first" -eq 1 ]; then first=0; else printf '\033[%dA\033[J' "$((LIVE_LINES + 1))"; fi
-    printf "${C_INFO}⏱ %s... %02d:%02d${C_END}\n" "$label" $((e/60)) $((e%60))
-    if [ -n "$last" ]; then printf '%s\n' "$last" | sed 's/^/  │ /'; fi
-    while [ "$have" -lt "$LIVE_LINES" ]; do printf '\n'; have=$((have+1)); done
-    sleep 1
-  done
-  wait "$pid" || rc=$?
-  trap - INT TERM
-  e=$(( $(date +%s) - start )); (( e > 0 )) || e=0
-  printf '\033[%dA\033[J' "$((LIVE_LINES + 1))"
-  if [ "$rc" -eq 0 ]; then
-    printf "${C_OK}⏱ %s完成，用时 %02d:%02d${C_END}\n" "$label" $((e/60)) $((e%60))
-  else
-    printf "${C_ERR}❌ %s失败，用时 %02d:%02d${C_END}\n" "$label" $((e/60)) $((e%60))
-    return "$rc"
-  fi
-}
+# 彩色提示与实时进度区与 server-building / check 共用（scripts/progress.sh）
+source "$ROOT/scripts/progress.sh"
 on_fail() {
   err "编译失败！日志最后 20 行（$CUR_LOG）:"
   tail -20 "$CUR_LOG" 2>/dev/null || true
@@ -67,18 +29,7 @@ ensure_toolchain
 
 web_build() {
   cd "$ROOT/web"
-  # 依赖未变化时跳过 npm install：package.json + package-lock.json 的联合哈希
-  # 存在 node_modules/.soj-dep-hash 标记文件里，一致则视为依赖树未动（install 成功后才写标记，
-  # 半途失败下次仍会重装）
-  local sig
-  sig="$(sha256sum package.json package-lock.json 2>/dev/null | sha256sum | cut -c1-64)"
-  if [ -d node_modules ] && [ -f node_modules/.soj-dep-hash ] \
-      && [ "$(cat node_modules/.soj-dep-hash)" = "$sig" ]; then
-    echo "依赖未变化（lock 哈希一致），跳过 npm install"
-  else
-    npm install --no-audit --no-fund
-    printf '%s' "$sig" > node_modules/.soj-dep-hash
-  fi
+  ensure_web_deps "$ROOT"   # 依赖哈希跳装（toolchain.sh，与 check.sh 共用）
   npm run build
 }
 sync_embed() {
@@ -87,9 +38,11 @@ sync_embed() {
 }
 go_build() {
   cd "$ROOT/server"
-  # 版本注入（v0.28 发版可追溯）：与镜像构建同源（git describe），/api/health 回显核对
+  # 版本注入（v0.28 发版可追溯）：与镜像构建同源，/api/health 回显核对。VERSION
+  # 环境变量优先（make up/bin 传入——服务器目录无 .git，git describe 会回退 dev，
+  # 部署同步脚本从开发机带真实版本过来）
   local ver
-  ver="$(git -C "$ROOT" describe --always --dirty 2>/dev/null || echo dev)"
+  ver="${VERSION:-$(git -C "$ROOT" describe --always --dirty 2>/dev/null || echo dev)}"
   CGO_ENABLED=0 go build -v -trimpath -ldflags="-s -w -X soj/internal/server.Version=$ver" -o bin/soj ./cmd/soj
 }
 deploy_swap() {

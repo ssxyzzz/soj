@@ -247,12 +247,7 @@ func (h *Handlers) GetListDetail(c *gin.Context) {
 		return
 	}
 	l, err := h.repo.GetProblemList(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题单不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题单失败")
+	if respondRepoErr(c, err, "题单不存在", "读取题单失败") {
 		return
 	}
 	manage := h.listManageable(c, l)
@@ -314,12 +309,7 @@ func (h *Handlers) GetListRank(c *gin.Context) {
 		return
 	}
 	l, err := h.repo.GetProblemList(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题单不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题单失败")
+	if respondRepoErr(c, err, "题单不存在", "读取题单失败") {
 		return
 	}
 	if l.Hidden && !h.listManageable(c, l) {
@@ -422,12 +412,7 @@ func (h *Handlers) UpdateList(c *gin.Context) {
 		return
 	}
 	l, err := h.repo.GetProblemList(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题单不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题单失败")
+	if respondRepoErr(c, err, "题单不存在", "读取题单失败") {
 		return
 	}
 	if !h.listManageable(c, l) {
@@ -496,12 +481,7 @@ func (h *Handlers) DeleteList(c *gin.Context) {
 		return
 	}
 	l, err := h.repo.GetProblemList(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题单不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题单失败")
+	if respondRepoErr(c, err, "题单不存在", "读取题单失败") {
 		return
 	}
 	uid, _, role, logged := currentUser(c)
@@ -545,12 +525,7 @@ func (h *Handlers) GetListFlat(c *gin.Context) {
 		return
 	}
 	l, err := h.repo.GetProblemList(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题单不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题单失败")
+	if respondRepoErr(c, err, "题单不存在", "读取题单失败") {
 		return
 	}
 	if l.Hidden && !h.listManageable(c, l) {

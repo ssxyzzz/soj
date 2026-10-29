@@ -672,9 +672,10 @@ type RankRow struct {
 	Nickname string `bson:"nickname"`
 }
 
-// RankTop 解题数前 limit 名：先按 (uid,pid) 去重 Accepted，再统计聚合。
-// 比赛提交在隐藏期结束（published）后才计入总榜，防赛中推测成绩。
-func (r *Repo) RankTop(ctx context.Context, limit int) ([]RankRow, error) {
+// RankBoard 解题排行榜全榜（limit 为防病态规模的上限，实际部署远小于此）：先按
+// (uid,pid) 去重 Accepted，再统计聚合；分页由服务层对全榜切片。比赛提交在隐藏期
+// 结束（published）后才计入总榜，防赛中推测成绩。
+func (r *Repo) RankBoard(ctx context.Context, limit int) ([]RankRow, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"status": StatusAccepted, "published": true}}},
 		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
@@ -706,7 +707,7 @@ func (r *Repo) RankTop(ctx context.Context, limit int) ([]RankRow, error) {
 
 // RankMe 观察者位次：与榜单完全同序（solved desc、uid asc 决胜）——
 // rank = 比我靠前的人数 + 1，solved = 我的去重解题数。无任何 AC 时 solved=0、
-// rank = 全榜人数 + 1（所有有 AC 的用户都排前面）。与 RankTop 同一聚合口径
+// rank = 全榜人数 + 1（所有有 AC 的用户都排前面）。与 RankBoard 同一聚合口径
 // （status=accepted && published，按 (uid,pid) 去重计题）。
 func (r *Repo) RankMe(ctx context.Context, uid int64) (rank, solved int64, err error) {
 	// 我的解题数：AC 且已发布的提交按 pid 去重

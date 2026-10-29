@@ -22,7 +22,7 @@ let unbindCopy: (() => void) | null = null
 
 const useHtml = computed(() => !!props.html)
 
-// ---- 动态子资源加载（katex / hljs，自托管 vditor dist；会话内只加载一次） ----
+// ---- 动态子资源加载（katex 走自托管 vditor dist；会话内只加载一次） ----
 const loaded = new Map<string, Promise<void>>()
 function loadScript(url: string): Promise<void> {
   if (!loaded.has(url)) {
@@ -73,16 +73,14 @@ async function renderMath(root: HTMLElement) {
   })
 }
 
-// hljs 高亮 + 行号（结构照抄 vditor-linenumber，CSS 在 vditor index.css + main.css 现成）
+// hljs 高亮 + 行号（结构照抄 vditor-linenumber，CSS 在 vditor index.css + main.css 现成）。
+// 加载优化批：改用 @/hljs 精简包（core + 判题/题面常用语言，vite hashed chunk +
+// immutable），替换原 loadScript 拉 vditor 全量包（304KB gzip）——首次看含代码题
+// 的下载量降一个数量级
 async function highlightCode(root: HTMLElement) {
   const codes = root.querySelectorAll<HTMLElement>('pre > code[class*="language-"]')
   if (!codes.length) return
-  await Promise.all([
-    loadScript(`${VDITOR_CDN}/dist/js/highlight.js/highlight.min.js`),
-    loadScript(`${VDITOR_CDN}/dist/js/highlight.js/third-languages.js`),
-  ])
-  const hljs = (window as unknown as { hljs?: { highlightElement: (el: HTMLElement) => void } }).hljs
-  if (!hljs) return
+  const { default: hljs } = await import('@/hljs')
   codes.forEach((code) => {
     try {
       hljs.highlightElement(code)

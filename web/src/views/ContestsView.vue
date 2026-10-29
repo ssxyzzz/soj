@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { usePolling } from '@/composables/usePolling'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
@@ -53,8 +54,11 @@ const contestLabel: Record<ContestListItem['status'], string> = {
 }
 
 // v3 副列「我的赛程 · 下一场」：最近一场未开赛比赛的倒计时（每秒刷新；无待开赛事不渲染卡）
+// usePolling（v0.29）：后台标签页自动暂停、卸载自清
 const now = ref(Date.now())
-let clock: ReturnType<typeof setInterval> | undefined
+const clock = usePolling(() => {
+  now.value = Date.now()
+}, 1000)
 const nextContest = computed(() =>
   [...scheduled.value].sort((a, b) => +new Date(a.start) - +new Date(b.start))[0] ?? null,
 )
@@ -72,7 +76,7 @@ const countdown = computed(() => {
 })
 onMounted(() => {
   load()
-  clock = setInterval(() => (now.value = Date.now()), 1000)
+  clock.start()
 })
 
 
@@ -127,10 +131,6 @@ async function create() {
 function openContest(c: ContestListItem) {
   router.push(`/contests/${c.id}`)
 }
-
-onUnmounted(() => {
-  if (clock) clearInterval(clock)
-})
 
 </script>
 

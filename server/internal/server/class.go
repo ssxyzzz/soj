@@ -197,12 +197,7 @@ func (h *Handlers) GetClass(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	cl, err := h.repo.GetClass(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取班级失败")
+	if respondRepoErr(c, err, "班级不存在", "读取班级失败") {
 		return
 	}
 
@@ -277,12 +272,7 @@ func (h *Handlers) JoinClass(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "邀请码错误")
 		return
 	}
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "加入班级失败")
+	if respondRepoErr(c, err, "班级不存在", "加入班级失败") {
 		return
 	}
 	ok(c, gin.H{"joined": true})
@@ -304,12 +294,7 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 		return
 	}
 	cl, err := h.repo.GetClass(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取班级失败")
+	if respondRepoErr(c, err, "班级不存在", "读取班级失败") {
 		return
 	}
 	// 建班人不可退班（2026-10-26 用户拍板：只能转让或解散，删除「没人了才可退」例外）
@@ -348,12 +333,7 @@ func (h *Handlers) UpdateClass(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	cl, err := h.repo.GetClass(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取班级失败")
+	if respondRepoErr(c, err, "班级不存在", "读取班级失败") {
 		return
 	}
 	if !h.classManageable(c, cl) {
@@ -409,12 +389,7 @@ func (h *Handlers) TransferClass(c *gin.Context) {
 		return
 	}
 	cl, err := h.repo.GetClass(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取班级失败")
+	if respondRepoErr(c, err, "班级不存在", "读取班级失败") {
 		return
 	}
 	if !(uid == cl.OwnerID || role == repo.RoleRoot) {
@@ -463,12 +438,7 @@ func (h *Handlers) DeleteClass(c *gin.Context) {
 		return
 	}
 	cl, err := h.repo.GetClass(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取班级失败")
+	if respondRepoErr(c, err, "班级不存在", "读取班级失败") {
 		return
 	}
 	if !(uid == cl.OwnerID || role == repo.RoleRoot) {
@@ -516,12 +486,7 @@ func (h *Handlers) SetClassPrivate(c *gin.Context) {
 		return
 	}
 	cl, err := h.repo.GetClass(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "班级不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取班级失败")
+	if respondRepoErr(c, err, "班级不存在", "读取班级失败") {
 		return
 	}
 	uid, _, role, logged := currentUser(c)

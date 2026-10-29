@@ -2,7 +2,8 @@
 // 比赛/考试详情页共享组件（v0.5.4 合并；v0.7 按 design.md 重排；v0.7.2 副列重排；v0.7.4 管理卡精简）。
 // 主列：名称卡（20px + 说明）→ 题目表（T1/状态/题目/标签/通过率）。
 // 副列：管理卡（编辑/调整题目/重测/删除，说明与场景开关在编辑弹窗内）→ 时间卡 → 成绩表。
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { usePolling } from '@/composables/usePolling'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -26,7 +27,9 @@ import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { fmtDate } from '@/utils/format'
 import type { ContestDetail, LeaderRow, Submission } from '@/types'
-import DiscussDialog from '@/components/discuss/DiscussDialog.vue'
+import { defineAsyncComponent } from 'vue'
+// 讨论弹窗按需加载（加载优化批）：不点开不下载讨论 chunk
+const DiscussDialog = defineAsyncComponent(() => import('@/components/discuss/DiscussDialog.vue'))
 
 const props = defineProps<{ kind: RoundKind }>()
 
@@ -96,7 +99,9 @@ function openEdit(mode: 'full' | 'problems') {
   showEditRound.value = true
 }
 
-let timer: ReturnType<typeof setInterval> | undefined
+const clock = usePolling(() => {
+  now.value = Date.now()
+}, 1000)
 
 const now = ref(Date.now())
 
@@ -269,13 +274,7 @@ onMounted(() => {
     }).catch(() => {})
   }
   load()
-  timer = setInterval(() => {
-    now.value = Date.now()
-  }, 1000)
-})
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
+  clock.start() // 每秒时钟（usePolling：后台标签暂停、卸载自清）
 })
 </script>
 
@@ -408,9 +407,9 @@ onUnmounted(() => {
       </template>
     </PageShell>
 
-    <!-- 比赛讨论弹窗（v0.24） -->
+    <!-- 比赛讨论弹窗（v0.24；showDiscuss 条件配合异步组件实现真延迟） -->
     <DiscussDialog
-      v-if="round && kind === 'contest'"
+      v-if="showDiscuss && round && kind === 'contest'"
       v-model="showDiscuss"
       scope="contest"
       :scope-id="round.id"

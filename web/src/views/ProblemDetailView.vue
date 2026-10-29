@@ -18,9 +18,12 @@ import SubStatus from '@/components/SubStatus.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
-import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import AnswerAnalysisCard from '@/components/problem/AnswerAnalysisCard.vue'
-import DiscussDialog from '@/components/discuss/DiscussDialog.vue'
+import { defineAsyncComponent } from 'vue'
+// 讨论/题解弹窗按需加载（加载优化批）：不点开不下载对应 chunk（题解链含 MdEditor），
+// 题面首开闭包瘦身；首次打开多一次懒加载往返
+const DiscussDialog = defineAsyncComponent(() => import('@/components/discuss/DiscussDialog.vue'))
+const SolutionsDialog = defineAsyncComponent(() => import('@/components/problem/SolutionsDialog.vue'))
 import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
@@ -441,10 +444,11 @@ onUnmounted(stopPolling)
       @submit="handleSubmit"
     />
 
-    <SolutionsDialog v-model="showSolutions" :problem-id="problem.id" />
+    <SolutionsDialog v-if="showSolutions" v-model="showSolutions" :problem-id="problem.id" />
 
-    <!-- 题内讨论弹窗（v0.24） -->
+    <!-- 题内讨论弹窗（v0.24；v-if 配合异步组件实现真延迟） -->
     <DiscussDialog
+      v-if="showDiscuss"
       v-model="showDiscuss"
       scope="problem"
       :scope-id="problem.id"

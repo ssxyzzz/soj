@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 
 import { rankApi } from '@/api'
 import TierBadge from '@/components/TierBadge.vue'
+import { usePagedList } from '@/composables/usePagedList'
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 import type { RankItem } from '@/types'
@@ -13,16 +14,25 @@ levels.ensure()
 const userStore = useUserStore()
 const router = useRouter()
 
-const list = ref<RankItem[]>([])
+// me = 观察者条目（含榜外名次），随每页请求一并返回，置顶展示用
 const me = ref<RankItem | null>(null)
-const loading = ref(false)
+const { list, total, page, pageSize, loading, load } = usePagedList<RankItem>(async (p) => {
+  const res = await rankApi.top(p)
+  me.value = res.me
+  return { list: res.items, total: res.total }
+}, { pageSize: 100 })
 
-// v3-full 排名页：前三名领奖台卡（渐变大数字 + 首字头像）
-const podium = computed(() => list.value.slice(0, 3))
+// v3-full 排名页：前三名领奖台卡（渐变大数字 + 首字头像）；仅第一页展示
+const podium = computed(() => (page.value === 1 ? list.value.slice(0, 3) : []))
 // 领奖台展示顺序：2 - 1 - 3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
 const podiumOrder = computed(() => [podium.value[1], podium.value[0], podium.value[2]].filter(Boolean))
-// 表格：自己的条目置顶（含榜外名次），后面跟完整榜单 1..50——方便查看自己
+// 表格：自己的条目置顶（含榜外名次），后面跟当前页榜单——方便查看自己
 const tableRows = computed(() => (me.value ? [me.value, ...list.value] : list.value))
+
+function onPageChange(p: number) {
+  page.value = p
+  load()
+}
 
 const avColors = ['#5a6b4f', '#8a5a33', '#3358b8', '#237e6b', '#7c3aed']
 function avColor(i: number): string {
@@ -33,16 +43,7 @@ function rowClass({ row }: { row: RankItem }): { 'me-row': boolean } {
   return { 'me-row': row.user_id === userStore.uid }
 }
 
-onMounted(async () => {
-  loading.value = true
-  try {
-    const res = await rankApi.top()
-    list.value = res.items
-    me.value = res.me
-  } finally {
-    loading.value = false
-  }
-})
+onMounted(load)
 </script>
 
 <template>
@@ -50,7 +51,7 @@ onMounted(async () => {
   <div class="page">
     <div class="page-head">
       <div class="kicker">LEADERBOARD</div>
-      <h1 class="page-title">解题排名<small>按通过题数排序 · 前 50 名</small></h1>
+      <h1 class="page-title">解题排名<small>按通过题数排序 · 每页 100 名</small></h1>
     </div>
 
     <!-- 领奖台（前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3）；整卡可点进公开主页 -->
@@ -104,6 +105,17 @@ onMounted(async () => {
           </template>
         </el-table-column>
       </el-table>
+      <!-- 超过一页才出翻页器；翻页换的是表格内容，领奖台只在第一页出现 -->
+      <div v-if="total > pageSize" class="pager">
+        <el-pagination
+          background
+          layout="prev, pager, next, total"
+          :total="total"
+          :page-size="pageSize"
+          :current-page="page"
+          @current-change="onPageChange"
+        />
+      </div>
       <el-empty v-if="!loading && !tableRows.length" description="还没有人通过题目，快去抢占第一！" />
     </el-card>
 
@@ -243,6 +255,14 @@ onMounted(async () => {
   border-top: 1px solid var(--soj-line);
   font-size: 12.5px;
   color: var(--soj-ink-3);
+}
+
+/* 表格内分页器（与其他列表页一致：右对齐） */
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-bottom: 2px;
 }
 
 @media (max-width: 900px) {

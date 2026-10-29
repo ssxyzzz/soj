@@ -158,6 +158,7 @@ func (h *Handlers) createRound(c *gin.Context, s roundScope, classID int64) {
 		fail(c, http.StatusInternalServerError, "创建"+s.Name+"失败")
 		return
 	}
+	h.invalidateLocks() // 新场次立即进锁题底表（v0.29 缓存失效钩子）
 	go h.notifyRoundCreated(ct, s.Kind) // 发布通知扇出（v0.24）：失败不阻塞创建
 	ok(c, gin.H{"id": ct.ID})
 }
@@ -203,12 +204,24 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 	metaHidden := ct.HideMeta && !ct.Published && !isOrganizer && !hasPerm(c, repo.PermProblemViewAll)
 	// 题目列表：赛前只给组织者；比赛开始后对所有人开放，考试仅本班成员。
 	canSeeProblems := isOrganizer || (status != "scheduled" && (participant || s.Kind == repo.KindContest))
+	// 题目元数据一次批查（快赢批，题目表与组织者编辑清单共用）：原每题一次全量
+	// GetProblem（N+1，组织者再来一轮）——30 题比赛 = 30~60 次全文档读（v0.30 后
+	// 每份还多带 statementHtml）；失败降级空表 = 两个消费块按 miss 全跳过
+	var pmap map[int64]*repo.Problem
+	if canSeeProblems || isOrganizer {
+		pids := make([]int64, 0, len(ct.Problems))
+		for _, cp := range ct.Problems {
+			pids = append(pids, cp.PID)
+		}
+		pmap, _ = h.repo.GetProblemMetas(ctx, pids)
+	}
 	if canSeeProblems {
 		// 本人在本场次的提交（原始态，含赛时未发布）：用于「已提交」与关闭隐藏后的实时状态。
+		// 瘦拉取（快赢批）：只取 pid/score/status 三字段，不再整文档回传
 		submitted := map[int64]bool{}
 		best := map[int64]repo.UserBestStatus{}
 		if logged {
-			if subs, err := h.repo.RoundSubmissions(ctx, s.Kind, ct.ID, uid); err == nil {
+			if subs, err := h.repo.RoundSubmissionStubs(ctx, s.Kind, ct.ID, uid); err == nil {
 				for _, sub := range subs {
 					submitted[sub.ProblemID] = true
 					if old, ok := best[sub.ProblemID]; !ok || sub.Score > old.Score {
@@ -219,8 +232,8 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 		}
 		problems := make([]gin.H, 0, len(ct.Problems))
 		for _, cp := range ct.Problems {
-			p, err := h.repo.GetProblem(ctx, cp.PID)
-			if err != nil || p.Hidden {
+			p, okP := pmap[cp.PID]
+			if !okP || p.Hidden {
 				continue // 题目已删除或主题库隐藏（备题）：不进入比赛/考试题目表
 			}
 			item := gin.H{"id": cp.PID, "title": p.Title, "score": cp.Score, "result_hidden": resultHidden}
@@ -267,7 +280,7 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 		edit := make([]gin.H, 0, len(ct.Problems))
 		for _, cp := range ct.Problems {
 			item := gin.H{"id": cp.PID, "score": cp.Score, "title": ""}
-			if p, err := h.repo.GetProblem(ctx, cp.PID); err == nil {
+			if p := pmap[cp.PID]; p != nil {
 				item["title"] = p.Title
 				item["hidden"] = p.Hidden
 			}
@@ -369,6 +382,7 @@ func (h *Handlers) roundDelete(c *gin.Context, s roundScope) {
 		fail(c, http.StatusInternalServerError, "删除失败")
 		return
 	}
+	h.invalidateLocks()
 	ok(c, gin.H{"deleted": ct.ID})
 }
 
@@ -510,6 +524,7 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}
+	h.invalidateLocks() // 时间/题目集变化影响锁的生效与传播
 	ok(c, gin.H{"updated": ct.ID})
 }
 
@@ -594,12 +609,7 @@ func (h *Handlers) ProblemPaper(c *gin.Context) {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {
@@ -644,12 +654,7 @@ func (h *Handlers) roundSubmit(c *gin.Context, s roundScope) {
 
 	ctx := c.Request.Context()
 	ct, err := h.repo.GetRound(ctx, s.Kind, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, s.Name+"不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取"+s.Name+"失败")
+	if respondRepoErr(c, err, s.Name+"不存在", "读取"+s.Name+"失败") {
 		return
 	}
 	// 考试仅本班成员可交；root 巡场豁免（否则 root 非成员时考试题无路可交）
@@ -784,12 +789,7 @@ func (h *Handlers) roundMySubmissions(c *gin.Context, s roundScope) {
 	}
 	ctx := c.Request.Context()
 	ct, err := h.repo.GetRound(ctx, s.Kind, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, s.Name+"不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取"+s.Name+"失败")
+	if respondRepoErr(c, err, s.Name+"不存在", "读取"+s.Name+"失败") {
 		return
 	}
 	if s.Kind == repo.KindExam {
@@ -853,12 +853,7 @@ func (h *Handlers) roundUserSubmissions(c *gin.Context, s roundScope) {
 	}
 	ctx := c.Request.Context()
 	ct, err := h.repo.GetRound(ctx, s.Kind, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, s.Name+"不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取"+s.Name+"失败")
+	if respondRepoErr(c, err, s.Name+"不存在", "读取"+s.Name+"失败") {
 		return
 	}
 	if uid != ct.CreatedBy && !hasPermAny(c, repo.PermSubmissionViewUser, repo.PermContestScoreDetail) {
@@ -936,12 +931,7 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 	}
 	ctx := c.Request.Context()
 	ct, err := h.repo.GetRound(ctx, s.Kind, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, s.Name+"不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取"+s.Name+"失败")
+	if respondRepoErr(c, err, s.Name+"不存在", "读取"+s.Name+"失败") {
 		return
 	}
 	if s.Kind == repo.KindExam {
@@ -1042,12 +1032,7 @@ func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
 	}
 	ctx := c.Request.Context()
 	ct, err := h.repo.GetRound(ctx, s.Kind, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, s.Name+"不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取"+s.Name+"失败")
+	if respondRepoErr(c, err, s.Name+"不存在", "读取"+s.Name+"失败") {
 		return
 	}
 	if !logged || (uid != ct.CreatedBy && role != repo.RoleRoot) {

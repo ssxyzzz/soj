@@ -46,6 +46,14 @@ type Handlers struct {
 	leaderMu    sync.Mutex
 	leaderCache map[string]leaderEntry
 
+	// 锁题底表进程缓存（v0.29）：未发布赛 + 考的全量拉取原本每请求跑两次（题库列表/
+	// 详情/提交/挑战/自测/作业全走此链）；TTL 30s + 场次增改删即时失效（invalidateLocks），
+	// PublishDueRounds 的到期发布靠 TTL 自然过期（循环周期同为 30s，锁语义最多滞后一个窗口）
+	lockSrcMu       sync.Mutex
+	lockSrcAt       time.Time
+	lockSrcContests []*repo.Contest
+	lockSrcExams    []*repo.Exam
+
 	// 批量导入（v0.15）：全站单任务（同一时刻仅一个导入任务）；job 在锁下创建/替换
 	batchMu sync.Mutex
 	batch   *batchImportJob
@@ -76,6 +84,32 @@ func fail(c *gin.Context, status int, message string) {
 // api 拦截器会把 data 挂到 rejected Error 上（error.data）。
 func failData(c *gin.Context, status int, message string, data any) {
 	c.JSON(status, gin.H{"code": 1, "message": message, "data": data})
+}
+
+// respondRepoErr repo 读错误的统一双连响应（v0.29 收敛，原 7 行样板 ×84 处）：
+// NotFound → 404 notFoundMsg，其他错误 → 500 serverMsg；已写响应返回 true（调用方
+// 即刻 return），err == nil 返回 false 继续正常流。
+func respondRepoErr(c *gin.Context, err error, notFoundMsg, serverMsg string) bool {
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, notFoundMsg)
+		return true
+	}
+	if err != nil {
+		fail(c, http.StatusInternalServerError, serverMsg)
+		return true
+	}
+	return false
+}
+
+// requireUID 已登录返回 uid；未登录写好 401 并返回 false（AuthOptional 路由的真实
+// 校验；AuthRequired 组下的防御性双保险同形）。需要 uname/role 的调用方仍走 currentUser。
+func requireUID(c *gin.Context) (int64, bool) {
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return 0, false
+	}
+	return uid, true
 }
 
 // Health 返回数据库与沙箱的连通状态；任一不通时返回 503（v0.27：原恒 200，compose

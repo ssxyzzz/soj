@@ -540,6 +540,40 @@ export interface DuplicateGroup {
   }[]
 }
 
+// 种子题管理（后台面板）：种子目录 ↔ 库内对账与清除/重部署结果
+export interface SeedRow {
+  dir: string // 种子目录名
+  title: string // 期望标题（problem.yaml title > 目录名回退）
+  exists: boolean // 库内已部署
+  pid?: number // 已部署时的库内题号
+  db_title?: string // 已部署时的实际标题
+  submissions: number // 该题现有提交数（清除将一并删除）
+}
+
+export interface SeedOutcome {
+  dir: string
+  status: 'imported' | 'skipped' | 'failed'
+  pid?: number
+  title?: string
+  reason?: string
+}
+
+export interface SeedClearStats {
+  problems: number
+  pids: number[]
+  submissions: number
+  challenges: number
+  solutions: number
+  discussions: number
+  replies: number
+}
+
+export interface SeedStatus {
+  seed_dir: string
+  marked: boolean
+  rows: SeedRow[]
+}
+
 // ---------- 题单（v0.18.3，GET /lists*） ----------
 
 // 章节树节点（提交/存储形态）：题挂叶子、章最多两层、单章不混挂
@@ -674,8 +708,10 @@ export interface SolutionItem {
   id: number
   uid: number
   nickname: string
-  content: string // 题解正文（Markdown，v0.8 起单一事实源）
-  content_html?: string // 渲染缓存（v0.30）
+  /** 题解正文（Markdown，单一事实源）。列表不携带（快赢批⑥ 去双发），编辑经
+   * getSolution 详情接口按需取；MdView 回退渲染场景仍可能出现 */
+  content?: string
+  content_html?: string // 渲染缓存（v0.30）；列表查看端的主渲染源
   pinned: boolean
   created_at: string
   updated_at: string
@@ -948,6 +984,44 @@ export interface NotificationItem {
 export interface NotifyPrefsResult {
   categories: { type: string; enabled: boolean }[]
   has_email: boolean
+}
+
+/** 后台系统设置（GET/PUT /admin/settings 全量视图）。v0.29 收敛：原 api/index.ts 三份
+ * 手抄内联类型已漂移（put 返回漏 v0.24 讨论区/通知字段）——单一事实源在此，
+ * 局部保存用 Partial&lt;AdminSettings&gt;。 */
+export interface AdminSettings {
+  rate_limit_per_minute: number
+  home_notice: string
+  data_download_daily_limit: number
+  autocomplete_min_level: number
+  allow_register: boolean
+  icp_number: string
+  batch_import_problem_mb: number
+  batch_import_zip_mb: number
+  /** 邮箱通道（v0.16） */
+  mail_channel: 'log' | 'smtp'
+  smtp_host: string
+  smtp_port: number
+  smtp_username: string
+  smtp_password: string
+  smtp_from: string
+  register_verify_mode: 'none' | 'email'
+  password_reset_enabled: boolean
+  /** 讨论区与通知（v0.24） */
+  discuss_global_enabled: boolean
+  discuss_problem_enabled: boolean
+  discuss_contest_enabled: boolean
+  discuss_global_locked: boolean
+  discuss_code_threshold: number
+  discuss_topic_daily_limit: number
+  discuss_reply_interval_sec: number
+  discuss_newbie_hours: number
+  discuss_report_fold: number
+  discuss_accept_xp: number
+  notify_retention_days: number
+  notify_broadcast_per_day: number
+  user_seq_start: number
+  problem_seq_start: number
 }
 
 export interface DiscussReportItem {

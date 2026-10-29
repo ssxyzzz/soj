@@ -70,8 +70,16 @@ func (r *Repo) MigrateRenderedHtml(ctx context.Context, refetch bool) (int, erro
 			for _, row := range rows {
 				md, _ := row[t.md].(string)
 				id := row["_id"]
+				// 补齐模式带 $exists:false 守卫：批内 Find 与 UpdateOne 之间若用户
+				// 编辑了 md，正常写入路径已写好新 html——无条件 $set 会用旧 md 的
+				// 渲染结果覆盖之，且增量迁移按「html 已存在」跳过导致旧渲染永久滞留
+				//（后端快赢批根修）。refetch 重刷模式本意就是覆盖，不加守卫。
+				uf := bson.M{"_id": id}
+				if !refetch {
+					uf[t.html] = bson.M{"$exists": false}
+				}
 				if _, err := t.coll.UpdateOne(ctx,
-					bson.M{"_id": id},
+					uf,
 					bson.M{"$set": bson.M{t.html: mdrender.Render(md)}}); err == nil {
 					wrote++
 				}

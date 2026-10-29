@@ -25,7 +25,15 @@ var (
 // repo 层据此触发存量渲染缓存全量重刷，见 migrate_render.go）。
 const LuteVersion = "1.7.8"
 
-func engine() *lute.Lute {
+// Render md → 消毒后的 HTML 片段（不含 <html> 骨架，v-html 直用）。
+// 空串进空串出。超限/病态内容由写入口的体积上限把关（本层不做长度策略）。
+// 渲染全程持锁：lute 引擎内部有共享态（emoji 表等），此前 MarkdownStr 跑在锁外，
+// 并发安全只是碰巧（当前版本的 Markdown 路径恰好无写共享态）——升级 lute 即静默
+// 数据竞争。渲染是 CPU 型短临界区，串行可接受（后端快赢批根修）。
+func Render(md string) string {
+	if md == "" {
+		return ""
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if eng == nil {
@@ -38,14 +46,5 @@ func engine() *lute.Lute {
 		// 交给前端 hljs（与现查看端一致）
 		eng.RenderOptions.CodeSyntaxHighlight = false
 	}
-	return eng
-}
-
-// Render md → 消毒后的 HTML 片段（不含 <html> 骨架，v-html 直用）。
-// 空串进空串出。超限/病态内容由写入口的体积上限把关（本层不做长度策略）。
-func Render(md string) string {
-	if md == "" {
-		return ""
-	}
-	return engine().MarkdownStr("", md)
+	return eng.MarkdownStr("", md)
 }

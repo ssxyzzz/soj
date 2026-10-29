@@ -13,6 +13,7 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SelfTestPanel from '@/components/SelfTestPanel.vue'
 import { challengeApi, problemApi, submissionApi } from '@/api'
+import { isQueueStatus } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
 
 const route = useRoute()
@@ -281,7 +282,9 @@ function pollVerdict(sid: number) {
   pollTimer = window.setTimeout(async () => {
     try {
       const s = await submissionApi.get(sid)
-      const terminal = !['Pending', 'Judging'].includes(s.status)
+      // 终态统一 isQueueStatus 口径（含 CancelRequested——自写 ['Pending','Judging']
+      // 会把取消收尾期当终态，v0.29 根修分叉）
+      const terminal = !isQueueStatus(s.status)
       if (!terminal) {
         pollVerdict(sid)
         return

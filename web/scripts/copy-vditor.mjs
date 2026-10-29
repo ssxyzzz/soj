@@ -31,5 +31,31 @@ mkdirSync(dst, { recursive: true })
 for (const name of readdirSync(join(webRoot, 'public/vditor'))) {
   rmSync(join(webRoot, 'public/vditor', name), { recursive: true, force: true })
 }
-cpSync(src, dst, { recursive: true })
-console.log(`vditor dist → public/vditor/${version} 完成`)
+
+// 裁剪清单（加载优化批）：查看端永不请求的可选语法运行时不进产物——SOJ 已剥离
+// chart/wavedrom 执行围栏，编辑器定案不引入 mermaid/graphviz/mathjax/echarts/
+// markmap/abcjs/flowchart 语法块（若未来支持，回补目录即可）。曾实锤这批目录 +
+// .mimosa 工具产物共 ~13MB 全量 embed 进 56.5MB 二进制；另裁 d.ts/ts/types 与
+// sourcemap（纯类型/源映射，浏览器永不请求）。保留：lute/katex/highlight.js/
+// icons/i18n/css/images。
+const PRUNE = [
+  '.mimosa',
+  'js/mermaid',
+  'js/graphviz',
+  'js/mathjax',
+  'js/echarts',
+  'js/markmap',
+  'js/abcjs',
+  'js/flowchart.js',
+  'ts',
+  'types',
+]
+const prunedFile = /\.(d\.ts|map)$/
+function keep(p) {
+  const rel = p.slice(src.length + 1).replaceAll('\\', '/')
+  if (!rel) return true
+  if (prunedFile.test(rel)) return false
+  return !PRUNE.some((d) => rel === d || rel.startsWith(d + '/'))
+}
+cpSync(src, dst, { recursive: true, filter: keep })
+console.log(`vditor dist → public/vditor/${version} 完成（已裁剪：可选语法运行时 + 类型/源映射 + .mimosa）`)

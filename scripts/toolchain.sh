@@ -1,4 +1,4 @@
-# 工具链自举（被 web-building.sh / server-building.sh source，须在 run_live/step 等定义之后 source）：
+# 工具链自举（被 web-building.sh / server-building.sh / check.sh source，须在 run_live/step 等定义之后 source）：
 # 缺 Go / Node 就自动下载安装到 ~/.local/opt（用户目录免 sudo），并配好模块代理与 PATH。
 # 系统已有的工具链优先（command -v 命中即跳过安装）。
 GO_VERSION=1.27.2     # 满足 go.mod 的 go 1.26；升级只改这里
@@ -88,4 +88,21 @@ ensure_toolchain() {
   command -v npm >/dev/null 2>&1 || { err "npm 自动安装失败，请手动安装 Node ≥18 后重试"; exit 1; }
   command -v go  >/dev/null 2>&1 || { err "go 自动安装失败，请手动安装 Go ≥1.26 后重试"; exit 1; }
   ok "工具链就绪：$(go env GOVERSION 2>/dev/null) + Node $(node -v 2>/dev/null)"
+}
+
+# 前端依赖自愈（check.sh / web-building.sh 共用）：package.json + package-lock.json 的
+# 联合哈希存进 node_modules/.soj-dep-hash，一致则视为依赖树未动直接跳装（install 成功后
+# 才写标记，半途失败下次仍会重装）。check 的 typecheck 也吃 node_modules——服务器上
+# rsync 不带 node_modules、make up 又是 check 先于 web-building，依赖变更时不先保依赖
+# 会先炸在类型检查（highlight.js 首次变更时实锤）。
+ensure_web_deps() {
+  local root="$1" sig
+  sig="$(sha256sum "$root/web/package.json" "$root/web/package-lock.json" 2>/dev/null | sha256sum | cut -c1-64)"
+  if [ -d "$root/web/node_modules" ] && [ -f "$root/web/node_modules/.soj-dep-hash" ] \
+      && [ "$(cat "$root/web/node_modules/.soj-dep-hash")" = "$sig" ]; then
+    echo "依赖未变化（lock 哈希一致），跳过 npm install"
+    return 0
+  fi
+  (cd "$root/web" && npm install --no-audit --no-fund)
+  printf '%s' "$sig" > "$root/web/node_modules/.soj-dep-hash"
 }

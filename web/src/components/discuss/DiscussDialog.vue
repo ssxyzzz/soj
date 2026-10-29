@@ -1,13 +1,15 @@
 <script setup lang="ts">
 // 讨论弹窗容器（v0.24）：题内/比赛讨论共用的「列表 ↔ 话题详情」导航壳。
 // 发帖按钮按 scope 走对应表单；列表与详情数据各自拉取，互不依赖路由。
-import { computed, ref } from 'vue'
+// 内部三件按需加载（加载优化批）：题面/比赛详情页不点开讨论弹窗就不下载这串
+// chunk（含 MdEditor 样式链），题面首开闭包显著瘦身；首次打开多一次懒加载往返。
+import { computed, defineAsyncComponent, ref } from 'vue'
 
 import { discussApi } from '@/api'
 import type { DiscussScope, DiscussTopic } from '@/types'
-import DiscussTopicList from './DiscussTopicList.vue'
-import DiscussTopicDetail from './DiscussTopicDetail.vue'
-import DiscussPostDialog from './DiscussPostDialog.vue'
+const DiscussTopicList = defineAsyncComponent(() => import('./DiscussTopicList.vue'))
+const DiscussTopicDetail = defineAsyncComponent(() => import('./DiscussTopicDetail.vue'))
+const DiscussPostDialog = defineAsyncComponent(() => import('./DiscussPostDialog.vue'))
 
 const props = defineProps<{
   scope: Exclude<DiscussScope, 'global'>

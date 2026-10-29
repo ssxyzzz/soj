@@ -15,6 +15,7 @@ import LevelPanel from '@/components/admin/LevelPanel.vue'
 import NoticePanel from '@/components/admin/NoticePanel.vue'
 import RolesPanel from '@/components/admin/RolesPanel.vue'
 import SecurityLogsPanel from '@/components/admin/SecurityLogsPanel.vue'
+import SeedProblemsPanel from '@/components/admin/SeedProblemsPanel.vue'
 import SettingsPanel from '@/components/admin/SettingsPanel.vue'
 import TagsPanel from '@/components/admin/TagsPanel.vue'
 import UsersPanel from '@/components/admin/UsersPanel.vue'
@@ -27,19 +28,30 @@ const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 
 type Section = (typeof sections)[number]
 // 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描三面板同页 tab 切换（2026-10-25 双树）；
 // tags/sources 旧深链值映射到 problems 的对应子页
-type SubTab = 'tags' | 'meta' | 'duplicates'
+type SubTab = 'tags' | 'meta' | 'duplicates' | 'seed'
 const rawSection = (Array.isArray(route.query.section) ? route.query.section[0] : route.query.section) as string | undefined
-const isLegacySub = rawSection === 'tags' || rawSection === 'sources' || rawSection === 'meta'
+// 子页深链值（旧 tags/sources/meta + 重复扫描/种子题）统一映射进题目管理分区
+const isProblemSub = rawSection === 'tags' || rawSection === 'sources' || rawSection === 'meta' || rawSection === 'duplicates' || rawSection === 'seed'
 const section = ref<Section>(
-  rawSection && (sections.includes(rawSection as Section) || isLegacySub) ? 'problems' : 'users',
+  rawSection && sections.includes(rawSection as Section)
+    ? (rawSection as Section)
+    : rawSection && isProblemSub
+      ? 'problems'
+      : 'users',
 )
 const subTab = ref<SubTab>(
-  rawSection === 'meta' ? 'meta' : isLegacySub ? 'tags' : rawSection === 'duplicates' ? 'duplicates' : 'tags',
+  rawSection === 'meta'
+    ? 'meta'
+    : isProblemSub && rawSection !== 'tags' && rawSection !== 'sources'
+      ? (rawSection as SubTab)
+      : 'tags',
 )
 // 题目管理入口：root（双树）∨ problem.edit.all（重复扫描）
 const canProblemManage = userStore.role === 'root' || userStore.can('problem.edit.all')
 const showTagsTab = userStore.role === 'root'
 const showDuplicatesTab = userStore.can('problem.edit.all')
+// 种子题管理（清除/重部署为部署级操作）：仅 root，端点同样 RequireRoot
+const showSeedTab = userStore.role === 'root'
 
 // 标签树面板草稿的脏状态：切走分区/子页前拦截确认（面板 v-if 销毁，草稿随组件丢失）
 const tagsDirty = ref(false)
@@ -107,7 +119,7 @@ async function switchSubTab(target: SubTab) {
         @click="switchSection('problems')"
       >
         <span class="nav-title">题目管理</span>
-        <span class="nav-sub">知识树 / 标签树 / 重复扫描</span>
+        <span class="nav-sub">知识树 / 标签树 / 重复扫描 / 种子题</span>
       </div>
       <div
         v-if="userStore.role === 'root'"
@@ -171,10 +183,12 @@ async function switchSubTab(target: SubTab) {
           <el-tab-pane v-if="showTagsTab" name="tags" label="知识树" />
           <el-tab-pane v-if="showTagsTab" name="meta" label="标签树" />
           <el-tab-pane v-if="showDuplicatesTab" name="duplicates" label="重复题扫描" />
+          <el-tab-pane v-if="showSeedTab" name="seed" label="种子题管理" />
         </el-tabs>
         <TagsPanel v-if="subTab === 'tags'" @update:dirty="tagsDirty = $event" />
         <TagsPanel v-else-if="subTab === 'meta'" tree="meta" @update:dirty="tagsDirty = $event" />
         <DuplicateProblemsPanel v-else-if="subTab === 'duplicates'" />
+        <SeedProblemsPanel v-else-if="subTab === 'seed'" />
       </div>
       <LevelPanel v-else-if="section === 'levels'" />
       <NoticePanel v-else-if="section === 'notice'" />

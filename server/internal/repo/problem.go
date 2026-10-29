@@ -214,6 +214,44 @@ func (r *Repo) GetProblem(ctx context.Context, id int64) (*Problem, error) {
 	return &p, nil
 }
 
+// metaProjection 题面两大字段（statement/statementHtml，各上限 256KB）排除——
+// 详情视图以外的消费面（场次题目表 / 判题）用瘦读，v0.30 双存后全量读各多带一份。
+var metaProjection = bson.M{"statement": 0, "statementHtml": 0}
+
+// GetProblemMeta 单题瘦读（排除题面两大字段）：判题 evaluate 等只要判题元数据的场景。
+func (r *Repo) GetProblemMeta(ctx context.Context, id int64) (*Problem, error) {
+	var p Problem
+	if err := r.Problems.FindOne(ctx, bson.M{"_id": id},
+		options.FindOne().SetProjection(metaProjection)).Decode(&p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// GetProblemMetas 批量瘦读（后端快赢批）：场次详情的题目表此前每题一次全量
+// GetProblem（N+1，组织者编辑清单再来一轮）——30 题比赛 = 30~60 次全文档读。
+// 缺席（已删）不进 map，调用方按 miss 跳过，与原逐题 err 跳过行为一致。
+func (r *Repo) GetProblemMetas(ctx context.Context, ids []int64) (map[int64]*Problem, error) {
+	out := make(map[int64]*Problem, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	cursor, err := r.Problems.Find(ctx, bson.M{"_id": bson.M{"$in": ids}},
+		options.Find().SetProjection(metaProjection))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	list := make([]*Problem, 0)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, err
+	}
+	for _, p := range list {
+		out[p.ID] = p
+	}
+	return out, nil
+}
+
 // ProblemListFilter 题库列表下推查询（v0.26）：搜索过滤 + 可见性反向排除，
 // 过滤与分页都在 DB 侧完成——原「全量 cursor.All 后内存过滤切片」在万题规模
 // 每请求传输几十 MB；下推后每请求只回当前页（≤100 条）。
@@ -286,7 +324,9 @@ func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, 
 	// cases 元数据需随行返回（列表「无数据」标记取 len(Cases)），仍排除 statement 正文
 	cursor, err := r.Problems.Find(ctx, query,
 		options.Find().
-			SetProjection(bson.M{"statement": 0}).
+			// statementHtml 与 statement 同量级（各上限 256KB），v0.30 双存后列表
+			// 每页 100 行整篇回传 Go 层再丢弃——一并排除（快赢批）
+			SetProjection(bson.M{"statement": 0, "statementHtml": 0}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}).
 			SetSkip(int64((page-1)*pageSize)).
 			SetLimit(int64(pageSize)))

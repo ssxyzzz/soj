@@ -20,7 +20,11 @@ type Config struct {
 	SeedDir      string // 启动时自动导入的种子题目目录（可为空）
 	SandboxAddr  string // go-judge 沙箱地址
 	JWTSecret    string
-	JudgeWorkers int    // 判题并发数
+	JudgeWorkers int // 判题并发数
+	// 编译并发闸容量（快赢批⑤）：默认 1 = 编译串行化（并发 g++ 瞬时 CE 治理的既定
+	// 口径）；考试 + 自测高峰期编译吞吐吃紧时可在 override 调大（受沙箱核数约束）。
+	// 判题 / 自测 / checker / interactor 编译共闸。
+	CompileConcurrency int
 	// 可信代理（v0.13）：ClientIP() 仅从可信直连方解析 X-Forwarded-For。
 	// 反代拓扑下用于还原学生真实 IP；nil = 不信任任何代理。
 	TrustedProxies []string
@@ -28,17 +32,18 @@ type Config struct {
 
 func Load() *Config {
 	c := &Config{
-		Addr:         getEnv("SOJ_ADDR", ":8080"),
-		MongoURI:     getEnv("SOJ_MONGO_URI", "mongodb://127.0.0.1:27017"),
-		MongoDB:      getEnv("SOJ_MONGO_DB", "soj"),
-		DataDir:      getEnv("SOJ_DATA_DIR", "./data/testdata"),
-		UploadsDir:   getEnv("SOJ_UPLOADS_DIR", "./data/uploads"),
-		BackupDir:    getEnv("SOJ_BACKUP_DIR", "./data/backups"),
-		KeysDir:      getEnv("SOJ_KEYS_DIR", "./data/keys"),
-		SeedDir:      getEnv("SOJ_SEED_DIR", ""),
-		SandboxAddr:  getEnv("SOJ_SANDBOX_ADDR", "http://127.0.0.1:5050"),
-		JWTSecret:    os.Getenv("SOJ_JWT_SECRET"), // 留空 = server.Run 从密钥卷载入或自动生成随机密钥（见 resolveJWTSecret）
-		JudgeWorkers: getEnvInt("SOJ_JUDGE_WORKERS", 2),
+		Addr:               getEnv("SOJ_ADDR", ":8080"),
+		MongoURI:           getEnv("SOJ_MONGO_URI", "mongodb://127.0.0.1:27017"),
+		MongoDB:            getEnv("SOJ_MONGO_DB", "soj"),
+		DataDir:            getEnv("SOJ_DATA_DIR", "./data/testdata"),
+		UploadsDir:         getEnv("SOJ_UPLOADS_DIR", "./data/uploads"),
+		BackupDir:          getEnv("SOJ_BACKUP_DIR", "./data/backups"),
+		KeysDir:            getEnv("SOJ_KEYS_DIR", "./data/keys"),
+		SeedDir:            getEnv("SOJ_SEED_DIR", ""),
+		SandboxAddr:        getEnv("SOJ_SANDBOX_ADDR", "http://127.0.0.1:5050"),
+		JWTSecret:          os.Getenv("SOJ_JWT_SECRET"), // 留空 = server.Run 从密钥卷载入或自动生成随机密钥（见 resolveJWTSecret）
+		JudgeWorkers:       getEnvInt("SOJ_JUDGE_WORKERS", 2),
+		CompileConcurrency: getEnvInt("SOJ_COMPILE_CONCURRENCY", 1),
 	}
 	c.TrustedProxies = parseTrustedProxies(getEnv("SOJ_TRUSTED_PROXIES", "127.0.0.1,::1"))
 	if len(c.TrustedProxies) == 0 {

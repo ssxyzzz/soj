@@ -108,6 +108,9 @@ func main() {
 	// 提交入队即时唤醒（v0.7.1）：Web+判题同进程时提交/重测后空闲 worker 近零延迟领取
 	waker := judge.NewWaker(cfg.JudgeWorkers)
 
+	// 编译闸容量（快赢批⑤）：默认 1 = 串行；SOJ_COMPILE_CONCURRENCY 可调大
+	judge.SetCompileConcurrency(cfg.CompileConcurrency)
+
 	// 判题线程池
 	jd := &judge.Judger{Repo: r, Sandbox: sb, Provider: store, Name: hostname(), Waker: waker}
 	jd.Pool(ctx, cfg.JudgeWorkers)

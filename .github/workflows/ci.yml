@@ -1,5 +1,6 @@
-# 最小 CI 门禁（v0.28 工程化批）：与本地 make check 完全同一入口——
-# go vet (+staticcheck 如有) + go test + eslint + vue-tsc + vite build。
+# 最小 CI 门禁（v0.28 工程化批）：与本地 make check 同一入口——
+# go vet (+staticcheck 如有) + go test + eslint + vue-tsc；vite build 单独一步
+# （check 不含 build：本地 make up 由 web-building 的真构建兜底，避免重复编译）。
 # repo 包测试需要 Mongo，CI 无 Mongo 时按既有约定整文件 skip（本地/真机跑全量）。
 name: CI
 
@@ -22,5 +23,11 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: 全量门禁（lint + test + typecheck + build）
+      - name: 安装前端依赖
+        run: npm ci
+        working-directory: web
+      - name: 代码门禁（lint + test + typecheck）
         run: make check
+      - name: 前端构建（vite build）
+        run: npm run build
+        working-directory: web

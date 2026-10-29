@@ -101,6 +101,7 @@ declare module 'vue' {
     ScoreCell: typeof import('./components/score/ScoreCell.vue')['default']
     ScoreSummaryCard: typeof import('./components/score/ScoreSummaryCard.vue')['default']
     SecurityLogsPanel: typeof import('./components/admin/SecurityLogsPanel.vue')['default']
+    SeedProblemsPanel: typeof import('./components/admin/SeedProblemsPanel.vue')['default']
     SelfTestPanel: typeof import('./components/SelfTestPanel.vue')['default']
     SettingsAccountPanel: typeof import('./components/admin/settings/SettingsAccountPanel.vue')['default']
     SettingsBasicPanel: typeof import('./components/admin/settings/SettingsBasicPanel.vue')['default']

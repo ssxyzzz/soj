@@ -103,6 +103,8 @@ func (r *Repo) EnsureSolutionUnique(ctx context.Context) (int64, error) {
 }
 
 // ListSolutions 某题的题解列表：置顶优先，其余按发布时间倒序（分页）。
+// 投影排除 content（md 事实源）——查看端走 content_html（v0.30），md 与 html 双发
+// 曾让列表 payload ≈ 2×正文×行数；编辑场景按需走单条详情取 md（快赢批⑥）。
 func (r *Repo) ListSolutions(ctx context.Context, pid int64, page, pageSize int) ([]*Solution, int64, error) {
 	filter := bson.M{"pid": pid}
 	total, err := r.Solutions.CountDocuments(ctx, filter)
@@ -115,6 +117,7 @@ func (r *Repo) ListSolutions(ctx context.Context, pid int64, page, pageSize int)
 			{Key: "pinned", Value: -1},
 			{Key: "createdAt", Value: -1},
 		}).
+			SetProjection(bson.M{"content": 0}).
 			SetLimit(int64(pageSize)).
 			SetSkip(int64((page-1)*pageSize)))
 	if err != nil {

@@ -227,12 +227,7 @@ func (h *Handlers) GetSubmission(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	s, err := h.repo.GetSubmission(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "提交不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取提交失败")
+	if respondRepoErr(c, err, "提交不存在", "读取提交失败") {
 		return
 	}
 
@@ -430,12 +425,7 @@ func (h *Handlers) CancelSubmission(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	s, err := h.repo.GetSubmission(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "提交不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取提交失败")
+	if respondRepoErr(c, err, "提交不存在", "读取提交失败") {
 		return
 	}
 	if uid != s.UID && !hasPerm(c, repo.PermSubmissionViewAll) {
@@ -467,12 +457,7 @@ func (h *Handlers) RejudgeProblem(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	p, err := h.repo.GetProblem(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {

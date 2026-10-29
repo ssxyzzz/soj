@@ -4,6 +4,7 @@ package server
 // 等级本身是读时聚合值（repo.LevelProgress），在这里统一算给 /me/profile 与排行榜。
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -104,22 +105,33 @@ func (h *Handlers) AdminUpdateLevelConfig(c *gin.Context) {
 	ok(c, gin.H{"config": cfg})
 }
 
+// levelAgg 定级三件套（配置 + 各难度 AC 数 + 经验调整合计，v0.29 收敛——原五处
+// 内联复制）：配置/AC 数失败返回 ok=false（调用方降级省略等级）；经验调整失败按
+// 全 0（统一口径：xpAdjust 是管理端手工加减的软增强，不可用不拖垮等级展示）。
+func levelAgg(ctx context.Context, r *repo.Repo, uids []int64) (cfg *repo.LevelConfig, counts map[int64][10]int64, adjs map[int64]int64, ok bool) {
+	cfg, err := r.GetLevelConfig(ctx)
+	if err != nil {
+		return nil, nil, nil, false
+	}
+	counts, err = r.SolvedDifficultyCounts(ctx, uids)
+	if err != nil {
+		return nil, nil, nil, false
+	}
+	adjs, err = r.SumXpAdjust(ctx, uids)
+	if err != nil {
+		adjs = map[int64]int64{}
+	}
+	return cfg, counts, adjs, true
+}
+
 // levelMapFor 批量算一组用户的等级（成绩表/榜单等列表场景用）。
 // 任一步失败返回 nil，由调用方降级省略等级字段。
 func (h *Handlers) levelMapFor(c *gin.Context, uids []int64) map[int64]int {
 	if len(uids) == 0 {
 		return map[int64]int{}
 	}
-	cfg, err := h.repo.GetLevelConfig(c.Request.Context())
-	if err != nil {
-		return nil
-	}
-	counts, err := h.repo.SolvedDifficultyCounts(c.Request.Context(), uids)
-	if err != nil {
-		return nil
-	}
-	adjs, err := h.repo.SumXpAdjust(c.Request.Context(), uids)
-	if err != nil {
+	cfg, counts, adjs, ok := levelAgg(c.Request.Context(), h.repo, uids)
+	if !ok {
 		return nil
 	}
 	out := make(map[int64]int, len(uids))
@@ -134,16 +146,8 @@ func (h *Handlers) levelMapFor(c *gin.Context, uids []int64) map[int64]int {
 // levelBadgeInfo 单用户等级展示信息（聚合失败时返回 nil，由调用方降级省略字段）。
 // 含经验调整合计（管理端加/减，可负）。
 func (h *Handlers) levelBadgeInfo(c *gin.Context, uid int64) gin.H {
-	cfg, err := h.repo.GetLevelConfig(c.Request.Context())
-	if err != nil {
-		return nil
-	}
-	counts, err := h.repo.SolvedDifficultyCounts(c.Request.Context(), []int64{uid})
-	if err != nil {
-		return nil
-	}
-	adjs, err := h.repo.SumXpAdjust(c.Request.Context(), []int64{uid})
-	if err != nil {
+	cfg, counts, adjs, ok := levelAgg(c.Request.Context(), h.repo, []int64{uid})
+	if !ok {
 		return nil
 	}
 	adjust := adjs[uid]
@@ -166,16 +170,8 @@ func (h *Handlers) autocompleteAllowed(c *gin.Context, uid int64) bool {
 	if err != nil {
 		return false
 	}
-	cfg, err := h.repo.GetLevelConfig(c.Request.Context())
-	if err != nil {
-		return false
-	}
-	counts, err := h.repo.SolvedDifficultyCounts(c.Request.Context(), []int64{uid})
-	if err != nil {
-		return false
-	}
-	adjs, err := h.repo.SumXpAdjust(c.Request.Context(), []int64{uid})
-	if err != nil {
+	cfg, counts, adjs, ok := levelAgg(c.Request.Context(), h.repo, []int64{uid})
+	if !ok {
 		return false
 	}
 	lv, _, _, _, _ := repo.LevelProgress(cfg, counts[uid], adjs[uid])

@@ -724,12 +724,7 @@ func (h *Handlers) GetDiscussTopic(c *gin.Context) {
 		return
 	}
 	t, err := h.repo.GetDiscussTopic(c.Request.Context(), tid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "话题不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取话题失败")
+	if respondRepoErr(c, err, "话题不存在", "读取话题失败") {
 		return
 	}
 	s, err := h.repo.GetSystemSettings(c.Request.Context())
@@ -839,12 +834,7 @@ func (h *Handlers) UpdateDiscussTopic(c *gin.Context) {
 		return
 	}
 	t, err := h.repo.GetDiscussTopic(c.Request.Context(), tid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "话题不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取话题失败")
+	if respondRepoErr(c, err, "话题不存在", "读取话题失败") {
 		return
 	}
 	if t.UID != uid {
@@ -884,12 +874,7 @@ func (h *Handlers) DeleteDiscussTopic(c *gin.Context) {
 		return
 	}
 	t, err := h.repo.GetDiscussTopic(c.Request.Context(), tid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "话题不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取话题失败")
+	if respondRepoErr(c, err, "话题不存在", "读取话题失败") {
 		return
 	}
 	byManager := t.UID != uid && hasPerm(c, repo.PermDiscussManage)
@@ -927,12 +912,7 @@ func (h *Handlers) CreateDiscussReply(c *gin.Context) {
 		return
 	}
 	t, err := h.repo.GetDiscussTopic(c.Request.Context(), tid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "话题不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取话题失败")
+	if respondRepoErr(c, err, "话题不存在", "读取话题失败") {
 		return
 	}
 	if t.Deleted {
@@ -1147,12 +1127,7 @@ func (h *Handlers) AcceptDiscussReply(c *gin.Context) {
 		return
 	}
 	t, err := h.repo.GetDiscussTopic(c.Request.Context(), tid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "话题不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取话题失败")
+	if respondRepoErr(c, err, "话题不存在", "读取话题失败") {
 		return
 	}
 	if t.UID != uid {
@@ -1214,12 +1189,7 @@ func (h *Handlers) LikeDiscussTopic(c *gin.Context) {
 		return
 	}
 	t, err := h.repo.GetDiscussTopic(c.Request.Context(), tid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "话题不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取话题失败")
+	if respondRepoErr(c, err, "话题不存在", "读取话题失败") {
 		return
 	}
 	liked, count, err := h.repo.ToggleDiscussLike(c.Request.Context(), "topic", tid, uid)
@@ -1255,12 +1225,7 @@ func (h *Handlers) LikeDiscussReply(c *gin.Context) {
 		return
 	}
 	rep, err := h.repo.GetDiscussReply(c.Request.Context(), rid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "回复不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取回复失败")
+	if respondRepoErr(c, err, "回复不存在", "读取回复失败") {
 		return
 	}
 	liked, count, err := h.repo.ToggleDiscussLike(c.Request.Context(), "reply", rid, uid)
@@ -1295,12 +1260,7 @@ func (h *Handlers) ModDiscussTopic(c *gin.Context) {
 		return
 	}
 	t, err := h.repo.GetDiscussTopic(c.Request.Context(), tid)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "话题不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取话题失败")
+	if respondRepoErr(c, err, "话题不存在", "读取话题失败") {
 		return
 	}
 	var req struct {

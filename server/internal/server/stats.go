@@ -103,17 +103,9 @@ func (h *Handlers) pickFeatured(ctx context.Context, seed string, difficulty int
 // userTier 账号当前等级（1–10，聚合口径与排行榜一致：难度分布 + 经验调整）；
 // 读取失败回 1（青铜）。
 func (h *Handlers) userTier(ctx context.Context, uid int64) int {
-	cfg, err := h.repo.GetLevelConfig(ctx)
-	if err != nil {
+	cfg, counts, adjs, ok := levelAgg(ctx, h.repo, []int64{uid})
+	if !ok {
 		return 1
-	}
-	counts, err := h.repo.SolvedDifficultyCounts(ctx, []int64{uid})
-	if err != nil {
-		return 1
-	}
-	adjs, err := h.repo.SumXpAdjust(ctx, []int64{uid})
-	if err != nil {
-		adjs = map[int64]int64{}
 	}
 	lv, _, _, _, _ := repo.LevelProgress(cfg, counts[uid], adjs[uid])
 	if lv < 1 || lv > 10 {

@@ -40,7 +40,10 @@ export default defineConfig({
       output: {
         // vendor 分包（v0.28）：注意不能用 manualChunks 硬分组 element-plus——
         // 被手工指派 chunk 的模块不会被摇树（rollup 已知行为，实测 943KB 全量进包），
-        // 改由 rollup 自动共享分包；vditor/CM6 维持组件内动态 import 的既有异步链路
+        // 改由 rollup 自动分包；vditor/CM6 维持组件内动态 import 的既有异步链路。
+        // 碎片收敛（加载优化批）：题面页闭包曾 40+ 个 2-7KB 小 chunk，15KB 以下
+        // 尝试合并——h2 多路复用下省往返与解压开销；构建后核对首屏闭包无回退
+        experimentalMinChunkSize: 15000,
       },
     },
   },

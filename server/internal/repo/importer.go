@@ -26,6 +26,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"soj/internal/testdata"
 )
@@ -39,10 +41,10 @@ type Importer struct {
 	TagIDs         []int64 // 知识树节点 ID
 	MetaTagIDs     []int64 // 来源标签树节点 ID（2026-10-25 双树）
 	Difficulty     int     // 难度 1–10
-	TimeLimitMS    int    // 时限毫秒
-	MemoryLimitKB  int    // 内存 KB
-	FileIOName     string // 文件 IO 基名（way → way.in/way.out）
-	Compare        string // exact / tolerant
+	TimeLimitMS    int     // 时限毫秒
+	MemoryLimitKB  int     // 内存 KB
+	FileIOName     string  // 文件 IO 基名（way → way.in/way.out）
+	Compare        string  // exact / tolerant
 	FloatTolerance float64
 	Hidden         bool // 显式隐藏态（建题表单无此输入，恒 false；批量走 DefaultHidden）
 	// ObjectiveQuestions 网页建客观题直传（含答案的完整定义，非空时优先于包内 questions）。
@@ -94,12 +96,61 @@ func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 		fmt.Println("[seed] 已播种过（meta.seedV1），跳过——新增题目用批量导入或网页建题")
 		return nil
 	}
+	outcomes, err := im.SeedDeploy(ctx, seedDir)
+	if err != nil {
+		return err
+	}
+	for _, o := range outcomes {
+		switch o.Status {
+		case SeedImported:
+			fmt.Printf("[seed] 已导入题目 #%d (%s)\n", o.PID, o.Dir)
+		case SeedSkipped:
+			fmt.Printf("[seed] 跳过 %s（%s）\n", o.Dir, o.Reason)
+		case SeedFailed:
+			fmt.Printf("[seed] 导入失败 %s: %s\n", o.Dir, o.Reason)
+		}
+	}
+	if n := countSeedFailed(outcomes); n > 0 {
+		return fmt.Errorf("%d 个种子目录导入失败", n) // 不标记，待下次启动重试
+	}
+	fmt.Println("[seed] 首次播种完成，已标记 seedV1（此后启动不再播种）")
+	return nil
+}
+
+// 种子部署的三种逐目录结果（后台种子题管理面板与启动播种共用口径，同批量导入 batchResult）。
+const (
+	SeedImported = "imported"
+	SeedSkipped  = "skipped"
+	SeedFailed   = "failed"
+)
+
+// SeedOutcome 单个种子目录的部署结果。
+type SeedOutcome struct {
+	Dir    string `json:"dir"`
+	Status string `json:"status"` // imported | skipped | failed
+	PID    int64  `json:"pid,omitempty"`
+	Title  string `json:"title,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
+func countSeedFailed(outcomes []SeedOutcome) int {
+	n := 0
+	for _, o := range outcomes {
+		if o.Status == SeedFailed {
+			n++
+		}
+	}
+	return n
+}
+
+// SeedDeploy 部署种子题（后台「重新部署种子题」）：与启动播种同规则逐目录导入
+// （补缺不覆盖，保护线上修改），但不受 seedV1 标记拦截；全部成功后补置标记。
+// 单目录失败不中断（继续导其余目录），失败明细随结果返回——err 仅在全量读目录
+// 失败时非空。
+func (im *Importer) SeedDeploy(ctx context.Context, seedDir string) ([]SeedOutcome, error) {
 	entries, err := os.ReadDir(seedDir)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
+		return nil, err
 	}
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
@@ -108,27 +159,244 @@ func (im *Importer) SeedAll(ctx context.Context, seedDir string) error {
 		}
 	}
 	sort.Strings(names)
+	outcomes := make([]SeedOutcome, 0, len(names))
 	for _, name := range names {
 		dir := filepath.Join(seedDir, name)
+		o := SeedOutcome{Dir: name, Status: SeedImported}
 		skip, why, err := im.seedSkipReason(ctx, dir, name)
 		if err != nil {
-			return err
+			o.Status, o.Reason = SeedFailed, err.Error()
+			outcomes = append(outcomes, o)
+			continue
 		}
 		if skip {
-			fmt.Printf("[seed] 跳过 %s（%s）\n", name, why)
+			o.Status, o.Reason = SeedSkipped, why
+			outcomes = append(outcomes, o)
 			continue
 		}
 		pr, err := im.ImportDir(ctx, dir)
 		if err != nil {
-			return fmt.Errorf("导入 %s: %w", name, err)
+			o.Status, o.Reason = SeedFailed, err.Error()
+			outcomes = append(outcomes, o)
+			continue
 		}
-		fmt.Printf("[seed] 已导入题目 #%d (%s)\n", pr.ID, name)
+		o.PID, o.Title = pr.ID, pr.Title
+		outcomes = append(outcomes, o)
+	}
+	if countSeedFailed(outcomes) == 0 {
+		// 与启动播种同口径：部署成功即视为完成首次播种，此后启动不再自动播种
+		if err := im.Repo.markSeedDone(ctx); err != nil {
+			return outcomes, err
+		}
+	}
+	return outcomes, nil
+}
+
+// SeedRow 种子目录 ↔ 库内现状对账行（后台面板展示与操作前确认）。
+type SeedRow struct {
+	Dir         string `json:"dir"`                // 种子目录名
+	Title       string `json:"title"`              // 期望标题（problem.yaml title > 目录名回退）
+	Exists      bool   `json:"exists"`             // 库内已部署
+	PID         int64  `json:"pid,omitempty"`      // 已部署时的库内题号（无前缀目录按标题命中，题号为导入时自动分配）
+	DBTitle     string `json:"db_title,omitempty"` // 已部署时的实际标题
+	Submissions int64  `json:"submissions"`        // 该题现有提交数（清除将一并删除）
+}
+
+// SeedInventory 对账种子目录与库内现状：数字前缀目录按题号查、无前缀目录按标题查
+// （与 seedSkipReason 同口径），供清除/重部署前预览影响面。
+func (im *Importer) SeedInventory(ctx context.Context, seedDir string) ([]SeedRow, error) {
+	entries, err := os.ReadDir(seedDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	rows := make([]SeedRow, 0, len(names))
+	for _, name := range names {
+		dir := filepath.Join(seedDir, name)
+		row := SeedRow{Dir: name, Title: dirTitleFallback(name)}
+		if raw, err := os.ReadFile(filepath.Join(dir, "problem.yaml")); err == nil {
+			var meta problemYAML
+			if yaml.Unmarshal(raw, &meta) == nil && meta.Title != "" {
+				row.Title = meta.Title
+			}
+		}
+		var p *Problem
+		if pid := seedPID(name); pid > 0 {
+			p, err = im.Repo.GetProblem(ctx, pid)
+			if err != nil && !IsNotFound(err) {
+				return nil, err
+			}
+		} else {
+			var doc *Problem
+			doc, err = im.problemByTitle(ctx, row.Title)
+			if err != nil {
+				return nil, err
+			}
+			p = doc
+		}
+		if p != nil {
+			row.Exists, row.PID, row.DBTitle = true, p.ID, p.Title
+			n, err := im.Repo.Submissions.CountDocuments(ctx, bson.M{"pid": p.ID})
+			if err != nil {
+				return nil, err
+			}
+			row.Submissions = n
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
+
+// problemByTitle 按标题取题目（无前缀种子目录的库内对账/清除定位）。
+func (im *Importer) problemByTitle(ctx context.Context, title string) (*Problem, error) {
+	var p Problem
+	err := im.Repo.Problems.FindOne(ctx, bson.M{"title": title}).Decode(&p)
+	if IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
+// SeedClearStats 清除种子题的删除统计。
+type SeedClearStats struct {
+	Problems    int64   `json:"problems"`
+	PIDs        []int64 `json:"pids"`
+	Submissions int64   `json:"submissions"`
+	Challenges  int64   `json:"challenges"`
+	Solutions   int64   `json:"solutions"`
+	Discussions int64   `json:"discussions"`
+	Replies     int64   `json:"replies"`
+}
+
+// SeedClear 清除种子题：题目文档 + 数据卷 + 提交 + 挑战 + 题解 + 题目讨论（含回复/
+// 点赞/举报）一并删除——提交是等级/榜单的统计源，随题删除才不产生孤儿统计。
+// 题单/比赛/作业对已删题会自动剔除展示（lists 已有先例），文档本身不动，由管理员
+// 自行调整；清除后置位 seedV1，防止重启自动播种「复活」刚删掉的题。
+func (im *Importer) SeedClear(ctx context.Context, seedDir string) (*SeedClearStats, error) {
+	rows, err := im.SeedInventory(ctx, seedDir)
+	if err != nil {
+		return nil, err
+	}
+	pids := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		if r.Exists {
+			pids = append(pids, r.PID)
+		}
+	}
+	stats := &SeedClearStats{PIDs: pids}
+	if len(pids) == 0 {
+		return stats, nil
+	}
+
+	// 题目讨论级联：主题 → 回复 → 点赞/举报（点赞/举报挂 topic/reply 两类目标）。
+	// nil 切片会序列化成 $in: null 报错，故按目标有无分别构造过滤器。
+	var tids []int64
+	{
+		cur, err := im.Repo.Discussions.Find(ctx,
+			bson.M{"scope": DiscussScopeProblem, "scopeId": bson.M{"$in": pids}},
+			options.Find().SetProjection(bson.M{"_id": 1}))
+		if err != nil {
+			return nil, err
+		}
+		defer cur.Close(ctx)
+		var docs []struct {
+			ID int64 `bson:"_id"`
+		}
+		if err := cur.All(ctx, &docs); err != nil {
+			return nil, err
+		}
+		for _, d := range docs {
+			tids = append(tids, d.ID)
+		}
+	}
+	var replyIDs []int64
+	if len(tids) > 0 {
+		cur, err := im.Repo.DiscussReplies.Find(ctx,
+			bson.M{"tid": bson.M{"$in": tids}},
+			options.Find().SetProjection(bson.M{"_id": 1}))
+		if err != nil {
+			return nil, err
+		}
+		defer cur.Close(ctx)
+		var docs []struct {
+			ID int64 `bson:"_id"`
+		}
+		if err := cur.All(ctx, &docs); err != nil {
+			return nil, err
+		}
+		for _, d := range docs {
+			replyIDs = append(replyIDs, d.ID)
+		}
+	}
+
+	pidsIn := bson.M{"$in": pids}
+	type del struct {
+		col    *mongo.Collection
+		filter bson.M
+	}
+	dels := []del{
+		{im.Repo.Solutions, bson.M{"pid": pidsIn}},
+		{im.Repo.Challenges, bson.M{"pid": pidsIn}},
+		{im.Repo.Submissions, bson.M{"pid": pidsIn}},
+		{im.Repo.Problems, bson.M{"_id": pidsIn}},
+	}
+	if len(tids) > 0 {
+		tidsIn := bson.M{"$in": tids}
+		dels = append(dels,
+			del{im.Repo.DiscussReports, bson.M{"tType": "topic", "tId": tidsIn}},
+			del{im.Repo.DiscussLikes, bson.M{"t": "topic", "id": tidsIn}},
+			del{im.Repo.DiscussReplies, bson.M{"tid": tidsIn}},
+			del{im.Repo.Discussions, bson.M{"_id": tidsIn}},
+		)
+	}
+	if len(replyIDs) > 0 {
+		replyIn := bson.M{"$in": replyIDs}
+		dels = append(dels,
+			del{im.Repo.DiscussReports, bson.M{"tType": "reply", "tId": replyIn}},
+			del{im.Repo.DiscussLikes, bson.M{"t": "reply", "id": replyIn}},
+		)
+	}
+	for _, d := range dels {
+		n, err := d.col.DeleteMany(ctx, d.filter)
+		if err != nil {
+			return nil, err
+		}
+		switch d.col {
+		case im.Repo.DiscussReplies:
+			stats.Replies = n.DeletedCount
+		case im.Repo.Discussions:
+			stats.Discussions = n.DeletedCount
+		case im.Repo.Solutions:
+			stats.Solutions = n.DeletedCount
+		case im.Repo.Challenges:
+			stats.Challenges = n.DeletedCount
+		case im.Repo.Submissions:
+			stats.Submissions = n.DeletedCount
+		case im.Repo.Problems:
+			stats.Problems = n.DeletedCount
+		}
+	}
+
+	store := testdata.NewLocalFS(im.DataDir)
+	for _, pid := range pids {
+		_ = store.RemoveDir(pid, ".") // "." = 题目数据卷根（RemoveDir 对 relPath 做 Clean 校验）
 	}
 	if err := im.Repo.markSeedDone(ctx); err != nil {
-		return err
+		return nil, err
 	}
-	fmt.Println("[seed] 首次播种完成，已标记 seedV1（此后启动不再播种）")
-	return nil
+	return stats, nil
 }
 
 // seedSkipReason 判断种子目录是否跳过（补缺不覆盖）：有数字前缀按题号查库，

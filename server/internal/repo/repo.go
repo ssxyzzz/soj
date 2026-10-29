@@ -129,6 +129,12 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}
 	if _, err := r.Problems.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "title", Value: 1}}},
+		// v0.26 下推链路的筛选索引（后端快赢批补齐）：tags/meta_tags 支撑标签与来源
+		// 筛选（multikey）；hidden 支撑 HiddenProblemIDs——每个非特权用户的每次题库
+		// 请求与首页 pickFeatured 都查 hidden，此前无索引全表扫
+		{Keys: bson.D{{Key: "tags", Value: 1}}},
+		{Keys: bson.D{{Key: "meta_tags", Value: 1}}},
+		{Keys: bson.D{{Key: "hidden", Value: 1}}},
 	}); err != nil {
 		return err
 	}
@@ -791,6 +797,10 @@ func (r *Repo) markSeedDone(ctx context.Context) error {
 	_, err := meta.UpdateOne(ctx, bson.M{"_id": "migrations"}, bson.M{"$set": bson.M{"seedV1": true}})
 	return err
 }
+
+// SeedMarked 读 seedV1 标记（后台种子题面板展示「启动自动播种」状态；写侧由
+// SeedDeploy / SeedClear 内部维护，不外放）。
+func (r *Repo) SeedMarked(ctx context.Context) (bool, error) { return r.seedDone(ctx) }
 
 // migrateExams 考试拆分迁移：把 contests 里 classId≠0 的班级比赛搬入 exams 集合，
 // 其提交的 contestId/contestTitle 同步改名为 examId/examTitle。

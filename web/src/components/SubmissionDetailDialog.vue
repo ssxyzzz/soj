@@ -4,7 +4,8 @@
 // submission（列表已带代码与明细时直接传入，避免多余请求）。
 // 教师级权限（submission.view.all）可重测：重置 Pending 交还判题池，轮询至终态。
 // v0.7.1：队列态（排队/评测/取消中）可取消评测——本人 ∨ submission.view.all。
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useJudgePoll } from '@/composables/useJudgePoll'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { submissionApi } from '@/api'
@@ -33,7 +34,6 @@ const detail = ref<Submission | null>(null)
 const polled = ref<Submission | null>(null) // 重测/取消轮询拿到的最新数据（优先于传入的列表快照）
 const rejudging = ref(false)
 const cancelling = ref(false)
-let pollToken = 0
 
 const sub = computed<Submission | null>(() => polled.value ?? props.submission ?? detail.value)
 const heading = computed(() => props.title || (sub.value ? `评测详情 #${sub.value.id}` : '评测详情'))
@@ -109,36 +109,26 @@ async function onCancel() {
   }
 }
 
-// 轮询：1.2s 一次拉详情，到终态停并提示（重测/取消共用）
-function pollUntilDone(id: number, doneMsg: string) {
-  const token = ++pollToken
-  const tick = async () => {
-    if (token !== pollToken || !props.modelValue) return
-    try {
-      const s = await submissionApi.get(id)
-      polled.value = s
-      if (isQueueStatus(s.status)) {
-        window.setTimeout(tick, 1200)
-      } else {
-        ElMessage.success(doneMsg)
-      }
-    } catch {
-      // 拉取失败已由拦截器提示，停止本轮轮询
-    }
-  }
-  window.setTimeout(tick, 1200)
-}
+// 轮询：1.2s 一次拉详情，到终态停并提示（重测/取消共用；useJudgePoll 终态口径
+// 统一 isQueueStatus，卸载自清——v0.27 的 onUnmounted 守卫由 composable 接管）
+let pollId = 0
+const judgePoll = useJudgePoll(() => submissionApi.get(pollId))
 
-// v0.27：父页直接卸载（切路由）时也停轮询——原只在关弹窗时失效 token，
-// 卸载后 1.2s 轮询会一直发到判题出终态
-onUnmounted(() => {
-  pollToken++
-})
+function pollUntilDone(id: number, doneMsg: string) {
+  pollId = id
+  judgePoll.start(
+    () => {},
+    doneMsg,
+    (s) => {
+      polled.value = s
+    },
+  )
+}
 
 watch(
   () => props.modelValue,
   (open) => {
-    pollToken++ // 关闭弹窗即停止重测轮询
+    judgePoll.stop() // 关闭弹窗即停止重测轮询
     if (open) {
       detail.value = null
       polled.value = null

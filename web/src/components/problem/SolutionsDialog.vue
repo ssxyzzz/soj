@@ -51,10 +51,17 @@ function openWriteSolution() {
   showSolutionEditor.value = true
 }
 
-function openEditSolution(s: SolutionItem) {
+async function openEditSolution(s: SolutionItem) {
   solutionEditing.value = s
-  solutionDraft.value = s.content
+  solutionDraft.value = ''
   showSolutionEditor.value = true
+  // 列表已去 md 双发（快赢批⑥）：编辑时按需拉单条详情取正文
+  try {
+    const d = await problemApi.getSolution(props.problemId, s.id)
+    if (solutionEditing.value?.id === s.id) solutionDraft.value = d.content ?? ''
+  } catch {
+    /* 拉取失败已提示；编辑器留空由用户自行填写或放弃 */
+  }
 }
 
 async function saveSolution() {
@@ -128,7 +135,7 @@ async function togglePin(s: SolutionItem) {
           </el-button>
         </span>
       </div>
-      <MdView :content="s.content" :html="s.content_html" />
+      <MdView :content="s.content ?? ''" :html="s.content_html" />
     </div>
     <el-empty v-if="!solutions.length" description="还没有题解，快来发第一篇" :image-size="48" />
     <div v-if="solutionsTotal > PAGE_SIZE" class="side-pager">

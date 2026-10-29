@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { usePolling } from '@/composables/usePolling'
 import { useRoute, useRouter } from 'vue-router'
 
 import AmbientGrid from '@/components/AmbientGrid.vue'
@@ -48,7 +49,7 @@ async function loadRecent() {
   }
 }
 
-let badgePoll: ReturnType<typeof setInterval> | undefined
+const badgePoll = usePolling(() => refreshBadge(), 60_000)
 
 function onBellVisible() {
   loadRecent()
@@ -105,11 +106,7 @@ onMounted(() => {
     })
     .catch(() => {})
   refreshBadge() // 通知角标首刷（v0.24）
-  badgePoll = setInterval(refreshBadge, 60_000)
-})
-
-onUnmounted(() => {
-  if (badgePoll) clearInterval(badgePoll)
+  badgePoll.start() // 60s 轮询（usePolling：后台标签暂停、卸载自清）
 })
 
 function onCommand(command: string) {
@@ -193,7 +190,7 @@ function onCommand(command: string) {
           </el-popover>
           <el-dropdown class="user-dropdown" @command="onCommand">
             <span class="user-chip">
-              <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" />
+              <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" decoding="async" />
               <span v-else class="avatar">{{ avatarChar }}</span>
               <span class="uname">{{ userStore.nickname || '已登录' }}</span>
               <TierBadge

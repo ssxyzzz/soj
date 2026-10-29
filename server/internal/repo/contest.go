@@ -371,6 +371,27 @@ func (r *Repo) RoundSubmissions(ctx context.Context, kind string, roundID int64,
 	return list, nil
 }
 
+// RoundSubmissionStubs 场次详情/作业页的瘦拉取（后端快赢批）：调用方只算
+// submitted/best 两个 map（pid/score/status 三字段），此前整文档回传——赛中学生
+// 提交几十次后每次详情刷新都是 MB 级 DB 传输（含代码 + 逐测试点明细）。
+// 「我的提交」列表（round.go）需要完整文档，仍走 RoundSubmissions。
+func (r *Repo) RoundSubmissionStubs(ctx context.Context, kind string, roundID int64, uid int64) ([]*Submission, error) {
+	filter := bson.M{roundsIDField(kind): roundID, "uid": uid}
+	cursor, err := r.Submissions.Find(ctx, filter,
+		options.Find().
+			SetProjection(bson.M{"pid": 1, "score": 1, "status": 1}).
+			SetSort(bson.D{{Key: "_id", Value: -1}}))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	list := make([]*Submission, 0)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, err
+	}
+	return list, nil
+}
+
 // RoundUserProblemSubmissions 指定用户在某轮次（比赛/考试）某题的全部提交（含代码与测试点明细），
 // 供榜单/进度表的「查看用户提交明细」弹窗使用（门槛由 handler 校验）。
 func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, roundID, uid, pid int64) ([]*Submission, error) {

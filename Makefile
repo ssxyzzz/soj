@@ -12,14 +12,11 @@ space := $(empty) $(empty)
 TOOLCHAIN_PATH := $(subst $(space),:,$(wildcard $(HOME)/.local/opt/go/bin $(HOME)/.local/opt/node-*/bin))
 export PATH := $(TOOLCHAIN_PATH)$(if $(TOOLCHAIN_PATH),:)$(PATH)
 
-check: ## 全量门禁：lint + go test + 前端 typecheck + build（CI 与 make up 共用）
-	$(MAKE) lint
-	cd server && go test ./...
-	cd web && npm run typecheck
-	cd web && npm run build
+check: ## 代码门禁：lint + go test + 前端 typecheck（脚本带中文进度提示，CI 非 TTY 自动透传；vite build 不入内——up 由 web-building 的真构建兜底、CI 单独跑，避免一次发版编译两遍前端）
+	./scripts/check.sh
 
-up: check ## 构建发版并对齐镜像（= check + bin + image：先过全量门禁，热替换后重建 soj 镜像，容器重建/宿主机重启不回退）
-	./scripts/web-building.sh
+up: check ## 构建发版并对齐镜像（= check + bin + image：先过代码门禁，热替换后重建 soj 镜像，容器重建/宿主机重启不回退）
+	VERSION=$(VERSION) ./scripts/web-building.sh
 	SOJ_VERSION=$(VERSION) docker compose up -d --build soj
 
 down: ## 停止并移除容器（数据卷保留）

@@ -197,7 +197,8 @@ func cancelledResult(st *evalState) (string, int, int, int, string, []*repo.Case
 // evaluate 完整评测一份提交，按题目配置选择计分方式。
 // 每个测试点之间检查取消请求与租约：取消即停（终态 Cancelled），租约丢失弃写。
 func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
-	problem, err := j.Repo.GetProblem(ctx, sub.ProblemID)
+	// 瘦读（快赢批）：判题只要元数据，排除 statement/statementHtml 两大字段（各 256KB 上限）
+	problem, err := j.Repo.GetProblemMeta(ctx, sub.ProblemID)
 	if err != nil {
 		return repo.StatusSystemError, 0, 0, 0, "题目不存在或读取失败", nil
 	}
@@ -412,9 +413,10 @@ func (j *Judger) programOutput(ctx context.Context, res *sandbox.Result, fio fil
 }
 
 // judgeCase 单测试点判定核心（v0.5.4 ③ 去重：evaluatePoints 与 evaluateSubtasks 原各持一份同构实现）。
+// input 为该点输入内容（runOne 已读，透传给 checker，省一次重复读盘——快赢批⑤）。
 // 返回 caseStatus（明细行）/ finalStatus（整体终态，空 = 继续）/ reason；err 非 nil 为致命错误
 // （答案读取/校验器异常），由调用方整体判 System Error。
-func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.Result, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (caseStatus, finalStatus, reason string, err error) {
+func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.Result, input string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (caseStatus, finalStatus, reason string, err error) {
 	if res.Status != "Accepted" {
 		if fio.enabled && res.Status == "File Error" {
 			// 文件模式：CopyOut 收集不到配置的输出文件（程序未写/freopen 名字错）
@@ -435,7 +437,7 @@ func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.R
 		return "", "", "", fmt.Errorf("读取答案文件失败: %w", err)
 	}
 	if chk != nil {
-		ok, msg, serr := chk.run(ctx, tc, string(ans), progOut)
+		ok, msg, serr := chk.run(ctx, tc, input, string(ans), progOut)
 		if serr != nil {
 			return "", "", "", fmt.Errorf("校验器异常: %w", serr)
 		}
@@ -453,23 +455,34 @@ func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.R
 func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	st := &evalState{}
 	n := len(problem.Cases)
+	// 点间检查 2s 节流（快赢批⑤）：心跳 goroutine 已独立保租约，点间查询只是取消与
+	// 回收的尽力检测——原每点一次 SubmissionLease，60 点题一份提交 60+ 次 Mongo 往返；
+	// 节流后取消感知最坏多 2s（取消语义本就受当前测试点时限支配）；首点即查不变
+	lastCheck := time.Time{}
+	checkGate := func() (cancelRequested, leaseLost bool) {
+		if time.Since(lastCheck) < 2*time.Second {
+			return false, false
+		}
+		lastCheck = time.Now()
+		return j.checkStop(ctx, sub)
+	}
 	passed := 0
 	failStatus, failInfo := "", "" // 首个失败点的状态与原因（整卷终态）
 	for i, tc := range problem.Cases {
 		// 每个测试点之间检查取消/租约：取消即停（已跑点如实入明细，得分 0）；
-		// 放在点前而非点后——最后一个测点跑完的完整结果不被迟到取消回滚
-		if cancelReq, lost := j.checkStop(ctx, sub); lost {
+		// 放在点前而非点后——最后一个测点跑完的完整结果不被迟到取消回滚（2s 节流见 checkGate）
+		if cancelReq, lost := checkGate(); lost {
 			return statusLeaseLost, 0, 0, 0, "", nil
 		} else if cancelReq {
 			return cancelledResult(st)
 		}
-		res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
+		res, input, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 		if err != nil {
 			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(passed, n),
 				"沙箱调用失败: " + err.Error(), st.detail
 		}
 		t, m := st.observe(res)
-		caseStatus, finalStatus, reason, jerr := j.judgeCase(ctx, tc, res, problem, cmp, chk, fio)
+		caseStatus, finalStatus, reason, jerr := j.judgeCase(ctx, tc, res, input, problem, cmp, chk, fio)
 		if jerr != nil {
 			return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, partialScore(passed, n),
 				jerr.Error(), st.detail
@@ -500,6 +513,15 @@ func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, langu
 // 不跳过组内剩余点，全部测试点跑完。
 // 总分 100 判 Accepted；否则以第一个失败点的状态作为整份提交状态（保留部分分）。
 func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+	// 点间检查 2s 节流（同 evaluatePoints，快赢批⑤）
+	lastCheck := time.Time{}
+	checkGate := func() (cancelRequested, leaseLost bool) {
+		if time.Since(lastCheck) < 2*time.Second {
+			return false, false
+		}
+		lastCheck = time.Now()
+		return j.checkStop(ctx, sub)
+	}
 	byIndex := map[int]repo.CaseMeta{}
 	for _, tc := range problem.Cases {
 		byIndex[tc.Index] = tc
@@ -516,19 +538,19 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, lan
 				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					"子任务配置引用了不存在的测试点", st.detail
 			}
-			// 每个测试点之间检查取消/租约（同单点模式：点前检查，末点结果不回滚）
-			if cancelReq, lost := j.checkStop(ctx, sub); lost {
+			// 每个测试点之间检查取消/租约（同单点模式：点前检查，末点结果不回滚；2s 节流见 checkGate）
+			if cancelReq, lost := checkGate(); lost {
 				return statusLeaseLost, 0, 0, 0, "", nil
 			} else if cancelReq {
 				return cancelledResult(st)
 			}
-			res, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
+			res, input, err := j.runOne(ctx, language, fileID, code, tc, problem, fio)
 			if err != nil {
 				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					"沙箱调用失败: " + err.Error(), st.detail
 			}
 			t, m := st.observe(res)
-			caseStatus, finalStatus, reason, jerr := j.judgeCase(ctx, tc, res, problem, cmp, chk, fio)
+			caseStatus, finalStatus, reason, jerr := j.judgeCase(ctx, tc, res, input, problem, cmp, chk, fio)
 			if jerr != nil {
 				return repo.StatusSystemError, st.sumTimeMS, st.sumMemKB, total,
 					jerr.Error(), st.detail
@@ -635,13 +657,24 @@ func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (fi
 	return "", repo.StatusCompileError, "编译重试次数耗尽", nil
 }
 
-// compileGate 编译串行化信号量：同一时刻仅允许一个编译任务进入沙箱。
+// compileGate 编译串行化信号量：默认同一时刻仅允许一个编译任务进入沙箱（并发
+// g++ 瞬时 CE 的治理口径）；容量可经 SetCompileConcurrency 按部署调大（快赢批⑤，
+// main 启动时在 Pool 之前调用一次）。
 var compileGate = make(chan struct{}, 1)
 
-func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code string, tc repo.CaseMeta, p *repo.Problem, fio fileIOParams) (*sandbox.Result, error) {
+// SetCompileConcurrency 调整编译闸容量（n < 1 忽略）。必须在判题线程池启动前调用。
+func SetCompileConcurrency(n int) {
+	if n >= 1 {
+		compileGate = make(chan struct{}, n)
+	}
+}
+
+// runOne 执行单个测试点；input 一并返回（judgeCase 的 checker 需要输入文件，
+// 复用本函数已读内容，省一次重复读盘——快赢批⑤）。
+func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code string, tc repo.CaseMeta, p *repo.Problem, fio fileIOParams) (*sandbox.Result, string, error) {
 	input, err := testdata.ReadAll(j.Provider, p.ID, tc.InName)
 	if err != nil {
-		return nil, fmt.Errorf("读取输入文件: %w", err)
+		return nil, "", fmt.Errorf("读取输入文件: %w", err)
 	}
 	cpuLimit := int64(p.TimeLimitMS) * int64(time.Millisecond)
 	cmd := sandbox.Cmd{
@@ -674,9 +707,9 @@ func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code stri
 	}
 	results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
 	if err != nil || len(results) == 0 {
-		return nil, err
+		return nil, string(input), err
 	}
-	return &results[0], nil
+	return &results[0], string(input), nil
 }
 
 func (j *Judger) releaseBinary(fileID string) {
@@ -778,29 +811,26 @@ func (cr *checkerRunner) ensureCompiled(ctx context.Context) (string, error) {
 }
 
 // run 执行校验器，返回 (通过, 失败原因, 系统错误)。
-func (cr *checkerRunner) run(ctx context.Context, tc repo.CaseMeta, ans, stdout string) (ok bool, msg string, sysErr error) {
+// input 由 runOne 透传（快赢批⑤：原 tryRun 重复读一次 runOne 已读过的输入文件）。
+func (cr *checkerRunner) run(ctx context.Context, tc repo.CaseMeta, input, ans, stdout string) (ok bool, msg string, sysErr error) {
 	fileID, err := cr.ensureCompiled(ctx)
 	if err != nil {
 		return false, "", err
 	}
-	ok, msg, sysErr, retry := cr.tryRun(ctx, fileID, tc, ans, stdout)
+	ok, msg, sysErr, retry := cr.tryRun(ctx, fileID, tc, input, ans, stdout)
 	if sysErr != nil && retry {
 		cr.p.CheckerFileID = "" // 产物缓存失效：重编一次再试
 		fileID, err = cr.ensureCompiled(ctx)
 		if err != nil {
 			return false, "", err
 		}
-		ok, msg, sysErr, _ = cr.tryRun(ctx, fileID, tc, ans, stdout)
+		ok, msg, sysErr, _ = cr.tryRun(ctx, fileID, tc, input, ans, stdout)
 	}
 	return ok, msg, sysErr
 }
 
-func (cr *checkerRunner) tryRun(ctx context.Context, fileID string, tc repo.CaseMeta, ans, stdout string) (ok bool, msg string, sysErr error, retry bool) {
-	input, err := testdata.ReadAll(cr.j.Provider, cr.p.ID, tc.InName)
-	if err != nil {
-		return false, "", fmt.Errorf("读取输入文件失败: %w", err), false
-	}
-	in, ansS, out := string(input), ans, stdout
+func (cr *checkerRunner) tryRun(ctx context.Context, fileID string, tc repo.CaseMeta, input, ans, stdout string) (ok bool, msg string, sysErr error, retry bool) {
+	in, ansS, out := input, ans, stdout
 	cmd := sandbox.Cmd{
 		Args: []string{"./main", "input", "answer", "output"}, // 产物约定名 main，相对工作目录
 		Files: []sandbox.File{

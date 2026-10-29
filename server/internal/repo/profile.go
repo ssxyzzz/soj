@@ -2,7 +2,7 @@ package repo
 
 // 用户公开主页（v0.17）读侧聚合：全部读时现算，不建集合不落库——与「等级是读时
 // 聚合值」同哲学。口径全部对齐既有公开面：
-//   - AC 口径 = status Accepted ∧ published（与 RankTop / SolvedDifficultyCounts 一致），
+//   - AC 口径 = status Accepted ∧ published（与 RankBoard / SolvedDifficultyCounts 一致），
 //     客观题整卷满分同为 Accepted，天然同口径；
 //   - 提交统计分母排除 Cancelled（作废件不加分不进榜，不该拉低 AC 率）；
 //   - 比赛历史只含 contest（考试是班级内私密成绩），参与 = 场内有过提交；

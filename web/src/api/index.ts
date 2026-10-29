@@ -3,6 +3,7 @@ import { ElMessage } from 'element-plus'
 
 import { useUserStore } from '@/stores/user'
 import type {
+  AdminSettings,
   AdminUser,
   ApiResponse,
   AssignmentDetail,
@@ -35,6 +36,9 @@ import type {
   LookupUser,
   SecurityLogItem,
   DuplicateGroup,
+  SeedOutcome,
+  SeedClearStats,
+  SeedStatus,
   Submission,
   SubmissionListResult,
   AdminTagTreeResult,
@@ -83,12 +87,15 @@ client.interceptors.response.use(
     return resp
   },
   (error) => {
+    // blob 下载的错误提示由 download.ts 自行解析（fail 响应是 JSON-in-Blob，
+    // 这里只能 toast 泛化的「网络错误」，会双重弹窗）；401 处理照常
+    const silent = error.config?.responseType === 'blob'
     if (error.response?.status === 401) {
       useUserStore().logout() // 清本标签页内存态与 localStorage（角色/权限一并清）
       if (!location.pathname.startsWith('/login')) {
         location.href = '/login'
       }
-    } else {
+    } else if (!silent) {
       ElMessage.error(error.response?.data?.message || error.message || '网络错误')
     }
     // 与成功分支同构：把 failData 的 data 挂到 error 上（如隐藏期 404 携带的锁信息，供重定向）
@@ -98,24 +105,28 @@ client.interceptors.response.use(
   },
 )
 
-async function get<T>(url: string, params?: Record<string, unknown>): Promise<T> {
-  const resp = await client.get<ApiResponse<T>>(url, { params })
+async function get<T>(url: string, params?: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+  const resp = await client.get<ApiResponse<T>>(url, { params, signal })
   return resp.data.data
 }
 
-// post/del 导出（v0.16）：验证码一族接口（api/verify.ts）复用同一 axios 实例与拦截器
-export async function post<T>(url: string, body?: unknown): Promise<T> {
-  const resp = await client.post<ApiResponse<T>>(url, body)
+// post/del/patch/client 导出（v0.16 验证码一族；v0.29 收编 judgeQueue/classManage/
+// download 的裸 axios 分叉——统一 401 登出与错误提示行为）
+export async function post<T>(url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const resp = await client.post<ApiResponse<T>>(url, body, { signal })
   return resp.data.data
 }
+
+export async function patch<T>(url: string, body?: unknown): Promise<T> {
+  const resp = await client.patch<ApiResponse<T>>(url, body)
+  return resp.data.data
+}
+
+/** 裸 axios 实例（download.ts 的 blob 下载用：自动鉴权头 + 401 登出；响应拦截对 blob 静默） */
+export { client }
 
 async function put<T>(url: string, body?: unknown): Promise<T> {
   const resp = await client.put<ApiResponse<T>>(url, body)
-  return resp.data.data
-}
-
-async function patch<T>(url: string, body?: unknown): Promise<T> {
-  const resp = await client.patch<ApiResponse<T>>(url, body)
   return resp.data.data
 }
 
@@ -235,6 +246,8 @@ export const problemApi = {
       page,
       page_size: pageSize,
     }),
+  /** 单条题解详情（含 md 正文）：列表已去 md 双发，编辑场景按需取（快赢批⑥） */
+  getSolution: (id: number, sid: number) => get<SolutionItem>(`/problems/${id}/solutions/${sid}`),
   postSolution: (id: number, md: string) =>
     post<{ id: number }>(`/problems/${id}/solutions`, { content: md }),
   updateSolution: (id: number, sid: number, md: string) =>
@@ -352,8 +365,9 @@ export const userApi = {
 }
 
 export const rankApi = {
-  // items = 前 50 名；me = 观察者条目（含榜外名次，未登录为 null）
-  top: () => get<{ items: RankItem[]; me: RankItem | null }>('/rank'),
+  // items = 当前页榜单（每页 100 名，rank 为全榜绝对名次）；me = 观察者条目（含榜外
+  // 名次，未登录为 null）；total = 榜上总人数（翻页器用）
+  top: (page = 1) => get<{ items: RankItem[]; me: RankItem | null; total: number }>('/rank', { page }),
 }
 
 // 等级体系（v0.11）：公开读配置（排行榜/顶栏徽章渲染）
@@ -441,91 +455,8 @@ export const adminApi = {
       .then((r) => r.data.data),
   updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; username?: string }) =>
     patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
-  getSettings: () =>
-    get<{
-      rate_limit_per_minute: number
-      home_notice: string
-      data_download_daily_limit: number
-      autocomplete_min_level: number
-      allow_register: boolean
-      icp_number: string
-      batch_import_problem_mb: number
-      batch_import_zip_mb: number
-      // 邮箱通道（v0.16）
-      mail_channel: 'log' | 'smtp'
-      smtp_host: string
-      smtp_port: number
-      smtp_username: string
-      smtp_password: string
-      smtp_from: string
-      register_verify_mode: 'none' | 'email'
-      password_reset_enabled: boolean
-      // 讨论区与通知（v0.24）
-      discuss_global_enabled: boolean
-      discuss_problem_enabled: boolean
-      discuss_contest_enabled: boolean
-      discuss_global_locked: boolean
-      discuss_code_threshold: number
-      discuss_topic_daily_limit: number
-      discuss_reply_interval_sec: number
-      discuss_newbie_hours: number
-      discuss_report_fold: number
-      discuss_accept_xp: number
-      notify_retention_days: number
-      notify_broadcast_per_day: number
-      user_seq_start: number
-      problem_seq_start: number
-    }>('/admin/settings'),
-  updateSettings: (patch: {
-    rate_limit_per_minute?: number
-    home_notice?: string
-    data_download_daily_limit?: number
-    autocomplete_min_level?: number
-    allow_register?: boolean
-    icp_number?: string
-    batch_import_problem_mb?: number
-    batch_import_zip_mb?: number
-    mail_channel?: 'log' | 'smtp'
-    smtp_host?: string
-    smtp_port?: number
-    smtp_username?: string
-    smtp_password?: string
-    smtp_from?: string
-    register_verify_mode?: 'none' | 'email'
-    password_reset_enabled?: boolean
-    discuss_global_enabled?: boolean
-    discuss_problem_enabled?: boolean
-    discuss_contest_enabled?: boolean
-    discuss_global_locked?: boolean
-    discuss_code_threshold?: number
-    discuss_topic_daily_limit?: number
-    discuss_reply_interval_sec?: number
-    discuss_newbie_hours?: number
-    discuss_report_fold?: number
-    discuss_accept_xp?: number
-    notify_retention_days?: number
-    notify_broadcast_per_day?: number
-    user_seq_start?: number
-    problem_seq_start?: number
-  }) =>
-    put<{
-      rate_limit_per_minute: number
-      home_notice: string
-      data_download_daily_limit: number
-      autocomplete_min_level: number
-      allow_register: boolean
-      icp_number: string
-      batch_import_problem_mb: number
-      batch_import_zip_mb: number
-      mail_channel: 'log' | 'smtp'
-      smtp_host: string
-      smtp_port: number
-      smtp_username: string
-      smtp_password: string
-      smtp_from: string
-      register_verify_mode: 'none' | 'email'
-      password_reset_enabled: boolean
-    }>('/admin/settings', patch),
+  getSettings: () => get<AdminSettings>('/admin/settings'),
+  updateSettings: (patch: Partial<AdminSettings>) => put<AdminSettings>('/admin/settings', patch),
   // 等级面板（v0.11，root）
   getLevelConfig: () => get<{ config: AdminLevelConfig }>('/admin/levelconfig'),
   saveLevelConfig: (body: {
@@ -553,6 +484,10 @@ export const adminApi = {
     }),
   // 重复题扫描（v0.18.1，problem.edit.all）：标题+题面双键，只列疑似重复组供处置
   duplicateProblems: () => get<{ groups: DuplicateGroup[]; total: number }>('/admin/problems/duplicates'),
+  // 种子题管理（root）：对账 / 清除 / 重新部署种子目录题包
+  seedStatus: () => get<SeedStatus>('/admin/seed'),
+  seedDeploy: () => post<{ outcomes: SeedOutcome[] }>('/admin/seed/deploy'),
+  seedClear: () => post<{ stats: SeedClearStats }>('/admin/seed/clear'),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),

@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 
 import { submissionApi, userApi } from '@/api'
+import { usePagedList } from '@/composables/usePagedList'
+import { usePolling } from '@/composables/usePolling'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
@@ -11,12 +13,21 @@ import { fmtMem, fmtRel, fmtSec, statusDesc, statusMap } from '@/utils/format'
 import type { LookupUser, Submission } from '@/types'
 
 const router = useRouter()
-const list = ref<Submission[]>([])
-const total = ref(0)
-const page = ref(1)
 const pageSize = 20
-const loading = ref(false)
-let timer: ReturnType<typeof setInterval> | undefined
+// v0.29 收敛：分页三件套与筛选重置样板进 usePagedList，5s 轮询进 usePolling
+//（后台标签页自动暂停，不再空转刷新）
+const { list, total, page, loading, load, reload } = usePagedList<Submission>((p) =>
+  submissionApi.list({
+    page: p,
+    page_size: pageSize,
+    ...(kw.value.trim() ? { kw: kw.value.trim() } : {}),
+    ...(statusFilter.value ? { status: statusFilter.value } : {}),
+    ...(langFilter.value ? { language: langFilter.value } : {}),
+    ...(userFilter.value ? { user_id: userFilter.value } : {}),
+    ...(mineOnly.value ? { mine: true } : {}),
+  }),
+  { pageSize },
+)
 
 // v3 筛选 chips（后端 v0.19 扩参）：关键词 / 状态 / 语言 / 选手 / 仅看自己
 const kw = ref('')
@@ -46,8 +57,7 @@ async function searchUsers(q: string) {
 // 与「仅看自己」互斥：语义都是限定提交者，后端 mine 会覆盖 user_id
 function onUserFilterChange() {
   if (userFilter.value) mineOnly.value = false
-  page.value = 1
-  load()
+  reload()
 }
 
 // 状态候选（判题终态 + 队列态，取全站状态表）
@@ -77,8 +87,7 @@ function resetFilters() {
   langFilter.value = ''
   userFilter.value = undefined
   mineOnly.value = false
-  page.value = 1
-  load()
+  reload()
 }
 
 // 状态标签点击 → 该评测记录的代码与测试点明细（本页需「查看全部提交」权限，代码可见）
@@ -90,50 +99,27 @@ function openDetail(id: number) {
   showDetail.value = true
 }
 
-async function load() {
-  loading.value = true
-  try {
-    const r = await submissionApi.list({
-      page: page.value,
-      page_size: pageSize,
-      ...(kw.value.trim() ? { kw: kw.value.trim() } : {}),
-      ...(statusFilter.value ? { status: statusFilter.value } : {}),
-      ...(langFilter.value ? { language: langFilter.value } : {}),
-      ...(userFilter.value ? { user_id: userFilter.value } : {}),
-      ...(mineOnly.value ? { mine: true } : {}),
-    })
-    list.value = r.list
-    total.value = r.total
-  } finally {
-    loading.value = false
-  }
-}
-
 function search() {
-  page.value = 1
-  load()
+  reload()
 }
 
 function pickStatus(v: string) {
   statusFilter.value = statusFilter.value === v ? '' : v
   statusOpen.value = false
-  page.value = 1
-  load()
+  reload()
 }
 
 function pickLang(v: string) {
   langFilter.value = langFilter.value === v ? '' : v
   langOpen.value = false
-  page.value = 1
-  load()
+  reload()
 }
 
 function toggleMine() {
   mineOnly.value = !mineOnly.value
   // 与选手筛选互斥（语义都是限定提交者，后端 mine 覆盖 user_id）
   if (mineOnly.value) userFilter.value = undefined
-  page.value = 1
-  load()
+  reload()
 }
 
 function onPageChange(p: number) {
@@ -141,14 +127,11 @@ function onPageChange(p: number) {
   load()
 }
 
-// 页面打开期间每 5 秒自动刷新一次判题状态
+// 页面打开期间每 5 秒自动刷新一次判题状态（usePolling：后台标签页暂停、卸载自清）
+const poll = usePolling(() => load(), 5000)
 onMounted(() => {
   load()
-  timer = setInterval(load, 5000)
-})
-
-onUnmounted(() => {
-  if (timer) clearInterval(timer)
+  poll.start()
 })
 </script>
 

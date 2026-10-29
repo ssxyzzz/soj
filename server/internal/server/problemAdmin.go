@@ -327,12 +327,7 @@ func (h *Handlers) UpdateChecker(c *gin.Context) {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {
@@ -389,12 +384,7 @@ func (h *Handlers) UpdateFunctionFile(c *gin.Context) {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {
@@ -451,12 +441,7 @@ func (h *Handlers) UpdateInteractor(c *gin.Context) {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {
@@ -514,12 +499,7 @@ func (h *Handlers) RemoveFunctionFile(c *gin.Context) {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {
@@ -541,12 +521,7 @@ func (h *Handlers) RemoveChecker(c *gin.Context) {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {
@@ -571,12 +546,7 @@ func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {
@@ -634,12 +604,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		return
 	}
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if !h.problemEditable(c, p) {
@@ -1019,12 +984,7 @@ func (h *Handlers) DownloadProblemTestdata(c *gin.Context) {
 	}
 	uid, _, role, _ := currentUser(c)
 	p, err := h.repo.GetProblem(c.Request.Context(), id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 	if role != repo.RoleRoot {

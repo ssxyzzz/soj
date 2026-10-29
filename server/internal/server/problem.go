@@ -197,12 +197,7 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	p, err := h.repo.GetProblem(ctx, id)
-	if repo.IsNotFound(err) {
-		fail(c, http.StatusNotFound, "题目不存在")
-		return
-	}
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取题目失败")
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
 		return
 	}
 

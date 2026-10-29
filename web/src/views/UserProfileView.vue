@@ -137,7 +137,7 @@ function openDetail(id: number) {
 
           <!-- 头部资料卡：昵称 + 等级 + 进度条 + 资料 + 统计 -->
           <div class="card hero">
-            <img v-if="page.avatar_url" :src="page.avatar_url" alt="" class="avatar avatar-img" />
+            <img v-if="page.avatar_url" :src="page.avatar_url" alt="" class="avatar avatar-img" loading="lazy" decoding="async" />
             <div v-else class="avatar">{{ avatarChar }}</div>
             <div class="who">
               <div class="name-row">
@@ -176,7 +176,7 @@ function openDetail(id: number) {
               </div>
               <div class="stat" :title="page.stats.answers_accepted ? '讨论区被采纳的解答数' : ''">
                 <b v-if="page.stats.answers_accepted" class="mono">{{ page.stats.answers_accepted }}</b>
-                <b v-else>—</b>
+                <b v-else class="mono">—</b>
                 <span>解答</span>
               </div>
               <div class="stat">
@@ -185,7 +185,7 @@ function openDetail(id: number) {
               </div>
               <div class="stat">
                 <b v-if="page.rank?.solved" class="mono">{{ page.rank.rank }}</b>
-                <b v-else>—</b>
+                <b v-else class="mono">—</b>
                 <span>全站排名</span>
               </div>
             </div>
@@ -348,6 +348,7 @@ function openDetail(id: number) {
 .meta {
   display: flex;
   flex-wrap: wrap;
+  align-items: baseline; /* @root 是等宽字体，度量与正文不同，需显式按基线对齐 */
   gap: 4px 14px;
   margin-top: 6px;
   font-size: 13px;

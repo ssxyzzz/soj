@@ -69,12 +69,43 @@ func (h *Handlers) loadLockMapView(ctx context.Context, uid int64, role string) 
 	return h.loadLockMap(ctx, uid, role)
 }
 
-func (h *Handlers) loadAllLocks(ctx context.Context) (map[int64]*contestLock, error) {
+const lockSrcTTL = 30 * time.Second
+
+// unpublishedRounds 锁题底表（v0.29 加 30s 进程缓存）：未发布赛 + 考全量列表。
+// 缓存返回的切片只读共享（调用方不修改）；场次的增改删走 invalidateLocks 即时失效，
+// 到期发布（PublishDueRounds）靠 TTL 自然过期。
+func (h *Handlers) unpublishedRounds(ctx context.Context) ([]*repo.Contest, []*repo.Exam, error) {
+	h.lockSrcMu.Lock()
+	if !h.lockSrcAt.IsZero() && time.Since(h.lockSrcAt) < lockSrcTTL {
+		cs, es := h.lockSrcContests, h.lockSrcExams
+		h.lockSrcMu.Unlock()
+		return cs, es, nil
+	}
+	h.lockSrcMu.Unlock()
 	contests, err := h.repo.ListUnpublishedContests(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	exams, err := h.repo.ListUnpublishedExams(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	h.lockSrcMu.Lock()
+	h.lockSrcContests, h.lockSrcExams, h.lockSrcAt = contests, exams, time.Now()
+	h.lockSrcMu.Unlock()
+	return contests, exams, nil
+}
+
+// invalidateLocks 场次增改删后即时失效锁题底表缓存。
+func (h *Handlers) invalidateLocks() {
+	h.lockSrcMu.Lock()
+	h.lockSrcAt = time.Time{}
+	h.lockSrcContests, h.lockSrcExams = nil, nil
+	h.lockSrcMu.Unlock()
+}
+
+func (h *Handlers) loadAllLocks(ctx context.Context) (map[int64]*contestLock, error) {
+	contests, exams, err := h.unpublishedRounds(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +150,7 @@ func (h *Handlers) loadAllLocks(ctx context.Context) (map[int64]*contestLock, er
 // bankContestOf 返回收录该题的主题库比赛（未发布即处于隐藏期，无则 nil）。
 // 比赛隐藏期覆盖赛前/赛中/赛后：期间该题在各处入口统一引导进比赛上下文。
 func (h *Handlers) bankContestOf(ctx context.Context, pid int64) *repo.Contest {
-	contests, err := h.repo.ListUnpublishedContests(ctx)
+	contests, _, err := h.unpublishedRounds(ctx)
 	if err != nil {
 		return nil
 	}
@@ -134,7 +165,7 @@ func (h *Handlers) bankContestOf(ctx context.Context, pid int64) *repo.Contest {
 // bankRunningContestOf 返回收录该题且正在进行中的主题库比赛（无则 nil）。
 // 比赛优先级最高：比赛进行中时该题的提交通道收归比赛，考试通道关闭。
 func (h *Handlers) bankRunningContestOf(ctx context.Context, pid int64) *repo.Contest {
-	contests, err := h.repo.ListUnpublishedContests(ctx)
+	contests, _, err := h.unpublishedRounds(ctx)
 	if err != nil {
 		return nil
 	}
