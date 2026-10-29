@@ -148,6 +148,13 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 		return
 	}
 	slog.Info("判题完成", "component", "judge", "sid", sub.ID, "status", status, "ms", timeMS, "mem_kb", memKB, "score", score)
+	// 玉经济体（v0.33-①）：已公开提交首次 AC 发玉（同题幂等）；比赛期提交 published=false，
+	// 由成绩发布时的补发钩子结算。尽力而为，失败不污染判题结果。
+	if status == repo.StatusAccepted && sub.Published {
+		if _, _, err := j.Repo.MaybeAwardJade(ctx, sub.UID, sub.ProblemID); err != nil {
+			slog.Warn("首 AC 玉发放失败", "component", "jade", "sid", sub.ID, "error", err)
+		}
+	}
 	// 挑战模式（v0.23）：AC 触发挑战终判（时长按提交创建时刻起算，判题排队耗时不惩罚选手；
 	// 已终态的会话重复触发为 no-op，重测幂等）
 	if status == repo.StatusAccepted && sub.ChallengeID != 0 {

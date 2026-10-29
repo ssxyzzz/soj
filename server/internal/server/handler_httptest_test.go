@@ -36,6 +36,7 @@ type fakeRepo struct {
 	problems map[int64]*repo.Problem
 	exams    []*repo.Contest // Exam = Contest 别名
 	isMember bool
+	jadeBal  map[int64]int64
 
 	// 题库三视角：捕获 server 传给 repo 的过滤契约 + 回放列表
 	lastFilter *repo.ProblemListFilter
@@ -152,6 +153,29 @@ func (f *fakeRepo) GetUsersByIDs(context.Context, []int64) (map[int64]*repo.User
 	return map[int64]*repo.User{}, nil
 }
 
+// ---- fake 玉账本（内存版，调玉端点测试用）----
+
+func (f *fakeRepo) JadeBalance(_ context.Context, uid int64) (int64, error) {
+	return f.jadeBal[uid], nil
+}
+
+func (f *fakeRepo) JadeCredit(_ context.Context, uid, delta int64, _, _ string, _ int64) error {
+	f.jadeBal[uid] += delta
+	return nil
+}
+
+func (f *fakeRepo) JadeSpend(_ context.Context, uid, amount int64, _, _ string, _ int64) error {
+	if f.jadeBal[uid] < amount {
+		return repo.ErrInsufficientJade
+	}
+	f.jadeBal[uid] -= amount
+	return nil
+}
+
+func (f *fakeRepo) JadeLedgerPage(context.Context, int64, int, int) ([]*repo.JadeLedgerEntry, int64, error) {
+	return nil, 0, nil
+}
+
 // ---- 测试装配 ----
 
 const testJWTSecret = "httptest-secret-0123456789abcdef"
@@ -181,6 +205,9 @@ func testEngine(h *Handlers) *gin.Engine {
 	api.GET("/discuss/:tid", AuthRequired(h), h.GetDiscussTopic)
 	authed := api.Group("", AuthRequired(h))
 	authed.GET("/admin/judge/stats", RequireRoot(), h.AdminJudgeStats)
+	authed.GET("/admin/users/:id/jade", RequireRoot(), h.AdminUserJade)
+	authed.POST("/admin/users/:id/jade-adjust", RequireRoot(), h.AdminJadeAdjust)
+	authed.GET("/me/jade", h.MyJade)
 	return r
 }
 
@@ -218,6 +245,7 @@ func baseFake() *fakeRepo {
 		problems: map[int64]*repo.Problem{},
 		settings: &repo.SystemSettings{RateLimitPerMinute: 100},
 		bestScores: map[int64]int{},
+		jadeBal:  map[int64]int64{},
 	}
 }
 
@@ -437,5 +465,41 @@ func TestDiscussCodeThresholdGate(t *testing.T) {
 	content2 := body2["data"].(map[string]any)["topic"].(map[string]any)["content"].(string)
 	if !strings.Contains(content2, "secret_code") {
 		t.Fatalf("达标视角代码被误裁：%q", content2)
+	}
+}
+
+// ---- ⑤ 玉端点（v0.33-①）----
+
+func TestJadeEndpoints(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
+	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
+	h := newTestHandlers(f)
+	r := testEngine(h)
+	rootTok := f.addUser(h, 1, "root", repo.RoleRoot, 0)
+	stuTok := f.addUser(h, 100, "stu", repo.RoleDefault, 0)
+	f.jadeBal[100] = 12
+
+	// 本人余额
+	if code, body := doJSON(r, "GET", "/api/me/jade", stuTok, ""); code != 200 || body["data"].(map[string]any)["balance"] != float64(12) {
+		t.Fatalf("本人余额 = %d %v", code, body)
+	}
+	// root 加玉 → 学生余额 22
+	if code, _ := doJSON(r, "POST", "/api/admin/users/100/jade-adjust", rootTok, `{"delta":10,"reason":"测试奖励"}`); code != 200 {
+		t.Fatalf("root 加玉失败 = %d", code)
+	}
+	if f.jadeBal[100] != 22 {
+		t.Fatalf("加玉后 = %d，期望 22", f.jadeBal[100])
+	}
+	// 超额扣减拒绝且不透支
+	if code, body := doJSON(r, "POST", "/api/admin/users/100/jade-adjust", rootTok, `{"delta":-99,"reason":"清零"}`); code != http.StatusBadRequest || !strings.Contains(body["message"].(string), "余额不足") {
+		t.Fatalf("超额扣减 = %d %v，期望 400 余额不足", code, body)
+	}
+	if f.jadeBal[100] != 22 {
+		t.Fatalf("拒付后 = %d，期望仍 22", f.jadeBal[100])
+	}
+	// 学生打不了调玉端点（root 专属）
+	if code, _ := doJSON(r, "POST", "/api/admin/users/100/jade-adjust", stuTok, `{"delta":10,"reason":"自学成才"}`); code != http.StatusForbidden {
+		t.Fatalf("学生调玉 = %d，期望 403", code)
 	}
 }

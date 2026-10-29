@@ -47,6 +47,9 @@ type Repo struct {
 	discussReports *mongo.Collection // 讨论举报队列
 	discussMutes   *mongo.Collection // 讨论禁言记录
 	notifications  *mongo.Collection // 站内通知（v0.24）
+	jadeAwards     *mongo.Collection // 玉首 AC 发放记录（v0.33，{uid,pid} 唯一防重发）
+	jadeLedger     *mongo.Collection // 玉流水（v0.33）
+	jadeBalances   *mongo.Collection // 玉余额物化（v0.33，条件原子扣减防双花）
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -91,8 +94,11 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		discussReplies: db.Collection("discussReplies"),
 		discussLikes:   db.Collection("discussLikes"),
 		discussReports: db.Collection("discussReports"),
-		discussMutes:   db.Collection("discussMutes"),
-		notifications:  db.Collection("notifications"),
+		discussMutes:  db.Collection("discussMutes"),
+		notifications: db.Collection("notifications"),
+		jadeAwards:    db.Collection("jadeAwards"),
+		jadeLedger:    db.Collection("jadeLedger"),
+		jadeBalances:  db.Collection("jadeBalances"),
 	}, nil
 }
 
@@ -208,6 +214,10 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	// 来源库（v0.12）：名称唯一（表单沉淀/导入登记/root 手工三条路并发不重名）
 	if _, err := r.db.Collection("sources").Indexes().CreateOne(ctx,
 		mongo.IndexModel{Keys: bson.D{{Key: "name", Value: 1}}, Options: options.Index().SetUnique(true)}); err != nil {
+		return err
+	}
+	// 玉经济体（v0.33）：awards {uid,pid} 唯一防重发 + 流水分页/结算幂等索引
+	if err := r.EnsureJadeIndexes(ctx); err != nil {
 		return err
 	}
 	// 题解每题每人一篇（2026-10-26）：清历史重复 + 唯一索引兜底并发

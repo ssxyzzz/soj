@@ -435,6 +435,7 @@ export interface AssignmentListItem {
   intro: string
   problem_count: number
   created_at: string
+  solved: number // 当前用户满分通过题数（班级作业卡进度条）
 }
 
 export interface AssignmentProblem {
@@ -843,6 +844,9 @@ export interface ContestDetail {
   result_hidden: boolean // 当前视角是否隐藏结果
   class_id?: number // 考试归属班级（v0.5.4 起两种详情同构返回）
   problems?: ContestProblem[]
+  /** 玉奖池（v0.33-①，双池默认 0 不发；结算随成绩发布） */
+  jade_pool?: number
+  jade_part_pool?: number
   edit_problems?: { id: number; title: string; score: number; hidden?: boolean }[] // 组织者编辑用完整清单
 }
 
@@ -1022,6 +1026,31 @@ export interface AdminSettings {
   notify_broadcast_per_day: number
   user_seq_start: number
   problem_seq_start: number
+  /** 玉经济体（v0.33-①）：货币名与比赛奖池获奖比例 */
+  currency_name: string
+  jade_award_rate_pct: number
+}
+
+/** 玉余额（v0.33-①）：/me/jade，currency 为后台可配货币名（默认「玉」）。 */
+export interface JadeMine {
+  balance: number
+  currency: string
+}
+
+/** 玉流水行（v0.33-①）：kind 中文映射见 jadeKindText（SettingsView）。 */
+export interface JadeLedgerEntry {
+  id: number
+  delta: number
+  kind: string
+  reason: string
+  ref: number
+  at: string
+}
+
+export interface JadeLedgerPage {
+  list: JadeLedgerEntry[]
+  total: number
+  balance: number
 }
 
 export interface DiscussReportItem {

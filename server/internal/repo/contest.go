@@ -46,7 +46,13 @@ type Contest struct {
 	HideDuring    bool             `bson:"hideDuring"`              // 赛期内对参赛者隐藏结果/状态/标签/通过率（v0.7；默认开，保持 OI 现状）
 	HideMeta      bool             `bson:"hideMeta"`                // 发布前对参赛者隐藏难度与知识点（2026-10-27；比赛默认开，服务端不下发，悬停不可见；组织者/题库全量可见视角不受限）
 	StartNotified bool             `bson:"startNotified,omitempty"` // 开赛提醒已发标记（v0.24 通知中心防重发）
-	CreatedAt     time.Time        `bson:"createdAt"`
+	// 玉奖池（v0.33-①，双池各自可配、默认 0 不发；设置权限仅教师/admin/root——server 侧
+	// round 编辑入口把关）：JadePool 名次奖池（N=score>0 人数、K=⌈N×比例⌉ 线性递减）；
+	// JadeParticipatePool 参与奖池（score>0 未获奖者均分，无人可发滚入名次奖）。结算随
+	// 成绩发布（PublishDueRounds → settleRoundJadePools）。
+	JadePool            int64     `bson:"jadePool,omitempty"`
+	JadeParticipatePool int64     `bson:"jadePartPool,omitempty"`
+	CreatedAt           time.Time `bson:"createdAt"`
 }
 
 // Exam 班级考试：与比赛同构（规则见 DEVELOPMENT.md「比赛」节）。
@@ -159,12 +165,16 @@ type RoundPatch struct {
 	HideDuring  *bool
 	HideMeta    *bool
 	FileIO      *bool
+	// 玉奖池（v0.33-①）：nil 不动；0 = 清零（不发）。设置权限在 server 侧把关。
+	JadePool            *int64
+	JadeParticipatePool *int64
 }
 
 func (p RoundPatch) Empty() bool {
 	return p.Title == nil && p.Intro == nil && p.Start == nil && p.End == nil &&
 		p.HiddenUntil == nil && p.Problems == nil && p.Scoreboard == nil &&
-		p.HideDuring == nil && p.HideMeta == nil && p.FileIO == nil
+		p.HideDuring == nil && p.HideMeta == nil && p.FileIO == nil &&
+		p.JadePool == nil && p.JadeParticipatePool == nil
 }
 
 func (r *Repo) UpdateRoundFields(ctx context.Context, kind string, id int64, p RoundPatch) error {
@@ -198,6 +208,12 @@ func (r *Repo) UpdateRoundFields(ctx context.Context, kind string, id int64, p R
 	}
 	if p.FileIO != nil {
 		set["fileIo"] = *p.FileIO
+	}
+	if p.JadePool != nil {
+		set["jadePool"] = *p.JadePool
+	}
+	if p.JadeParticipatePool != nil {
+		set["jadePartPool"] = *p.JadeParticipatePool
 	}
 	if len(set) == 0 {
 		return ErrEmptyPatch
@@ -298,6 +314,8 @@ func (r *Repo) PublishDueRounds(ctx context.Context, now time.Time) (int, error)
 				bson.M{"$set": bson.M{"published": true}}); err != nil {
 				return published, err
 			}
+			// 玉结算（v0.33-①）：该场首 AC 补发 + 双奖池结算；尽力而为，不阻断发布循环
+			r.publishRoundJade(ctx, kind, c)
 			published++
 		}
 	}

@@ -306,6 +306,62 @@ async function submitXp() {
   }
 }
 
+// ---- 玉调整弹窗（v0.33-①，root 专属）：查当前余额，正数加、负数减（流水留审计） ----
+const showJade = ref(false)
+const jadeSaving = ref(false)
+const jadeTarget = reactive({ id: 0, username: '' })
+const jadeBalance = ref<number | null>(null)
+const jadeForm = reactive({ delta: 10, reason: '' })
+const canJade = userStore.role === 'root'
+
+async function openJade(row: AdminUser) {
+  jadeTarget.id = row.id
+  jadeTarget.username = row.username
+  jadeBalance.value = null
+  jadeForm.delta = 10
+  jadeForm.reason = ''
+  showJade.value = true
+  try {
+    const r = await adminApi.getUserJade(row.id)
+    jadeBalance.value = r.balance
+  } catch {
+    // 拉取失败弹窗内显示占位，仍允许提交调整
+  }
+}
+
+async function submitJade() {
+  if (!jadeForm.delta) {
+    ElMessage.warning('调整值不能为 0（正数增加、负数减少）')
+    return
+  }
+  if (!jadeForm.reason.trim()) {
+    ElMessage.warning('请填写调整原因（随流水留审计）')
+    return
+  }
+  const verb = jadeForm.delta > 0 ? '增加' : '减少'
+  try {
+    await ElMessageBox.confirm(
+      `确认为用户 ${jadeTarget.username} ${verb} ${Math.abs(jadeForm.delta)} 玉？`,
+      '确认调整',
+      { type: 'warning', confirmButtonText: '确认调整', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  jadeSaving.value = true
+  try {
+    const r = await adminApi.adjustUserJade(jadeTarget.id, jadeForm.delta, jadeForm.reason.trim())
+    jadeBalance.value = r.balance
+    ElMessage.success(`已为 ${jadeTarget.username} ${verb} ${Math.abs(jadeForm.delta)} 玉`)
+    jadeForm.delta = 10
+    jadeForm.reason = ''
+  } catch {
+    // 拦截器统一提示（余额不足等）
+  } finally {
+    jadeSaving.value = false
+  }
+}
+
 onMounted(async () => {
   await roleStore.ensure()
   await load()
@@ -365,6 +421,7 @@ defineExpose({ refresh: () => load() })
           <template #default="{ row }">
             <el-button size="small" link type="primary" @click="openEdit(row as AdminUser)">编辑</el-button>
             <el-button size="small" link type="primary" @click="openXp(row as AdminUser)">经验</el-button>
+            <el-button v-if="canJade" size="small" link type="success" @click="openJade(row as AdminUser)">玉</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -528,6 +585,27 @@ defineExpose({ refresh: () => load() })
       <template #footer>
         <el-button @click="showXp = false">关闭</el-button>
         <el-button type="primary" :loading="xpSaving" @click="submitXp">确认调整</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 玉调整（v0.33-①，root）：当前余额 + 正加负减 + 必填原因 -->
+    <el-dialog v-model="showJade" :title="`调整玉 · ${jadeTarget.username}`" width="520">
+      <div class="xp-current">
+        <span v-if="jadeBalance !== null" class="xp-nums">当前余额 <b>{{ jadeBalance }}</b> 玉</span>
+        <span v-else class="xp-loading">读取余额中…</span>
+      </div>
+      <el-form label-position="top">
+        <el-form-item label="调整数量" required>
+          <el-input-number v-model="jadeForm.delta" :step="10" :step-strictly="false" style="width: 200px" />
+          <span class="dim" style="margin-left: 8px">正数增加、负数减少（扣减不透支）</span>
+        </el-form-item>
+        <el-form-item label="原因（必填，随流水留审计）">
+          <el-input v-model="jadeForm.reason" maxlength="200" show-word-limit placeholder="如：比赛奖励 / 兑现 / 违规扣减" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showJade = false">关闭</el-button>
+        <el-button type="primary" :loading="jadeSaving" @click="submitJade">确认调整</el-button>
       </template>
     </el-dialog>
   </el-card>

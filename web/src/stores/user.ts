@@ -27,6 +27,11 @@ export const useUserStore = defineStore('user', () => {
   // 学生等级（v0.11）：顶栏徽章与补全门槛提示；/me/profile 随偏好一并下发
   const level = ref<LevelBadgeInfo | null>(null)
 
+  // 玉余额（v0.33-①）：顶栏展示（货币名后台可配）；登录后布局层经 /me/jade 拉取，
+  // 消费/获取后各页调 jadeApi.mine() 自行刷新——不落 localStorage（服务端为准）
+  const jadeBalance = ref(0)
+  const jadeCurrency = ref('')
+
   // 管理后台入口：root 或持有任一后台能力（角色管理面板仅 root 可见，面板内部再判）
   const canAdmin = computed(
     () =>
@@ -63,6 +68,12 @@ export const useUserStore = defineStore('user', () => {
     level.value = l ?? null
   }
 
+  // 玉余额同步（v0.33-①）：余额 + 货币名一起写；登出清零
+  function setJade(balance: number, currency: string) {
+    jadeBalance.value = balance
+    jadeCurrency.value = currency || '玉'
+  }
+
   // 本人改昵称后同步顶栏与本地持久化（token/权限不变，无需重新登录）
   function setNickname(n: string) {
     nickname.value = n
@@ -85,6 +96,8 @@ export const useUserStore = defineStore('user', () => {
     prefs.value = {}
     level.value = null
     avatarUrl.value = ''
+    jadeBalance.value = 0
+    jadeCurrency.value = ''
     localStorage.removeItem('soj_token')
     localStorage.removeItem('soj_uid')
     localStorage.removeItem('soj_nickname')
@@ -93,5 +106,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('soj_avatar')
   }
 
-  return { token, uid, nickname, role, perms, prefs, level, avatarUrl, canAdmin, can, setLogin, setPrefs, setLevel, setNickname, setAvatarUrl, logout }
+  return { token, uid, nickname, role, perms, prefs, level, avatarUrl, jadeBalance, jadeCurrency, canAdmin, can, setLogin, setPrefs, setLevel, setJade, setNickname, setAvatarUrl, logout }
 })

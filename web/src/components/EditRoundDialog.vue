@@ -10,6 +10,7 @@ import { contestApi, examApi, type RoundKind } from '@/api'
 import MdEditor from '@/components/MdEditor.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
+import { useUserStore } from '@/stores/user'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import type { ContestDetail, PickedProblem } from '@/types'
 
@@ -41,6 +42,11 @@ const scoreboard = ref(true)
 const hideDuring = ref(true)
 // 赛时隐藏难度与知识点（2026-10-27）：比赛场景开关（考试不提供）
 const hideMeta = ref(true)
+// 玉奖池（v0.33-①，双池默认 0 不发）：仅教师/admin/root 可设（后端同闸）
+const userStore = useUserStore()
+const canJade = userStore.role === 'admin' || userStore.role === 'root'
+const jadePool = ref(0)
+const jadePartPool = ref(0)
 const editList = ref<PickedProblem[]>([])
 const saving = ref(false)
 
@@ -52,6 +58,8 @@ function reset() {
   scoreboard.value = !!props.round.scoreboard
   hideDuring.value = !!props.round.hide_during
   hideMeta.value = props.round.hide_meta ?? false
+  jadePool.value = props.round.jade_pool ?? 0
+  jadePartPool.value = props.round.jade_part_pool ?? 0
   const source = props.round.edit_problems ?? props.round.problems ?? []
   editList.value = source.map((p) => ({ id: p.id, title: p.title, hidden: 'hidden' in p ? p.hidden : false }))
 }
@@ -116,6 +124,8 @@ async function save() {
       hide_during?: boolean
       hide_meta?: boolean
       file_io?: boolean
+      jade_pool?: number
+      jade_part_pool?: number
     } =
       props.mode === 'problems'
         ? { problem_ids: editList.value.map((p) => p.id) }
@@ -128,6 +138,7 @@ async function save() {
             hide_during: hideDuring.value,
             ...(props.kind === 'contest' ? { hide_meta: hideMeta.value } : {}),
             file_io: fileIO.value,
+            ...(canJade ? { jade_pool: jadePool.value, jade_part_pool: jadePartPool.value } : {}),
           }
     await api.value.update(props.round.id, body)
     ElMessage.success(`${name.value}已保存`)
@@ -196,6 +207,21 @@ watch(
             tip="比赛期间对参赛者隐藏题目难度与知识点（服务端不下发，悬停不可见），题目表与做题页显示横杠；发布后恢复显示，组织者与管理员不受影响"
           />
         </el-form-item>
+        <!-- 玉奖池（v0.33-①）：双池默认 0 不发；仅教师/admin/root 可见可改 -->
+        <template v-if="canJade">
+          <el-form-item label="玉奖池 · 名次奖池">
+            <el-input-number v-model="jadePool" :min="0" :max="1000000" :step="50" style="width: 180px" />
+            <span class="dim" style="margin-left: 8px">
+              成绩发布时按最终榜单结算：真正参赛（得分&gt;0）人数 × 获奖比例 = 名次名额，线性递减瓜分本池（0 = 不发）
+            </span>
+          </el-form-item>
+          <el-form-item label="玉奖池 · 参与奖池">
+            <el-input-number v-model="jadePartPool" :min="0" :max="1000000" :step="10" style="width: 180px" />
+            <span class="dim" style="margin-left: 8px">
+              得分&gt;0 但未获名次奖的参赛者均分本池；无人可领时自动滚入名次奖池
+            </span>
+          </el-form-item>
+        </template>
       </el-form>
     </template>
 

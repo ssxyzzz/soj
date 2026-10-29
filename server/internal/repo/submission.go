@@ -3,6 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"time"
@@ -152,6 +153,17 @@ func (r *Repo) CreateObjectiveSubmission(ctx context.Context, uid int64, uname s
 	if _, err := r.submissions.InsertOne(ctx, doc); err != nil {
 		return 0, err
 	}
+	// 玉经济体（v0.33-①）：已公开客观题首满分发玉（客观题半额口径在 MaybeAwardJade 内）；
+	// 赛内提交 published=false，由成绩发布补发。尽力而为异步，不阻塞提交响应。
+	if score >= 100 && doc["published"] == true {
+		go func() {
+			cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if _, _, err := r.MaybeAwardJade(cctx, uid, p.ID); err != nil {
+				slog.Warn("客观题首满分玉发放失败", "component", "jade", "pid", p.ID, "uid", uid, "error", err)
+			}
+		}()
+	}
 	return sid, nil
 }
 
@@ -170,6 +182,12 @@ func (r *Repo) RegradeObjective(ctx context.Context, id int64) error {
 	_, err = r.submissions.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
 		"status": status, "score": score, "detail": detail, "judgedAt": time.Now(),
 	}})
+	if err == nil && score >= 100 && s.Published {
+		// 玉经济体（v0.33-①）：重判翻盘成满分同样触发首 AC 发玉（幂等）
+		if _, _, aerr := r.MaybeAwardJade(ctx, s.UID, s.ProblemID); aerr != nil {
+			slog.Warn("客观题重判玉发放失败", "component", "jade", "sid", id, "error", aerr)
+		}
+	}
 	return err
 }
 

@@ -149,11 +149,17 @@ func (h *Handlers) ListClassAssignments(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取作业失败")
 		return
 	}
+	ctx := c.Request.Context()
 	items := make([]gin.H, 0, len(list))
 	for _, a := range list {
+		// 我的完成进度（与作业详情/成绩表同口径：公开提交、满分记通过）
+		solved := 0
+		if rows, err := h.repo.AssignmentProgress(ctx, a, []int64{uid}); err == nil && len(rows) > 0 {
+			solved = rows[0].Solved
+		}
 		items = append(items, gin.H{
 			"id": a.ID, "title": a.Title, "intro": a.Intro, "intro_html": a.IntroHtml, // 渲染缓存（v0.30）
-			"problem_count": len(a.Problems), "created_at": a.CreatedAt,
+			"problem_count": len(a.Problems), "created_at": a.CreatedAt, "solved": solved,
 		})
 	}
 	ok(c, gin.H{"visible": true, "list": items})

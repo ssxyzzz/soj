@@ -39,6 +39,8 @@ import type {
   SeedOutcome,
   SeedClearStats,
   SeedStatus,
+  JadeMine,
+  JadeLedgerPage,
   Submission,
   SubmissionListResult,
   AdminTagTreeResult,
@@ -480,6 +482,10 @@ export const adminApi = {
   getUserLevel: (id: number) => get<UserLevelInfo>(`/admin/users/${id}/level`),
   adjustUserXp: (id: number, delta: number, reason: string) =>
     post<UserLevelInfo>(`/admin/users/${id}/xp-adjust`, { delta, reason }),
+  // 玉查调（v0.33-①，root 专属——印钞面）
+  getUserJade: (id: number, page = 1) => get<JadeLedgerPage>(`/admin/users/${id}/jade`, { page }),
+  adjustUserJade: (id: number, delta: number, reason: string) =>
+    post<{ balance: number }>(`/admin/users/${id}/jade-adjust`, { delta, reason }),
   // 安全日志（v0.14，root）：登录/锁定/改密/重置/限流事件，type 精确、q 按用户名/IP 模糊
   securityLogs: (page: number, pageSize: number, type?: string, q?: string) =>
     get<{ list: SecurityLogItem[]; total: number; types: string[] }>('/admin/security-logs', {
@@ -523,6 +529,8 @@ export interface CreateContestPayload {
   scoreboard?: boolean // v0.7：开启成绩表（默认 true）
   hide_during?: boolean // v0.7：赛期内对参赛者隐藏结果（默认 true）
   hide_meta?: boolean // 2026-10-27：发布前对参赛者隐藏难度与知识点（比赛默认开，考试不提供）
+  jade_pool?: number // 玉名次奖池（v0.33-①，仅教师/admin/root 可设）
+  jade_part_pool?: number // 玉参与奖池（v0.33-①）
 }
 
 // ---------- 比赛/考试（v0.5.4 ① 合并：10 对同构接口收敛为 roundApiOf(kind) 工厂） ----------
@@ -534,7 +542,7 @@ const roundApiOf = (kind: RoundKind) => {
   const base = `/${kind}s`
   return {
     detail: (id: number) => get<ContestDetail>(`${base}/${id}`),
-    update: (id: number, body: { title?: string; start?: string; end?: string; intro?: string; problem_ids?: number[]; scoreboard?: boolean; hide_during?: boolean; hide_meta?: boolean; file_io?: boolean }) =>
+    update: (id: number, body: { title?: string; start?: string; end?: string; intro?: string; problem_ids?: number[]; scoreboard?: boolean; hide_during?: boolean; hide_meta?: boolean; file_io?: boolean; jade_pool?: number; jade_part_pool?: number }) =>
       patch<{ updated: number }>(`${base}/${id}`, body),
     remove: (id: number) => del<{ deleted: number }>(`${base}/${id}`),
     submit: (roundId: number, pid: number, language: string, code: string) =>
@@ -629,6 +637,13 @@ export const discussApi = {
 }
 
 // ---------- 站内通知中心（v0.24） ----------
+
+// ---------- 玉经济体（v0.33-①）：本人余额与流水分页 ----------
+
+export const jadeApi = {
+  mine: () => get<JadeMine>('/me/jade'),
+  ledger: (page = 1) => get<JadeLedgerPage>('/me/jade/ledger', { page }),
+}
 
 export const notifyApi = {
   badge: () => get<{ unread: number }>('/me/notifications/badge'),

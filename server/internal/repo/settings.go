@@ -63,6 +63,12 @@ type SystemSettings struct {
 	// 自动题号起点：自动分配的题目 ID 从该号起（默认 1001，1~1000 惯例留给导入题包）；
 	// 只抬高不回退——计数器已超过起点时从计数器继续；导入/建题指定题号不受此限。
 	ProblemSeqStart *int `bson:"problemSeqStart,omitempty"`
+	// 玉经济体（v0.33）：货币名（默认「玉」，可改金币/钻石/奖励币等，1–6 字）；
+	// 全站文案统一从该配置读。
+	CurrencyName string `bson:"currencyName,omitempty"`
+	// 比赛奖池获奖比例（百分比，N=score>0 人数 → 名次奖名额 K=⌈N×比例/100⌉）；
+	// nil = 未设置按默认 50。
+	JadeAwardRatePct *int `bson:"jadeAwardRatePct,omitempty"`
 }
 
 const (
@@ -87,6 +93,10 @@ const (
 	MailChannelSMTP     = "smtp"
 	RegisterVerifyNone  = "none"
 	RegisterVerifyEmail = "email"
+
+	// 玉经济体（v0.33）默认值。
+	DefaultCurrencyName     = "玉"
+	DefaultJadeAwardRatePct = 50
 )
 
 func downloadLimitPtr(v int) *int { return &v }
@@ -185,6 +195,12 @@ func (s *SystemSettings) normalizeDiscuss() {
 		v := int(DefaultProblemSeqStart)
 		s.ProblemSeqStart = &v
 	}
+	if s.CurrencyName == "" {
+		s.CurrencyName = DefaultCurrencyName
+	}
+	if s.JadeAwardRatePct == nil || *s.JadeAwardRatePct < 1 || *s.JadeAwardRatePct > 100 {
+		s.JadeAwardRatePct = intPtr(DefaultJadeAwardRatePct)
+	}
 }
 
 // 讨论区开关取值（nil 已在读取时兜底，防御直接构造的零值结构体）。
@@ -264,6 +280,25 @@ func (s *SystemSettings) ProblemSeqStartVal() int64 {
 	return int64(*s.ProblemSeqStart)
 }
 
+// CurrencyNameVal 货币名（空回默认「玉」；长度在后台保存入口校验，读侧兜底截断）。
+func (s *SystemSettings) CurrencyNameVal() string {
+	if s.CurrencyName == "" {
+		return DefaultCurrencyName
+	}
+	if runes := []rune(s.CurrencyName); len(runes) > 6 {
+		return DefaultCurrencyName
+	}
+	return s.CurrencyName
+}
+
+// JadeAwardRatePctVal 比赛奖池获奖比例（越界回默认 50）。
+func (s *SystemSettings) JadeAwardRatePctVal() int {
+	if s.JadeAwardRatePct == nil || *s.JadeAwardRatePct < 1 || *s.JadeAwardRatePct > 100 {
+		return DefaultJadeAwardRatePct
+	}
+	return *s.JadeAwardRatePct
+}
+
 func intPtr(v int) *int { return &v }
 
 // UpdateSystemSettings 更新系统设置（文档不存在时创建）。
@@ -302,6 +337,8 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"notifyBroadcastPerDay":  s.NotifyBroadcastPerDayVal(),
 			"userSeqStart":           s.UserSeqStartVal(),
 			"problemSeqStart":        s.ProblemSeqStartVal(),
+			"currencyName":           s.CurrencyNameVal(),
+			"jadeAwardRatePct":       s.JadeAwardRatePctVal(),
 		}},
 	)
 	return err

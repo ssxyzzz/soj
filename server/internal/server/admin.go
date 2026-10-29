@@ -280,6 +280,8 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"notify_broadcast_per_day":   s.NotifyBroadcastPerDayVal(),
 		"user_seq_start":             s.UserSeqStartVal(),
 		"problem_seq_start":          s.ProblemSeqStartVal(),
+		"currency_name":              s.CurrencyNameVal(),
+		"jade_award_rate_pct":        s.JadeAwardRatePctVal(),
 	})
 }
 
@@ -349,6 +351,8 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		NotifyBroadcastPerDay   *int  `json:"notify_broadcast_per_day"`
 		UserSeqStart            *int  `json:"user_seq_start"` // 注册取号起点（v0.24 小批）
 		ProblemSeqStart         *int  `json:"problem_seq_start"` // 自动题号起点
+		CurrencyName            *string `json:"currency_name"` // 货币名（v0.33，1–6 字，默认「玉」）
+		JadeAwardRatePct        *int  `json:"jade_award_rate_pct"` // 比赛奖池获奖比例 %（v0.33）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -553,6 +557,21 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.ProblemSeqStart = req.ProblemSeqStart
+	}
+	if req.CurrencyName != nil {
+		name := strings.TrimSpace(*req.CurrencyName)
+		if n := len([]rune(name)); n < 1 || n > 6 {
+			fail(c, http.StatusBadRequest, "货币名需为 1–6 个字（如：玉 / 金币 / 钻石 / 奖励币）")
+			return
+		}
+		s.CurrencyName = name
+	}
+	if req.JadeAwardRatePct != nil {
+		if *req.JadeAwardRatePct < 1 || *req.JadeAwardRatePct > 100 {
+			fail(c, http.StatusBadRequest, "奖池获奖比例需在 1–100 之间")
+			return
+		}
+		s.JadeAwardRatePct = req.JadeAwardRatePct
 	}
 	// 与启动校验同一口径：smtp 通道开着但配置不全不让存——否则重启直接拒绝启动，
 	// 管理员把自己锁在门外（运行期 Mailer() 会降级 log，但重启过不去）。

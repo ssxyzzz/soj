@@ -142,7 +142,9 @@ func Run(ctx context.Context, deps *Deps) {
 		api.POST("/auth/email/code", authLimit, AuthOptional(h), h.EmailCode)
 		api.POST("/auth/password/reset", authLimit, h.PasswordReset)
 		api.POST("/auth/email/bind", AuthRequired(h), h.EmailBind)
-		api.GET("/me", AuthRequired(h), h.Me)
+			api.GET("/me", AuthRequired(h), h.Me)
+			api.GET("/me/jade", AuthRequired(h), h.MyJade)
+			api.GET("/me/jade/ledger", AuthRequired(h), h.MyJadeLedger)
 
 		api.GET("/problems", AuthOptional(h), h.ListProblems)
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)
@@ -386,6 +388,9 @@ func Run(ctx context.Context, deps *Deps) {
 				// 经验调整（用户管理界面）：查等级 + 加/减经验，用户管理权限位
 				adminG.GET("/users/:id/level", RequirePerm(repo.PermAdminUserManage), h.AdminGetUserLevel)
 				adminG.POST("/users/:id/xp-adjust", RequirePerm(repo.PermAdminUserManage), h.AdminAdjustUserXp)
+				// 玉经济体（v0.33-①）：查玉/调玉为印钞面，root 专属
+				adminG.GET("/users/:id/jade", RequireRoot(), h.AdminUserJade)
+				adminG.POST("/users/:id/jade-adjust", RequireRoot(), h.AdminJadeAdjust)
 			}
 		}
 	}

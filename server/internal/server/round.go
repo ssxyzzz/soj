@@ -49,6 +49,26 @@ type roundCreateReq struct {
 	Scoreboard *bool     `json:"scoreboard"`  // 缺省 true：开启成绩表
 	HideDuring *bool     `json:"hide_during"` // 缺省 true：赛期内对参赛者隐藏结果
 	HideMeta   *bool     `json:"hide_meta"`   // 缺省：比赛 true / 考试 false——发布前对参赛者隐藏难度与知识点
+	// 玉奖池（v0.33-①）：双池可配（0/缺省 = 不发）；设置权限仅教师/admin/root。
+	JadePool            *int64 `json:"jade_pool"`
+	JadeParticipatePool *int64 `json:"jade_part_pool"`
+}
+
+// jadePoolAllowed 奖池设置权限闸（2026-10-30 拍板：设池权＝印钞权，仅教师/admin/root）。
+func (h *Handlers) jadePoolAllowed(c *gin.Context) bool {
+	_, _, role, _ := currentUser(c)
+	return role == repo.RoleAdmin || role == repo.RoleRoot
+}
+
+// jadePoolValue 奖池取值与校验（nil = 不设；0 = 不发；上限 100 万防手滑）。
+func jadePoolValue(v *int64) (int64, bool) {
+	if v == nil {
+		return 0, true
+	}
+	if *v < 0 || *v > 1_000_000 {
+		return 0, false
+	}
+	return *v, true
 }
 
 // validateRoundCreate 校验创建参数；ok=false 时已写响应。
@@ -150,6 +170,20 @@ func (h *Handlers) createRound(c *gin.Context, s roundScope, classID int64) {
 		// 赛时隐藏难度/知识点是比赛场景开关：比赛默认开；考试 UI 不提供，保持关
 		HideMeta: s.Kind == repo.KindContest && (req.HideMeta == nil || *req.HideMeta),
 	}
+	// 玉奖池（v0.33-①）：仅教师/admin/root 可设（2026-10-30 拍板，堵自建班自印自发）
+	if req.JadePool != nil || req.JadeParticipatePool != nil {
+		if !h.jadePoolAllowed(c) {
+			fail(c, http.StatusForbidden, "仅教师/管理员可设置玉奖池")
+			return
+		}
+		pool, okP := jadePoolValue(req.JadePool)
+		partPool, okQ := jadePoolValue(req.JadeParticipatePool)
+		if !okP || !okQ {
+			fail(c, http.StatusBadRequest, "奖池需在 0–1000000 之间")
+			return
+		}
+		ct.JadePool, ct.JadeParticipatePool = pool, partPool
+	}
 	if req.HiddenDays > 0 {
 		ct.HiddenUntil = req.End.AddDate(0, 0, req.HiddenDays)
 	}
@@ -190,6 +224,9 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 		"scoreboard":    ct.Scoreboard, // v0.7：是否开启成绩表
 		"hide_during":   ct.HideDuring, // v0.7：赛期内对参赛者隐藏结果
 		"hide_meta":     ct.HideMeta,   // 2026-10-27：发布前对参赛者隐藏难度与知识点
+		// 玉奖池（v0.33-①）：公开透明鼓励参赛（结算口径见 plan §2.39）
+		"jade_pool":        ct.JadePool,
+		"jade_part_pool":   ct.JadeParticipatePool,
 	}
 	if !ct.HiddenUntil.IsZero() {
 		resp["hidden_until"] = ct.HiddenUntil
@@ -417,10 +454,28 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 		HideDuring *bool      `json:"hide_during"`
 		HideMeta   *bool      `json:"hide_meta"` // 2026-10-27：发布前对参赛者隐藏难度与知识点
 		FileIO     *bool      `json:"file_io"`   // v0.7.4：随编辑弹窗一并保存（同 /file-io 端点语义，只影响之后的提交）
+		// 玉奖池（v0.33-①）：nil 不动、0 清零；仅教师/admin/root 可改
+		JadePool            *int64 `json:"jade_pool"`
+		JadeParticipatePool *int64 `json:"jade_part_pool"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
+	}
+	// 奖池字段带了就得是教师/admin/root（2026-10-30 拍板）
+	if req.JadePool != nil || req.JadeParticipatePool != nil {
+		if !h.jadePoolAllowed(c) {
+			fail(c, http.StatusForbidden, "仅教师/管理员可设置玉奖池")
+			return
+		}
+		if _, okP := jadePoolValue(req.JadePool); !okP {
+			fail(c, http.StatusBadRequest, "奖池需在 0–1000000 之间")
+			return
+		}
+		if _, okQ := jadePoolValue(req.JadeParticipatePool); !okQ {
+			fail(c, http.StatusBadRequest, "奖池需在 0–1000000 之间")
+			return
+		}
 	}
 	ct, okR := h.roundOrganizerOnly(c, s)
 	if !okR {
@@ -513,6 +568,12 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 	}
 	if req.FileIO != nil {
 		patch.FileIO = req.FileIO
+	}
+	if req.JadePool != nil {
+		patch.JadePool = req.JadePool
+	}
+	if req.JadeParticipatePool != nil {
+		patch.JadeParticipatePool = req.JadeParticipatePool
 	}
 	if patch.Empty() {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")

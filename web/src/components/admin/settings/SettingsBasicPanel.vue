@@ -18,6 +18,9 @@ const batchProblemMB = ref(100)
 const batchZipMB = ref(2048)
 // 自动题号起点：无前缀自动取号的最小题号（默认 1001，1~起点-1 留给带题号的导入题包）
 const problemSeqStart = ref(1001)
+// 玉经济体（v0.33-①）：货币名（1–6 字，全站文案统一读此值）+ 比赛奖池获奖比例
+const currencyName = ref('玉')
+const jadeAwardRatePct = ref(50)
 
 const saving = ref(false)
 
@@ -31,6 +34,8 @@ onMounted(async () => {
     batchProblemMB.value = s.batch_import_problem_mb
     batchZipMB.value = s.batch_import_zip_mb
     problemSeqStart.value = s.problem_seq_start ?? 1001
+    currencyName.value = s.currency_name || '玉'
+    jadeAwardRatePct.value = s.jade_award_rate_pct ?? 50
   } catch {
     // 加载失败保留默认值展示
   }
@@ -47,6 +52,8 @@ async function save() {
       batch_import_problem_mb: batchProblemMB.value,
       batch_import_zip_mb: batchZipMB.value,
       problem_seq_start: problemSeqStart.value,
+      currency_name: currencyName.value.trim(),
+      jade_award_rate_pct: jadeAwardRatePct.value,
     })
     ElMessage.success('基础设置已保存')
     // ICP 改了页脚要即时跟随：重置站点公开状态缓存
@@ -95,6 +102,23 @@ async function save() {
         <el-input-number v-model="problemSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
         <span class="dim" style="margin-left: 8px">
           无前缀自动取号的最小题号（默认 1001）；1~起点-1 的保留段留给带题号的导入题包；调大即时生效、只前进不回退；导入/建题指定题号不受此限
+        </span>
+      </el-form-item>
+      <el-form-item label="货币名">
+        <el-input
+          v-model="currencyName"
+          placeholder="玉"
+          maxlength="6"
+          style="width: 120px"
+        />
+        <span class="dim" style="margin-left: 8px">
+          做题奖励货币的名称（1–6 个字，如：玉 / 金币 / 钻石 / 奖励币），导航栏、流水、商店等全站文案统一显示
+        </span>
+      </el-form-item>
+      <el-form-item label="比赛奖池获奖比例（%）">
+        <el-input-number v-model="jadeAwardRatePct" :min="1" :max="100" />
+        <span class="dim" style="margin-left: 8px">
+          真正参赛（得分 &gt; 0）人数 × 该比例 = 名次奖名额（向上取整，至少 1 人），名次奖按线性递减瓜分名次奖池
         </span>
       </el-form-item>
       <el-form-item label="ICP 备案号">

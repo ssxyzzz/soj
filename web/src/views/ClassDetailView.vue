@@ -429,6 +429,16 @@ onMounted(load)
                       <p class="strip-intro">{{ a.intro || '暂无说明' }}</p>
                       <div class="strip-meta">{{ a.problem_count }} 题</div>
                     </div>
+                    <!-- 完成进度（对齐题单章节条）：满分通过数 / 作业题数 -->
+                    <div class="a-pct">
+                      <div class="a-pct-bar">
+                        <div
+                          class="a-pct-in"
+                          :style="{ width: `${a.problem_count ? Math.round((a.solved / a.problem_count) * 100) : 0}%` }"
+                        ></div>
+                      </div>
+                      <span class="a-pct-txt mono">{{ a.solved }}/{{ a.problem_count }}</span>
+                    </div>
                   </div>
                 </div>
                 <span
@@ -879,6 +889,38 @@ onMounted(load)
 
 .a-info .strip-intro {
   margin: 0;
+}
+
+/* 完成进度条（样式对齐题单章节条/lpct：渐变胶囊 + mono 计数） */
+.a-pct {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.a-pct-bar {
+  width: 150px;
+  height: 7px;
+  border-radius: 999px;
+  background: #e8eef8;
+  overflow: hidden;
+}
+
+.a-pct-in {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--soj-blue-hi), var(--soj-teal));
+  transition: width 0.3s;
+}
+
+.a-pct-txt {
+  flex: none;
+  min-width: 34px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--soj-ink-3, #5b6b85);
 }
 
 /* 六点拖拽手柄（仅班级管理员可见）：grab 光标，hover 主蓝 */

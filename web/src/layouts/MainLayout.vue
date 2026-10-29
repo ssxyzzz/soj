@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 
 import AmbientGrid from '@/components/AmbientGrid.vue'
 import TierBadge from '@/components/TierBadge.vue'
-import { authApi, notifyApi } from '@/api'
+import { authApi, jadeApi, notifyApi } from '@/api'
 import { notifyTypeMeta } from '@/components/discuss/discussMeta'
 import { useLevelsStore } from '@/stores/levels'
 import { useSiteStore } from '@/stores/site'
@@ -33,6 +33,17 @@ async function refreshBadge() {
   try {
     const b = await notifyApi.badge()
     unread.value = b.unread
+  } catch {
+    /* 静默 */
+  }
+}
+
+// 玉余额（v0.33-①）：顶栏 chip 数据源；消费/获取后各页调 jadeApi.mine + setJade 自行刷新
+async function refreshJade() {
+  if (!userStore.token) return
+  try {
+    const m = await jadeApi.mine()
+    userStore.setJade(m.balance, m.currency)
   } catch {
     /* 静默 */
   }
@@ -107,6 +118,7 @@ onMounted(() => {
     .catch(() => {})
   refreshBadge() // 通知角标首刷（v0.24）
   badgePoll.start() // 60s 轮询（usePolling：后台标签暂停、卸载自清）
+  refreshJade() // 玉余额首刷（v0.33-①）
 })
 
 function onCommand(command: string) {
@@ -188,6 +200,19 @@ function onCommand(command: string) {
               </div>
             </div>
           </el-popover>
+          <!-- 玉余额 chip（v0.33-①）：货币名后台可配；点击进个人设置看流水 -->
+          <el-tooltip content="我的余额 · 点击查看流水" placement="bottom">
+            <button
+              v-if="userStore.jadeCurrency"
+              class="jade-chip"
+              type="button"
+              @click="router.push('/settings')"
+            >
+              <span class="jade-glyph" aria-hidden="true">◈</span>
+              <b>{{ userStore.jadeBalance }}</b>
+              <span class="jade-unit">{{ userStore.jadeCurrency }}</span>
+            </button>
+          </el-tooltip>
           <el-dropdown class="user-dropdown" @command="onCommand">
             <span class="user-chip">
               <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" decoding="async" />
@@ -199,8 +224,7 @@ function onCommand(command: string) {
                 kind="level"
                 size="sm"
               />
-            </span>
-            <template #dropdown>
+            </span>            <template #dropdown>
             <el-dropdown-menu>
               <!-- v0.17：公开主页入口 -->
               <el-dropdown-item command="me">我的主页</el-dropdown-item>
@@ -493,6 +517,43 @@ function onCommand(command: string) {
 }
 
 /* v3-full .user-chip：白底描边胶囊（渐变圆头像 30px + 昵称 700 + 等级徽章同装一体） */
+/* 玉余额 chip（v0.33-①）：与 user-chip 同族描边胶囊，玉青色数字强调 */
+.jade-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--soj-line);
+  background: var(--el-fill-color-blank);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(11, 31, 69, 0.05);
+  transition: box-shadow 0.18s, border-color 0.18s;
+  white-space: nowrap;
+  font-size: var(--soj-fs-13);
+}
+
+.jade-chip:hover {
+  border-color: var(--soj-blue-line);
+  box-shadow: 0 2px 8px rgba(11, 31, 69, 0.09);
+}
+
+.jade-chip .jade-glyph {
+  color: #0f9b8e;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.jade-chip b {
+  color: #0f9b8e;
+  font-weight: var(--soj-fw-bold);
+}
+
+.jade-chip .jade-unit {
+  color: var(--soj-text-2, var(--el-text-color-secondary));
+}
+
 .user-dropdown {
   height: 100%;
   display: inline-flex;

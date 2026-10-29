@@ -100,6 +100,10 @@ type RepoAPI interface {
 	InsertSolution(ctx context.Context, s *repo.Solution) error
 	InsertUpload(ctx context.Context, u repo.Upload) error
 	InsertVerifyCode(ctx context.Context, vc *repo.VerifyCode) error
+	JadeBalance(ctx context.Context, uid int64) (int64, error)
+	JadeCredit(ctx context.Context, uid, delta int64, kind, reason string, ref int64) error
+	JadeLedgerPage(ctx context.Context, uid int64, page, pageSize int) ([]*repo.JadeLedgerEntry, int64, error)
+	JadeSpend(ctx context.Context, uid, amount int64, kind, reason string, ref int64) error
 	IsMember(ctx context.Context, classID, uid int64) (bool, error)
 	JoinClass(ctx context.Context, classID, uid int64, uname, code string) error
 	LastChallenge(ctx context.Context, uid, pid int64) (*repo.Challenge, error)
