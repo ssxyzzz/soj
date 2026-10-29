@@ -16,7 +16,7 @@ func TestRecordLoginFailureLockout(t *testing.T) {
 	r := openTestRepo(t)
 	ctx := context.Background()
 	uid := int64(990001)
-	if _, err := r.Users.InsertOne(ctx, bson.M{
+	if _, err := r.users.InsertOne(ctx, bson.M{
 		"_id": uid, "uname": "lock_test", "pwdHash": "x", "nickname": "锁定测试",
 		"role": RoleDefault, "createdAt": time.Now(),
 	}); err != nil {

@@ -99,9 +99,9 @@ type DiscussReply struct {
 // discussTarget 折叠/点赞等操作的目标定位。
 func discussTargetCol(r *Repo, targetType string) *mongo.Collection {
 	if targetType == "reply" {
-		return r.DiscussReplies
+		return r.discussReplies
 	}
-	return r.Discussions
+	return r.discussions
 }
 
 // ---------- 主题帖 CRUD ----------
@@ -114,13 +114,13 @@ func (r *Repo) InsertDiscussTopic(ctx context.Context, t *DiscussTopic) error {
 	t.ID = id
 	now := time.Now()
 	t.CreatedAt, t.UpdatedAt, t.LastActiveAt = now, now, now
-	_, err = r.Discussions.InsertOne(ctx, t)
+	_, err = r.discussions.InsertOne(ctx, t)
 	return err
 }
 
 func (r *Repo) GetDiscussTopic(ctx context.Context, tid int64) (*DiscussTopic, error) {
 	var t DiscussTopic
-	if err := r.Discussions.FindOne(ctx, bson.M{"_id": tid}).Decode(&t); err != nil {
+	if err := r.discussions.FindOne(ctx, bson.M{"_id": tid}).Decode(&t); err != nil {
 		return nil, err
 	}
 	return &t, nil
@@ -128,11 +128,11 @@ func (r *Repo) GetDiscussTopic(ctx context.Context, tid int64) (*DiscussTopic, e
 
 // listDiscussTopics 按过滤器分页：置顶优先，其余按最后活跃倒序。
 func (r *Repo) listDiscussTopics(ctx context.Context, filter bson.M, page, pageSize int) ([]*DiscussTopic, int64, error) {
-	total, err := r.Discussions.CountDocuments(ctx, filter)
+	total, err := r.discussions.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := r.Discussions.Find(ctx, filter,
+	cursor, err := r.discussions.Find(ctx, filter,
 		options.Find().SetSort(bson.D{{Key: "pinned", Value: -1}, {Key: "lastActiveAt", Value: -1}, {Key: "_id", Value: -1}}).
 			SetLimit(int64(pageSize)).SetSkip(int64((page-1)*pageSize)))
 	if err != nil {
@@ -176,7 +176,7 @@ func (r *Repo) ListScopeTopics(ctx context.Context, scope string, scopeID, viewe
 func (r *Repo) CountUserDiscussTopicsToday(ctx context.Context, uid int64) (int64, error) {
 	now := time.Now()
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	return r.Discussions.CountDocuments(ctx, bson.M{"uid": uid, "createdAt": bson.M{"$gte": dayStart}})
+	return r.discussions.CountDocuments(ctx, bson.M{"uid": uid, "createdAt": bson.M{"$gte": dayStart}})
 }
 
 // LastUserReplyAt 某用户最近一条回复的时刻（回复间隔限速用；零值 = 没发过）。
@@ -184,7 +184,7 @@ func (r *Repo) LastUserReplyAt(ctx context.Context, uid int64) (time.Time, error
 	var doc struct {
 		CreatedAt time.Time `bson:"createdAt"`
 	}
-	err := r.DiscussReplies.FindOne(ctx, bson.M{"uid": uid},
+	err := r.discussReplies.FindOne(ctx, bson.M{"uid": uid},
 		options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})).Decode(&doc)
 	if IsNotFound(err) {
 		return time.Time{}, nil
@@ -213,7 +213,7 @@ func (r *Repo) UpdateDiscussTopicContent(ctx context.Context, tid int64, title, 
 	if tagID > 0 {
 		set["tagId"] = tagID
 	}
-	res, err := r.Discussions.UpdateOne(ctx, bson.M{"_id": tid}, bson.M{"$set": set})
+	res, err := r.discussions.UpdateOne(ctx, bson.M{"_id": tid}, bson.M{"$set": set})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
 	}
@@ -222,7 +222,7 @@ func (r *Repo) UpdateDiscussTopicContent(ctx context.Context, tid int64, title, 
 
 // SoftDeleteDiscussTopic 软删除主楼（保留楼层结构）。
 func (r *Repo) SoftDeleteDiscussTopic(ctx context.Context, tid, byUID int64) error {
-	res, err := r.Discussions.UpdateOne(ctx, bson.M{"_id": tid},
+	res, err := r.discussions.UpdateOne(ctx, bson.M{"_id": tid},
 		bson.M{"$set": bson.M{"deleted": true, "updatedAt": time.Now(), "lastActiveAt": time.Now()}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
@@ -248,7 +248,7 @@ func (r *Repo) SetDiscussTopicFlags(ctx context.Context, tid int64, pinned, feat
 			set["publicAt"] = time.Now()
 		}
 	}
-	res, err := r.Discussions.UpdateOne(ctx, bson.M{"_id": tid}, bson.M{"$set": set})
+	res, err := r.discussions.UpdateOne(ctx, bson.M{"_id": tid}, bson.M{"$set": set})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
 	}
@@ -257,14 +257,14 @@ func (r *Repo) SetDiscussTopicFlags(ctx context.Context, tid int64, pinned, feat
 
 // IncDiscussTopicReplies 回复数 +1 并前移活跃时间。
 func (r *Repo) IncDiscussTopicReplies(ctx context.Context, tid int64) error {
-	_, err := r.Discussions.UpdateOne(ctx, bson.M{"_id": tid},
+	_, err := r.discussions.UpdateOne(ctx, bson.M{"_id": tid},
 		bson.M{"$inc": bson.M{"replyCount": 1}, "$set": bson.M{"lastActiveAt": time.Now()}})
 	return err
 }
 
 // AcceptDiscussReply 楼主采纳回复（一帖一条，后选覆盖）。
 func (r *Repo) AcceptDiscussReply(ctx context.Context, tid, rid int64) error {
-	res, err := r.Discussions.UpdateOne(ctx, bson.M{"_id": tid},
+	res, err := r.discussions.UpdateOne(ctx, bson.M{"_id": tid},
 		bson.M{"$set": bson.M{"acceptedReplyId": rid, "updatedAt": time.Now()}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
@@ -274,7 +274,7 @@ func (r *Repo) AcceptDiscussReply(ctx context.Context, tid, rid int64) error {
 
 // SetDiscussReplyAccepted 单条回复的采纳标记。
 func (r *Repo) SetDiscussReplyAccepted(ctx context.Context, rid int64, accepted bool) error {
-	res, err := r.DiscussReplies.UpdateOne(ctx, bson.M{"_id": rid},
+	res, err := r.discussReplies.UpdateOne(ctx, bson.M{"_id": rid},
 		bson.M{"$set": bson.M{"accepted": accepted}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
@@ -284,7 +284,7 @@ func (r *Repo) SetDiscussReplyAccepted(ctx context.Context, rid int64, accepted 
 
 // MarkDiscussOfficial 教师回应标记（题内求助帖官方回应徽标）。
 func (r *Repo) MarkDiscussOfficial(ctx context.Context, tid int64) error {
-	_, err := r.Discussions.UpdateOne(ctx, bson.M{"_id": tid}, bson.M{"$set": bson.M{"official": true}})
+	_, err := r.discussions.UpdateOne(ctx, bson.M{"_id": tid}, bson.M{"$set": bson.M{"official": true}})
 	return err
 }
 
@@ -297,7 +297,7 @@ func (r *Repo) InsertDiscussReply(ctx context.Context, rep *DiscussReply) error 
 	}
 	rep.ID = id
 	rep.CreatedAt, rep.UpdatedAt = time.Now(), time.Now()
-	_, err = r.DiscussReplies.InsertOne(ctx, rep)
+	_, err = r.discussReplies.InsertOne(ctx, rep)
 	return err
 }
 
@@ -310,11 +310,11 @@ const DiscussReplyPageSize = 20
 // replyTo 带 omitempty：顶层楼字段缺失，$in [0, nil] 同时命中存量显式 0。
 func (r *Repo) ListDiscussReplyPage(ctx context.Context, tid int64, page int) ([]*DiscussReply, int64, error) {
 	filter := bson.M{"tid": tid, "replyTo": bson.M{"$in": bson.A{0, nil}}}
-	total, err := r.DiscussReplies.CountDocuments(ctx, filter)
+	total, err := r.discussReplies.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := r.DiscussReplies.Find(ctx, filter,
+	cursor, err := r.discussReplies.Find(ctx, filter,
 		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).
 			SetSkip(int64((page - 1) * DiscussReplyPageSize)).
 			SetLimit(int64(DiscussReplyPageSize)))
@@ -334,7 +334,7 @@ func (r *Repo) ListDiscussReplyChildren(ctx context.Context, tid int64, topIDs [
 	if len(topIDs) == 0 {
 		return nil, nil
 	}
-	cursor, err := r.DiscussReplies.Find(ctx,
+	cursor, err := r.discussReplies.Find(ctx,
 		bson.M{"tid": tid, "replyTo": bson.M{"$in": topIDs}},
 		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
 	if err != nil {
@@ -350,14 +350,14 @@ func (r *Repo) ListDiscussReplyChildren(ctx context.Context, tid int64, topIDs [
 
 func (r *Repo) GetDiscussReply(ctx context.Context, rid int64) (*DiscussReply, error) {
 	var rep DiscussReply
-	if err := r.DiscussReplies.FindOne(ctx, bson.M{"_id": rid}).Decode(&rep); err != nil {
+	if err := r.discussReplies.FindOne(ctx, bson.M{"_id": rid}).Decode(&rep); err != nil {
 		return nil, err
 	}
 	return &rep, nil
 }
 
 func (r *Repo) UpdateDiscussReplyContent(ctx context.Context, rid int64, content string) error {
-	res, err := r.DiscussReplies.UpdateOne(ctx, bson.M{"_id": rid},
+	res, err := r.discussReplies.UpdateOne(ctx, bson.M{"_id": rid},
 		bson.M{"$set": bson.M{"content": content, "edited": true, "updatedAt": time.Now()}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
@@ -366,7 +366,7 @@ func (r *Repo) UpdateDiscussReplyContent(ctx context.Context, rid int64, content
 }
 
 func (r *Repo) SoftDeleteDiscussReply(ctx context.Context, rid int64) error {
-	res, err := r.DiscussReplies.UpdateOne(ctx, bson.M{"_id": rid},
+	res, err := r.discussReplies.UpdateOne(ctx, bson.M{"_id": rid},
 		bson.M{"$set": bson.M{"deleted": true, "updatedAt": time.Now()}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
@@ -376,7 +376,7 @@ func (r *Repo) SoftDeleteDiscussReply(ctx context.Context, rid int64) error {
 
 // CountUserAcceptedAnswers 用户被采纳的回复数（个人主页「解答数」）。
 func (r *Repo) CountUserAcceptedAnswers(ctx context.Context, uid int64) (int64, error) {
-	return r.DiscussReplies.CountDocuments(ctx, bson.M{"uid": uid, "accepted": true, "deleted": bson.M{"$ne": true}})
+	return r.discussReplies.CountDocuments(ctx, bson.M{"uid": uid, "accepted": true, "deleted": bson.M{"$ne": true}})
 }
 
 // ---------- 点赞（toggle + 计数） ----------
@@ -384,14 +384,14 @@ func (r *Repo) CountUserAcceptedAnswers(ctx context.Context, uid int64) (int64, 
 // ToggleDiscussLike 点赞/取消点赞：幂等 toggle，返回操作后的点赞态与计数。
 func (r *Repo) ToggleDiscussLike(ctx context.Context, targetType string, targetID, uid int64) (liked bool, count int64, err error) {
 	col := discussTargetCol(r, targetType)
-	res, err := r.DiscussLikes.DeleteOne(ctx, bson.M{"t": targetType, "id": targetID, "uid": uid})
+	res, err := r.discussLikes.DeleteOne(ctx, bson.M{"t": targetType, "id": targetID, "uid": uid})
 	if err != nil {
 		return false, 0, err
 	}
 	delta := -1
 	liked = false
 	if res.DeletedCount == 0 {
-		_, err = r.DiscussLikes.InsertOne(ctx, bson.M{"t": targetType, "id": targetID, "uid": uid, "at": time.Now()})
+		_, err = r.discussLikes.InsertOne(ctx, bson.M{"t": targetType, "id": targetID, "uid": uid, "at": time.Now()})
 		if err != nil {
 			if mongo.IsDuplicateKeyError(err) {
 				return true, 0, nil // 并发重复点赞：按已赞处理（计数以目标文档为准）
@@ -422,7 +422,7 @@ func (r *Repo) LikedDiscussTargets(ctx context.Context, uid int64, targetType st
 	if uid <= 0 || len(ids) == 0 {
 		return out, nil
 	}
-	cursor, err := r.DiscussLikes.Find(ctx, bson.M{"t": targetType, "uid": uid, "id": bson.M{"$in": ids}})
+	cursor, err := r.discussLikes.Find(ctx, bson.M{"t": targetType, "uid": uid, "id": bson.M{"$in": ids}})
 	if err != nil {
 		return out, err
 	}
@@ -444,13 +444,13 @@ func (r *Repo) LikedDiscussTargets(ctx context.Context, uid int64, targetType st
 // AddDiscussReport 记一笔举报；返回目标当前累计未处理举报数与是否触发自动折叠。
 func (r *Repo) AddDiscussReport(ctx context.Context, targetType string, targetID, reporterUID int64, reason string, foldThreshold int64) (count int64, folded bool, err error) {
 	col := discussTargetCol(r, targetType)
-	if _, err = r.DiscussReports.InsertOne(ctx, bson.M{
+	if _, err = r.discussReports.InsertOne(ctx, bson.M{
 		"tType": targetType, "tId": targetID, "uid": reporterUID,
 		"reason": reason, "status": "open", "at": time.Now(),
 	}); err != nil {
 		return 0, false, err
 	}
-	count, err = r.DiscussReports.CountDocuments(ctx, bson.M{"tType": targetType, "tId": targetID, "status": "open"})
+	count, err = r.discussReports.CountDocuments(ctx, bson.M{"tType": targetType, "tId": targetID, "status": "open"})
 	if err != nil {
 		return 0, false, err
 	}
@@ -484,11 +484,11 @@ func (r *Repo) ListDiscussReports(ctx context.Context, status string, page, page
 	if status != "" {
 		filter["status"] = status
 	}
-	total, err := r.DiscussReports.CountDocuments(ctx, filter)
+	total, err := r.discussReports.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := r.DiscussReports.Find(ctx, filter,
+	cursor, err := r.discussReports.Find(ctx, filter,
 		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}).
 			SetLimit(int64(pageSize)).SetSkip(int64((page-1)*pageSize)))
 	if err != nil {
@@ -504,7 +504,7 @@ func (r *Repo) ListDiscussReports(ctx context.Context, status string, page, page
 
 // ResolveDiscussReports 批量结案（action: dismiss|delete|warn|mute，处置由 handler 执行）。
 func (r *Repo) ResolveDiscussReports(ctx context.Context, ids []int64, action string, byUID int64) error {
-	_, err := r.DiscussReports.UpdateMany(ctx,
+	_, err := r.discussReports.UpdateMany(ctx,
 		bson.M{"_id": bson.M{"$in": ids}, "status": "open"},
 		bson.M{"$set": bson.M{"status": "resolved", "action": action, "resolvedBy": byUID, "resolvedAt": time.Now()}})
 	return err
@@ -527,7 +527,7 @@ func (r *Repo) AddDiscussMute(ctx context.Context, uid int64, days int, reason s
 		until = time.Now().AddDate(100, 0, 0)
 	}
 	// 旧记录保留历史，查询只认未过期记录；直接插新记录（含 permanent 标记）
-	_, err := r.DiscussMutes.InsertOne(ctx, bson.M{
+	_, err := r.discussMutes.InsertOne(ctx, bson.M{
 		"uid": uid, "until": until, "permanent": permanent,
 		"reason": reason, "byUid": byUID, "at": time.Now(),
 	})
@@ -542,7 +542,7 @@ func (r *Repo) ActiveDiscussMute(ctx context.Context, uid int64) (*DiscussReport
 		Permanent bool      `bson:"permanent"`
 		Reason    string    `bson:"reason"`
 	}
-	err := r.DiscussMutes.FindOne(ctx,
+	err := r.discussMutes.FindOne(ctx,
 		bson.M{"uid": uid, "until": bson.M{"$gt": time.Now()}},
 		options.FindOne().SetSort(bson.D{{Key: "until", Value: -1}})).Decode(&doc)
 	if IsNotFound(err) {
@@ -567,7 +567,7 @@ type DiscussMuteRow struct {
 
 // ListActiveDiscussMutes 全部生效中的禁言。
 func (r *Repo) ListActiveDiscussMutes(ctx context.Context) ([]*DiscussMuteRow, error) {
-	cursor, err := r.DiscussMutes.Find(ctx, bson.M{"until": bson.M{"$gt": time.Now()}},
+	cursor, err := r.discussMutes.Find(ctx, bson.M{"until": bson.M{"$gt": time.Now()}},
 		options.Find().SetSort(bson.D{{Key: "until", Value: -1}}))
 	if err != nil {
 		return nil, err
@@ -582,7 +582,7 @@ func (r *Repo) ListActiveDiscussMutes(ctx context.Context) ([]*DiscussMuteRow, e
 
 // LiftDiscussMute 解除禁言（截止时间改为立即过期）。
 func (r *Repo) LiftDiscussMute(ctx context.Context, id int64) error {
-	res, err := r.DiscussMutes.UpdateOne(ctx, bson.M{"_id": id},
+	res, err := r.discussMutes.UpdateOne(ctx, bson.M{"_id": id},
 		bson.M{"$set": bson.M{"until": time.Now()}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
@@ -592,36 +592,36 @@ func (r *Repo) LiftDiscussMute(ctx context.Context, id int64) error {
 
 // EnsureDiscussIndexes 讨论区/通知集合索引（Bootstrap 调用，幂等）。
 func (r *Repo) EnsureDiscussIndexes(ctx context.Context) error {
-	if _, err := r.Discussions.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	if _, err := r.discussions.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "scope", Value: 1}, {Key: "scopeId", Value: 1}, {Key: "lastActiveAt", Value: -1}}},
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "createdAt", Value: -1}}},
 	}); err != nil {
 		return err
 	}
-	if _, err := r.DiscussReplies.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	if _, err := r.discussReplies.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "tid", Value: 1}, {Key: "_id", Value: 1}}},
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "accepted", Value: 1}}},
 	}); err != nil {
 		return err
 	}
-	if _, err := r.DiscussLikes.Indexes().CreateOne(ctx, mongo.IndexModel{
+	if _, err := r.discussLikes.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "t", Value: 1}, {Key: "id", Value: 1}, {Key: "uid", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	}); err != nil {
 		return err
 	}
-	if _, err := r.DiscussReports.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	if _, err := r.discussReports.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "tType", Value: 1}, {Key: "tId", Value: 1}, {Key: "status", Value: 1}}},
 	}); err != nil {
 		return err
 	}
-	if _, err := r.DiscussMutes.Indexes().CreateOne(ctx,
+	if _, err := r.discussMutes.Indexes().CreateOne(ctx,
 		mongo.IndexModel{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "until", Value: -1}}}); err != nil {
 		return err
 	}
 	// 通知：收件箱查询 + purgeAt TTL（保留天数在插入时按当时设置写死，改动只影响新通知）
-	if _, err := r.Notifications.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	if _, err := r.notifications.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "read", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "purgeAt", Value: 1}},
 			Options: options.Index().SetExpireAfterSeconds(0)},

@@ -98,7 +98,7 @@ func (u *User) EffProfileVis() ProfileVis {
 
 // UpdatePassword 修改密码：写新哈希并 pwdVer+1（原子），所有旧 token 随即失效。
 func (r *Repo) UpdatePassword(ctx context.Context, uid int64, passwordHash string) error {
-	res, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{
+	res, err := r.users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{
 		"$set": bson.M{"pwdHash": passwordHash},
 		"$inc": bson.M{"pwdVer": 1},
 	})
@@ -113,7 +113,7 @@ func (r *Repo) UpdatePassword(ctx context.Context, uid int64, passwordHash strin
 
 // BumpPwdVer 仅递增密码版本（管理员重置密码走 UpdateUser 裸 $set 后补一刀，v0.14）。
 func (r *Repo) BumpPwdVer(ctx context.Context, uid int64) error {
-	_, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$inc": bson.M{"pwdVer": 1}})
+	_, err := r.users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$inc": bson.M{"pwdVer": 1}})
 	return err
 }
 
@@ -130,7 +130,7 @@ func (r *Repo) RecordLoginFailure(ctx context.Context, uid int64, maxFail int, l
 	hitMax := bson.D{{Key: "$gte", Value: bson.A{newCount, maxFail}}}
 	lockedAt := time.Now().Add(lockDur)
 	var u User
-	err = r.Users.FindOneAndUpdate(ctx, bson.M{"_id": uid}, mongo.Pipeline{
+	err = r.users.FindOneAndUpdate(ctx, bson.M{"_id": uid}, mongo.Pipeline{
 		{{Key: "$set", Value: bson.D{
 			{Key: "failedCount", Value: bson.D{{Key: "$cond", Value: bson.A{hitMax, 0, newCount}}}},
 			{Key: "lockedUntil", Value: bson.D{{Key: "$cond", Value: bson.A{
@@ -148,7 +148,7 @@ func (r *Repo) RecordLoginFailure(ctx context.Context, uid int64, maxFail int, l
 
 // ClearLoginFailures 登录成功后清零失败计数与锁定时间（best-effort，失败不阻断登录）。
 func (r *Repo) ClearLoginFailures(ctx context.Context, uid int64) error {
-	_, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid},
+	_, err := r.users.UpdateOne(ctx, bson.M{"_id": uid},
 		bson.M{"$set": bson.M{"failedCount": 0, "lockedUntil": time.Time{}}})
 	return err
 }
@@ -158,7 +158,7 @@ func (r *Repo) CreateUser(ctx context.Context, username, passwordHash, nickname,
 	if err != nil {
 		return 0, err
 	}
-	_, err = r.Users.InsertOne(ctx, bson.M{
+	_, err = r.users.InsertOne(ctx, bson.M{
 		"_id": uid, "uname": username, "pwdHash": passwordHash,
 		"nickname": nickname, "role": role, "createdAt": time.Now(),
 	})
@@ -187,7 +187,7 @@ func (r *Repo) nextUserSeq(ctx context.Context) (int64, error) {
 		var doc struct {
 			Seq int64 `bson:"seq"`
 		}
-		if merr := r.Counters.FindOneAndUpdate(ctx,
+		if merr := r.counters.FindOneAndUpdate(ctx,
 			bson.M{"_id": "user"},
 			bson.M{"$max": bson.M{"seq": start - 1}},
 			options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
@@ -208,7 +208,7 @@ func (r *Repo) SeedUserCounter(ctx context.Context) error {
 	var before struct {
 		Seq int64 `bson:"seq"`
 	}
-	err := r.Counters.FindOneAndUpdate(ctx,
+	err := r.counters.FindOneAndUpdate(ctx,
 		bson.M{"_id": "user"},
 		bson.M{"$max": bson.M{"seq": start - 1}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before),
@@ -229,7 +229,7 @@ func (r *Repo) CreateUserWithID(ctx context.Context, id int64, username, passwor
 	if err != nil {
 		return 0, err
 	}
-	_, err = r.Users.InsertOne(ctx, bson.M{
+	_, err = r.users.InsertOne(ctx, bson.M{
 		"_id": id, "uname": username, "pwdHash": hash,
 		"nickname": nickname, "role": role, "createdAt": time.Now(),
 	})
@@ -239,7 +239,7 @@ func (r *Repo) CreateUserWithID(ctx context.Context, id int64, username, passwor
 	var doc struct {
 		Seq int64 `bson:"seq"`
 	}
-	if err := r.Counters.FindOneAndUpdate(ctx,
+	if err := r.counters.FindOneAndUpdate(ctx,
 		bson.M{"_id": "user"},
 		bson.M{"$max": bson.M{"seq": id}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
@@ -259,7 +259,7 @@ func (r *Repo) CreateUserWithEmail(ctx context.Context, username, password, nick
 	if err != nil {
 		return 0, err
 	}
-	_, err = r.Users.InsertOne(ctx, bson.M{
+	_, err = r.users.InsertOne(ctx, bson.M{
 		"_id": uid, "uname": username, "pwdHash": hash,
 		"nickname": nickname, "role": role, "createdAt": time.Now(),
 		"email": email,
@@ -273,7 +273,7 @@ func (r *Repo) CreateUserWithEmail(ctx context.Context, username, password, nick
 // GetUserByEmail 按绑定邮箱查用户（找回密码/注册查重）。
 func (r *Repo) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	var u User
-	err := r.Users.FindOne(ctx, bson.M{"email": email}).Decode(&u)
+	err := r.users.FindOne(ctx, bson.M{"email": email}).Decode(&u)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (r *Repo) GetUserByEmail(ctx context.Context, email string) (*User, error) 
 
 // SetUserEmail 绑定/换绑邮箱（验证通过后调用）。换绑成功前旧值已被读方留存用于通知。
 func (r *Repo) SetUserEmail(ctx context.Context, uid int64, email string) error {
-	res, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$set": bson.M{"email": email}})
+	res, err := r.users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$set": bson.M{"email": email}})
 	if err != nil {
 		return err
 	}
@@ -294,7 +294,7 @@ func (r *Repo) SetUserEmail(ctx context.Context, uid int64, email string) error 
 
 // UnbindEmail 管理端解绑邮箱（root，学生换邮箱场景）。
 func (r *Repo) UnbindEmail(ctx context.Context, uid int64) error {
-	res, err := r.Users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$unset": bson.M{"email": ""}})
+	res, err := r.users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$unset": bson.M{"email": ""}})
 	if err != nil {
 		return err
 	}
@@ -307,7 +307,7 @@ func (r *Repo) UnbindEmail(ctx context.Context, uid int64) error {
 // GetUserByUsername 返回用户与密码哈希；未找到时返回 mongo.ErrNoDocuments。
 func (r *Repo) GetUserByUsername(ctx context.Context, username string) (*User, string, error) {
 	var u User
-	err := r.Users.FindOne(ctx, bson.M{"uname": username}).Decode(&u)
+	err := r.users.FindOne(ctx, bson.M{"uname": username}).Decode(&u)
 	if err != nil {
 		return nil, "", err
 	}
@@ -316,7 +316,7 @@ func (r *Repo) GetUserByUsername(ctx context.Context, username string) (*User, s
 
 func (r *Repo) GetUserByID(ctx context.Context, id int64) (*User, error) {
 	var u User
-	err := r.Users.FindOne(ctx, bson.M{"_id": id}).Decode(&u)
+	err := r.users.FindOne(ctx, bson.M{"_id": id}).Decode(&u)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +329,7 @@ func (r *Repo) GetUsersByIDs(ctx context.Context, ids []int64) (map[int64]*User,
 	if len(ids) == 0 {
 		return out, nil
 	}
-	cursor, err := r.Users.Find(ctx,
+	cursor, err := r.users.Find(ctx,
 		bson.M{"_id": bson.M{"$in": ids}},
 		options.Find().SetProjection(bson.M{"pwdHash": 0}))
 	if err != nil {
@@ -354,7 +354,7 @@ func (r *Repo) LookupUsers(ctx context.Context, kw string, limit int) ([]*User, 
 		bson.M{"uname": bson.M{"$regex": pat, "$options": "i"}},
 		bson.M{"nickname": bson.M{"$regex": pat, "$options": "i"}},
 	}}
-	cursor, err := r.Users.Find(ctx, filter,
+	cursor, err := r.users.Find(ctx, filter,
 		options.Find().SetProjection(bson.M{"pwdHash": 0}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}).
 			SetLimit(int64(limit)))
@@ -381,7 +381,7 @@ func (r *Repo) CreateUserWithPassword(ctx context.Context, username, password, n
 // SyncUnameReferences 改名后同步冗余存储的用户名：提交记录（提交列表与比赛榜单
 // 共用其 uname 字段）与班级成员（成员列表展示）。引用键恒为 uid，这里只修展示名。
 func (r *Repo) SyncUnameReferences(ctx context.Context, uid int64, uname string) error {
-	if _, err := r.Submissions.UpdateMany(ctx,
+	if _, err := r.submissions.UpdateMany(ctx,
 		bson.M{"uid": uid},
 		bson.M{"$set": bson.M{"uname": uname}}); err != nil {
 		return err
@@ -408,11 +408,11 @@ func (r *Repo) ListUsers(ctx context.Context, page, pageSize int, keyword, role 
 			bson.M{"nickname": bson.M{"$regex": pattern, "$options": "i"}},
 		}
 	}
-	total, err := r.Users.CountDocuments(ctx, filter)
+	total, err := r.users.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := r.Users.Find(ctx, filter,
+	cursor, err := r.users.Find(ctx, filter,
 		options.Find().
 			SetProjection(bson.M{"pwdHash": 0}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}).
@@ -431,7 +431,7 @@ func (r *Repo) ListUsers(ctx context.Context, page, pageSize int, keyword, role 
 
 // UpdateUser 管理端更新（set 中的字段由调用方校验，pwdHash 仅在重置密码时出现）。
 func (r *Repo) UpdateUser(ctx context.Context, id int64, set bson.M) error {
-	res, err := r.Users.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
+	res, err := r.users.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {
 		return err
 	}
@@ -463,7 +463,7 @@ func (r *Repo) migrateRoles(ctx context.Context) error {
 	}
 	for _, p := range pairs {
 		m := p.(bson.M)
-		if _, err := r.Users.UpdateMany(ctx,
+		if _, err := r.users.UpdateMany(ctx,
 			bson.M{"role": m["from"]},
 			bson.M{"$set": bson.M{"role": m["to"]}}); err != nil {
 			return err

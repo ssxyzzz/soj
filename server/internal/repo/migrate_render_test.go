@@ -23,7 +23,7 @@ func TestMigrateRenderedHtml(t *testing.T) {
 			t.Fatalf("seed #%d: %v", id, err)
 		}
 		// 抹掉 html 模拟存量（UpsertProblem 已双写）
-		if _, err := r.Problems.UpdateOne(ctx,
+		if _, err := r.problems.UpdateOne(ctx,
 			bson.M{"_id": id}, bson.M{"$unset": bson.M{"statementHtml": ""}}); err != nil {
 			t.Fatalf("unset #%d: %v", id, err)
 		}
@@ -53,7 +53,7 @@ func TestMigrateRenderedHtml(t *testing.T) {
 	}
 
 	// 全量重刷模式：人为改坏 #1 的 html，refetch 模式应重算
-	if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": int64(1)},
+	if _, err := r.problems.UpdateOne(ctx, bson.M{"_id": int64(1)},
 		bson.M{"$set": bson.M{"statementHtml": "stale"}}); err != nil {
 		t.Fatal(err)
 	}

@@ -25,25 +25,27 @@ func setRenderedHtml(set bson.M, mdKey, htmlKey string) {
 }
 
 // Repo 聚合所有集合的访问入口。
+// v0.32 分层收紧：collection 字段全部私有——外部一律走具名方法（查询契约单点，
+// 索引命中有人把关；裸查询下沉见 site_stats.go 等）。
 type Repo struct {
-	cli            *mongo.Client
-	db             *mongo.Database
-	Users          *mongo.Collection
-	Roles          *mongo.Collection
-	Problems       *mongo.Collection
-	Submissions    *mongo.Collection
-	Counters       *mongo.Collection
-	Uploads        *mongo.Collection
-	Solutions      *mongo.Collection
-	Tags           *mongo.Collection
-	Lists          *mongo.Collection // 题单（v0.18.3 章节化自学导航）
-	Challenges     *mongo.Collection // 挑战模式会话/记录（v0.23）
-	Discussions    *mongo.Collection // 讨论区主题帖（v0.24，scope+scopeId 通用模型）
-	DiscussReplies *mongo.Collection // 讨论区回复（两层楼中楼）
-	DiscussLikes   *mongo.Collection // 讨论点赞（topic/reply × id × uid 唯一）
-	DiscussReports *mongo.Collection // 讨论举报队列
-	DiscussMutes   *mongo.Collection // 讨论禁言记录
-	Notifications  *mongo.Collection // 站内通知（v0.24）
+	cli               *mongo.Client
+	db                *mongo.Database
+	users             *mongo.Collection
+	roles             *mongo.Collection
+	problems          *mongo.Collection
+	submissions       *mongo.Collection
+	counters          *mongo.Collection
+	uploads           *mongo.Collection
+	solutions         *mongo.Collection
+	tags              *mongo.Collection
+	lists             *mongo.Collection // 题单（v0.18.3 章节化自学导航）
+	challenges        *mongo.Collection // 挑战模式会话/记录（v0.23）
+	discussions       *mongo.Collection // 讨论区主题帖（v0.24，scope+scopeId 通用模型）
+	discussReplies    *mongo.Collection // 讨论区回复（两层楼中楼）
+	discussLikes      *mongo.Collection // 讨论点赞（topic/reply × id × uid 唯一）
+	discussReports    *mongo.Collection // 讨论举报队列
+	discussMutes      *mongo.Collection // 讨论禁言记录
+	notifications     *mongo.Collection // 站内通知（v0.24）
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -74,22 +76,22 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 	return &Repo{
 		cli:            cli,
 		db:             db,
-		Users:          db.Collection("users"),
-		Roles:          db.Collection("roles"),
-		Problems:       db.Collection("problems"),
-		Submissions:    db.Collection("submissions"),
-		Counters:       db.Collection("counters"),
-		Uploads:        db.Collection("uploads"),
-		Solutions:      db.Collection("solutions"),
-		Tags:           db.Collection("tags"),
-		Lists:          db.Collection("lists"),
-		Challenges:     db.Collection("challenges"),
-		Discussions:    db.Collection("discussions"),
-		DiscussReplies: db.Collection("discussReplies"),
-		DiscussLikes:   db.Collection("discussLikes"),
-		DiscussReports: db.Collection("discussReports"),
-		DiscussMutes:   db.Collection("discussMutes"),
-		Notifications:  db.Collection("notifications"),
+		users:          db.Collection("users"),
+		roles:          db.Collection("roles"),
+		problems:       db.Collection("problems"),
+		submissions:    db.Collection("submissions"),
+		counters:       db.Collection("counters"),
+		uploads:        db.Collection("uploads"),
+		solutions:      db.Collection("solutions"),
+		tags:           db.Collection("tags"),
+		lists:          db.Collection("lists"),
+		challenges:     db.Collection("challenges"),
+		discussions:    db.Collection("discussions"),
+		discussReplies: db.Collection("discussReplies"),
+		discussLikes:   db.Collection("discussLikes"),
+		discussReports: db.Collection("discussReports"),
+		discussMutes:   db.Collection("discussMutes"),
+		notifications:  db.Collection("notifications"),
 	}, nil
 }
 
@@ -101,7 +103,7 @@ func (r *Repo) Ping(ctx context.Context) error { return r.cli.Ping(ctx, nil) }
 // Bootstrap 创建索引、初始化 admin 账号、把上次异常退出遗留的 Judging 重置为 Pending。
 // store 用于需要读测试数据文件的一次性迁移。幂等，每次启动都执行。
 func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
-	_, err := r.Submissions.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err := r.submissions.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "_id", Value: 1}}},
 		// v0.7.1 队列领取排序：优先级降序 + 先来先服务（批量重测不挤占学生新提交）
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "priority", Value: -1}, {Key: "_id", Value: 1}}},
@@ -127,7 +129,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}); err != nil {
 		return err
 	}
-	if _, err := r.Problems.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	if _, err := r.problems.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "title", Value: 1}}},
 		// v0.26 下推链路的筛选索引（后端快赢批补齐）：tags/meta_tags 支撑标签与来源
 		// 筛选（multikey）；hidden 支撑 HiddenProblemIDs——每个非特权用户的每次题库
@@ -138,7 +140,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}); err != nil {
 		return err
 	}
-	_, err = r.Users.Indexes().CreateOne(ctx, mongo.IndexModel{
+	_, err = r.users.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "uname", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
@@ -146,7 +148,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		return err
 	}
 	// 绑定邮箱/手机（v0.16）：sparse 唯一——多数用户无邮箱（字段缺省）不占号，非空必唯一
-	if _, err := r.Users.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	if _, err := r.users.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
 		{Keys: bson.D{{Key: "phone", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
 	}); err != nil {
@@ -185,7 +187,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}
 	// v0.24 验收修复清理：早期 upsert 未显式赋 _id，Mongo 自动生成的 ObjectId 主机
 	// 文档会让读取侧 int64 解码失败（角标正常、列表报错）；重启一次性清掉
-	if res, err := r.Notifications.DeleteMany(ctx, bson.M{"_id": bson.M{"$type": "objectId"}}); err != nil {
+	if res, err := r.notifications.DeleteMany(ctx, bson.M{"_id": bson.M{"$type": "objectId"}}); err != nil {
 		return err
 	} else if res.DeletedCount > 0 {
 		slog.Info("已清理 ObjectId 主机的通知脏数据（v0.24 验收期产生）", "component", "boot", "count", res.DeletedCount)
@@ -212,7 +214,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	// 初始管理员：users 为空时创建 root / sojroot123（root 角色）；
 	// 空用户表同时作为 runMigrations 全新库判定的一环
 	usersEmpty := false
-	if n, err := r.Users.CountDocuments(ctx, bson.M{}); err != nil {
+	if n, err := r.users.CountDocuments(ctx, bson.M{}); err != nil {
 		return err
 	} else if n == 0 {
 		usersEmpty = true
@@ -251,14 +253,14 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}
 
 	// v0.7.1 队列优先级回填：存量提交补默认高档（幂等，只有升级后首次有改动）
-	if res, err := r.Submissions.UpdateMany(ctx,
+	if res, err := r.submissions.UpdateMany(ctx,
 		bson.M{"priority": bson.M{"$exists": false}},
 		bson.M{"$set": bson.M{"priority": PriorityHigh}}); err == nil && res.ModifiedCount > 0 {
 		slog.Info("已为存量提交补队列优先级默认值", "component", "boot", "count", res.ModifiedCount)
 	}
 
 	// 遗留的 Judging（进程被杀时没判完）重新排队
-	res, err := r.Submissions.UpdateMany(ctx,
+	res, err := r.submissions.UpdateMany(ctx,
 		bson.M{"status": "Judging"},
 		bson.M{"$set": bson.M{"status": "Pending"},
 			"$unset": bson.M{"judge": "", "claimedAt": "", "heartbeatAt": ""}})
@@ -307,7 +309,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	}
 
 	if !migrationsSeen && usersEmpty {
-		if n, err := r.Problems.CountDocuments(ctx, bson.M{}); err != nil {
+		if n, err := r.problems.CountDocuments(ctx, bson.M{}); err != nil {
 			return err
 		} else if n == 0 {
 			for _, k := range freshSkipFlags {
@@ -378,7 +380,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	}
 	if !flagDone("solutionManageV1") {
 		// v0.5.2-1：题解管理权限位（初始归属 admin）补发存量 admin 角色
-		if _, err := r.Roles.UpdateOne(ctx,
+		if _, err := r.roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": PermSolutionManage}}); err != nil {
 			return err
@@ -390,7 +392,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	}
 	if !flagDone("submissionViewUserV1") {
 		// v0.5.2-2：查看用户提交明细权限位（初始归属 admin）补发存量 admin 角色
-		if _, err := r.Roles.UpdateOne(ctx,
+		if _, err := r.roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": PermSubmissionViewUser}}); err != nil {
 			return err
@@ -403,12 +405,12 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	if !flagDone("nicknameEditV1") {
 		// v0.6.x：真名下线的同时开放本人昵称修改。旧「查看真实姓名」权限位已从目录删除，
 		// 这里顺手清掉角色文档里的残留（EffectivePerms 也会过滤，双保险）。
-		if _, err := r.Roles.UpdateMany(ctx,
+		if _, err := r.roles.UpdateMany(ctx,
 			bson.M{},
 			bson.M{"$pull": bson.M{"perms": "user.realname.view"}}); err != nil {
 			return err
 		}
-		if _, err := r.Roles.UpdateMany(ctx,
+		if _, err := r.roles.UpdateMany(ctx,
 			bson.M{"_id": bson.M{"$in": []string{RoleDefault, RoleAdmin}}},
 			bson.M{"$addToSet": bson.M{"perms": PermUserNicknameEdit}}); err != nil {
 			return err
@@ -454,7 +456,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	if !flagDone("classLeaveV1") {
 		// v0.7.2：退出班级改为权限位（class.leave）管控，default 刻意不给；
 		// admin 角色补发该位（root 走 "*" 恒通，无需补）
-		if _, err := r.Roles.UpdateOne(ctx,
+		if _, err := r.roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": PermClassLeave}}); err != nil {
 			return err
@@ -467,7 +469,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	if !flagDone("assignmentScoreViewV1") {
 		// v0.11：查看班级作业成绩表权限位（assignment.score.view），default 默认开启；
 		// 存量 default/admin 角色补发，未持有的成员在作业页只能看到自己的完成进度
-		if _, err := r.Roles.UpdateMany(ctx,
+		if _, err := r.roles.UpdateMany(ctx,
 			bson.M{"_id": bson.M{"$in": []string{RoleDefault, RoleAdmin}}},
 			bson.M{"$addToSet": bson.M{"perms": PermAssignmentScoreView}}); err != nil {
 			return err
@@ -480,7 +482,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	if !flagDone("contestScorePermV1") {
 		// v0.11：比赛/考试成绩表两个权限位（查看 / 详情点看），初始归属 admin（root 走 "*" 恒通）；
 		// default 刻意不给——普通学生默认看不了比赛成绩表，由老师按角色放开发
-		if _, err := r.Roles.UpdateOne(ctx,
+		if _, err := r.roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": bson.M{"$each": []string{PermContestScoreView, PermContestScoreDetail}}}}); err != nil {
 			return err
@@ -492,7 +494,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	}
 	if !flagDone("listManageV1") {
 		// v0.18.3：题单管理权限位，初始归属 admin（root 走 "*" 恒通；default 刻意不给）
-		if _, err := r.Roles.UpdateOne(ctx,
+		if _, err := r.roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": PermListManage}}); err != nil {
 			return err
@@ -505,7 +507,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	if !flagDone("discussPermV1") {
 		// v0.24：讨论三权限位（管理/免限速/代码门槛豁免），初始归属 admin（root 恒通；
 		// notify.broadcast 默认仅 root，不在补发之列）
-		if _, err := r.Roles.UpdateOne(ctx,
+		if _, err := r.roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": bson.M{"$each": []string{
 				PermDiscussManage, PermDiscussRateExempt, PermDiscussCodeBypass,
@@ -520,7 +522,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次
 		//（仅回填，识别不出保持空；之后 root 逐题手调）
-		cur, err := r.Problems.Find(ctx, bson.M{
+		cur, err := r.problems.Find(ctx, bson.M{
 			"source_type": bson.M{"$in": bson.A{"", nil}},
 			"source":      bson.M{"$in": bson.A{"", nil}},
 			"year":        bson.M{"$in": bson.A{0, nil}},
@@ -552,7 +554,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			if h.Region != "" {
 				set["region"] = h.Region
 			}
-			if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": p.ID}, bson.M{"$set": set}); err != nil {
+			if _, err := r.problems.UpdateOne(ctx, bson.M{"_id": p.ID}, bson.M{"$set": set}); err != nil {
 				return err
 			}
 			filled++
@@ -565,7 +567,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	if !flagDone("adminProblemViewAllV1") {
 		// v0.7.2：存量 admin 角色补发「题库全量可见」——builtin 定义一直包含该位，
 		// 但早期创建的角色文档没有它且从未补发过（导致存量 admin 看不到隐藏题/锁定标记）
-		if _, err := r.Roles.UpdateOne(ctx,
+		if _, err := r.roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": PermProblemViewAll}}); err != nil {
 			return err
@@ -579,7 +581,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		// v0.9.3：客观题从单题（question）升级为多小题（questions[]）。
 		// 存量：把 question 文档搬进 questions[1]（分值 100）；提交侧 answer/blanks
 		// 搬进 objAnswers[0]，旧字段 $unset。
-		cur, err := r.Problems.Find(ctx, bson.M{"question": bson.M{"$exists": true}})
+		cur, err := r.problems.Find(ctx, bson.M{"question": bson.M{"$exists": true}})
 		if err != nil {
 			return err
 		}
@@ -591,14 +593,14 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			var raw struct {
 				Question *ObjectiveQuestion `bson:"question"`
 			}
-			if err := r.Problems.FindOne(ctx, bson.M{"_id": p.ID}).Decode(&raw); err != nil || raw.Question == nil {
+			if err := r.problems.FindOne(ctx, bson.M{"_id": p.ID}).Decode(&raw); err != nil || raw.Question == nil {
 				continue
 			}
 			q := *raw.Question
 			if q.Score <= 0 {
 				q.Score = 100
 			}
-			if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": p.ID}, bson.M{
+			if _, err := r.problems.UpdateOne(ctx, bson.M{"_id": p.ID}, bson.M{
 				"$set":   bson.M{"questions": []ObjectiveQuestion{q}},
 				"$unset": bson.M{"question": ""},
 			}); err != nil {
@@ -606,7 +608,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			}
 		}
 		// 提交：answer/blanks → objAnswers[0]
-		scur, err := r.Submissions.Find(ctx, bson.M{"$or": []bson.M{
+		scur, err := r.submissions.Find(ctx, bson.M{"$or": []bson.M{
 			{"answer": bson.M{"$exists": true}}, {"blanks": bson.M{"$exists": true}},
 		}})
 		if err != nil {
@@ -624,7 +626,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			if len(sub.Blanks) > 0 {
 				oa.Blanks = sub.Blanks
 			}
-			if _, err := r.Submissions.UpdateOne(ctx, bson.M{"_id": sub.ID}, bson.M{
+			if _, err := r.submissions.UpdateOne(ctx, bson.M{"_id": sub.ID}, bson.M{
 				"$set":   bson.M{"objAnswers": []ObjectiveAnswer{oa}},
 				"$unset": bson.M{"answer": "", "blanks": ""},
 			}); err != nil {
@@ -638,7 +640,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	}
 	if !flagDone("dataDownloadPermV1") {
 		// v0.8.3：下载数据权限位（初始归属 admin）补发存量 admin 角色
-		if _, err := r.Roles.UpdateOne(ctx,
+		if _, err := r.roles.UpdateOne(ctx,
 			bson.M{"_id": RoleAdmin},
 			bson.M{"$addToSet": bson.M{"perms": PermProblemDataDownload}}); err != nil {
 			return err
@@ -826,7 +828,7 @@ func (r *Repo) migrateExams(ctx context.Context) error {
 			}
 			return err
 		}
-		if _, err := r.Submissions.UpdateMany(ctx,
+		if _, err := r.submissions.UpdateMany(ctx,
 			bson.M{"contestId": cid},
 			bson.M{"$rename": bson.M{"contestId": "examId", "contestTitle": "examTitle"}}); err != nil {
 			return err
@@ -959,7 +961,7 @@ func (r *Repo) nextSeq(ctx context.Context, name string) (int64, error) {
 	var doc struct {
 		Seq int64 `bson:"seq"`
 	}
-	err := r.Counters.FindOneAndUpdate(ctx,
+	err := r.counters.FindOneAndUpdate(ctx,
 		bson.M{"_id": name},
 		bson.M{"$inc": bson.M{"seq": 1}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
@@ -972,7 +974,7 @@ func (r *Repo) nextSeqBatch(ctx context.Context, name string, n int64) (int64, e
 	var doc struct {
 		Seq int64 `bson:"seq"`
 	}
-	err := r.Counters.FindOneAndUpdate(ctx,
+	err := r.counters.FindOneAndUpdate(ctx,
 		bson.M{"_id": name},
 		bson.M{"$inc": bson.M{"seq": n}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
@@ -987,7 +989,7 @@ func (r *Repo) syncProblemCounter(ctx context.Context) error {
 	var last struct {
 		ID int64 `bson:"_id"`
 	}
-	err := r.Problems.FindOne(ctx, bson.M{},
+	err := r.problems.FindOne(ctx, bson.M{},
 		options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}}),
 	).Decode(&last)
 	if IsNotFound(err) {
@@ -999,7 +1001,7 @@ func (r *Repo) syncProblemCounter(ctx context.Context) error {
 	var before struct {
 		Seq int64 `bson:"seq"`
 	}
-	err = r.Counters.FindOneAndUpdate(ctx,
+	err = r.counters.FindOneAndUpdate(ctx,
 		bson.M{"_id": "problem"},
 		bson.M{"$max": bson.M{"seq": last.ID}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before),

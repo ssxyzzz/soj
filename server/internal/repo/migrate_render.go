@@ -28,13 +28,13 @@ func renderTargets(r *Repo) []struct {
 		coll     *mongo.Collection
 		md, html string
 	}{
-		{r.Problems, "statement", "statementHtml"},
+		{r.problems, "statement", "statementHtml"},
 		{r.roundsCol(KindContest), "intro", "introHtml"},
 		{r.roundsCol(KindExam), "intro", "introHtml"},
 		{r.db.Collection("assignments"), "intro", "introHtml"},
 		{r.db.Collection("classes"), "intro", "introHtml"},
-		{r.Lists, "intro", "introHtml"},
-		{r.Solutions, "content", "contentHtml"},
+		{r.lists, "intro", "introHtml"},
+		{r.solutions, "content", "contentHtml"},
 	}
 }
 

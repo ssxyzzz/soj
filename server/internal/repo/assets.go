@@ -311,7 +311,7 @@ func (r *Repo) ReplaceAssetURLs(ctx context.Context, pid int64, reps map[string]
 		Statement     string `bson:"statement"`
 		StatementHtml string `bson:"statementHtml"`
 	}
-	if err := r.Problems.FindOne(ctx, bson.M{"_id": pid},
+	if err := r.problems.FindOne(ctx, bson.M{"_id": pid},
 		options.FindOne().SetProjection(bson.M{"statement": 1, "statementHtml": 1})).Decode(&doc); err != nil {
 		return err
 	}
@@ -323,7 +323,7 @@ func (r *Repo) ReplaceAssetURLs(ctx context.Context, pid int64, reps map[string]
 	if st == doc.Statement && html == doc.StatementHtml {
 		return nil
 	}
-	_, err := r.Problems.UpdateOne(ctx, bson.M{"_id": pid}, bson.M{"$set": bson.M{
+	_, err := r.problems.UpdateOne(ctx, bson.M{"_id": pid}, bson.M{"$set": bson.M{
 		"statement": st, "statementHtml": html, "updatedAt": time.Now()}})
 	return err
 }

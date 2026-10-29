@@ -68,7 +68,7 @@ func (r *Repo) UpsertNotification(ctx context.Context, uid int64, in NotifyInput
 			return err
 		}
 		// 同源未读通知合并：只增计数（首条文案保留，避免抖动）
-		_, err = r.Notifications.UpdateOne(ctx,
+		_, err = r.notifications.UpdateOne(ctx,
 			bson.M{"uid": uid, "typ": in.Typ, "refId": in.RefID, "read": bson.M{"$ne": true}},
 			bson.M{"$inc": bson.M{"aggCount": 1}, "$setOnInsert": bson.M{
 				"_id": id,
@@ -82,7 +82,7 @@ func (r *Repo) UpsertNotification(ctx context.Context, uid int64, in NotifyInput
 	if err != nil {
 		return err
 	}
-	_, err = r.Notifications.InsertOne(ctx, newNotification(id, uid, in, purge))
+	_, err = r.notifications.InsertOne(ctx, newNotification(id, uid, in, purge))
 	return err
 }
 
@@ -115,7 +115,7 @@ func (r *Repo) NotifyUsers(ctx context.Context, uids []int64, in NotifyInput, re
 			RefID: in.RefID, AggCount: 1, CreatedAt: now, PurgeAt: purge,
 		})
 	}
-	_, err = r.Notifications.InsertMany(ctx, docs)
+	_, err = r.notifications.InsertMany(ctx, docs)
 	return err
 }
 
@@ -128,11 +128,11 @@ func (r *Repo) ListNotifications(ctx context.Context, uid int64, unreadOnly bool
 	if typ != "" {
 		filter["typ"] = typ
 	}
-	total, err := r.Notifications.CountDocuments(ctx, filter)
+	total, err := r.notifications.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := r.Notifications.Find(ctx, filter,
+	cursor, err := r.notifications.Find(ctx, filter,
 		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}).
 			SetLimit(int64(pageSize)).SetSkip(int64((page-1)*pageSize)))
 	if err != nil {
@@ -148,7 +148,7 @@ func (r *Repo) ListNotifications(ctx context.Context, uid int64, unreadOnly bool
 
 // UnreadNotificationCount 未读数（顶栏角标轮询）。
 func (r *Repo) UnreadNotificationCount(ctx context.Context, uid int64) (int64, error) {
-	return r.Notifications.CountDocuments(ctx, bson.M{"uid": uid, "read": bson.M{"$ne": true}})
+	return r.notifications.CountDocuments(ctx, bson.M{"uid": uid, "read": bson.M{"$ne": true}})
 }
 
 // MarkNotificationsRead 指定通知标已读（空列表 = 全部）。
@@ -157,7 +157,7 @@ func (r *Repo) MarkNotificationsRead(ctx context.Context, uid int64, ids []int64
 	if len(ids) > 0 {
 		filter["_id"] = bson.M{"$in": ids}
 	}
-	_, err := r.Notifications.UpdateMany(ctx, filter,
+	_, err := r.notifications.UpdateMany(ctx, filter,
 		bson.M{"$set": bson.M{"read": true, "readAt": time.Now()}})
 	return err
 }
@@ -165,7 +165,7 @@ func (r *Repo) MarkNotificationsRead(ctx context.Context, uid int64, ids []int64
 // AllUserIDs 全站用户 id（比赛发布/全站广播扇出用；班级/社团量级直查安全）。
 func (r *Repo) AllUserIDs(ctx context.Context) ([]int64, error) {
 	var ids []int64
-	if err := r.Users.Distinct(ctx, "_id", bson.M{}).Decode(&ids); err != nil {
+	if err := r.users.Distinct(ctx, "_id", bson.M{}).Decode(&ids); err != nil {
 		return nil, err
 	}
 	return ids, nil

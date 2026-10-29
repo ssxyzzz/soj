@@ -54,7 +54,7 @@ func TestSolutionOnePerProblem(t *testing.T) {
 	if removed != 1 {
 		t.Fatalf("应清理 1 篇重复，实际 %d", removed)
 	}
-	total, err := r.Solutions.CountDocuments(ctx, bson.M{"pid": pid})
+	total, err := r.solutions.CountDocuments(ctx, bson.M{"pid": pid})
 	if err != nil || total != 2 {
 		t.Fatalf("清理后应剩 2 篇（自己 1 + 他人 1）: %v %d", err, total)
 	}

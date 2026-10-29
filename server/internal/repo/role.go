@@ -43,7 +43,7 @@ var builtinRoles = []Role{
 // InsertOne + 容忍重复键惯例；已存在则不动，保留 root 的后续调整）。
 func (r *Repo) EnsureBuiltinRoles(ctx context.Context) error {
 	for _, role := range builtinRoles {
-		if _, err := r.Roles.InsertOne(ctx, role); err != nil && !mongo.IsDuplicateKeyError(err) {
+		if _, err := r.roles.InsertOne(ctx, role); err != nil && !mongo.IsDuplicateKeyError(err) {
 			return err
 		}
 	}
@@ -52,7 +52,7 @@ func (r *Repo) EnsureBuiltinRoles(ctx context.Context) error {
 
 // ListRoles 全量角色：内置按 default/admin/root 固定序，自定义按 id 字典序。
 func (r *Repo) ListRoles(ctx context.Context) ([]*Role, error) {
-	cursor, err := r.Roles.Find(ctx, bson.M{})
+	cursor, err := r.roles.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (r *Repo) ListRoles(ctx context.Context) ([]*Role, error) {
 // GetRole 按 id 取角色；不存在返回 mongo.ErrNoDocuments。
 func (r *Repo) GetRole(ctx context.Context, id string) (*Role, error) {
 	var role Role
-	err := r.Roles.FindOne(ctx, bson.M{"_id": id}).Decode(&role)
+	err := r.roles.FindOne(ctx, bson.M{"_id": id}).Decode(&role)
 	if err != nil {
 		return nil, err
 	}
@@ -88,13 +88,13 @@ func (r *Repo) GetRole(ctx context.Context, id string) (*Role, error) {
 
 // CreateRole 新建自定义角色（存在性/合法性由调用方校验）。
 func (r *Repo) CreateRole(ctx context.Context, role Role) error {
-	_, err := r.Roles.InsertOne(ctx, role)
+	_, err := r.roles.InsertOne(ctx, role)
 	return err
 }
 
 // UpdateRole 更新角色显示名与权限位（id 不可改）。
 func (r *Repo) UpdateRole(ctx context.Context, id, name string, perms []string) error {
-	res, err := r.Roles.UpdateOne(ctx,
+	res, err := r.roles.UpdateOne(ctx,
 		bson.M{"_id": id},
 		bson.M{"$set": bson.M{"name": name, "perms": perms}})
 	if err != nil {
@@ -108,11 +108,11 @@ func (r *Repo) UpdateRole(ctx context.Context, id, name string, perms []string) 
 
 // DeleteRole 删除角色（调用方保证为自定义角色且无用户挂靠）。
 func (r *Repo) DeleteRole(ctx context.Context, id string) error {
-	_, err := r.Roles.DeleteOne(ctx, bson.M{"_id": id})
+	_, err := r.roles.DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }
 
 // CountUsersWithRole 统计挂靠某角色的用户数（删除前置校验）。
 func (r *Repo) CountUsersWithRole(ctx context.Context, role string) (int64, error) {
-	return r.Users.CountDocuments(ctx, bson.M{"role": role})
+	return r.users.CountDocuments(ctx, bson.M{"role": role})
 }

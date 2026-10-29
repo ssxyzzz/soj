@@ -109,14 +109,14 @@ func (r *Repo) CreateProblemList(ctx context.Context, l *ProblemList) error {
 		l.Chapters = []ListEntry{}
 	}
 	l.IntroHtml = mdrender.Render(l.Intro)
-	_, err = r.Lists.InsertOne(ctx, l)
+	_, err = r.lists.InsertOne(ctx, l)
 	return err
 }
 
 // GetProblemList 按 id 取题单。
 func (r *Repo) GetProblemList(ctx context.Context, id int64) (*ProblemList, error) {
 	var l ProblemList
-	if err := r.Lists.FindOne(ctx, bson.M{"_id": id}).Decode(&l); err != nil {
+	if err := r.lists.FindOne(ctx, bson.M{"_id": id}).Decode(&l); err != nil {
 		return nil, err
 	}
 	return &l, nil
@@ -124,7 +124,7 @@ func (r *Repo) GetProblemList(ctx context.Context, id int64) (*ProblemList, erro
 
 // ListProblemLists 全量题单（列表页：sort asc, _id asc；隐藏题单的可见性由调用方过滤）。
 func (r *Repo) ListProblemLists(ctx context.Context) ([]*ProblemList, error) {
-	cursor, err := r.Lists.Find(ctx, bson.M{},
+	cursor, err := r.lists.Find(ctx, bson.M{},
 		options.Find().SetSort(bson.D{{Key: "sort", Value: 1}, {Key: "_id", Value: 1}}))
 	if err != nil {
 		return nil, err
@@ -140,7 +140,7 @@ func (r *Repo) ListProblemLists(ctx context.Context) ([]*ProblemList, error) {
 // UpdateProblemList 更新题单（指针语义由 handler 组装 $set；chapters 整体覆盖）。
 func (r *Repo) UpdateProblemList(ctx context.Context, id int64, set bson.M) error {
 	setRenderedHtml(set, "intro", "introHtml")
-	res, err := r.Lists.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
+	res, err := r.lists.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (r *Repo) UpdateProblemList(ctx context.Context, id int64, set bson.M) erro
 
 // DeleteProblemList 硬删题单（进度为读时聚合，无软删包袱）。
 func (r *Repo) DeleteProblemList(ctx context.Context, id int64) error {
-	res, err := r.Lists.DeleteOne(ctx, bson.M{"_id": id})
+	res, err := r.lists.DeleteOne(ctx, bson.M{"_id": id})
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func (r *Repo) MaxListSort(ctx context.Context) (int64, error) {
 	var doc struct {
 		Sort int64 `bson:"sort"`
 	}
-	err := r.Lists.FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.D{{Key: "sort", Value: -1}})).Decode(&doc)
+	err := r.lists.FindOne(ctx, bson.M{}, options.FindOne().SetSort(bson.D{{Key: "sort", Value: -1}})).Decode(&doc)
 	if IsNotFound(err) {
 		return 0, nil
 	}
@@ -189,7 +189,7 @@ func (r *Repo) ProblemSummariesByIDs(ctx context.Context, pids []int64) (map[int
 	if len(pids) == 0 {
 		return out, nil
 	}
-	cursor, err := r.Problems.Find(ctx,
+	cursor, err := r.problems.Find(ctx,
 		bson.M{"_id": bson.M{"$in": pids}},
 		options.Find().SetProjection(bson.M{"title": 1, "difficulty": 1, "hidden": 1, "tags": 1}))
 	if err != nil {
@@ -231,7 +231,7 @@ func (r *Repo) ListParticipantPairs(ctx context.Context, pids []int64) ([]ListPa
 		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
 		{{Key: "$project", Value: bson.M{"uid": "$_id.uid", "pid": "$_id.pid"}}},
 	}
-	cursor, err := r.Submissions.Aggregate(ctx, pipe)
+	cursor, err := r.submissions.Aggregate(ctx, pipe)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +262,7 @@ func (r *Repo) ListRankRows(ctx context.Context, pids []int64) ([]ListRankRow, e
 		{{Key: "$match", Value: bson.M{"solved": bson.M{"$gt": 0}}}},
 		{{Key: "$sort", Value: bson.D{{Key: "solved", Value: -1}, {Key: "_id", Value: 1}}}},
 	}
-	cursor, err := r.Submissions.Aggregate(ctx, pipe)
+	cursor, err := r.submissions.Aggregate(ctx, pipe)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,7 @@ func TestUnbindTags(t *testing.T) {
 	// 唯一前缀避免与库内其它测试题冲突（_id 用 99 万段测试专用号段）
 	mk := func(id int64, title string, tags []int64) {
 		t.Helper()
-		if _, err := r.Problems.InsertOne(ctx, bson.M{
+		if _, err := r.problems.InsertOne(ctx, bson.M{
 			"_id": id, "title": title, "tags": tags, "createdAt": time.Now(),
 		}); err != nil {
 			t.Fatalf("insert problem %d: %v", id, err)
@@ -40,7 +40,7 @@ func TestUnbindTags(t *testing.T) {
 		var doc struct {
 			Tags []int64 `bson:"tags"`
 		}
-		if err := r.Problems.FindOne(ctx, bson.M{"_id": id}).Decode(&doc); err != nil {
+		if err := r.problems.FindOne(ctx, bson.M{"_id": id}).Decode(&doc); err != nil {
 			t.Fatalf("reload %d: %v", id, err)
 		}
 		if len(doc.Tags) != len(want) {

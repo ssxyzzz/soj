@@ -57,7 +57,7 @@ func insert(t *testing.T, r *Repo, doc bson.M) {
 	for k, v := range doc {
 		base[k] = v
 	}
-	if _, err := r.Submissions.InsertOne(context.Background(), base); err != nil {
+	if _, err := r.submissions.InsertOne(context.Background(), base); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
 }
@@ -327,13 +327,13 @@ func TestMyProblemStats(t *testing.T) {
 	r := openTestRepo(t)
 	now := time.Now()
 	// 题目两条（一条隐藏不计入 total）
-	if _, err := r.Problems.InsertOne(context.Background(), bson.M{"_id": int64(1), "title": "a", "hidden": false}); err != nil {
+	if _, err := r.problems.InsertOne(context.Background(), bson.M{"_id": int64(1), "title": "a", "hidden": false}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Problems.InsertOne(context.Background(), bson.M{"_id": int64(2), "title": "b", "hidden": false}); err != nil {
+	if _, err := r.problems.InsertOne(context.Background(), bson.M{"_id": int64(2), "title": "b", "hidden": false}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Problems.InsertOne(context.Background(), bson.M{"_id": int64(3), "title": "c", "hidden": true}); err != nil {
+	if _, err := r.problems.InsertOne(context.Background(), bson.M{"_id": int64(3), "title": "c", "hidden": true}); err != nil {
 		t.Fatal(err)
 	}
 	// 提交：题1 两条 AC（去重 1 题）+ 一条 WA；题2 一条 AC；另加一条 8 天前的 AC（不进七天窗）

@@ -18,13 +18,13 @@ type Upload struct {
 }
 
 func (r *Repo) InsertUpload(ctx context.Context, u Upload) error {
-	_, err := r.Uploads.InsertOne(ctx, u)
+	_, err := r.uploads.InsertOne(ctx, u)
 	return err
 }
 
 // UploadsUsedBytes 某用户已用图片存储字节数（配额判定用）。
 func (r *Repo) UploadsUsedBytes(ctx context.Context, uid int64) (int64, error) {
-	cursor, err := r.Uploads.Aggregate(ctx, []bson.M{
+	cursor, err := r.uploads.Aggregate(ctx, []bson.M{
 		{"$match": bson.M{"uid": uid}},
 		{"$group": bson.M{"_id": nil, "total": bson.M{"$sum": "$size"}}},
 	})
@@ -46,6 +46,6 @@ func (r *Repo) UploadsUsedBytes(ctx context.Context, uid int64) (int64, error) {
 
 // DeleteUpload 删除图片元数据（文件本体由调用方删除）。
 func (r *Repo) DeleteUpload(ctx context.Context, file string) error {
-	_, err := r.Uploads.DeleteOne(ctx, bson.M{"_id": file})
+	_, err := r.uploads.DeleteOne(ctx, bson.M{"_id": file})
 	return err
 }

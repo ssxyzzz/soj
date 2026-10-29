@@ -36,7 +36,7 @@ type ProblemInfo struct {
 // ScanDuplicateProblems 返回全部疑似重复组（组内 ≥2 题），按组内题数降序、
 // 组内按题号升序。题面为空的空壳题只要标题+题面都相同同样计入（正是重复建壳的信号）。
 func (r *Repo) ScanDuplicateProblems(ctx context.Context) ([]DuplicateProblemGroup, error) {
-	cursor, err := r.Problems.Find(ctx, bson.M{},
+	cursor, err := r.problems.Find(ctx, bson.M{},
 		options.Find().SetProjection(bson.M{"title": 1, "statement": 1, "type": 1, "hidden": 1, "createdBy": 1, "createdAt": 1}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}))
 	if err != nil {

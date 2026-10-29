@@ -45,7 +45,7 @@ func (r *Repo) ReplaceTagTree(ctx context.Context, nodes []TagNode) error {
 		nodes = []TagNode{}
 	}
 	doc := bson.M{"nodes": nodes, "updatedAt": time.Now()}
-	_, err := r.Tags.ReplaceOne(ctx, bson.M{"_id": "tree"}, doc, options.Replace().SetUpsert(true))
+	_, err := r.tags.ReplaceOne(ctx, bson.M{"_id": "tree"}, doc, options.Replace().SetUpsert(true))
 	return err
 }
 
@@ -156,7 +156,7 @@ func CollectTagIDs(nodes []TagNode, into map[int64]bool) {
 
 // TagRefProblems 返回引用了指定标签节点 ID 的题目（ID/标题/标签），删除拦截明细用。
 func (r *Repo) TagRefProblems(ctx context.Context, tagIDs []int64) ([]*Problem, error) {
-	cursor, err := r.Problems.Find(ctx, bson.M{"tags": bson.M{"$in": tagIDs}},
+	cursor, err := r.problems.Find(ctx, bson.M{"tags": bson.M{"$in": tagIDs}},
 		options.Find().SetProjection(bson.M{"title": 1, "tags": 1}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}))
 	if err != nil {
@@ -175,7 +175,7 @@ func (r *Repo) UnbindTags(ctx context.Context, problemIDs, tagIDs []int64) (int6
 	if len(problemIDs) == 0 || len(tagIDs) == 0 {
 		return 0, nil
 	}
-	res, err := r.Problems.UpdateMany(ctx,
+	res, err := r.problems.UpdateMany(ctx,
 		bson.M{"_id": bson.M{"$in": problemIDs}, "tags": bson.M{"$in": tagIDs}},
 		bson.M{"$pull": bson.M{"tags": bson.M{"$in": tagIDs}}})
 	if err != nil {
@@ -191,7 +191,7 @@ func (r *Repo) TagUsageCounts(ctx context.Context) (map[int64]int64, error) {
 		{{Key: "$unwind", Value: "$tags"}},
 		{{Key: "$group", Value: bson.M{"_id": "$tags", "n": bson.M{"$sum": 1}}}},
 	}
-	cursor, err := r.Problems.Aggregate(ctx, pipeline)
+	cursor, err := r.problems.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (r *Repo) TagUsageCountsField(ctx context.Context, field string) (map[int64
 		{{Key: "$unwind", Value: "$" + field}},
 		{{Key: "$group", Value: bson.M{"_id": "$" + field, "n": bson.M{"$sum": 1}}}},
 	}
-	cursor, err := r.Problems.Aggregate(ctx, pipeline)
+	cursor, err := r.problems.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (r *Repo) TagUsageCountsField(ctx context.Context, field string) (map[int64
 
 // TagRefProblemsField 引用题目明细（删除/改名拦截用，字段参数化）。
 func (r *Repo) TagRefProblemsField(ctx context.Context, field string, tagIDs []int64) ([]*Problem, error) {
-	cursor, err := r.Problems.Find(ctx, bson.M{field: bson.M{"$in": tagIDs}},
+	cursor, err := r.problems.Find(ctx, bson.M{field: bson.M{"$in": tagIDs}},
 		options.Find().SetProjection(bson.M{"title": 1, field: 1}).
 			SetSort(bson.D{{Key: "_id", Value: 1}}))
 	if err != nil {
@@ -253,7 +253,7 @@ func (r *Repo) UnbindTagsField(ctx context.Context, field string, problemIDs, ta
 	if len(problemIDs) == 0 || len(tagIDs) == 0 {
 		return 0, nil
 	}
-	res, err := r.Problems.UpdateMany(ctx,
+	res, err := r.problems.UpdateMany(ctx,
 		bson.M{"_id": bson.M{"$in": problemIDs}, field: bson.M{"$in": tagIDs}},
 		bson.M{"$pull": bson.M{field: bson.M{"$in": tagIDs}}})
 	if err != nil {
@@ -388,7 +388,7 @@ func (r *Repo) GetTagTreeDoc(ctx context.Context, docID string) ([]TagNode, erro
 	var doc struct {
 		Nodes []TagNode `bson:"nodes"`
 	}
-	err := r.Tags.FindOne(ctx, bson.M{"_id": docID}).Decode(&doc)
+	err := r.tags.FindOne(ctx, bson.M{"_id": docID}).Decode(&doc)
 	if IsNotFound(err) {
 		return nil, nil
 	}
@@ -404,7 +404,7 @@ func (r *Repo) ReplaceTagTreeDoc(ctx context.Context, docID string, nodes []TagN
 		nodes = []TagNode{}
 	}
 	doc := bson.M{"nodes": nodes, "updatedAt": time.Now()}
-	_, err := r.Tags.ReplaceOne(ctx, bson.M{"_id": docID}, doc, options.Replace().SetUpsert(true))
+	_, err := r.tags.ReplaceOne(ctx, bson.M{"_id": docID}, doc, options.Replace().SetUpsert(true))
 	return err
 }
 

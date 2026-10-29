@@ -68,7 +68,7 @@ func TestChallengeSessionFlow(t *testing.T) {
 		t.Fatalf("StartChallenge #2: %v", err)
 	}
 	var old Challenge
-	if err := r.Challenges.FindOne(ctx, bson.M{"_id": c1.ID}).Decode(&old); err != nil {
+	if err := r.challenges.FindOne(ctx, bson.M{"_id": c1.ID}).Decode(&old); err != nil {
 		t.Fatalf("读旧会话: %v", err)
 	}
 	if old.Status != ChallengeQuit {
@@ -85,7 +85,7 @@ func TestChallengeSessionFlow(t *testing.T) {
 		"lang": "cpp", "code": "int main(){}", "status": StatusAccepted,
 		"score": 100, "timeMs": 1, "memKb": 1024, "createdAt": time.Now(), "published": true,
 	}
-	if _, err := r.Submissions.InsertOne(ctx, doc); err != nil {
+	if _, err := r.submissions.InsertOne(ctx, doc); err != nil {
 		t.Fatalf("造提交: %v", err)
 	}
 	if _, err := r.AttachChallengeSubmission(ctx, c2.ID, sid, "cpp", 100, nil); err != nil {
@@ -93,7 +93,7 @@ func TestChallengeSessionFlow(t *testing.T) {
 	}
 	r.FinalizeChallengeOnAC(ctx, uid, pid, sid, 100)
 	var fin Challenge
-	if err := r.Challenges.FindOne(ctx, bson.M{"_id": c2.ID}).Decode(&fin); err != nil {
+	if err := r.challenges.FindOne(ctx, bson.M{"_id": c2.ID}).Decode(&fin); err != nil {
 		t.Fatalf("读终态: %v", err)
 	}
 	if fin.Status != ChallengeAC || fin.DurationMS < 0 || fin.CharsPerSec <= 0 {

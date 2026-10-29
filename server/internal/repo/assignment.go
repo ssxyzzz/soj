@@ -190,7 +190,7 @@ func (r *Repo) AssignmentProgress(ctx context.Context, a *Assignment, memberUIDs
 		uids = append(uids, uid)
 	}
 
-	cursor, err := r.Submissions.Find(ctx,
+	cursor, err := r.submissions.Find(ctx,
 		bson.M{"pid": bson.M{"$in": pids}, "uid": bson.M{"$in": uids}, "published": true},
 		options.Find().SetProjection(bson.M{"uid": 1, "pid": 1, "score": 1, "status": 1}))
 	if err != nil {

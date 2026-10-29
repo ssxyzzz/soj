@@ -34,14 +34,14 @@ func (r *Repo) InsertSolution(ctx context.Context, s *Solution) error {
 	}
 	s.ID = id
 	s.ContentHtml = mdrender.Render(s.Content)
-	_, err = r.Solutions.InsertOne(ctx, s)
+	_, err = r.solutions.InsertOne(ctx, s)
 	return err
 }
 
 // GetUserSolution 取某用户在某题下的那篇题解（每人每题一篇；无则返回 nil, nil）。
 func (r *Repo) GetUserSolution(ctx context.Context, pid, uid int64) (*Solution, error) {
 	var s Solution
-	err := r.Solutions.FindOne(ctx, bson.M{"pid": pid, "uid": uid}).Decode(&s)
+	err := r.solutions.FindOne(ctx, bson.M{"pid": pid, "uid": uid}).Decode(&s)
 	if IsNotFound(err) {
 		return nil, nil
 	}
@@ -55,7 +55,7 @@ func (r *Repo) GetUserSolution(ctx context.Context, pid, uid int64) (*Solution, 
 // 再建 {pid, uid} 唯一索引兜底并发。幂等，随 Bootstrap 每次启动执行。
 func (r *Repo) EnsureSolutionUnique(ctx context.Context) (int64, error) {
 	var removed int64
-	cursor, err := r.Solutions.Aggregate(ctx, []bson.M{
+	cursor, err := r.solutions.Aggregate(ctx, []bson.M{
 		{"$group": bson.M{
 			"_id":  bson.M{"pid": "$pid", "uid": "$uid"},
 			"n":    bson.M{"$sum": 1},
@@ -78,7 +78,7 @@ func (r *Repo) EnsureSolutionUnique(ctx context.Context) (int64, error) {
 			cursor.Close(ctx)
 			return removed, err
 		}
-		res, err := r.Solutions.DeleteMany(ctx, bson.M{
+		res, err := r.solutions.DeleteMany(ctx, bson.M{
 			"pid": row.ID.PID, "uid": row.ID.UID, "_id": bson.M{"$ne": row.Keep},
 		})
 		if err != nil {
@@ -93,7 +93,7 @@ func (r *Repo) EnsureSolutionUnique(ctx context.Context) (int64, error) {
 		return removed, err
 	}
 	cursor.Close(ctx)
-	if _, err := r.Solutions.Indexes().CreateOne(ctx, mongo.IndexModel{
+	if _, err := r.solutions.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "pid", Value: 1}, {Key: "uid", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	}); err != nil {
@@ -107,11 +107,11 @@ func (r *Repo) EnsureSolutionUnique(ctx context.Context) (int64, error) {
 // 曾让列表 payload ≈ 2×正文×行数；编辑场景按需走单条详情取 md（快赢批⑥）。
 func (r *Repo) ListSolutions(ctx context.Context, pid int64, page, pageSize int) ([]*Solution, int64, error) {
 	filter := bson.M{"pid": pid}
-	total, err := r.Solutions.CountDocuments(ctx, filter)
+	total, err := r.solutions.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := r.Solutions.Find(ctx,
+	cursor, err := r.solutions.Find(ctx,
 		filter,
 		options.Find().SetSort(bson.D{
 			{Key: "pinned", Value: -1},
@@ -133,7 +133,7 @@ func (r *Repo) ListSolutions(ctx context.Context, pid int64, page, pageSize int)
 
 func (r *Repo) GetSolution(ctx context.Context, sid int64) (*Solution, error) {
 	var s Solution
-	err := r.Solutions.FindOne(ctx, bson.M{"_id": sid}).Decode(&s)
+	err := r.solutions.FindOne(ctx, bson.M{"_id": sid}).Decode(&s)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (r *Repo) GetSolution(ctx context.Context, sid int64) (*Solution, error) {
 
 // UpdateSolutionContent 作者更新自己的题解内容。
 func (r *Repo) UpdateSolutionContent(ctx context.Context, sid int64, content string) error {
-	res, err := r.Solutions.UpdateOne(ctx,
+	res, err := r.solutions.UpdateOne(ctx,
 		bson.M{"_id": sid},
 		bson.M{"$set": bson.M{"content": content, "contentHtml": mdrender.Render(content), "updatedAt": time.Now()}})
 	if res.MatchedCount == 0 {
@@ -153,7 +153,7 @@ func (r *Repo) UpdateSolutionContent(ctx context.Context, sid int64, content str
 
 // SetSolutionPinned 置顶/取消置顶（solution.manage 权限位）。
 func (r *Repo) SetSolutionPinned(ctx context.Context, sid int64, pinned bool) error {
-	res, err := r.Solutions.UpdateOne(ctx,
+	res, err := r.solutions.UpdateOne(ctx,
 		bson.M{"_id": sid},
 		bson.M{"$set": bson.M{"pinned": pinned}})
 	if res.MatchedCount == 0 {
@@ -163,7 +163,7 @@ func (r *Repo) SetSolutionPinned(ctx context.Context, sid int64, pinned bool) er
 }
 
 func (r *Repo) DeleteSolution(ctx context.Context, sid int64) error {
-	res, err := r.Solutions.DeleteOne(ctx, bson.M{"_id": sid})
+	res, err := r.solutions.DeleteOne(ctx, bson.M{"_id": sid})
 	if res.DeletedCount == 0 {
 		return mongo.ErrNoDocuments
 	}

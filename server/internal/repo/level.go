@@ -236,7 +236,7 @@ func (r *Repo) SolvedDifficultyCounts(ctx context.Context, uids []int64) (map[in
 	for d := 1; d <= 10; d++ {
 		group[fmt.Sprintf("c%d", d)] = sum(d)
 	}
-	cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
+	cursor, err := r.submissions.Aggregate(ctx, []bson.M{
 		{"$match": bson.M{"uid": bson.M{"$in": uids}, "status": StatusAccepted, "published": true}},
 		{"$group": bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}},
 		{"$lookup": bson.M{
@@ -287,7 +287,7 @@ func (r *Repo) migrateDifficultyEstimate(ctx context.Context) error {
 		N  int64 `bson:"n"`
 	}
 	distinctUsers := func(match bson.M) (map[int64]int64, error) {
-		cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
+		cursor, err := r.submissions.Aggregate(ctx, []bson.M{
 			{"$match": match},
 			{"$group": bson.M{"_id": bson.M{"pid": "$pid", "uid": "$uid"}}},
 			{"$group": bson.M{"_id": "$_id.pid", "n": bson.M{"$sum": 1}}},
@@ -315,7 +315,7 @@ func (r *Repo) migrateDifficultyEstimate(ctx context.Context) error {
 		return err
 	}
 
-	cursor, err := r.Problems.Find(ctx, bson.M{})
+	cursor, err := r.problems.Find(ctx, bson.M{})
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func (r *Repo) migrateDifficultyEstimate(ctx context.Context) error {
 				d = 9
 			}
 		}
-		if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": p.ID},
+		if _, err := r.problems.UpdateOne(ctx, bson.M{"_id": p.ID},
 			bson.M{"$set": bson.M{"difficulty": d}}); err != nil {
 			return err
 		}

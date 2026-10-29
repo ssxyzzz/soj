@@ -115,12 +115,12 @@ func (r *Repo) UpsertProblem(ctx context.Context, p *Problem) error {
 	p.UpdatedAt = now
 	p.StatementHtml = mdrender.Render(p.Statement)
 	// 新建时补 createdAt 并把计数器推进到已占用的最大 pid
-	if err := r.Problems.FindOne(ctx, bson.M{"_id": p.ID}).Err(); IsNotFound(err) {
+	if err := r.problems.FindOne(ctx, bson.M{"_id": p.ID}).Err(); IsNotFound(err) {
 		p.CreatedAt = now
 		var probe struct {
 			Seq int64 `bson:"seq"`
 		}
-		if err := r.Counters.FindOneAndUpdate(ctx,
+		if err := r.counters.FindOneAndUpdate(ctx,
 			bson.M{"_id": "problem"},
 			bson.M{"$max": bson.M{"seq": p.ID}},
 			options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
@@ -131,7 +131,7 @@ func (r *Repo) UpsertProblem(ctx context.Context, p *Problem) error {
 		return err
 	}
 
-	_, err := r.Problems.ReplaceOne(ctx,
+	_, err := r.problems.ReplaceOne(ctx,
 		bson.M{"_id": p.ID}, p, options.Replace().SetUpsert(true))
 	return err
 }
@@ -146,7 +146,7 @@ func (r *Repo) CreateProblemShell(ctx context.Context, p *Problem) error {
 	p.ID = id
 	p.CreatedAt = time.Now()
 	p.StatementHtml = mdrender.Render(p.Statement)
-	_, err = r.Problems.InsertOne(ctx, p)
+	_, err = r.problems.InsertOne(ctx, p)
 	return err
 }
 
@@ -170,7 +170,7 @@ func (r *Repo) nextProblemSeq(ctx context.Context) (int64, error) {
 		var doc struct {
 			Seq int64 `bson:"seq"`
 		}
-		if merr := r.Counters.FindOneAndUpdate(ctx,
+		if merr := r.counters.FindOneAndUpdate(ctx,
 			bson.M{"_id": "problem"},
 			bson.M{"$max": bson.M{"seq": start - 1}},
 			options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
@@ -192,7 +192,7 @@ func (r *Repo) SeedProblemCounter(ctx context.Context) error {
 	var before struct {
 		Seq int64 `bson:"seq"`
 	}
-	err := r.Counters.FindOneAndUpdate(ctx,
+	err := r.counters.FindOneAndUpdate(ctx,
 		bson.M{"_id": "problem"},
 		bson.M{"$max": bson.M{"seq": start - 1}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before),
@@ -208,7 +208,7 @@ func (r *Repo) SeedProblemCounter(ctx context.Context) error {
 
 func (r *Repo) GetProblem(ctx context.Context, id int64) (*Problem, error) {
 	var p Problem
-	if err := r.Problems.FindOne(ctx, bson.M{"_id": id}).Decode(&p); err != nil {
+	if err := r.problems.FindOne(ctx, bson.M{"_id": id}).Decode(&p); err != nil {
 		return nil, err
 	}
 	return &p, nil
@@ -221,7 +221,7 @@ var metaProjection = bson.M{"statement": 0, "statementHtml": 0}
 // GetProblemMeta 单题瘦读（排除题面两大字段）：判题 evaluate 等只要判题元数据的场景。
 func (r *Repo) GetProblemMeta(ctx context.Context, id int64) (*Problem, error) {
 	var p Problem
-	if err := r.Problems.FindOne(ctx, bson.M{"_id": id},
+	if err := r.problems.FindOne(ctx, bson.M{"_id": id},
 		options.FindOne().SetProjection(metaProjection)).Decode(&p); err != nil {
 		return nil, err
 	}
@@ -236,7 +236,7 @@ func (r *Repo) GetProblemMetas(ctx context.Context, ids []int64) (map[int64]*Pro
 	if len(ids) == 0 {
 		return out, nil
 	}
-	cursor, err := r.Problems.Find(ctx, bson.M{"_id": bson.M{"$in": ids}},
+	cursor, err := r.problems.Find(ctx, bson.M{"_id": bson.M{"$in": ids}},
 		options.Find().SetProjection(metaProjection))
 	if err != nil {
 		return nil, err
@@ -317,12 +317,12 @@ func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, 
 	if len(f.MetaTags) > 0 {
 		query["meta_tags"] = bson.M{"$in": f.MetaTags}
 	}
-	total, err := r.Problems.CountDocuments(ctx, query)
+	total, err := r.problems.CountDocuments(ctx, query)
 	if err != nil {
 		return nil, 0, err
 	}
 	// cases 元数据需随行返回（列表「无数据」标记取 len(Cases)），仍排除 statement 正文
-	cursor, err := r.Problems.Find(ctx, query,
+	cursor, err := r.problems.Find(ctx, query,
 		options.Find().
 			// statementHtml 与 statement 同量级（各上限 256KB），v0.30 双存后列表
 			// 每页 100 行整篇回传 Go 层再丢弃——一并排除（快赢批）
@@ -343,7 +343,7 @@ func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, 
 
 // HiddenProblemIDs 全部隐藏题 ID（小集合：手动标记的备题/下架题），题库列表反向排除用。
 func (r *Repo) HiddenProblemIDs(ctx context.Context) ([]int64, error) {
-	cursor, err := r.Problems.Find(ctx, bson.M{"hidden": true},
+	cursor, err := r.problems.Find(ctx, bson.M{"hidden": true},
 		options.Find().SetProjection(bson.M{"_id": 1}))
 	if err != nil {
 		return nil, err
@@ -374,7 +374,7 @@ func intIn(xs []int, x int) bool {
 
 // SetProblemHidden 设置主题库隐藏标记（权限由调用方校验）。
 func (r *Repo) SetProblemHidden(ctx context.Context, pid int64, hidden bool) error {
-	res, err := r.Problems.UpdateOne(ctx,
+	res, err := r.problems.UpdateOne(ctx,
 		bson.M{"_id": pid}, bson.M{"$set": bson.M{"hidden": hidden}})
 	if err != nil {
 		return err
@@ -387,7 +387,7 @@ func (r *Repo) SetProblemHidden(ctx context.Context, pid int64, hidden bool) err
 
 // SetProblemStatement 更新题面（Markdown，权限由调用方校验）。
 func (r *Repo) SetProblemStatement(ctx context.Context, pid int64, statement string) error {
-	res, err := r.Problems.UpdateOne(ctx,
+	res, err := r.problems.UpdateOne(ctx,
 		bson.M{"_id": pid},
 		bson.M{"$set": bson.M{"statement": statement, "statementHtml": mdrender.Render(statement), "updatedAt": time.Now()}})
 	if err != nil {
@@ -402,7 +402,7 @@ func (r *Repo) SetProblemStatement(ctx context.Context, pid int64, statement str
 // UpdateProblemMeta 网页编辑题目元数据（set 键值由调用方校验，自动带上 updatedAt）。
 func (r *Repo) UpdateProblemMeta(ctx context.Context, pid int64, set bson.M) error {
 	set["updatedAt"] = time.Now()
-	res, err := r.Problems.UpdateOne(ctx,
+	res, err := r.problems.UpdateOne(ctx,
 		bson.M{"_id": pid}, bson.M{"$set": set})
 	if err != nil {
 		return err

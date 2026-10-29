@@ -55,7 +55,7 @@ func (r *Repo) UserFirstAccepted(ctx context.Context, uid int64) ([]FirstACEntry
 		}}},
 		{{Key: "$sort", Value: bson.D{{Key: "first_ac_at", Value: -1}}}},
 	}
-	cursor, err := r.Submissions.Aggregate(ctx, pipe)
+	cursor, err := r.submissions.Aggregate(ctx, pipe)
 	if err != nil {
 		return nil, err
 	}
@@ -70,13 +70,13 @@ func (r *Repo) UserFirstAccepted(ctx context.Context, uid int64) ([]FirstACEntry
 // UserSubmissionStats 主页统计卡：提交总数（published ∧ 非 Cancelled）与 AC 条数
 //（不去重按题——按题去重的解题数由 first-AC 清单/等级侧承担）。
 func (r *Repo) UserSubmissionStats(ctx context.Context, uid int64) (total, accepted int64, err error) {
-	total, err = r.Submissions.CountDocuments(ctx, bson.M{
+	total, err = r.submissions.CountDocuments(ctx, bson.M{
 		"uid": uid, "published": true, "status": bson.M{"$ne": StatusCancelled},
 	})
 	if err != nil {
 		return 0, 0, err
 	}
-	accepted, err = r.Submissions.CountDocuments(ctx, bson.M{
+	accepted, err = r.submissions.CountDocuments(ctx, bson.M{
 		"uid": uid, "published": true, "status": StatusAccepted,
 	})
 	return total, accepted, err
@@ -85,7 +85,7 @@ func (r *Repo) UserSubmissionStats(ctx context.Context, uid int64) (total, accep
 // UserRecentSubmissions 主页「近期提交」：最新 limit 条 published 提交的投影，
 // 不带代码/作答/明细/报错——代码与明细仍走提交详情接口的既有权限规则。
 func (r *Repo) UserRecentSubmissions(ctx context.Context, uid int64, limit int) ([]*Submission, error) {
-	cursor, err := r.Submissions.Find(ctx,
+	cursor, err := r.submissions.Find(ctx,
 		bson.M{"uid": uid, "published": true},
 		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}).
 			SetLimit(int64(limit)).
@@ -108,7 +108,7 @@ func (r *Repo) UserRecentSubmissions(ctx context.Context, uid int64, limit int) 
 // 按开赛时间倒序；名次由 handler 在场次发布后现算（repo 不管权限口径）。
 // 已删除场次自然缺席（rounds 查无此文档）。
 func (r *Repo) UserContests(ctx context.Context, uid int64) ([]*Contest, error) {
-	cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
+	cursor, err := r.submissions.Aggregate(ctx, []bson.M{
 		{"$match": bson.M{"uid": uid, "contestId": bson.M{"$gt": 0}}},
 		{"$group": bson.M{"_id": "$contestId"}},
 	})

@@ -69,7 +69,7 @@ func (p *Problem) ChallengeEligible() bool {
 // StartChallenge 开启挑战会话：同 (uid,pid) 的旧 running 会话顶为 quit（刷新/重开不背双会话）。
 // startedAt 顺延 challengePrerollMS：对齐前端 3-2-1-GO 前摇，GO 落地才真正起表。
 func (r *Repo) StartChallenge(ctx context.Context, uid int64, p *Problem) (*Challenge, error) {
-	if _, err := r.Challenges.UpdateMany(ctx,
+	if _, err := r.challenges.UpdateMany(ctx,
 		bson.M{"uid": uid, "pid": p.ID, "status": ChallengeRunning},
 		bson.M{"$set": bson.M{"status": ChallengeQuit, "finishedAt": time.Now()}}); err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func (r *Repo) StartChallenge(ctx context.Context, uid int64, p *Problem) (*Chal
 		DeadlineAt: started.Add(time.Duration(p.EffChallengeSec()) * time.Second),
 		Status:     ChallengeRunning,
 	}
-	if _, err := r.Challenges.InsertOne(ctx, c); err != nil {
+	if _, err := r.challenges.InsertOne(ctx, c); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -99,7 +99,7 @@ const challengePrerollMS = 3 * time.Second
 
 // sweepExpired 会话超时懒判定：把到期 running 会话置 timeout。随读取路径调用。
 func (r *Repo) sweepExpired(ctx context.Context, uid, pid int64) {
-	if _, err := r.Challenges.UpdateMany(ctx,
+	if _, err := r.challenges.UpdateMany(ctx,
 		bson.M{"uid": uid, "pid": pid, "status": ChallengeRunning, "deadlineAt": bson.M{"$lt": time.Now()}},
 		bson.M{"$set": bson.M{"status": ChallengeTimeout, "finishedAt": time.Now()}}); err != nil {
 		slog.Warn("超时清扫失败", "component", "challenge", "uid", uid, "pid", pid, "error", err)
@@ -110,7 +110,7 @@ func (r *Repo) sweepExpired(ctx context.Context, uid, pid int64) {
 func (r *Repo) ActiveChallenge(ctx context.Context, uid, pid int64) (*Challenge, error) {
 	r.sweepExpired(ctx, uid, pid)
 	var c Challenge
-	err := r.Challenges.FindOne(ctx, bson.M{"uid": uid, "pid": pid, "status": ChallengeRunning}).Decode(&c)
+	err := r.challenges.FindOne(ctx, bson.M{"uid": uid, "pid": pid, "status": ChallengeRunning}).Decode(&c)
 	if IsNotFound(err) {
 		return nil, nil
 	}
@@ -124,7 +124,7 @@ func (r *Repo) ActiveChallenge(ctx context.Context, uid, pid int64) (*Challenge,
 func (r *Repo) LastChallenge(ctx context.Context, uid, pid int64) (*Challenge, error) {
 	r.sweepExpired(ctx, uid, pid)
 	var c Challenge
-	err := r.Challenges.FindOne(ctx, bson.M{"uid": uid, "pid": pid},
+	err := r.challenges.FindOne(ctx, bson.M{"uid": uid, "pid": pid},
 		options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}})).Decode(&c)
 	if IsNotFound(err) {
 		return nil, nil
@@ -137,7 +137,7 @@ func (r *Repo) LastChallenge(ctx context.Context, uid, pid int64) (*Challenge, e
 
 // QuitChallenge 主动退出：running → quit。返回是否确有会话被退出。
 func (r *Repo) QuitChallenge(ctx context.Context, uid, pid int64) (bool, error) {
-	res, err := r.Challenges.UpdateOne(ctx,
+	res, err := r.challenges.UpdateOne(ctx,
 		bson.M{"uid": uid, "pid": pid, "status": ChallengeRunning},
 		bson.M{"$set": bson.M{"status": ChallengeQuit, "finishedAt": time.Now()}})
 	if err != nil {
@@ -156,7 +156,7 @@ const (
 // ChallengeRunningOK 挑战会话可用性校验：属于本人、同题、仍在跑（含到期懒清扫）。
 func (r *Repo) ChallengeRunningOK(ctx context.Context, cid, uid, pid int64) (bool, error) {
 	r.sweepExpired(ctx, uid, pid)
-	n, err := r.Challenges.CountDocuments(ctx,
+	n, err := r.challenges.CountDocuments(ctx,
 		bson.M{"_id": cid, "uid": uid, "pid": pid, "status": ChallengeRunning})
 	if err != nil {
 		return false, err
@@ -168,7 +168,7 @@ func (r *Repo) ChallengeRunningOK(ctx context.Context, cid, uid, pid int64) (boo
 // 打字流水。调用方先以 ChallengeRunningOK 校验再创建提交，这里绑定失败只可能来自
 // 毫秒级竞态（会话恰好到期），由调用方记日志兜底。
 func (r *Repo) AttachChallengeSubmission(ctx context.Context, cid, sid int64, langName string, codeLen int, changelog []ChallengeDelta) (bool, error) {
-	res, err := r.Challenges.UpdateOne(ctx,
+	res, err := r.challenges.UpdateOne(ctx,
 		bson.M{"_id": cid, "status": ChallengeRunning},
 		bson.M{"$set": bson.M{"submissionId": sid, "lang": langName, "codeLen": codeLen}})
 	if err != nil || res.MatchedCount == 0 {
@@ -176,7 +176,7 @@ func (r *Repo) AttachChallengeSubmission(ctx context.Context, cid, sid int64, la
 	}
 	if total := changelogSize(changelog); total > 0 {
 		if total <= challengeMaxDeltaText && len(changelog) <= challengeMaxDeltas {
-			if _, err := r.Challenges.UpdateOne(ctx, bson.M{"_id": cid},
+			if _, err := r.challenges.UpdateOne(ctx, bson.M{"_id": cid},
 				bson.M{"$set": bson.M{"changelog": changelog}}); err != nil {
 				slog.Warn("打字流水留存失败", "component", "challenge", "cid", cid, "error", err)
 			}
@@ -200,7 +200,7 @@ func changelogSize(log []ChallengeDelta) int {
 func (r *Repo) FinalizeChallengeOnAC(ctx context.Context, uid, pid, sid int64, codeLen int) {
 	r.sweepExpired(ctx, uid, pid)
 	var c Challenge
-	err := r.Challenges.FindOne(ctx, bson.M{"uid": uid, "pid": pid, "submissionId": sid, "status": ChallengeRunning}).Decode(&c)
+	err := r.challenges.FindOne(ctx, bson.M{"uid": uid, "pid": pid, "submissionId": sid, "status": ChallengeRunning}).Decode(&c)
 	if err != nil {
 		if !IsNotFound(err) {
 			slog.Error("AC 终判读取失败", "component", "challenge", "uid", uid, "pid", pid, "sid", sid, "error", err)
@@ -210,7 +210,7 @@ func (r *Repo) FinalizeChallengeOnAC(ctx context.Context, uid, pid, sid int64, c
 	var sub struct {
 		CreatedAt time.Time `bson:"createdAt"`
 	}
-	if err := r.Submissions.FindOne(ctx, bson.M{"_id": sid}, options.FindOne().SetProjection(bson.M{"createdAt": 1})).Decode(&sub); err != nil {
+	if err := r.submissions.FindOne(ctx, bson.M{"_id": sid}, options.FindOne().SetProjection(bson.M{"createdAt": 1})).Decode(&sub); err != nil {
 		slog.Error("AC 终判读提交失败", "component", "challenge", "sid", sid, "error", err)
 		return
 	}
@@ -226,7 +226,7 @@ func (r *Repo) FinalizeChallengeOnAC(ctx context.Context, uid, pid, sid int64, c
 	if status == ChallengeAC {
 		set["charsPerSec"] = float64(codeLen) / (float64(duration) / 1000.0)
 	}
-	if _, err := r.Challenges.UpdateOne(ctx, bson.M{"_id": c.ID, "status": ChallengeRunning}, bson.M{"$set": set}); err != nil {
+	if _, err := r.challenges.UpdateOne(ctx, bson.M{"_id": c.ID, "status": ChallengeRunning}, bson.M{"$set": set}); err != nil {
 		slog.Error("AC 终判回写失败", "component", "challenge", "cid", c.ID, "error", err)
 	}
 }
@@ -246,7 +246,7 @@ func (r *Repo) ChallengeRank(ctx context.Context, pid int64, limit int) ([]Chall
 	if limit <= 0 {
 		limit = 50
 	}
-	cur, err := r.Challenges.Find(ctx, bson.M{"pid": pid, "status": ChallengeAC},
+	cur, err := r.challenges.Find(ctx, bson.M{"pid": pid, "status": ChallengeAC},
 		options.Find().
 			SetSort(bson.D{{Key: "durationMs", Value: 1}, {Key: "_id", Value: 1}}).
 			SetProjection(bson.M{"uid": 1, "durationMs": 1, "charsPerSec": 1, "lang": 1, "submissionId": 1, "finishedAt": 1}))
@@ -278,7 +278,7 @@ func (r *Repo) ChallengeRank(ctx context.Context, pid int64, limit int) ([]Chall
 
 // ensureChallengeIndexes Bootstrap 挂载：会话查询与榜单聚合。
 func (r *Repo) ensureChallengeIndexes(ctx context.Context) error {
-	_, err := r.Challenges.Indexes().CreateMany(ctx, []mongo.IndexModel{
+	_, err := r.challenges.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "pid", Value: 1}, {Key: "status", Value: 1}}},
 		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "durationMs", Value: 1}}},
 	})

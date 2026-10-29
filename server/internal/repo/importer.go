@@ -252,7 +252,7 @@ func (im *Importer) SeedInventory(ctx context.Context, seedDir string) ([]SeedRo
 		}
 		if p != nil {
 			row.Exists, row.PID, row.DBTitle = true, p.ID, p.Title
-			n, err := im.Repo.Submissions.CountDocuments(ctx, bson.M{"pid": p.ID})
+			n, err := im.Repo.submissions.CountDocuments(ctx, bson.M{"pid": p.ID})
 			if err != nil {
 				return nil, err
 			}
@@ -266,7 +266,7 @@ func (im *Importer) SeedInventory(ctx context.Context, seedDir string) ([]SeedRo
 // problemByTitle 按标题取题目（无前缀种子目录的库内对账/清除定位）。
 func (im *Importer) problemByTitle(ctx context.Context, title string) (*Problem, error) {
 	var p Problem
-	err := im.Repo.Problems.FindOne(ctx, bson.M{"title": title}).Decode(&p)
+	err := im.Repo.problems.FindOne(ctx, bson.M{"title": title}).Decode(&p)
 	if IsNotFound(err) {
 		return nil, nil
 	}
@@ -311,7 +311,7 @@ func (im *Importer) SeedClear(ctx context.Context, seedDir string) (*SeedClearSt
 	// nil 切片会序列化成 $in: null 报错，故按目标有无分别构造过滤器。
 	var tids []int64
 	{
-		cur, err := im.Repo.Discussions.Find(ctx,
+		cur, err := im.Repo.discussions.Find(ctx,
 			bson.M{"scope": DiscussScopeProblem, "scopeId": bson.M{"$in": pids}},
 			options.Find().SetProjection(bson.M{"_id": 1}))
 		if err != nil {
@@ -330,7 +330,7 @@ func (im *Importer) SeedClear(ctx context.Context, seedDir string) (*SeedClearSt
 	}
 	var replyIDs []int64
 	if len(tids) > 0 {
-		cur, err := im.Repo.DiscussReplies.Find(ctx,
+		cur, err := im.Repo.discussReplies.Find(ctx,
 			bson.M{"tid": bson.M{"$in": tids}},
 			options.Find().SetProjection(bson.M{"_id": 1}))
 		if err != nil {
@@ -354,25 +354,25 @@ func (im *Importer) SeedClear(ctx context.Context, seedDir string) (*SeedClearSt
 		filter bson.M
 	}
 	dels := []del{
-		{im.Repo.Solutions, bson.M{"pid": pidsIn}},
-		{im.Repo.Challenges, bson.M{"pid": pidsIn}},
-		{im.Repo.Submissions, bson.M{"pid": pidsIn}},
-		{im.Repo.Problems, bson.M{"_id": pidsIn}},
+		{im.Repo.solutions, bson.M{"pid": pidsIn}},
+		{im.Repo.challenges, bson.M{"pid": pidsIn}},
+		{im.Repo.submissions, bson.M{"pid": pidsIn}},
+		{im.Repo.problems, bson.M{"_id": pidsIn}},
 	}
 	if len(tids) > 0 {
 		tidsIn := bson.M{"$in": tids}
 		dels = append(dels,
-			del{im.Repo.DiscussReports, bson.M{"tType": "topic", "tId": tidsIn}},
-			del{im.Repo.DiscussLikes, bson.M{"t": "topic", "id": tidsIn}},
-			del{im.Repo.DiscussReplies, bson.M{"tid": tidsIn}},
-			del{im.Repo.Discussions, bson.M{"_id": tidsIn}},
+			del{im.Repo.discussReports, bson.M{"tType": "topic", "tId": tidsIn}},
+			del{im.Repo.discussLikes, bson.M{"t": "topic", "id": tidsIn}},
+			del{im.Repo.discussReplies, bson.M{"tid": tidsIn}},
+			del{im.Repo.discussions, bson.M{"_id": tidsIn}},
 		)
 	}
 	if len(replyIDs) > 0 {
 		replyIn := bson.M{"$in": replyIDs}
 		dels = append(dels,
-			del{im.Repo.DiscussReports, bson.M{"tType": "reply", "tId": replyIn}},
-			del{im.Repo.DiscussLikes, bson.M{"t": "reply", "id": replyIn}},
+			del{im.Repo.discussReports, bson.M{"tType": "reply", "tId": replyIn}},
+			del{im.Repo.discussLikes, bson.M{"t": "reply", "id": replyIn}},
 		)
 	}
 	for _, d := range dels {
@@ -381,17 +381,17 @@ func (im *Importer) SeedClear(ctx context.Context, seedDir string) (*SeedClearSt
 			return nil, err
 		}
 		switch d.col {
-		case im.Repo.DiscussReplies:
+		case im.Repo.discussReplies:
 			stats.Replies = n.DeletedCount
-		case im.Repo.Discussions:
+		case im.Repo.discussions:
 			stats.Discussions = n.DeletedCount
-		case im.Repo.Solutions:
+		case im.Repo.solutions:
 			stats.Solutions = n.DeletedCount
-		case im.Repo.Challenges:
+		case im.Repo.challenges:
 			stats.Challenges = n.DeletedCount
-		case im.Repo.Submissions:
+		case im.Repo.submissions:
 			stats.Submissions = n.DeletedCount
-		case im.Repo.Problems:
+		case im.Repo.problems:
 			stats.Problems = n.DeletedCount
 		}
 	}
@@ -410,7 +410,7 @@ func (im *Importer) SeedClear(ctx context.Context, seedDir string) (*SeedClearSt
 // 无前缀按 problem.yaml 标题查同名题。
 func (im *Importer) seedSkipReason(ctx context.Context, dir, name string) (bool, string, error) {
 	if pid := seedPID(name); pid > 0 {
-		err := im.Repo.Problems.FindOne(ctx, bson.M{"_id": pid}).Err()
+		err := im.Repo.problems.FindOne(ctx, bson.M{"_id": pid}).Err()
 		if err == nil {
 			return true, fmt.Sprintf("#%d 已存在，补缺不覆盖，保护线上修改", pid), nil
 		}
@@ -426,7 +426,7 @@ func (im *Importer) seedSkipReason(ctx context.Context, dir, name string) (bool,
 			title = meta.Title
 		}
 	}
-	n, err := im.Repo.Problems.CountDocuments(ctx, bson.M{"title": title})
+	n, err := im.Repo.problems.CountDocuments(ctx, bson.M{"title": title})
 	if err != nil {
 		return false, "", err
 	}

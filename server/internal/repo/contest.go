@@ -238,7 +238,7 @@ func (r *Repo) PublishDueRounds(ctx context.Context, now time.Time) (int, error)
 				bson.M{"$set": bson.M{"published": true}}); err != nil {
 				return published, err
 			}
-			if _, err := r.Submissions.UpdateMany(ctx,
+			if _, err := r.submissions.UpdateMany(ctx,
 				bson.M{idField: c.ID},
 				bson.M{"$set": bson.M{"published": true}}); err != nil {
 				return published, err
@@ -358,7 +358,7 @@ func (r *Repo) RoundSubmissions(ctx context.Context, kind string, roundID int64,
 		filter["uid"] = uid
 	}
 	// 最新在前（2026-10-27 统一口径：所有提交列表默认最新在上）
-	cursor, err := r.Submissions.Find(ctx, filter,
+	cursor, err := r.submissions.Find(ctx, filter,
 		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}))
 	if err != nil {
 		return nil, err
@@ -377,7 +377,7 @@ func (r *Repo) RoundSubmissions(ctx context.Context, kind string, roundID int64,
 // 「我的提交」列表（round.go）需要完整文档，仍走 RoundSubmissions。
 func (r *Repo) RoundSubmissionStubs(ctx context.Context, kind string, roundID int64, uid int64) ([]*Submission, error) {
 	filter := bson.M{roundsIDField(kind): roundID, "uid": uid}
-	cursor, err := r.Submissions.Find(ctx, filter,
+	cursor, err := r.submissions.Find(ctx, filter,
 		options.Find().
 			SetProjection(bson.M{"pid": 1, "score": 1, "status": 1}).
 			SetSort(bson.D{{Key: "_id", Value: -1}}))
@@ -400,7 +400,7 @@ func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, rou
 		"uid":               uid,
 		"pid":               pid,
 	}
-	cursor, err := r.Submissions.Find(ctx, filter,
+	cursor, err := r.submissions.Find(ctx, filter,
 		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}))
 	if err != nil {
 		return nil, err
@@ -417,7 +417,7 @@ func (r *Repo) RoundUserProblemSubmissions(ctx context.Context, kind string, rou
 // 作业提交明细用：与 AssignmentProgress 的 published=true 口径一致，不按比赛/考试轮次过滤。
 func (r *Repo) UserProblemSubmissions(ctx context.Context, uid, pid int64) ([]*Submission, error) {
 	filter := bson.M{"uid": uid, "pid": pid, "published": true}
-	cursor, err := r.Submissions.Find(ctx, filter,
+	cursor, err := r.submissions.Find(ctx, filter,
 		options.Find().SetSort(bson.D{{Key: "_id", Value: -1}}))
 	if err != nil {
 		return nil, err
@@ -434,7 +434,7 @@ func (r *Repo) UserProblemSubmissions(ctx context.Context, uid, pid int64) ([]*S
 // 排名规则：总分降序 → 最后得分提交时间早者靠前 → 并列。
 // fullScores 为每题满分（pid → score），用于统计未满分提交次数（errors）。
 func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64, fullScores map[int64]int) ([]*LeaderRow, error) {
-	cursor, err := r.Submissions.Find(ctx,
+	cursor, err := r.submissions.Find(ctx,
 		bson.M{roundsIDField(kind): roundID},
 		options.Find().SetProjection(bson.M{
 			"uid": 1, "uname": 1, "pid": 1, "score": 1, "status": 1, "judgedAt": 1,

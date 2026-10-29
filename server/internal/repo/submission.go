@@ -112,7 +112,7 @@ func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p 
 		doc["contestId"] = 0
 		doc["published"] = true
 	}
-	if _, err := r.Submissions.InsertOne(ctx, doc); err != nil {
+	if _, err := r.submissions.InsertOne(ctx, doc); err != nil {
 		return 0, err
 	}
 	return sid, nil
@@ -149,7 +149,7 @@ func (r *Repo) CreateObjectiveSubmission(ctx context.Context, uid int64, uname s
 		doc["contestId"] = 0
 		doc["published"] = true
 	}
-	if _, err := r.Submissions.InsertOne(ctx, doc); err != nil {
+	if _, err := r.submissions.InsertOne(ctx, doc); err != nil {
 		return 0, err
 	}
 	return sid, nil
@@ -159,7 +159,7 @@ func (r *Repo) CreateObjectiveSubmission(ctx context.Context, uid int64, uname s
 // 与代码提交的 Pending 重排队不同，这里同步写终态。
 func (r *Repo) RegradeObjective(ctx context.Context, id int64) error {
 	var s Submission
-	if err := r.Submissions.FindOne(ctx, bson.M{"_id": id}).Decode(&s); err != nil {
+	if err := r.submissions.FindOne(ctx, bson.M{"_id": id}).Decode(&s); err != nil {
 		return err
 	}
 	p, err := r.GetProblem(ctx, s.ProblemID)
@@ -167,7 +167,7 @@ func (r *Repo) RegradeObjective(ctx context.Context, id int64) error {
 		return err
 	}
 	status, score, detail := GradeObjectiveSet(p.Questions, s.ObjectiveAnswers)
-	_, err = r.Submissions.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
+	_, err = r.submissions.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": bson.M{
 		"status": status, "score": score, "detail": detail, "judgedAt": time.Now(),
 	}})
 	return err
@@ -175,7 +175,7 @@ func (r *Repo) RegradeObjective(ctx context.Context, id int64) error {
 
 // PendingDepth 判题队列当前深度（status=Pending 计数；判题可观测的巡检告警与管理端点用）。
 func (r *Repo) PendingDepth(ctx context.Context) (int64, error) {
-	return r.Submissions.CountDocuments(ctx, bson.M{"status": StatusPending})
+	return r.submissions.CountDocuments(ctx, bson.M{"status": StatusPending})
 }
 
 // ClaimSubmission 原子领取一条待判提交：Pending -> Judging。
@@ -185,7 +185,7 @@ func (r *Repo) PendingDepth(ctx context.Context) (int64, error) {
 func (r *Repo) ClaimSubmission(ctx context.Context, judgeName string) (*Submission, error) {
 	now := time.Now()
 	var s Submission
-	err := r.Submissions.FindOneAndUpdate(ctx,
+	err := r.submissions.FindOneAndUpdate(ctx,
 		bson.M{"status": StatusPending},
 		bson.M{"$set": bson.M{"status": StatusJudging, "judge": judgeName, "claimedAt": now, "heartbeatAt": now}},
 		options.FindOneAndUpdate().
@@ -221,7 +221,7 @@ func (r *Repo) FinishSubmission(ctx context.Context, sid int64, judgeName, statu
 	if detail != nil {
 		set["detail"] = detail
 	}
-	res, err := r.Submissions.UpdateOne(ctx,
+	res, err := r.submissions.UpdateOne(ctx,
 		bson.M{"_id": sid, "judge": judgeName}, bson.M{"$set": set})
 	if err == nil && res.MatchedCount == 0 {
 		return ErrLeaseLost
@@ -231,7 +231,7 @@ func (r *Repo) FinishSubmission(ctx context.Context, sid int64, judgeName, statu
 
 // HeartbeatSubmission 刷新判题租约心跳；仅当提交仍由该判题器持有时生效。
 func (r *Repo) HeartbeatSubmission(ctx context.Context, sid int64, judgeName string) error {
-	_, err := r.Submissions.UpdateOne(ctx,
+	_, err := r.submissions.UpdateOne(ctx,
 		bson.M{"_id": sid, "status": StatusJudging, "judge": judgeName},
 		bson.M{"$set": bson.M{"heartbeatAt": time.Now()}})
 	return err
@@ -244,7 +244,7 @@ func (r *Repo) SubmissionLease(ctx context.Context, sid int64, judgeName string)
 		Status string `bson:"status"`
 		Judge  string `bson:"judge"`
 	}
-	if err := r.Submissions.FindOne(ctx, bson.M{"_id": sid},
+	if err := r.submissions.FindOne(ctx, bson.M{"_id": sid},
 		options.FindOne().SetProjection(bson.M{"status": 1, "judge": 1})).Decode(&row); err != nil {
 		return "", false, err
 	}
@@ -260,7 +260,7 @@ func (r *Repo) ReclaimExpiredLeases(ctx context.Context, staleBefore time.Time) 
 		bson.M{"heartbeatAt": bson.M{"$exists": false}}, // 升级前的存量 Judging（Bootstrap 已兜底重排队）
 	}}
 	unset := bson.M{"judge": "", "claimedAt": "", "heartbeatAt": ""}
-	res, err := r.Submissions.UpdateMany(ctx,
+	res, err := r.submissions.UpdateMany(ctx,
 		bson.M{"status": StatusCancelRequested, "$or": stale["$or"]},
 		bson.M{"$set": bson.M{
 			"status": StatusCancelled, "score": 0, "errorInfo": "已取消评测（判题器失联，由系统回收）",
@@ -270,7 +270,7 @@ func (r *Repo) ReclaimExpiredLeases(ctx context.Context, staleBefore time.Time) 
 		return 0, 0, err
 	}
 	cancelled = res.ModifiedCount
-	res, err = r.Submissions.UpdateMany(ctx,
+	res, err = r.submissions.UpdateMany(ctx,
 		bson.M{"status": StatusJudging, "$or": stale["$or"]},
 		bson.M{"$set": bson.M{"status": StatusPending}, "$unset": unset})
 	if err != nil {
@@ -289,7 +289,7 @@ var ErrNotCancellable = errors.New("submission is not cancellable")
 //
 // 返回提交进入的状态（StatusCancelled / StatusCancelRequested）。
 func (r *Repo) RequestCancelSubmission(ctx context.Context, sid int64) (string, error) {
-	err := r.Submissions.FindOneAndUpdate(ctx,
+	err := r.submissions.FindOneAndUpdate(ctx,
 		bson.M{"_id": sid, "status": StatusPending},
 		bson.M{"$set": bson.M{
 			"status": StatusCancelled, "score": 0, "timeMs": 0, "memKb": 0,
@@ -302,7 +302,7 @@ func (r *Repo) RequestCancelSubmission(ctx context.Context, sid int64) (string, 
 	if !errors.Is(err, mongo.ErrNoDocuments) {
 		return "", err
 	}
-	err = r.Submissions.FindOneAndUpdate(ctx,
+	err = r.submissions.FindOneAndUpdate(ctx,
 		bson.M{"_id": sid, "status": bson.M{"$in": bson.A{StatusJudging, StatusCancelRequested}}},
 		bson.M{"$set": bson.M{"status": StatusCancelRequested}},
 	).Err()
@@ -313,7 +313,7 @@ func (r *Repo) RequestCancelSubmission(ctx context.Context, sid int64) (string, 
 		return "", err
 	}
 	// 非队列态：区分「已出结果」与「不存在」
-	if r.Submissions.FindOne(ctx, bson.M{"_id": sid}).Err() == nil {
+	if r.submissions.FindOne(ctx, bson.M{"_id": sid}).Err() == nil {
 		return "", ErrNotCancellable
 	}
 	return "", mongo.ErrNoDocuments
@@ -338,7 +338,7 @@ func rejudgeUpdate(priority int) bson.M {
 // RejudgeSubmission 重测：把一条非评测中的提交重置为 Pending（中优先级），交还判题线程池自动领取重评。
 // 评测中（含已请求取消、正在收尾）的提交返回 ErrJudging；不存在返回 mongo.ErrNoDocuments。
 func (r *Repo) RejudgeSubmission(ctx context.Context, id int64) error {
-	err := r.Submissions.FindOneAndUpdate(ctx,
+	err := r.submissions.FindOneAndUpdate(ctx,
 		bson.M{"_id": id, "status": bson.M{"$nin": bson.A{StatusPending, StatusJudging, StatusCancelRequested}}},
 		rejudgeUpdate(PriorityMid),
 	).Err()
@@ -347,7 +347,7 @@ func (r *Repo) RejudgeSubmission(ctx context.Context, id int64) error {
 	}
 	if errors.Is(err, mongo.ErrNoDocuments) {
 		// 区分「不存在」与「评测中」
-		if r.Submissions.FindOne(ctx, bson.M{"_id": id}).Err() == nil {
+		if r.submissions.FindOne(ctx, bson.M{"_id": id}).Err() == nil {
 			return ErrJudging
 		}
 	}
@@ -360,7 +360,7 @@ var inFlight = bson.A{StatusPending, StatusJudging, StatusCancelRequested}
 // RejudgeProblem 按题批量重测（低优先级）：本题全部已出结果的提交重置 Pending，
 // 只在判题空闲容量里消化，不挤占学生新提交。返回重置条数。
 func (r *Repo) RejudgeProblem(ctx context.Context, pid int64) (int64, error) {
-	res, err := r.Submissions.UpdateMany(ctx,
+	res, err := r.submissions.UpdateMany(ctx,
 		bson.M{"pid": pid, "status": bson.M{"$nin": inFlight}},
 		rejudgeUpdate(PriorityLow))
 	if err != nil {
@@ -379,7 +379,7 @@ func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64,
 	if kind == KindExam {
 		field = "examId"
 	}
-	res, err := r.Submissions.UpdateMany(ctx,
+	res, err := r.submissions.UpdateMany(ctx,
 		bson.M{field: rid, "status": bson.M{"$nin": inFlight}},
 		rejudgeUpdate(PriorityLow))
 	if err != nil {
@@ -393,7 +393,7 @@ func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64,
 
 func (r *Repo) GetSubmission(ctx context.Context, id int64) (*Submission, error) {
 	var s Submission
-	if err := r.Submissions.FindOne(ctx, bson.M{"_id": id}).Decode(&s); err != nil {
+	if err := r.submissions.FindOne(ctx, bson.M{"_id": id}).Decode(&s); err != nil {
 		return nil, err
 	}
 	return &s, nil
@@ -433,11 +433,11 @@ func (r *Repo) ListSubmissions(ctx context.Context, f SubmissionFilter, page, pa
 			filter["ptitle"] = bson.M{"$regex": regexp.QuoteMeta(f.Keyword), "$options": "i"}
 		}
 	}
-	total, err := r.Submissions.CountDocuments(ctx, filter)
+	total, err := r.submissions.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	cursor, err := r.Submissions.Find(ctx, filter,
+	cursor, err := r.submissions.Find(ctx, filter,
 		options.Find().
 			SetProjection(bson.M{"code": 0}).
 			SetSort(bson.D{{Key: "_id", Value: -1}}).
@@ -473,20 +473,20 @@ func (r *Repo) MyProblemStats(ctx context.Context, uid int64, includeHidden bool
 	if !includeHidden {
 		totalFilter["hidden"] = bson.M{"$ne": true}
 	}
-	total, err := r.Problems.CountDocuments(ctx, totalFilter)
+	total, err := r.problems.CountDocuments(ctx, totalFilter)
 	if err != nil {
 		return nil, err
 	}
 	st.Total = total
 
 	// 提交数与 AC 条数
-	submissions, err := r.Submissions.CountDocuments(ctx, bson.M{"uid": uid})
+	submissions, err := r.submissions.CountDocuments(ctx, bson.M{"uid": uid})
 	if err != nil {
 		return nil, err
 	}
 	st.Submissions = submissions
 	if submissions > 0 {
-		ac, err := r.Submissions.CountDocuments(ctx, bson.M{"uid": uid, "status": StatusAccepted})
+		ac, err := r.submissions.CountDocuments(ctx, bson.M{"uid": uid, "status": StatusAccepted})
 		if err != nil {
 			return nil, err
 		}
@@ -494,7 +494,7 @@ func (r *Repo) MyProblemStats(ctx context.Context, uid int64, includeHidden bool
 	}
 
 	// AC 题数（uid + Accepted 按题去重）
-	cur, err := r.Submissions.Aggregate(ctx, mongo.Pipeline{
+	cur, err := r.submissions.Aggregate(ctx, mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"uid": uid, "status": StatusAccepted}}},
 		{{Key: "$group", Value: bson.M{"_id": "$pid"}}},
 		{{Key: "$count", Value: "n"}},
@@ -515,7 +515,7 @@ func (r *Repo) MyProblemStats(ctx context.Context, uid int64, includeHidden bool
 	// 最近 7 天提交分布：按本地日期字符串分组，再映射回 [6 天前 .. 今天] 下标
 	now := time.Now()
 	dayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -6)
-	cur, err = r.Submissions.Aggregate(ctx, mongo.Pipeline{
+	cur, err = r.submissions.Aggregate(ctx, mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"uid": uid, "createdAt": bson.M{"$gte": dayStart}}}},
 		{{Key: "$group", Value: bson.M{
 			"_id":   bson.M{"$dateToString": bson.M{"format": "%Y-%m-%d", "date": "$createdAt"}},
@@ -545,7 +545,7 @@ func (r *Repo) MyProblemStats(ctx context.Context, uid int64, includeHidden bool
 
 // HasSolved 用户是否在该题拿到过满分（代码可见性解锁判定）。
 func (r *Repo) HasSolved(ctx context.Context, uid, pid int64) (bool, error) {
-	n, err := r.Submissions.CountDocuments(ctx,
+	n, err := r.submissions.CountDocuments(ctx,
 		bson.M{"uid": uid, "pid": pid, "score": 100})
 	return n > 0, err
 }
@@ -565,7 +565,7 @@ func (r *Repo) UserBestStatuses(ctx context.Context, uid int64, pids []int64) (m
 	if uid <= 0 || len(pids) == 0 {
 		return out, nil
 	}
-	cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
+	cursor, err := r.submissions.Aggregate(ctx, []bson.M{
 		{"$match": bson.M{"uid": uid, "pid": bson.M{"$in": pids}, "published": true}},
 		// 多键排序必须 bson.D：bson.M 是 Go map 键序随机，每次请求可能变成按 _id
 		// 取最新提交而非最高分（题库状态列偶发「不是满分」的根因）。
@@ -606,7 +606,7 @@ func (r *Repo) ListPidSubmissions(ctx context.Context, pid int64, uid int64, pag
 	if lang != "" {
 		filter["lang"] = lang
 	}
-	total, err := r.Submissions.CountDocuments(ctx, filter)
+	total, err := r.submissions.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -616,7 +616,7 @@ func (r *Repo) ListPidSubmissions(ctx context.Context, pid int64, uid int64, pag
 	} else if uid == 0 && sort == "mem" {
 		sortSpec = bson.D{{Key: "memKb", Value: 1}, {Key: "timeMs", Value: 1}}
 	}
-	cursor, err := r.Submissions.Find(ctx, filter,
+	cursor, err := r.submissions.Find(ctx, filter,
 		options.Find().SetSort(sortSpec).
 			SetLimit(int64(pageSize)).
 			SetSkip(int64((page-1)*pageSize)))
@@ -643,7 +643,7 @@ func (r *Repo) ListProblemStats(ctx context.Context, pids []int64) (map[int64]Pr
 	if len(pids) == 0 {
 		return out, nil
 	}
-	cursor, err := r.Submissions.Aggregate(ctx, []bson.M{
+	cursor, err := r.submissions.Aggregate(ctx, []bson.M{
 		{"$match": bson.M{"pid": bson.M{"$in": pids}, "published": true}},
 		{"$group": bson.M{
 			"_id":      "$pid",
@@ -698,7 +698,7 @@ func (r *Repo) RankBoard(ctx context.Context, limit int) ([]RankRow, error) {
 			"nickname": "$u.nickname",
 		}}},
 	}
-	cursor, err := r.Submissions.Aggregate(ctx, pipeline)
+	cursor, err := r.submissions.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
@@ -721,7 +721,7 @@ func (r *Repo) RankMe(ctx context.Context, uid int64) (rank, solved int64, err e
 		{{Key: "$group", Value: bson.M{"_id": "$pid"}}},
 		{{Key: "$count", Value: "n"}},
 	}
-	cur, err := r.Submissions.Aggregate(ctx, myPipe)
+	cur, err := r.submissions.Aggregate(ctx, myPipe)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -745,7 +745,7 @@ func (r *Repo) RankMe(ctx context.Context, uid int64) (rank, solved int64, err e
 		}}}},
 		{{Key: "$count", Value: "n"}},
 	}
-	cur2, err := r.Submissions.Aggregate(ctx, aheadPipe)
+	cur2, err := r.submissions.Aggregate(ctx, aheadPipe)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -783,7 +783,7 @@ func (r *Repo) ProblemEfficiencyBoard(ctx context.Context, pid int64, byMem bool
 		sortKeys = bson.D{{Key: "memKb", Value: 1}, {Key: "timeMs", Value: 1}}
 	}
 	sortKeys = append(sortKeys, bson.D{{Key: "createdAt", Value: 1}, {Key: "_id", Value: 1}}...)
-	cur, err := r.Submissions.Find(ctx,
+	cur, err := r.submissions.Find(ctx,
 		bson.M{"pid": pid, "status": StatusAccepted, "published": true},
 		options.Find().
 			SetSort(sortKeys).

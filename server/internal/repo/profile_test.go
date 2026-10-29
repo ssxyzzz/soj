@@ -50,7 +50,7 @@ func TestUserFirstAccepted(t *testing.T) {
 		{ID: 1, Title: "甲", Difficulty: 3},
 		{ID: 4, Title: "丁", Difficulty: 7, Hidden: true},
 	} {
-		if _, err := r.Problems.InsertOne(ctx, p); err != nil {
+		if _, err := r.problems.InsertOne(ctx, p); err != nil {
 			t.Fatalf("插入题目: %v", err)
 		}
 	}

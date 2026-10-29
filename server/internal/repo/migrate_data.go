@@ -20,7 +20,7 @@ import (
 )
 
 func (r *Repo) migrateDataLayoutV2(ctx context.Context, store testdata.Provider) error {
-	cursor, err := r.Problems.Find(ctx, bson.M{})
+	cursor, err := r.problems.Find(ctx, bson.M{})
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func (r *Repo) migrateDataLayoutV2(ctx context.Context, store testdata.Provider)
 			_ = store.Delete(p.ID, "problem.yaml")
 			_ = store.Delete(p.ID, "config.yaml")
 			_ = store.Delete(p.ID, "statement.md")
-			if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": p.ID},
+			if _, err := r.problems.UpdateOne(ctx, bson.M{"_id": p.ID},
 				bson.M{"$unset": bson.M{"sample": ""}}); err != nil {
 				return err
 			}
@@ -112,7 +112,7 @@ func (r *Repo) migrateDataLayoutV2(ctx context.Context, store testdata.Provider)
 		if len(unset) > 0 {
 			update["$unset"] = unset
 		}
-		if _, err := r.Problems.UpdateOne(ctx, bson.M{"_id": p.ID}, update); err != nil {
+		if _, err := r.problems.UpdateOne(ctx, bson.M{"_id": p.ID}, update); err != nil {
 			return err
 		}
 	}
