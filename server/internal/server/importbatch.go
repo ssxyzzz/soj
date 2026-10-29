@@ -361,7 +361,7 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 			continue
 		}
 		pr, err := (&repo.Importer{
-			Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid,
+			Repo: h.concreteRepo(), DataDir: h.cfg.DataDir, CreatorUID: uid,
 			// 按题号跳过模式认目录名前缀：不存在则以该号落库（存在已在上方跳过，
 			// 不可能顶号）；纯新建模式维持 v0.15 防顶号口径（前缀忽略、自动取号）
 			IgnoreDirPID:   !job.SkipExistingPID,

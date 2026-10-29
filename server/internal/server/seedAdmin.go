@@ -14,8 +14,9 @@ import (
 )
 
 // importer 数据卷感知的导入器构造（种子管理与资产异步转存共用）。
+// Importer 住 repo 包内依赖私有 collection，走 concreteRepo 断言取具体实例。
 func (h *Handlers) importer() *repo.Importer {
-	return &repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, TransferImages: true}
+	return &repo.Importer{Repo: h.concreteRepo(), DataDir: h.cfg.DataDir, TransferImages: true}
 }
 
 // seedImporter 种子链的导入器（同 importer，语义别名保留给种子调用点）。

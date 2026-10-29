@@ -105,10 +105,18 @@ func (h *Handlers) AdminUpdateLevelConfig(c *gin.Context) {
 	ok(c, gin.H{"config": cfg})
 }
 
+// levelAggRepo 定级三件套所需的最小 repo 面（Handlers.repo 接口缝与 rankCache 的
+// 具体 *repo.Repo 都满足）。
+type levelAggRepo interface {
+	GetLevelConfig(ctx context.Context) (*repo.LevelConfig, error)
+	SolvedDifficultyCounts(ctx context.Context, uids []int64) (map[int64][10]int64, error)
+	SumXpAdjust(ctx context.Context, uids []int64) (map[int64]int64, error)
+}
+
 // levelAgg 定级三件套（配置 + 各难度 AC 数 + 经验调整合计，v0.29 收敛——原五处
 // 内联复制）：配置/AC 数失败返回 ok=false（调用方降级省略等级）；经验调整失败按
 // 全 0（统一口径：xpAdjust 是管理端手工加减的软增强，不可用不拖垮等级展示）。
-func levelAgg(ctx context.Context, r *repo.Repo, uids []int64) (cfg *repo.LevelConfig, counts map[int64][10]int64, adjs map[int64]int64, ok bool) {
+func levelAgg(ctx context.Context, r levelAggRepo, uids []int64) (cfg *repo.LevelConfig, counts map[int64][10]int64, adjs map[int64]int64, ok bool) {
 	cfg, err := r.GetLevelConfig(ctx)
 	if err != nil {
 		return nil, nil, nil, false

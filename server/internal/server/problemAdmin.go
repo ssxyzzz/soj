@@ -149,7 +149,7 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	}
 
 	imp := &repo.Importer{
-		Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid,
+		Repo: h.concreteRepo(), DataDir: h.cfg.DataDir, CreatorUID: uid,
 		TagIDs: tagIDs, MetaTagIDs: metaTagIDs, Difficulty: difficulty,
 		Compare: compare, FloatTolerance: tol,
 		ObjectiveQuestions: objQuestions,
@@ -594,7 +594,7 @@ func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "整理数据目录失败")
 		return
 	}
-	pr, err := (&repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir}).ReplaceData(c.Request.Context(), id, tmpDir)
+	pr, err := (&repo.Importer{Repo: h.concreteRepo(), DataDir: h.cfg.DataDir}).ReplaceData(c.Request.Context(), id, tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "替换失败："+err.Error())
 		return
@@ -941,7 +941,7 @@ func (h *Handlers) exportProblemInto(ctx context.Context, zw *zip.Writer, p *rep
 		_, err = w.Write(b)
 		return err
 	}
-	imp := &repo.Importer{Repo: h.repo}
+	imp := &repo.Importer{Repo: h.concreteRepo()}
 	if yb := imp.RenderProblemYAML(ctx, p); len(yb) > 0 {
 		if err := write("problem.yaml", yb); err != nil {
 			return err

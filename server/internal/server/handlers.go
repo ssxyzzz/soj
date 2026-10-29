@@ -26,9 +26,9 @@ type leaderEntry struct {
 }
 
 type Handlers struct {
-	cfg      *config.Config
-	repo     *repo.Repo
-	sandbox  *sandbox.Client
+	cfg     *config.Config
+	repo    RepoAPI // 依赖缝（v0.32）：生产恒 *repo.Repo（seam.go 断言），httptest 注 fake
+	sandbox *sandbox.Client
 	store    testdata.Provider // 测试数据读取（题目样例展示用）
 	waker    *judge.Waker      // 提交即时唤醒（v0.7.1）：判题同进程时空闲 worker 近零延迟领取
 	judger   *judge.Judger     // 自测直跑（v0.23）：复用判题器的编译串行闸与沙箱客户端
