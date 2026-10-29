@@ -12,7 +12,7 @@ package repo
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -363,7 +363,7 @@ func (r *Repo) migrateDifficultyEstimate(ctx context.Context) error {
 		return err
 	}
 	if changed > 0 {
-		log.Printf("[migrate][difficultyV1] 已按通过率预估 %d 道存量题的难度（D10 仅手工）", changed)
+		slog.Info("已按通过率预估存量题的难度（D10 仅手工）", "component", "migrate", "count", changed)
 	}
 	return nil
 }

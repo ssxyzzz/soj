@@ -173,6 +173,11 @@ func (r *Repo) RegradeObjective(ctx context.Context, id int64) error {
 	return err
 }
 
+// PendingDepth 判题队列当前深度（status=Pending 计数；判题可观测的巡检告警与管理端点用）。
+func (r *Repo) PendingDepth(ctx context.Context) (int64, error) {
+	return r.Submissions.CountDocuments(ctx, bson.M{"status": StatusPending})
+}
+
 // ClaimSubmission 原子领取一条待判提交：Pending -> Judging。
 // 数据库原子性保证多个判题线程/进程不会领到同一份提交。
 // 领取按优先级降序（学生新提交 > 单条重测 > 批量重测），同档按先来先服务。

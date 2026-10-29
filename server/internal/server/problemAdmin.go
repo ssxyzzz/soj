@@ -16,7 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -1043,7 +1043,7 @@ func (h *Handlers) DownloadProblemTestdata(c *gin.Context) {
 	// 打包已交付后才记账（root 不记账）
 	if role != repo.RoleRoot {
 		if err := h.repo.RecordTestDataDownload(c.Request.Context(), uid, id); err != nil {
-			log.Printf("[data-download] 记录下载失败 uid=%d pid=%d: %v", uid, id, err)
+			slog.Warn("记录数据下载失败", "component", "data-download", "uid", uid, "pid", id, "error", err)
 		}
 	}
 }
@@ -1209,7 +1209,7 @@ func (h *Handlers) ExportProblems(c *gin.Context) {
 	if role != repo.RoleRoot {
 		for _, id := range exported {
 			if err := h.repo.RecordTestDataDownload(c.Request.Context(), uid, id); err != nil {
-				log.Printf("[data-download] 多题导出记账失败 uid=%d pid=%d: %v", uid, id, err)
+				slog.Warn("多题导出记账失败", "component", "data-download", "uid", uid, "pid", id, "error", err)
 			}
 		}
 	}

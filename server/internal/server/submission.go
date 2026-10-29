@@ -2,7 +2,7 @@ package server
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -102,7 +102,7 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 			fail(c, http.StatusInternalServerError, "创建提交失败")
 			return
 		}
-		log.Printf("[web] 用户 %s 提交客观题 #%d (题目 %d)", uname, id, req.ProblemID)
+		slog.Info("用户提交客观题", "component", "web", "username", uname, "sid", id, "pid", req.ProblemID)
 		ok(c, gin.H{"id": id})
 		return
 	}
@@ -151,13 +151,13 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 	}
 	if req.ChallengeID != 0 {
 		if _, err := h.repo.AttachChallengeSubmission(ctx, req.ChallengeID, id, req.Language, len(req.Code), req.ChangeLog); err != nil {
-			log.Printf("[challenge] 提交绑定失败(cid=%d sid=%d): %v", req.ChallengeID, id, err)
+			slog.Error("挑战提交绑定失败", "component", "challenge", "cid", req.ChallengeID, "sid", id, "error", err)
 		}
 	}
 	h.wakeJudge() // 即时唤醒空闲 worker（多进程部署靠 1s 轮询兜底）
-	log.Printf("[web] 用户 %s 提交 #%d (题目 %d, %s)", uname, id, req.ProblemID, req.Language)
+	slog.Info("用户提交", "component", "web", "username", uname, "sid", id, "pid", req.ProblemID, "lang", req.Language)
 	if req.ChallengeID != 0 {
-		log.Printf("[web] 用户 %s 挑战提交 #%d (会话 %d, 题目 %d)", uname, id, req.ChallengeID, req.ProblemID)
+		slog.Info("用户挑战提交", "component", "web", "username", uname, "sid", id, "cid", req.ChallengeID, "pid", req.ProblemID)
 	}
 	ok(c, gin.H{"id": id})
 }

@@ -6,7 +6,7 @@ package repo
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -107,7 +107,7 @@ func (r *Repo) bootstrapRenderedHtmlAsync() {
 	go func() {
 		defer func() {
 			if rec := recover(); rec != nil {
-				log.Printf("[render-migrate] 迁移任务 panic: %v", rec)
+				slog.Error("渲染缓存迁移任务 panic", "component", "render-migrate", "panic", rec)
 			}
 		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -122,19 +122,20 @@ func (r *Repo) bootstrapRenderedHtmlAsync() {
 		refetch := hasPrev && prev != mdrender.LuteVersion // 版本变更：全量重刷
 		n, err := r.MigrateRenderedHtml(ctx, refetch)
 		if err != nil {
-			log.Printf("[render-migrate] 渲染缓存迁移失败（下次启动重试）: %v", err)
+			slog.Warn("渲染缓存迁移失败（下次启动重试）", "component", "render-migrate", "error", err)
 			return
 		}
 		if _, err := r.db.Collection("meta").UpdateOne(ctx,
 			bson.M{"_id": "rendered"},
 			bson.M{"$set": bson.M{"rendered." + renderedMetaKey: mdrender.LuteVersion}},
 			options.UpdateOne().SetUpsert(true)); err != nil {
-			log.Printf("[render-migrate] 版本标记写入失败: %v", err)
+			slog.Error("渲染缓存版本标记写入失败", "component", "render-migrate", "error", err)
 			return
 		}
 		if n > 0 || refetch {
-			log.Printf("[render-migrate] 渲染缓存迁移完成：%d 份文档（lute %s，%s）",
-				n, mdrender.LuteVersion, map[bool]string{true: "全量重刷", false: "补缺失"}[refetch])
+			slog.Info("渲染缓存迁移完成", "component", "render-migrate",
+				"docs", n, "lute", mdrender.LuteVersion,
+				"mode", map[bool]string{true: "全量重刷", false: "补缺失"}[refetch])
 		}
 	}()
 }

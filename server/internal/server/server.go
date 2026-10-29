@@ -6,7 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -20,6 +20,12 @@ import (
 	"soj/internal/repo"
 	"soj/internal/sandbox"
 )
+
+// fatalWeb 结构化版 log.Fatal：Error 级落一条（component=web）后退出。
+func fatalWeb(msg string, args ...any) {
+	slog.Error(msg, append([]any{"component", "web"}, args...)...)
+	os.Exit(1)
+}
 
 // Deps 服务运行依赖。
 type Deps struct {
@@ -37,7 +43,7 @@ type Deps struct {
 func resolveJWTSecret(cfg *config.Config) string {
 	if s := cfg.JWTSecret; s != "" {
 		if s == "soj-dev-secret-change-me" || s == "soj-dev-secret" {
-			log.Println("[web] 警告: SOJ_JWT_SECRET 为开发默认值，生产环境务必更换为随机长字符串")
+			slog.Warn("SOJ_JWT_SECRET 为开发默认值，生产环境务必更换为随机长字符串", "component", "web")
 		}
 		return s
 	}
@@ -45,25 +51,25 @@ func resolveJWTSecret(cfg *config.Config) string {
 	if b, err := os.ReadFile(path); err == nil {
 		s := strings.TrimSpace(string(b))
 		if len(s) < 32 {
-			log.Fatalf("[web] 密钥卷文件 %s 内容不足 32 字符（疑似损坏），请删除该文件后重启以自动重新生成", path)
+			fatalWeb("密钥卷文件内容不足 32 字符（疑似损坏），请删除该文件后重启以自动重新生成", "path", path)
 		}
-		log.Printf("[web] 未设置 SOJ_JWT_SECRET，已从密钥卷载入 %s", path)
+		slog.Info("未设置 SOJ_JWT_SECRET，已从密钥卷载入", "component", "web", "path", path)
 		return s
 	} else if !os.IsNotExist(err) {
-		log.Fatalf("[web] 密钥卷文件 %s 不可读（%v），请检查 SOJ_KEYS_DIR 挂载权限，或显式设置 SOJ_JWT_SECRET", path, err)
+		fatalWeb("密钥卷文件不可读，请检查 SOJ_KEYS_DIR 挂载权限，或显式设置 SOJ_JWT_SECRET", "path", path, "error", err)
 	}
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		log.Fatalf("[web] 生成随机 JWT 密钥失败: %v", err)
+		fatalWeb("生成随机 JWT 密钥失败", "error", err)
 	}
 	s := hex.EncodeToString(b)
 	if err := os.MkdirAll(cfg.KeysDir, 0o700); err != nil {
-		log.Fatalf("[web] 密钥卷目录 %s 不可写（%v），无法持久化自动生成的 JWT 密钥；请修复挂载权限，或显式设置 SOJ_JWT_SECRET", cfg.KeysDir, err)
+		fatalWeb("密钥卷目录不可写，无法持久化自动生成的 JWT 密钥；请修复挂载权限，或显式设置 SOJ_JWT_SECRET", "path", cfg.KeysDir, "error", err)
 	}
 	if err := os.WriteFile(path, []byte(s), 0o600); err != nil {
-		log.Fatalf("[web] 密钥卷文件 %s 不可写（%v），无法持久化自动生成的 JWT 密钥；请修复挂载权限，或显式设置 SOJ_JWT_SECRET", path, err)
+		fatalWeb("密钥卷文件不可写，无法持久化自动生成的 JWT 密钥；请修复挂载权限，或显式设置 SOJ_JWT_SECRET", "path", path, "error", err)
 	}
-	log.Printf("[web] 未设置 SOJ_JWT_SECRET，已自动生成随机密钥并持久化到 %s（多实例部署请显式设置该环境变量）", path)
+	slog.Info("未设置 SOJ_JWT_SECRET，已自动生成随机密钥并持久化（多实例部署请显式设置该环境变量）", "component", "web", "path", path)
 	return s
 }
 
@@ -76,10 +82,10 @@ func Run(ctx context.Context, deps *Deps) {
 	// 注册/找回功能打成半残，早失败好过线上排查）
 	if s, err := deps.Repo.GetSystemSettings(ctx); err == nil {
 		if s.MailChannelVal() == repo.MailChannelSMTP && !s.SMTP.Ready() {
-			log.Fatal("[web] 邮件通道为 smtp 但配置不完整（主机/端口/发件人），请在后台补全或先切回 log 通道")
+			fatalWeb("邮件通道为 smtp 但配置不完整（主机/端口/发件人），请在后台补全或先切回 log 通道")
 		}
 	} else {
-		log.Printf("[web] 警告: 启动时读取系统设置失败，跳过邮件通道校验: %v", err)
+		slog.Warn("启动时读取系统设置失败，跳过邮件通道校验", "component", "web", "error", err)
 	}
 	if os.Getenv("SOJ_DEBUG") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -104,7 +110,7 @@ func Run(ctx context.Context, deps *Deps) {
 	// 可信代理（v0.13）：ClientIP() 只从可信直连方解析 X-Forwarded-For，
 	// 防 XFF 伪造；反代拓扑下配置后可还原学生真实 IP（v0.14 限流依赖）
 	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
-		log.Fatalf("[web] 可信代理配置无效（SOJ_TRUSTED_PROXIES）: %v", err)
+		fatalWeb("可信代理配置无效（SOJ_TRUSTED_PROXIES）", "error", err)
 	}
 	r.Use(gin.Logger(), gin.Recovery(), CORS(), Gzip())
 
@@ -359,6 +365,8 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.GET("/seed", RequireRoot(), h.AdminSeedStatus)
 				adminG.POST("/seed/deploy", RequireRoot(), h.AdminSeedDeploy)
 				adminG.POST("/seed/clear", RequireRoot(), h.AdminSeedClear)
+				// 判题可观测（v0.32）：只读统计（窗口完成数/时长/Pending 深度），root 专属
+				adminG.GET("/judge/stats", RequireRoot(), h.AdminJudgeStats)
 
 				// 等级面板（v0.11）：名称/阈值/衰减系数/特效开关，仅 root
 				adminG.GET("/levelconfig", RequireRoot(), h.AdminGetLevelConfig)
@@ -388,7 +396,7 @@ func Run(ctx context.Context, deps *Deps) {
 	// 开赛/开考提醒扫描（v0.24）：Web 进程内每分钟一扫，判题进程（--judge-only）不启
 	go h.notifyStartLoop(ctx)
 
-	log.Printf("[web] SOJ 启动: %s (判题并发 %d, 沙箱 %s)", cfg.Addr, cfg.JudgeWorkers, cfg.SandboxAddr)
+	slog.Info("SOJ 启动", "component", "web", "addr", cfg.Addr, "workers", cfg.JudgeWorkers, "sandbox", cfg.SandboxAddr)
 
 	// v0.25 万题体检：原无任何超时，慢客户端可无限占用连接/goroutine。
 	// 刻意不设 Read/WriteTimeout——多题导出与备份是长流式下载，会被 WriteTimeout 掐断。
@@ -400,14 +408,14 @@ func Run(ctx context.Context, deps *Deps) {
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("[web] HTTP 服务异常退出: %v", err)
+			fatalWeb("HTTP 服务异常退出", "error", err)
 		}
 	}()
 	<-ctx.Done()
-	log.Println("[web] 收到退出信号，关闭 HTTP 服务...")
+	slog.Info("收到退出信号，关闭 HTTP 服务", "component", "web")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("[web] 强制退出: %v", err)
+		slog.Warn("HTTP 服务优雅退出超时，强制退出", "component", "web", "error", err)
 	}
 }

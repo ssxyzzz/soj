@@ -15,7 +15,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -165,31 +165,31 @@ func (im *Importer) stageProblemAssets(store testdata.Provider, pid int64, dir s
 		switch ext {
 		case ".png", ".jpg", ".jpeg", ".gif", ".webp":
 		default:
-			log.Printf("[assets] #%d 跳过 %s：后缀不在白名单（png/jpg/jpeg/gif/webp）", pid, name)
+			slog.Warn("跳过：后缀不在白名单（png/jpg/jpeg/gif/webp）", "component", "assets", "pid", pid, "name", name)
 			continue
 		}
 		content, err := os.ReadFile(filepath.Join(assetsDir, name))
 		if err != nil {
-			log.Printf("[assets] #%d 读取 %s 失败: %v", pid, name, err)
+			slog.Error("读取资产失败", "component", "assets", "pid", pid, "name", name, "error", err)
 			continue
 		}
 		if int64(len(content)) > AssetMaxFileBytes {
-			log.Printf("[assets] #%d 跳过 %s：超过单文件 5MB 上限", pid, name)
+			slog.Warn("跳过：超过单文件 5MB 上限", "component", "assets", "pid", pid, "name", name)
 			continue
 		}
 		// 后缀可伪造，内容不能：按魔数定真实类型（svg 嗅探不出即被拒）。
 		real := safefetch.DetectImageExt(content)
 		if real == "" {
-			log.Printf("[assets] #%d 跳过 %s：内容不是白名单图片", pid, name)
+			slog.Warn("跳过：内容不是白名单图片", "component", "assets", "pid", pid, "name", name)
 			continue
 		}
 		if total+int64(len(content)) > AssetMaxTotalBytes {
-			log.Printf("[assets] #%d 跳过 %s：单题资产将超 20MB 总量上限", pid, name)
+			slog.Warn("跳过：单题资产将超 20MB 总量上限", "component", "assets", "pid", pid, "name", name)
 			continue
 		}
 		stored, err := saveAsset(store, pid, content, real)
 		if err != nil {
-			log.Printf("[assets] #%d 落库 %s 失败: %v", pid, name, err)
+			slog.Error("落库资产失败", "component", "assets", "pid", pid, "name", name, "error", err)
 			continue
 		}
 		total += int64(len(content))
@@ -221,18 +221,18 @@ func (im *Importer) transferExternalImages(ctx context.Context, store testdata.P
 		}
 		content, ext, err := fetcher.GetImage(ctx, u)
 		if err != nil {
-			log.Printf("[assets] #%d 转存失败（保留外链）%s: %v", pid, u, err)
+			slog.Warn("转存失败（保留外链）", "component", "assets", "pid", pid, "url", u, "error", err)
 			notes = append(notes, AssetTransferNote{URL: u, Err: err.Error()})
 			continue
 		}
 		if total+int64(len(content)) > AssetMaxTotalBytes {
-			log.Printf("[assets] #%d 转存中止（保留外链）%s：单题资产将超 20MB 总量上限", pid, u)
+			slog.Warn("转存中止（保留外链）：单题资产将超 20MB 总量上限", "component", "assets", "pid", pid, "url", u)
 			notes = append(notes, AssetTransferNote{URL: u, Err: "单题资产总量超限，保留外链"})
 			continue
 		}
 		stored, err := saveAsset(store, pid, content, ext)
 		if err != nil {
-			log.Printf("[assets] #%d 落库失败（保留外链）%s: %v", pid, u, err)
+			slog.Warn("落库失败（保留外链）", "component", "assets", "pid", pid, "url", u, "error", err)
 			notes = append(notes, AssetTransferNote{URL: u, Err: err.Error()})
 			continue
 		}
@@ -282,7 +282,7 @@ func (im *Importer) TransferStatementAssetsAsync(pid int64) {
 		ctx, cancel := context.WithTimeout(context.Background(), assetTransferBudget)
 		defer cancel()
 		if err := im.transferProblemAssets(ctx, pid); err != nil {
-			log.Printf("[assets] #%d 异步转存失败: %v", pid, err)
+			slog.Warn("异步转存失败", "component", "assets", "pid", pid, "error", err)
 		}
 	}()
 }

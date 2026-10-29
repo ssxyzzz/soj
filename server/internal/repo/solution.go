@@ -6,7 +6,7 @@ package repo
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -86,8 +86,8 @@ func (r *Repo) EnsureSolutionUnique(ctx context.Context) (int64, error) {
 			return removed, err
 		}
 		removed += res.DeletedCount
-		log.Printf("[boot] 题解去重：同题同人多篇保留最早一篇，清理 %d 篇（pid=%d uid=%d）",
-			res.DeletedCount, row.ID.PID, row.ID.UID)
+		slog.Info("题解去重：同题同人多篇保留最早一篇", "component", "boot",
+			"removed", res.DeletedCount, "pid", row.ID.PID, "uid", row.ID.UID)
 	}
 	if err := cursor.Err(); err != nil {
 		return removed, err

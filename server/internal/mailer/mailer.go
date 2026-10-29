@@ -8,7 +8,7 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/smtp"
 	"strconv"
@@ -140,7 +140,7 @@ func (s *SMTP) Send(to, subject, body string) error {
 type Log struct{}
 
 func (Log) Send(to, subject, body string) error {
-	log.Printf("[mailer:log] to=%s subject=%q body=%q", to, subject, body)
+	slog.Info("邮件 log 通道：不外发，人工转告", "component", "mailer", "to", to, "subject", subject, "body", body)
 	return nil
 }
 

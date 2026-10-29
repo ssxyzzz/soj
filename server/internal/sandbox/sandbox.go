@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -170,7 +170,7 @@ func (c *Client) RunPiped(ctx context.Context, cmds []Cmd, pipes []PipeMap) ([]R
 		return nil, err
 	}
 	if os.Getenv("SOJ_DEBUG") != "" {
-		log.Printf("[sandbox] 请求: %s", truncate(string(body), 4096))
+		slog.Info("沙箱请求（SOJ_DEBUG）", "component", "sandbox", "body", truncate(string(body), 4096))
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/run", bytes.NewReader(body))
 	if err != nil {

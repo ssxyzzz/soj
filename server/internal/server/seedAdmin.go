@@ -5,7 +5,7 @@ package server
 // importer.SeedInventory）；root 专属（部署级操作，同标签树/角色管理先例）。
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -34,7 +34,7 @@ func (h *Handlers) AdminSeedStatus(c *gin.Context) {
 	}
 	rows, err := h.seedImporter().SeedInventory(c.Request.Context(), h.cfg.SeedDir)
 	if err != nil {
-		log.Printf("[seed] 对账失败: %v", err)
+		slog.Error("种子对账失败", "component", "seed", "error", err)
 		fail(c, http.StatusInternalServerError, "读取种子目录失败")
 		return
 	}
@@ -50,7 +50,7 @@ func (h *Handlers) AdminSeedDeploy(c *gin.Context) {
 	}
 	outcomes, err := h.seedImporter().SeedDeploy(c.Request.Context(), h.cfg.SeedDir)
 	if err != nil {
-		log.Printf("[seed] 部署失败: %v", err)
+		slog.Error("种子部署失败", "component", "seed", "error", err)
 		fail(c, http.StatusInternalServerError, "部署种子题失败")
 		return
 	}
@@ -66,7 +66,7 @@ func (h *Handlers) AdminSeedClear(c *gin.Context) {
 	}
 	stats, err := h.seedImporter().SeedClear(c.Request.Context(), h.cfg.SeedDir)
 	if err != nil {
-		log.Printf("[seed] 清除失败: %v", err)
+		slog.Error("种子清除失败", "component", "seed", "error", err)
 		fail(c, http.StatusInternalServerError, "清除种子题失败")
 		return
 	}

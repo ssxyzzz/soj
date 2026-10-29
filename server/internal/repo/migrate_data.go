@@ -9,7 +9,7 @@ package repo
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"path"
 	"sort"
 	"strings"
@@ -59,7 +59,7 @@ func (r *Repo) migrateDataLayoutV2(ctx context.Context, store testdata.Provider)
 				ansName = fmt.Sprintf("data/test%d.out", n)
 			}
 			if err := moveVolumeFile(store, p.ID, tc.InName, inName); err != nil {
-				log.Printf("[migrate][dataLayoutV2] 题目 %d 迁移 %s 失败: %v", p.ID, tc.InName, err)
+				slog.Error("数据卷布局迁移失败", "component", "migrate", "pid", p.ID, "case", tc.InName, "error", err)
 				continue
 			}
 			if ansName != "" {

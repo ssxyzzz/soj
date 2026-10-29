@@ -3,7 +3,7 @@
 package config
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -47,9 +47,9 @@ func Load() *Config {
 	}
 	c.TrustedProxies = parseTrustedProxies(getEnv("SOJ_TRUSTED_PROXIES", "127.0.0.1,::1"))
 	if len(c.TrustedProxies) == 0 {
-		log.Printf("[web] 可信代理: 无（不解析 X-Forwarded-For，ClientIP 取直连地址）")
+		slog.Info("可信代理: 无（不解析 X-Forwarded-For，ClientIP 取直连地址）", "component", "web")
 	} else {
-		log.Printf("[web] 可信代理: %s", strings.Join(c.TrustedProxies, ","))
+		slog.Info("可信代理", "component", "web", "proxies", strings.Join(c.TrustedProxies, ","))
 	}
 	return c
 }

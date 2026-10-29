@@ -12,7 +12,7 @@ package repo
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -102,7 +102,7 @@ func (r *Repo) sweepExpired(ctx context.Context, uid, pid int64) {
 	if _, err := r.Challenges.UpdateMany(ctx,
 		bson.M{"uid": uid, "pid": pid, "status": ChallengeRunning, "deadlineAt": bson.M{"$lt": time.Now()}},
 		bson.M{"$set": bson.M{"status": ChallengeTimeout, "finishedAt": time.Now()}}); err != nil {
-		log.Printf("[challenge] 超时清扫失败(uid=%d pid=%d): %v", uid, pid, err)
+		slog.Warn("超时清扫失败", "component", "challenge", "uid", uid, "pid", pid, "error", err)
 	}
 }
 
@@ -178,10 +178,10 @@ func (r *Repo) AttachChallengeSubmission(ctx context.Context, cid, sid int64, la
 		if total <= challengeMaxDeltaText && len(changelog) <= challengeMaxDeltas {
 			if _, err := r.Challenges.UpdateOne(ctx, bson.M{"_id": cid},
 				bson.M{"$set": bson.M{"changelog": changelog}}); err != nil {
-				log.Printf("[challenge] 打字流水留存失败(cid=%d): %v", cid, err)
+				slog.Warn("打字流水留存失败", "component", "challenge", "cid", cid, "error", err)
 			}
 		} else {
-			log.Printf("[challenge] 打字流水超限丢弃(cid=%d entries=%d bytes=%d)", cid, len(changelog), total)
+			slog.Warn("打字流水超限丢弃", "component", "challenge", "cid", cid, "entries", len(changelog), "bytes", total)
 		}
 	}
 	return true, nil
@@ -203,7 +203,7 @@ func (r *Repo) FinalizeChallengeOnAC(ctx context.Context, uid, pid, sid int64, c
 	err := r.Challenges.FindOne(ctx, bson.M{"uid": uid, "pid": pid, "submissionId": sid, "status": ChallengeRunning}).Decode(&c)
 	if err != nil {
 		if !IsNotFound(err) {
-			log.Printf("[challenge] AC 终判读取失败(uid=%d pid=%d sid=%d): %v", uid, pid, sid, err)
+			slog.Error("AC 终判读取失败", "component", "challenge", "uid", uid, "pid", pid, "sid", sid, "error", err)
 		}
 		return
 	}
@@ -211,7 +211,7 @@ func (r *Repo) FinalizeChallengeOnAC(ctx context.Context, uid, pid, sid int64, c
 		CreatedAt time.Time `bson:"createdAt"`
 	}
 	if err := r.Submissions.FindOne(ctx, bson.M{"_id": sid}, options.FindOne().SetProjection(bson.M{"createdAt": 1})).Decode(&sub); err != nil {
-		log.Printf("[challenge] AC 终判读提交失败(sid=%d): %v", sid, err)
+		slog.Error("AC 终判读提交失败", "component", "challenge", "sid", sid, "error", err)
 		return
 	}
 	status, duration := ChallengeAC, sub.CreatedAt.Sub(c.StartedAt).Milliseconds()
@@ -227,7 +227,7 @@ func (r *Repo) FinalizeChallengeOnAC(ctx context.Context, uid, pid, sid int64, c
 		set["charsPerSec"] = float64(codeLen) / (float64(duration) / 1000.0)
 	}
 	if _, err := r.Challenges.UpdateOne(ctx, bson.M{"_id": c.ID, "status": ChallengeRunning}, bson.M{"$set": set}); err != nil {
-		log.Printf("[challenge] AC 终判回写失败(cid=%d): %v", c.ID, err)
+		slog.Error("AC 终判回写失败", "component", "challenge", "cid", c.ID, "error", err)
 	}
 }
 

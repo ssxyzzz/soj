@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
@@ -114,6 +115,8 @@ func (h *Handlers) Rank(c *gin.Context) {
 						uname, nick = "-", "-"
 					}
 					me["username"], me["nickname"] = uname, nick
+				} else {
+					slog.Warn("榜单：榜外用户信息读取失败，省略用户名字段", "component", "web", "uid", uid, "error", err)
 				}
 				// 等级与榜单同口径（解题难度分布 + 经验调整）；0 解题不出等级
 				if solved > 0 {
@@ -123,8 +126,10 @@ func (h *Handlers) Rank(c *gin.Context) {
 						}
 					}
 				}
+			} else {
+				// RankMe 失败：me 缺省为空，前端退化为纯榜单
+				slog.Warn("榜单：榜外排名补算失败，me 省略", "component", "web", "uid", uid, "error", err)
 			}
-			// RankMe 失败：me 缺省为空，前端退化为纯榜单
 		}
 	}
 	ok(c, gin.H{"items": all[start:end], "me": me, "total": len(all)})

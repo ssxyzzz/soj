@@ -13,7 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"math"
 	"strconv"
 	"strings"
@@ -81,6 +81,7 @@ func (j *Judger) Pool(ctx context.Context, workers int) {
 	if workers < 1 {
 		workers = 1
 	}
+	go j.pendingWatch(ctx) // Pending 深度巡检（判题可观测）：进程内单例，随池启停
 	for i := 0; i < workers; i++ {
 		go j.loop(ctx, i)
 	}
@@ -96,7 +97,7 @@ func (j *Judger) loop(ctx context.Context, worker int) {
 		}
 		sub, err := j.Repo.ClaimSubmission(ctx, name)
 		if err != nil {
-			log.Printf("[judge] 领取任务失败(%s): %v", name, err)
+			slog.Error("领取任务失败", "component", "judge", "worker", name, "error", err)
 			sleepCtx(ctx, pollInterval)
 			continue
 		}
@@ -126,27 +127,29 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 	defer func() {
 		close(stopHB)
 		if r := recover(); r != nil {
-			log.Printf("[judge] 提交 #%d 判题 panic: %v", sub.ID, r)
+			slog.Error("判题 panic", "component", "judge", "sid", sub.ID, "panic", r)
 			_ = j.Repo.FinishSubmission(ctx, sub.ID, sub.Judge, repo.StatusSystemError, 0, 0, 0,
 				"判题器内部错误", nil)
 		}
 	}()
 
-	log.Printf("[judge] 开始判题 #%d uid=%d pid=%d lang=%s", sub.ID, sub.UID, sub.ProblemID, sub.Language)
+	slog.Info("开始判题", "component", "judge", "sid", sub.ID, "uid", sub.UID, "pid", sub.ProblemID, "lang", sub.Language)
+	judgeStart := time.Now()
 	status, timeMS, memKB, score, info, detail := j.evaluate(ctx, sub)
+	recordJudge(time.Since(judgeStart)) // 判题可观测：完成数与时长（不含排队）
 	if status == statusLeaseLost {
-		log.Printf("[judge] 提交 #%d 租约已失效，弃写结果", sub.ID)
+		slog.Warn("租约已失效，弃写结果", "component", "judge", "sid", sub.ID)
 		return
 	}
 	if err := j.Repo.FinishSubmission(ctx, sub.ID, sub.Judge, status, timeMS, memKB, score, info, detail); err != nil {
 		if errors.Is(err, repo.ErrLeaseLost) {
-			log.Printf("[judge] 提交 #%d 回写被拒（租约已转移/回收），弃写", sub.ID)
+			slog.Warn("回写被拒（租约已转移/回收），弃写", "component", "judge", "sid", sub.ID)
 		} else {
-			log.Printf("[judge] 回写提交 #%d 结果失败: %v", sub.ID, err)
+			slog.Error("回写提交结果失败", "component", "judge", "sid", sub.ID, "error", err)
 		}
 		return
 	}
-	log.Printf("[judge] 提交 #%d => %s (%dms / %dKB / %d分)", sub.ID, status, timeMS, memKB, score)
+	slog.Info("判题完成", "component", "judge", "sid", sub.ID, "status", status, "ms", timeMS, "mem_kb", memKB, "score", score)
 	// 挑战模式（v0.23）：AC 触发挑战终判（时长按提交创建时刻起算，判题排队耗时不惩罚选手；
 	// 已终态的会话重复触发为 no-op，重测幂等）
 	if status == repo.StatusAccepted && sub.ChallengeID != 0 {
@@ -168,7 +171,7 @@ func (j *Judger) heartbeatLoop(ctx context.Context, sub *repo.Submission, stop c
 		case <-t.C:
 			hctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			if err := j.Repo.HeartbeatSubmission(hctx, sub.ID, sub.Judge); err != nil {
-				log.Printf("[judge] 提交 #%d 心跳失败: %v", sub.ID, err)
+				slog.Warn("租约心跳失败", "component", "judge", "sid", sub.ID, "error", err)
 			}
 			cancel()
 		}
@@ -404,7 +407,7 @@ func (j *Judger) programOutput(ctx context.Context, res *sandbox.Result, fio fil
 	dctx, dcancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer dcancel()
 	if derr := j.Sandbox.DeleteFile(dctx, id); derr != nil {
-		log.Printf("[judge] 清理输出缓存文件失败: %v", derr)
+		slog.Warn("清理输出缓存文件失败", "component", "judge", "error", derr)
 	}
 	if err != nil {
 		return "", false, fmt.Errorf("拉取考生输出失败: %w", err)
@@ -649,7 +652,7 @@ func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (fi
 			detail += "\n" + truncate(stderr, 4096)
 		}
 		if attempt < maxAttempts {
-			log.Printf("[judge] 编译瞬时失败(%s, stderr=%q)，自动重试", r.Status, truncate(stderr, 200))
+			slog.Warn("编译瞬时失败，自动重试", "component", "judge", "status", r.Status, "stderr", truncate(stderr, 200))
 			continue
 		}
 		return "", repo.StatusCompileError, detail, nil
@@ -716,7 +719,7 @@ func (j *Judger) releaseBinary(fileID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := j.Sandbox.DeleteFile(ctx, fileID); err != nil {
-		log.Printf("[judge] 清理编译产物失败: %v", err)
+		slog.Warn("清理编译产物失败", "component", "judge", "file", fileID, "error", err)
 	}
 }
 

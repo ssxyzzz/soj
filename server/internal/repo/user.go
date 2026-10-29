@@ -3,7 +3,7 @@ package repo
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -217,7 +217,7 @@ func (r *Repo) SeedUserCounter(ctx context.Context) error {
 		return nil // 全新计数器，本次 $max 已写入起点-1
 	}
 	if err == nil && before.Seq < start-1 {
-		log.Printf("[boot] user 计数器已从 %d 垫到 %d（注册取号起点 %d）", before.Seq, start-1, start)
+		slog.Info("user 计数器已垫高（注册取号起点）", "component", "boot", "from", before.Seq, "to", start-1, "start", start)
 	}
 	return err
 }

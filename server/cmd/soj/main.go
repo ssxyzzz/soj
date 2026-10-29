@@ -9,7 +9,7 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,6 +24,12 @@ import (
 	"soj/internal/testdata"
 )
 
+// fatal 结构化版 log.Fatalf：Error 级落一条后退出（组件词走 component 属性，可 grep）。
+func fatal(component, msg string, args ...any) {
+	slog.Error(msg, append([]any{"component", component}, args...)...)
+	os.Exit(1)
+}
+
 func main() {
 	judgeOnly := flag.Bool("judge-only", false, "只运行判题线程池，不启动 HTTP 服务")
 	importDir := flag.String("import", "", "导入一个题目目录后退出")
@@ -31,18 +37,22 @@ func main() {
 	backupTier := flag.String("backup-tier", "all", "备份分层：db=每日库备 | media=每周数据卷 | all=全量")
 	flag.Parse()
 
+	// slog 一处收口（v0.32）：TextHandler 到 stderr、时间 RFC3339 毫秒；此后全站
+	// log.Printf 禁用，组件词统一走 component 属性（grep 口径：component=judge 等）。
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+
 	cfg := config.Load()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	r, err := repo.Connect(ctx, cfg.MongoURI, cfg.MongoDB)
 	if err != nil {
-		log.Fatalf("[boot] %v", err)
+		fatal("boot", "MongoDB 连接失败", "error", err)
 	}
 	defer r.Close(context.Background())
 	store := testdata.NewLocalFS(cfg.DataDir)
 	if err := r.Bootstrap(ctx, store); err != nil {
-		log.Fatalf("[boot] 初始化失败: %v", err)
+		fatal("boot", "初始化失败", "error", err)
 	}
 	cleanupStaleTemp(cfg)
 
@@ -53,9 +63,9 @@ func main() {
 		imp := &repo.Importer{Repo: r, DataDir: cfg.DataDir, TransferImages: true}
 		pr, err := imp.ImportDir(ctx, *importDir)
 		if err != nil {
-			log.Fatalf("[import] 导入失败: %v", err)
+			fatal("import", "导入失败", "error", err)
 		}
-		log.Printf("[import] 已导入题目 #%d（来自 %s）", pr.ID, *importDir)
+		slog.Info("已导入题目", "component", "import", "pid", pr.ID, "dir", *importDir)
 		return
 	}
 
@@ -63,7 +73,7 @@ func main() {
 	// 与管理后台 /admin/backup/run 走 internal/backup 同一模块、同一密钥卷）
 	if *backupRun {
 		if !backup.ValidTier(*backupTier) {
-			log.Fatalf("[backup] 未知分层 %q（可用：db / media / all）", *backupTier)
+			fatal("backup", "未知备份分层（可用：db / media / all）", "tier", *backupTier)
 		}
 		path, err := backup.Run(ctx, backup.Options{
 			MongoURI:   cfg.MongoURI,
@@ -74,16 +84,16 @@ func main() {
 			Tier:       *backupTier,
 		})
 		if err != nil {
-			log.Fatalf("[backup] %v", err)
+			fatal("backup", "备份失败", "error", err)
 		}
-		log.Printf("[backup] 已生成 %s", path)
+		slog.Info("备份已生成", "component", "backup", "path", path)
 		return
 	}
 
 	// 种子题目：仅 Web 模式导入（多实例时避免重复导入竞争）
 	if !*judgeOnly && cfg.SeedDir != "" {
 		if err := (&repo.Importer{Repo: r, DataDir: cfg.DataDir}).SeedAll(ctx, cfg.SeedDir); err != nil {
-			log.Fatalf("[seed] 种子题目导入失败: %v", err)
+			fatal("seed", "种子题目导入失败", "error", err)
 		}
 	}
 
@@ -97,10 +107,10 @@ func main() {
 				return
 			case <-ticker.C:
 				if n, err := r.PublishDueRounds(ctx, time.Now()); err != nil {
-					log.Printf("[publish] %v", err)
-				} else if n > 0 {
-					log.Printf("[publish] 已发布 %d 场到期的比赛/考试", n)
-				}
+				slog.Error("到期比赛/考试发布失败", "component", "publish", "error", err)
+			} else if n > 0 {
+				slog.Info("已发布到期的比赛/考试", "component", "publish", "count", n)
+			}
 			}
 		}
 	}()
@@ -116,7 +126,7 @@ func main() {
 	jd.Pool(ctx, cfg.JudgeWorkers)
 
 	if *judgeOnly {
-		log.Printf("[judge] 独立判题进程启动: workers=%d sandbox=%s", cfg.JudgeWorkers, cfg.SandboxAddr)
+		slog.Info("独立判题进程启动", "component", "judge", "workers", cfg.JudgeWorkers, "sandbox", cfg.SandboxAddr)
 		<-ctx.Done()
 		return
 	}
@@ -133,11 +143,11 @@ func main() {
 			case <-ticker.C:
 				requeued, cancelled, err := r.ReclaimExpiredLeases(ctx, time.Now().Add(-repo.LeaseStaleAfter))
 				if err != nil {
-					log.Printf("[judge] 租约回收失败: %v", err)
+					slog.Error("租约回收失败", "component", "judge", "error", err)
 					continue
 				}
 				if requeued+cancelled > 0 {
-					log.Printf("[judge] 租约回收：重排队 %d 条，转取消 %d 条", requeued, cancelled)
+					slog.Info("租约回收：重排队与转取消", "component", "judge", "requeued", requeued, "cancelled", cancelled)
 					waker.Notify()
 				}
 			}
@@ -163,9 +173,9 @@ func hostname() string {
 func cleanupStaleTemp(cfg *config.Config) {
 	const olderThan = 2 * time.Hour
 	if n := server.CleanupStaleImportTemp(olderThan); n > 0 {
-		log.Printf("[boot] 已清扫 %d 个残留导入临时文件", n)
+		slog.Info("已清扫残留导入临时文件", "component", "boot", "count", n)
 	}
 	if n := backup.CleanupStaleTemp(cfg.BackupDir, olderThan); n > 0 {
-		log.Printf("[boot] 已清扫 %d 个残留备份临时目录", n)
+		slog.Info("已清扫残留备份临时目录", "component", "boot", "count", n)
 	}
 }

@@ -4,7 +4,7 @@ package repo
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -60,7 +60,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 				break
 			}
 		}
-		log.Printf("等待 MongoDB 就绪: %v", err)
+		slog.Warn("等待 MongoDB 就绪", "component", "boot", "error", err)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -188,7 +188,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if res, err := r.Notifications.DeleteMany(ctx, bson.M{"_id": bson.M{"$type": "objectId"}}); err != nil {
 		return err
 	} else if res.DeletedCount > 0 {
-		log.Printf("[boot] 已清理 %d 条 ObjectId 主机的通知脏数据（v0.24 验收期产生）", res.DeletedCount)
+		slog.Info("已清理 ObjectId 主机的通知脏数据（v0.24 验收期产生）", "component", "boot", "count", res.DeletedCount)
 	}
 	// 安全审计日志（v0.14）：at 上 TTL 索引滚动保留 90 天（mongod 后台清扫，无需应用层定时）；
 	// type+at 复合索引供后台按类型筛选
@@ -221,7 +221,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 			return err
 		}
 		_ = uid
-		log.Printf("[boot] 已创建初始管理员: root / sojroot123（请尽快修改密码）")
+		slog.Info("已创建初始管理员: root / sojroot123（请尽快修改密码）", "component", "boot")
 	}
 
 	// 角色种子：内置 default/admin/root（不存在才建，不覆盖 root 的调整）
@@ -254,7 +254,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if res, err := r.Submissions.UpdateMany(ctx,
 		bson.M{"priority": bson.M{"$exists": false}},
 		bson.M{"$set": bson.M{"priority": PriorityHigh}}); err == nil && res.ModifiedCount > 0 {
-		log.Printf("[boot] 已为 %d 条存量提交补队列优先级默认值", res.ModifiedCount)
+		slog.Info("已为存量提交补队列优先级默认值", "component", "boot", "count", res.ModifiedCount)
 	}
 
 	// 遗留的 Judging（进程被杀时没判完）重新排队
@@ -263,7 +263,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		bson.M{"$set": bson.M{"status": "Pending"},
 			"$unset": bson.M{"judge": "", "claimedAt": "", "heartbeatAt": ""}})
 	if err == nil && res.ModifiedCount > 0 {
-		log.Printf("[boot] 已把 %d 条遗留 Judging 提交重新排队", res.ModifiedCount)
+		slog.Info("已把遗留 Judging 提交重新排队", "component", "boot", "count", res.ModifiedCount)
 	}
 
 	// 存量 md 渲染缓存迁移（v0.30）：后台渐进补齐，不阻塞启动
@@ -315,7 +315,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 					return err
 				}
 			}
-			log.Printf("[boot] 全新数据库：预置 %d 项历史迁移标记（老库升级才会逐项执行）", len(freshSkipFlags))
+			slog.Info("全新数据库：预置历史迁移标记（老库升级才会逐项执行）", "component", "boot", "count", len(freshSkipFlags))
 			if err := meta.FindOne(ctx, bson.M{"_id": "migrations"}).Decode(&done); err != nil {
 				return err
 			}
@@ -329,7 +329,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("rolesV2"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 角色体系已迁移到 default/admin/root")
+		slog.Info("角色体系已迁移到 default/admin/root", "component", "boot")
 	}
 	if !flagDone("classRefsV1") {
 		if err := r.migrateClassRefs(ctx); err != nil {
@@ -338,7 +338,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("classRefsV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 班级题目引用结构已迁移（增加 hidden 标记）")
+		slog.Info("班级题目引用结构已迁移（增加 hidden 标记）", "component", "boot")
 	}
 	if !flagDone("memberRolesV1") {
 		if err := r.migrateMemberRoles(ctx); err != nil {
@@ -347,7 +347,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("memberRolesV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 班级成员角色已迁移（owner/admin/member）")
+		slog.Info("班级成员角色已迁移（owner/admin/member）", "component", "boot")
 	}
 	if !flagDone("assignmentsV1") {
 		if err := r.migrateAssignments(ctx); err != nil {
@@ -356,7 +356,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("assignmentsV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 班级题目引用已迁移为作业")
+		slog.Info("班级题目引用已迁移为作业", "component", "boot")
 	}
 	if !flagDone("examsV1") {
 		if err := r.migrateExams(ctx); err != nil {
@@ -365,7 +365,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("examsV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 班级比赛已迁移为考试（exams 集合）")
+		slog.Info("班级比赛已迁移为考试（exams 集合）", "component", "boot")
 	}
 	if !flagDone("dataLayoutV2") {
 		if err := r.migrateDataLayoutV2(ctx, store); err != nil {
@@ -374,7 +374,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("dataLayoutV2"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 测试数据卷已换血为 data/<原始文件名> 布局（v0.15 统一题包格式）")
+		slog.Info("测试数据卷已换血为 data/<原始文件名> 布局（v0.15 统一题包格式）", "component", "boot")
 	}
 	if !flagDone("solutionManageV1") {
 		// v0.5.2-1：题解管理权限位（初始归属 admin）补发存量 admin 角色
@@ -386,7 +386,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("solutionManageV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] admin 角色已补发题解管理权限位（solution.manage）")
+		slog.Info("admin 角色已补发题解管理权限位（solution.manage）", "component", "boot")
 	}
 	if !flagDone("submissionViewUserV1") {
 		// v0.5.2-2：查看用户提交明细权限位（初始归属 admin）补发存量 admin 角色
@@ -398,7 +398,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("submissionViewUserV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] admin 角色已补发查看用户提交明细权限位（submission.view.user）")
+		slog.Info("admin 角色已补发查看用户提交明细权限位（submission.view.user）", "component", "boot")
 	}
 	if !flagDone("nicknameEditV1") {
 		// v0.6.x：真名下线的同时开放本人昵称修改。旧「查看真实姓名」权限位已从目录删除，
@@ -416,7 +416,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("nicknameEditV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 已补发昵称修改权限位（user.nickname.edit），真实姓名权限位已清理")
+		slog.Info("已补发昵称修改权限位（user.nickname.edit），真实姓名权限位已清理", "component", "boot")
 	}
 	if !flagDone("roundFlagsV1") {
 		// v0.7：比赛/考试新增「开启成绩表」「赛时隐藏成绩」两个开关。存量场次补默认值：
@@ -436,7 +436,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("roundFlagsV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 比赛/考试已补默认开关（成绩表开、赛时隐藏成绩开）")
+		slog.Info("比赛/考试已补默认开关（成绩表开、赛时隐藏成绩开）", "component", "boot")
 	}
 	if !flagDone("contestHideMetaV1") {
 		// 2026-10-27：比赛新增「赛时隐藏难度与知识点」开关，默认开。存量比赛补 true
@@ -449,7 +449,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("contestHideMetaV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 存量比赛已补默认开关（赛时隐藏难度与知识点开）")
+		slog.Info("存量比赛已补默认开关（赛时隐藏难度与知识点开）", "component", "boot")
 	}
 	if !flagDone("classLeaveV1") {
 		// v0.7.2：退出班级改为权限位（class.leave）管控，default 刻意不给；
@@ -462,7 +462,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("classLeaveV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] admin 角色已补发退出班级权限位（class.leave）")
+		slog.Info("admin 角色已补发退出班级权限位（class.leave）", "component", "boot")
 	}
 	if !flagDone("assignmentScoreViewV1") {
 		// v0.11：查看班级作业成绩表权限位（assignment.score.view），default 默认开启；
@@ -475,7 +475,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("assignmentScoreViewV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] default/admin 角色已补发查看班级作业成绩表权限位（assignment.score.view）")
+		slog.Info("default/admin 角色已补发查看班级作业成绩表权限位（assignment.score.view）", "component", "boot")
 	}
 	if !flagDone("contestScorePermV1") {
 		// v0.11：比赛/考试成绩表两个权限位（查看 / 详情点看），初始归属 admin（root 走 "*" 恒通）；
@@ -488,7 +488,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("contestScorePermV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] admin 角色已补发比赛/考试成绩表权限位（contest.score.view / contest.score.detail）")
+		slog.Info("admin 角色已补发比赛/考试成绩表权限位（contest.score.view / contest.score.detail）", "component", "boot")
 	}
 	if !flagDone("listManageV1") {
 		// v0.18.3：题单管理权限位，初始归属 admin（root 走 "*" 恒通；default 刻意不给）
@@ -500,7 +500,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("listManageV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] admin 角色已补发题单管理权限位（list.manage）")
+		slog.Info("admin 角色已补发题单管理权限位（list.manage）", "component", "boot")
 	}
 	if !flagDone("discussPermV1") {
 		// v0.24：讨论三权限位（管理/免限速/代码门槛豁免），初始归属 admin（root 恒通；
@@ -515,7 +515,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("discussPermV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] admin 角色已补发讨论权限位（discussion.manage / rate_exempt / code.bypass）")
+		slog.Info("admin 角色已补发讨论权限位（discussion.manage / rate_exempt / code.bypass）", "component", "boot")
 	}
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次
@@ -560,7 +560,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("sourceBackfillV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 来源四字段存量回填完成：识别并回填 %d / 扫描 %d 题", filled, len(plist))
+		slog.Info("来源四字段存量回填完成", "component", "boot", "filled", filled, "scanned", len(plist))
 	}
 	if !flagDone("adminProblemViewAllV1") {
 		// v0.7.2：存量 admin 角色补发「题库全量可见」——builtin 定义一直包含该位，
@@ -573,7 +573,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("adminProblemViewAllV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] admin 角色已补发题库全量可见权限位（problem.view.all）")
+		slog.Info("admin 角色已补发题库全量可见权限位（problem.view.all）", "component", "boot")
 	}
 	if !flagDone("objQuestionsV1") {
 		// v0.9.3：客观题从单题（question）升级为多小题（questions[]）。
@@ -634,7 +634,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("objQuestionsV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] 客观题已升级多小题（%d 题 / %d 提交迁移）", len(plist), len(slist))
+		slog.Info("客观题已升级多小题", "component", "boot", "problems", len(plist), "submissions", len(slist))
 	}
 	if !flagDone("dataDownloadPermV1") {
 		// v0.8.3：下载数据权限位（初始归属 admin）补发存量 admin 角色
@@ -646,7 +646,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("dataDownloadPermV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] admin 角色已补发下载数据权限位（problem.data.download）")
+		slog.Info("admin 角色已补发下载数据权限位（problem.data.download）", "component", "boot")
 	}
 	if !flagDone("contentMdV1") {
 		if err := r.migrateContentMd(ctx); err != nil {
@@ -655,7 +655,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		if err := setFlag("contentMdV1"); err != nil {
 			return err
 		}
-		log.Printf("[boot] HTML 富文本字段已回迁为 markdown（v0.8 编辑器换回 Vditor）")
+		slog.Info("HTML 富文本字段已回迁为 markdown（v0.8 编辑器换回 Vditor）", "component", "boot")
 	}
 	if !flagDone("difficultyV1") {
 		// v0.11：存量题按通过率启发式预估难度（显式设过的题不动；D10 仅手工给）
@@ -676,7 +676,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		if inserted {
-			log.Printf("[boot] 空标签树已注入默认标签树（defaultTagsV1）")
+			slog.Info("空标签树已注入默认标签树（defaultTagsV1）", "component", "boot")
 		}
 	}
 	if !flagDone("defaultMetaTreeV1") {
@@ -689,7 +689,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		if inserted {
-			log.Printf("[boot] 空来源标签树已注入默认种子（defaultMetaTreeV1）")
+			slog.Info("空来源标签树已注入默认种子（defaultMetaTreeV1）", "component", "boot")
 		}
 	}
 	return nil
@@ -768,7 +768,7 @@ func (r *Repo) migrateContentMd(ctx context.Context) error {
 		return err
 	}
 	if total > 0 {
-		log.Printf("[boot] v0.8 回迁：%d 篇 HTML 富文本已转回 markdown", total)
+		slog.Info("v0.8 回迁：HTML 富文本已转回 markdown", "component", "boot", "count", total)
 	}
 	return nil
 }
@@ -1008,7 +1008,7 @@ func (r *Repo) syncProblemCounter(ctx context.Context) error {
 		err = nil // 计数器文档缺失视为 0，本次 $max 已把它拉齐
 	}
 	if err == nil && before.Seq < last.ID {
-		log.Printf("[boot] problem 计数器已从 %d 对齐到最大题目 _id %d", before.Seq, last.ID)
+		slog.Info("problem 计数器已对齐到最大题目 _id", "component", "boot", "from", before.Seq, "to", last.ID)
 	}
 	return err
 }

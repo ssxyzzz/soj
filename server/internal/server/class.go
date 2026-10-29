@@ -3,7 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -311,7 +311,7 @@ func (h *Handlers) LeaveClass(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "退出班级失败")
 		return
 	}
-	log.Printf("[web] 用户 %s 退出班级 #%d", uname, id)
+	slog.Info("用户退出班级", "component", "web", "username", uname, "class_id", id)
 	ok(c, gin.H{"left": true})
 }
 
@@ -422,7 +422,7 @@ func (h *Handlers) TransferClass(c *gin.Context) {
 	if terr == nil {
 		tname = target.Username
 	}
-	log.Printf("[web] 班级 #%d 已由用户 %s 转让给 %s", id, uname, tname)
+	slog.Info("班级已转让", "component", "web", "class_id", id, "from", uname, "to", tname)
 	ok(c, gin.H{"transferred": true})
 }
 
@@ -453,7 +453,7 @@ func (h *Handlers) DeleteClass(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "解散班级失败")
 		return
 	}
-	log.Printf("[web] 班级 #%d 已被用户 %s 解散（考试/作业/成员关系一并清理）", id, uname)
+	slog.Info("班级已解散（考试/作业/成员关系一并清理）", "component", "web", "class_id", id, "username", uname)
 	ok(c, gin.H{"deleted": true})
 }
 

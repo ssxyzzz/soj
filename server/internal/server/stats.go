@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"hash/fnv"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"sync"
@@ -160,10 +161,14 @@ func (h *Handlers) GetSiteStats(c *gin.Context) {
 			var rows []struct {
 				Avg float64 `bson:"avg"`
 			}
-			if err := cur.All(ctx, &rows); err == nil && len(rows) > 0 {
+			if err := cur.All(ctx, &rows); err != nil {
+				slog.Warn("首页统计：判题时长窗口读取失败，均值按 0 展示", "component", "web", "error", err)
+			} else if len(rows) > 0 {
 				avg = rows[0].Avg
 			}
 			cur.Close(ctx)
+		} else {
+			slog.Warn("首页统计：平均判题时长聚合失败，均值按 0 展示", "component", "web", "error", err)
 		}
 
 		st = &siteStats{

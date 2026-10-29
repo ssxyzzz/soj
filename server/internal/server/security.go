@@ -1,7 +1,7 @@
 package server
 
 import (
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -20,7 +20,7 @@ func (h *Handlers) securityLog(c *gin.Context, typ string, uid int64, uname, det
 		Type: typ, UID: uid, Username: uname,
 		IP: c.ClientIP(), UA: c.Request.UserAgent(), Detail: detail,
 	}); err != nil {
-		log.Printf("[security] 审计写入失败: %v", err)
+		slog.Error("安全审计写入失败", "component", "security", "error", err)
 	}
 }
 

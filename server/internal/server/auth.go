@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"regexp"
@@ -191,7 +191,7 @@ func (h *Handlers) Login(c *gin.Context) {
 	if !auth.CheckPassword(hash, req.Password) {
 		count, locked, ferr := h.repo.RecordLoginFailure(ctx, u.ID, loginMaxFailures, loginLockDuration)
 		if ferr != nil {
-			log.Printf("[security] 登录失败计数写入失败 uid=%d: %v", u.ID, ferr)
+			slog.Warn("登录失败计数写入失败", "component", "security", "uid", u.ID, "error", ferr)
 		}
 		if locked {
 			// 本次失败恰好达到阈值：直接给锁定文案（与锁定期内尝试的提示衔接）
@@ -207,7 +207,7 @@ func (h *Handlers) Login(c *gin.Context) {
 		return
 	}
 	if err := h.repo.ClearLoginFailures(ctx, u.ID); err != nil {
-		log.Printf("[security] 清理登录失败计数失败 uid=%d: %v", u.ID, err) // 不阻断登录
+		slog.Warn("清理登录失败计数失败", "component", "security", "uid", u.ID, "error", err) // 不阻断登录
 	}
 	h.securityLog(c, repo.SecLoginSuccess, u.ID, u.Username, "")
 	token, err := auth.GenerateToken(u.ID, u.Username, u.PwdVer, h.cfg.JWTSecret)

@@ -10,7 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"regexp"
@@ -270,7 +270,7 @@ func (h *Handlers) EmailCode(c *gin.Context) {
 		codeUsername = resetUsername
 	}
 	if err := h.sendVerifyCode(c, s, provider, req.Purpose, email, codeUsername, tpl); err != nil {
-		log.Printf("[email] 验证码发送失败 purpose=%s target=%s: %v", req.Purpose, email, err)
+		slog.Error("验证码发送失败", "component", "email", "purpose", req.Purpose, "target", email, "error", err)
 		fail(c, http.StatusInternalServerError, "邮件发送失败，请稍后再试或联系管理员")
 		return
 	}
@@ -300,7 +300,7 @@ func (h *Handlers) verifyCode(c *gin.Context, purpose, target, code string) stri
 	if !hmac.Equal([]byte(h.codeHMAC(code)), []byte(vc.CodeHash)) {
 		left, err := h.repo.FailVerifyCode(c.Request.Context(), vc.ID, vc.Attempts)
 		if err != nil {
-			log.Printf("[email] 验证码失败计数写入失败: %v", err)
+			slog.Warn("验证码失败计数写入失败", "component", "email", "error", err)
 		}
 		if left > 0 {
 			return fmt.Sprintf("验证码错误，还可尝试 %d 次", left)
@@ -308,7 +308,7 @@ func (h *Handlers) verifyCode(c *gin.Context, purpose, target, code string) stri
 		return "验证码错误次数过多已作废，请重新获取"
 	}
 	if err := h.repo.ConsumeVerifyCode(c.Request.Context(), vc.ID); err != nil {
-		log.Printf("[email] 验证码消费删除失败: %v", err)
+		slog.Warn("验证码消费删除失败", "component", "email", "error", err)
 	}
 	return ""
 }
@@ -439,7 +439,7 @@ func (h *Handlers) notifyEmailAsync(s *repo.SystemSettings, to, subject string, 
 	provider := mailer.NewSMTP(s.SMTP)
 	go func() {
 		if err := provider.Send(to, subject, body); err != nil {
-			log.Printf("[email] 通知邮件发送失败 to=%s subject=%q: %v", to, subject, err)
+			slog.Error("通知邮件发送失败", "component", "email", "to", to, "subject", subject, "error", err)
 		}
 	}()
 }

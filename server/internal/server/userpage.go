@@ -6,6 +6,7 @@ package server
 // 无权限者的计数卡与列表同步缩减，等级经验不受影响（等级聚合不剔隐藏）。
 
 import (
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -67,6 +68,8 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 	}
 	if rank, solved, err := h.repo.RankMe(ctx, id); err == nil {
 		out["rank"] = gin.H{"rank": rank, "solved": solved}
+	} else {
+		slog.Warn("用户主页：排名聚合失败，省略 rank 字段", "component", "web", "uid", id, "error", err)
 	}
 
 	// 统计卡：提交总数（排除 Cancelled 作废件）/ AC 条数 / AC 率 / 讨论被采纳解答数（v0.24）
@@ -82,6 +85,8 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 	stats := gin.H{"submissions": total, "accepted": accepted, "ac_rate": acRate}
 	if answers, err := h.repo.CountUserAcceptedAnswers(ctx, id); err == nil {
 		stats["answers_accepted"] = answers
+	} else {
+		slog.Warn("用户主页：被采纳解答数统计失败，省略字段", "component", "web", "uid", id, "error", err)
 	}
 	out["stats"] = stats
 
@@ -96,6 +101,8 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 			})
 		}
 		out["recent"] = items
+	} else {
+		slog.Warn("用户主页：近期提交读取失败，省略 recent 字段", "component", "web", "uid", id, "error", err)
 	}
 
 	// 首次 AC 清单（全量一次下发，时间窗前端本地切）；隐藏题对无全量可见权限的观察者整条剔除
@@ -112,6 +119,8 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 			})
 		}
 		out["first_ac"] = list
+	} else {
+		slog.Warn("用户主页：首次 AC 清单读取失败，省略 first_ac 字段", "component", "web", "uid", id, "error", err)
 	}
 
 	// 比赛历史：只含比赛；状态随时段（进行中/成绩未公布/已公布），名次仅在场次
@@ -143,12 +152,16 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 								break
 							}
 						}
+					} else {
+						slog.Warn("用户主页：场次榜单读取失败，省略名次", "component", "web", "round", ct.ID, "error", err)
 					}
 				}
 			}
 			rounds = append(rounds, row)
 		}
 		out["contests"] = rounds
+	} else {
+		slog.Warn("用户主页：比赛历史读取失败，省略 contests 字段", "component", "web", "uid", id, "error", err)
 	}
 
 	ok(c, out)
