@@ -1217,11 +1217,15 @@ strong {
 }
 
 /* 数据区：卡体即底色，pre 只留内距（压通用代码块淡蓝底/边/圆角与行号缩进）；
-   13.5px/1.8 海军蓝为 v3-full .codeblk pre 定值；样例行号隐藏（.md-io 例外） */
+   字号对齐通用代码块 --soj-fs-code=15.2px/1.8（2026-10-29 拍板：v3-full 原
+   13.5px 定值上调，观感反馈偏小）；overflow-y 关闸（同日）：样例卡高度恒随内容
+   生长、纵向滚动从不合法，关掉根除亚像素取整/行号列残差在 Edge 等常规滚动条
+   浏览器冒纵向条——横向仍 auto，左右超界照旧出横向滚动条 */
 .soj-md .vditor-reset .md-io pre {
   margin: 0;
   flex: 1;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -1235,15 +1239,15 @@ strong {
 
 .soj-md.md-light .vditor-reset .md-io pre > code {
   padding: 14px 16px;
-  font-size: 13.5px;
+  font-size: var(--soj-fs-code);
   line-height: 1.8;
   color: var(--soj-navy);
 }
 
 /* 行号（2026-10-25 用户回调恢复，设计稿虽无行号）：列/分隔线/数字色沿用通用规则
-   （2.25em 列宽 + #d9e6f3 分隔 + #8ba3c2 数字，随样例 13.5px 字号自然缩放）；
-   仅把列 top 从通用 0.5em 改为 14px——通用值按样例字号折算仅 6.75px，
-   而样例数据区内距是 14px，不改会整体偏高约 7px（top 必须等于 padding-top，见通用处注释） */
+   （2.25em 列宽 + #d9e6f3 分隔 + #8ba3c2 数字，随样例字号自然缩放）；
+   仅把列 top 从通用 0.5em 改为 14px——通用值按样例字号折算小于数据区内距
+   14px，不改会整体偏高（top 必须等于 padding-top，见通用处注释） */
 .soj-md.md-light .vditor-reset .md-io pre .vditor-linenumber__rows {
   top: 14px;
 }
