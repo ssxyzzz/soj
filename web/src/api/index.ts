@@ -498,6 +498,31 @@ export const adminApi = {
     get<{ list: ShopOrder[]; total: number }>('/admin/shop/orders', { status, page }),
   shopResolveOrder: (id: number, action: 'fulfill' | 'reject') =>
     post<{ resolved: number }>(`/admin/shop/orders/${id}/resolve`, { action }),
+  // AI 助教（v0.33-③，root）：配置（key 只写不回显）+ 调用审计
+  aiConfig: () =>
+    get<{
+      providers: { name: string; base_url: string; model: string; has_key: boolean }[]
+      active: string
+      daily_limit: number
+      prices: { hint1: number; hint2: number; hint3: number; debug: number }
+      discount: { lv1: number; pct1: number; lv2: number; pct2: number }
+    }>('/admin/ai/config'),
+  aiSaveConfig: (body: {
+    providers: { name: string; base_url: string; api_key: string; model: string }[]
+    active: string
+    daily_limit: number
+    prices: { hint1: number; hint2: number; hint3: number; debug: number }
+    discount: { lv1: number; pct1: number; lv2: number; pct2: number }
+  }) => post<{ saved: boolean }>('/admin/ai/config', body),
+  aiCalls: (page = 1, uid?: number) =>
+    get<{
+      list: {
+        id: number; uid: number; pid: number; kind: string; tokens: number
+        prompt_chars: number; cost: number; provider: string; model: string
+        ok: boolean; err: string; at: string
+      }[]
+      total: number
+    }>('/admin/ai/calls', { page, ...(uid ? { uid } : {}) }),
   // 安全日志（v0.14，root）：登录/锁定/改密/重置/限流事件，type 精确、q 按用户名/IP 模糊
   securityLogs: (page: number, pageSize: number, type?: string, q?: string) =>
     get<{ list: SecurityLogItem[]; total: number; types: string[] }>('/admin/security-logs', {

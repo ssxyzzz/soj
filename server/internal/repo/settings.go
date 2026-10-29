@@ -76,6 +76,18 @@ type SystemSettings struct {
 	JadeBountyMax *int `bson:"jadeBountyMax,omitempty"`
 	// 实物兑换（v0.33-②）：整模块默认关，仅 root 可开（目录 + 人工履约）。
 	JadeShopEnabled *bool `bson:"jadeShopEnabled,omitempty"`
+	// AI 计费（v0.33-③）：每日合计上限（默认 5 次，提示+找 bug 合计）；基准价
+	//（提示三级 2/4/6、找 bug 8）× 难度倍率 ⌈D/3⌉；等级折扣两档（Lv≥discount1Lv 九折 /
+	// Lv≥discount2Lv 八折，向上取整）。全部后台可调。
+	AiDailyLimit   *int   `bson:"aiDailyLimit,omitempty"`
+	AiHintPrice1   *int64 `bson:"aiHintPrice1,omitempty"`
+	AiHintPrice2   *int64 `bson:"aiHintPrice2,omitempty"`
+	AiHintPrice3   *int64 `bson:"aiHintPrice3,omitempty"`
+	AiDebugPrice   *int64 `bson:"aiDebugPrice,omitempty"`
+	AiDiscount1Lv  *int   `bson:"aiDiscount1Lv,omitempty"`
+	AiDiscount1Pct *int   `bson:"aiDiscount1Pct,omitempty"`
+	AiDiscount2Lv  *int   `bson:"aiDiscount2Lv,omitempty"`
+	AiDiscount2Pct *int   `bson:"aiDiscount2Pct,omitempty"`
 }
 
 const (
@@ -107,10 +119,36 @@ const (
 	DefaultJadeSolutionUnlockMult = 5
 	DefaultJadeBountyMin          = 5
 	DefaultJadeBountyMax          = 500
+	// AI 计费（v0.33-③）默认值。
+	DefaultAiDailyLimit   = 5
+	DefaultAiHintPrice1   = 2
+	DefaultAiHintPrice2   = 4
+	DefaultAiHintPrice3   = 6
+	DefaultAiDebugPrice   = 8
+	DefaultAiDiscount1Lv  = 5 // Lv.5–7 九折
+	DefaultAiDiscount1Pct = 90
+	DefaultAiDiscount2Lv  = 8 // Lv.8+ 八折
+	DefaultAiDiscount2Pct = 80
 )
 
 func downloadLimitPtr(v int) *int { return &v }
-func boolPtr(v bool) *bool        { return &v }
+func boolPtr(v bool) *bool       { return &v }
+func int64Ptr(v int64) *int64    { return &v }
+
+// aiDiscountLvVal / aiDiscountPctVal 直接构造的 settings（未过 normalize）读侧兜底。
+func aiDiscountLvVal(v *int, def int) int {
+	if v == nil || *v < 1 || *v > 10 {
+		return def
+	}
+	return *v
+}
+
+func aiDiscountPctVal(v *int, def int) int {
+	if v == nil || *v < 10 || *v > 100 {
+		return def
+	}
+	return *v
+}
 
 // DownloadDailyLimit 限额取值：未设置回默认（存量 settings 文档无此字段时为 nil）。
 func (s *SystemSettings) DownloadDailyLimit() int {
@@ -222,6 +260,36 @@ func (s *SystemSettings) normalizeDiscuss() {
 	}
 	if s.JadeShopEnabled == nil {
 		s.JadeShopEnabled = boolPtr(false)
+	}
+	if s.AiDailyLimit == nil || *s.AiDailyLimit < 1 || *s.AiDailyLimit > 100 {
+		s.AiDailyLimit = intPtr(DefaultAiDailyLimit)
+	}
+	if s.AiHintPrice1 == nil || *s.AiHintPrice1 < 0 {
+		s.AiHintPrice1 = int64Ptr(DefaultAiHintPrice1)
+	}
+	if s.AiHintPrice2 == nil || *s.AiHintPrice2 < 0 {
+		s.AiHintPrice2 = int64Ptr(DefaultAiHintPrice2)
+	}
+	if s.AiHintPrice3 == nil || *s.AiHintPrice3 < 0 {
+		s.AiHintPrice3 = int64Ptr(DefaultAiHintPrice3)
+	}
+	if s.AiDebugPrice == nil || *s.AiDebugPrice < 0 {
+		s.AiDebugPrice = int64Ptr(DefaultAiDebugPrice)
+	}
+	if s.AiDiscount1Lv == nil || *s.AiDiscount1Lv < 1 || *s.AiDiscount1Lv > 10 {
+		s.AiDiscount1Lv = intPtr(DefaultAiDiscount1Lv)
+	}
+	if s.AiDiscount1Pct == nil || *s.AiDiscount1Pct < 10 || *s.AiDiscount1Pct > 100 {
+		s.AiDiscount1Pct = intPtr(DefaultAiDiscount1Pct)
+	}
+	if s.AiDiscount2Lv == nil || *s.AiDiscount2Lv < 1 || *s.AiDiscount2Lv > 10 {
+		s.AiDiscount2Lv = intPtr(DefaultAiDiscount2Lv)
+	}
+	if s.AiDiscount2Pct == nil || *s.AiDiscount2Pct < 10 || *s.AiDiscount2Pct > 100 {
+		s.AiDiscount2Pct = intPtr(DefaultAiDiscount2Pct)
+	}
+	if *s.AiDiscount2Lv < *s.AiDiscount1Lv {
+		s.AiDiscount2Lv = s.AiDiscount1Lv
 	}
 }
 
@@ -349,6 +417,81 @@ func (s *SystemSettings) JadeShopOpen() bool {
 	return s.JadeShopEnabled != nil && *s.JadeShopEnabled
 }
 
+// ---- AI 计费取值（v0.33-③）：难度倍率 × 等级折扣，向上取整 ----
+
+func (s *SystemSettings) AiDailyLimitVal() int {
+	if s.AiDailyLimit == nil || *s.AiDailyLimit < 1 || *s.AiDailyLimit > 100 {
+		return DefaultAiDailyLimit
+	}
+	return *s.AiDailyLimit
+}
+
+func (s *SystemSettings) AiHintPrice1Val() int64 {
+	if s.AiHintPrice1 == nil || *s.AiHintPrice1 < 0 {
+		return DefaultAiHintPrice1
+	}
+	return *s.AiHintPrice1
+}
+
+func (s *SystemSettings) AiHintPrice2Val() int64 {
+	if s.AiHintPrice2 == nil || *s.AiHintPrice2 < 0 {
+		return DefaultAiHintPrice2
+	}
+	return *s.AiHintPrice2
+}
+
+func (s *SystemSettings) AiHintPrice3Val() int64 {
+	if s.AiHintPrice3 == nil || *s.AiHintPrice3 < 0 {
+		return DefaultAiHintPrice3
+	}
+	return *s.AiHintPrice3
+}
+
+func (s *SystemSettings) AiDebugPriceVal() int64 {
+	if s.AiDebugPrice == nil || *s.AiDebugPrice < 0 {
+		return DefaultAiDebugPrice
+	}
+	return *s.AiDebugPrice
+}
+
+// AiPrice 单次调用价格：基准（hint1~3 / debug 按类取）× 难度倍率 ⌈D/3⌉ × 等级折扣，向上取整。
+// level 为 0（取不到等级）时不打折；折扣取两档中满足的最高档。
+func (s *SystemSettings) AiPrice(kind string, difficulty, level int) int64 {
+	var base int64
+	switch kind {
+	case "hint1":
+		base = s.AiHintPrice1Val()
+	case "hint2":
+		base = s.AiHintPrice2Val()
+	case "hint3":
+		base = s.AiHintPrice3Val()
+	default: // debug
+		base = s.AiDebugPriceVal()
+	}
+	mult := (difficulty + 2) / 3 // ⌈D/3⌉：D1–3 ×1 / D4–6 ×2 / D7–10 ×3
+	if mult < 1 {
+		mult = 1
+	}
+	price := base * int64(mult)
+	if level > 0 {
+		pct := 100
+		lv2, pct2 := aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv), aiDiscountPctVal(s.AiDiscount2Pct, DefaultAiDiscount2Pct)
+		lv1, pct1 := aiDiscountLvVal(s.AiDiscount1Lv, DefaultAiDiscount1Lv), aiDiscountPctVal(s.AiDiscount1Pct, DefaultAiDiscount1Pct)
+		if level >= lv2 {
+			pct = pct2
+		} else if level >= lv1 {
+			pct = pct1
+		}
+		if pct < 100 {
+			price = (price*int64(pct) + 99) / 100 // 向上取整
+		}
+	}
+	if price < 1 {
+		price = 1
+	}
+	return price
+}
+
 func intPtr(v int) *int { return &v }
 
 // UpdateSystemSettings 更新系统设置（文档不存在时创建）。
@@ -393,6 +536,15 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"jadeBountyMin":          s.JadeBountyMinVal(),
 			"jadeBountyMax":          s.JadeBountyMaxVal(),
 			"jadeShopEnabled":        s.JadeShopOpen(),
+			"aiDailyLimit":           s.AiDailyLimitVal(),
+			"aiHintPrice1":           s.AiHintPrice1Val(),
+			"aiHintPrice2":           s.AiHintPrice2Val(),
+			"aiHintPrice3":           s.AiHintPrice3Val(),
+			"aiDebugPrice":           s.AiDebugPriceVal(),
+			"aiDiscount1Lv":          aiDiscountLvVal(s.AiDiscount1Lv, DefaultAiDiscount1Lv),
+			"aiDiscount1Pct":         aiDiscountPctVal(s.AiDiscount1Pct, DefaultAiDiscount1Pct),
+			"aiDiscount2Lv":          aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv),
+			"aiDiscount2Pct":         aiDiscountPctVal(s.AiDiscount2Pct, DefaultAiDiscount2Pct),
 		}},
 	)
 	return err

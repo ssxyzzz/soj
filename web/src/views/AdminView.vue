@@ -18,6 +18,7 @@ import SecurityLogsPanel from '@/components/admin/SecurityLogsPanel.vue'
 import SeedProblemsPanel from '@/components/admin/SeedProblemsPanel.vue'
 import SettingsPanel from '@/components/admin/SettingsPanel.vue'
 import ShopPanel from '@/components/admin/ShopPanel.vue'
+import AiPanel from '@/components/admin/AiPanel.vue'
 import TagsPanel from '@/components/admin/TagsPanel.vue'
 import UsersPanel from '@/components/admin/UsersPanel.vue'
 import { useUserStore } from '@/stores/user'
@@ -25,7 +26,7 @@ import { useUserStore } from '@/stores/user'
 const userStore = useUserStore()
 const route = useRoute()
 
-const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'discuss', 'shop', 'settings', 'backup'] as const
+const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'discuss', 'shop', 'ai', 'settings', 'backup'] as const
 type Section = (typeof sections)[number]
 // 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描三面板同页 tab 切换（2026-10-25 双树）；
 // tags/sources 旧深链值映射到 problems 的对应子页
@@ -158,6 +159,16 @@ async function switchSubTab(target: SubTab) {
         <span class="nav-title">实物兑换</span>
         <span class="nav-sub">物品目录 / 订单履约</span>
       </div>
+      <!-- AI 助教（v0.33-③，root）：供应商配置 + 计费 + 审计 -->
+      <div
+        v-if="userStore.role === 'root'"
+        class="nav-item"
+        :class="{ active: section === 'ai' }"
+        @click="switchSection('ai')"
+      >
+        <span class="nav-title">AI 助教</span>
+        <span class="nav-sub">供应商 / 计费 / 审计</span>
+      </div>
       <div
         class="nav-item"
         :class="{ active: section === 'settings' }"
@@ -205,6 +216,7 @@ async function switchSubTab(target: SubTab) {
       <NoticePanel v-else-if="section === 'notice'" />
       <DiscussPanel v-else-if="section === 'discuss'" />
       <ShopPanel v-else-if="section === 'shop' && userStore.role === 'root'" />
+      <AiPanel v-else-if="section === 'ai' && userStore.role === 'root'" />
       <SettingsPanel v-else-if="section === 'settings'" />
       <BackupPanel v-else-if="section === 'backup'" />
       <SecurityLogsPanel v-else-if="section === 'security'" />

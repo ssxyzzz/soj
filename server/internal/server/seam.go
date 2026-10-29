@@ -11,6 +11,7 @@ import (
 	"context"
 	"time"
 
+	"soj/internal/ai"
 	"soj/internal/repo"
 )
 
@@ -120,6 +121,11 @@ type RepoAPI interface {
 	GetShopOrder(ctx context.Context, id int64) (*repo.ShopOrder, error)
 	ResolveShopOrder(ctx context.Context, orderID int64, action string) error
 	UserIDsByRole(ctx context.Context, role string) ([]int64, error)
+	GetAIConfig(ctx context.Context) (*ai.Config, error)
+	SaveAIConfig(ctx context.Context, cfg *ai.Config) error
+	RecordAiCall(ctx context.Context, c *repo.AiCall)
+	CountAiCallsToday(ctx context.Context, uid int64) (int64, error)
+	ListAiCalls(ctx context.Context, uid int64, page, pageSize int) ([]*repo.AiCall, int64, error)
 	IsMember(ctx context.Context, classID, uid int64) (bool, error)
 	JoinClass(ctx context.Context, classID, uid int64, uname, code string) error
 	LastChallenge(ctx context.Context, uid, pid int64) (*repo.Challenge, error)

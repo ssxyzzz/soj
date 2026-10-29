@@ -402,6 +402,10 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.DELETE("/shop/items/:id", RequireRoot(), h.AdminDeleteShopItem)
 				adminG.GET("/shop/orders", RequireRoot(), h.AdminShopOrders)
 				adminG.POST("/shop/orders/:id/resolve", RequireRoot(), h.AdminResolveShopOrder)
+				// AI 底座（v0.33-③）：供应商配置 + 调用审计，root 专属
+				adminG.GET("/ai/config", RequireRoot(), h.AdminGetAIConfig)
+				adminG.POST("/ai/config", RequireRoot(), h.AdminSaveAIConfig)
+				adminG.GET("/ai/calls", RequireRoot(), h.AdminAiCalls)
 			}
 		}
 	}
