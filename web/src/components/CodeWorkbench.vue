@@ -70,6 +70,10 @@ async function saveEditorPrefs(patch: Partial<UserPrefs>) {
 }
 
 watch(() => props.modelValue, (open) => {
+  // 全屏期间锁定底层页面滚动：覆盖层只是 fixed 盖在题目页上，底层文档照旧可滚，
+  // 窗口右缘会挂着一条无用的页面滚动条（2026-10-29 用户反馈）。overflow hidden
+  // 不动 scrollTop，退出后底层页面原地保留浏览位置；卸载路径在 onBeforeUnmount 兜底
+  document.documentElement.style.overflow = open ? 'hidden' : ''
   if (open) {
     const lock = props.langOnly
     if (lock) lang.value = Array.isArray(lock) ? lock[0] : lock
@@ -124,6 +128,8 @@ onMounted(() => document.addEventListener('keydown', onKeydown))
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', onKeydown)
   onDragEnd()
+  // 全屏开着时卸载（如切路由）：滚动锁兜底恢复，避免底层页面被永久锁死
+  document.documentElement.style.overflow = ''
 })
 </script>
 
