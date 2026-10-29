@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/lang"
 	"soj/internal/repo"
@@ -428,21 +427,21 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 		return
 	}
 	ctx := c.Request.Context()
-	set := bson.M{}
+	var patch repo.RoundPatch
 	if req.Title != nil {
 		title := trimTo(*req.Title, 64)
 		if title == "" {
 			fail(c, http.StatusBadRequest, s.Name+"名称不能为空")
 			return
 		}
-		set["title"] = title
+		patch.Title = &title
 	}
 	if req.Intro != nil {
 		if len(*req.Intro) > maxStatementSize {
 			fail(c, http.StatusBadRequest, s.Name+"说明过长（上限 256KB）")
 			return
 		}
-		set["intro"] = *req.Intro
+		patch.Intro = req.Intro
 	}
 	if req.Start != nil || req.End != nil {
 		start, end := ct.Start, ct.End
@@ -460,16 +459,15 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 			fail(c, http.StatusBadRequest, s.Name+"时长最长 7 天")
 			return
 		}
-		set["start"] = start
-		set["end"] = end
+		patch.Start, patch.End = &start, &end
 		// 原赛后隐藏期若存在，按原相对天数跟到新结束时间，避免出现隐藏期早于结束时间
 		if !ct.HiddenUntil.IsZero() {
 			days := int(ct.HiddenUntil.Sub(ct.End).Hours() / 24)
+			var hu time.Time
 			if days > 0 {
-				set["hiddenUntil"] = end.AddDate(0, 0, days)
-			} else {
-				set["hiddenUntil"] = time.Time{}
+				hu = end.AddDate(0, 0, days)
 			}
+			patch.HiddenUntil = &hu
 		}
 	}
 	if req.ProblemIDs != nil {
@@ -502,25 +500,25 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 			fail(c, http.StatusBadRequest, s.Name+"至少需要一道题目")
 			return
 		}
-		set["problems"] = problems
+		patch.Problems = &problems
 	}
 	if req.Scoreboard != nil {
-		set["scoreboard"] = *req.Scoreboard
+		patch.Scoreboard = req.Scoreboard
 	}
 	if req.HideDuring != nil {
-		set["hideDuring"] = *req.HideDuring
+		patch.HideDuring = req.HideDuring
 	}
 	if req.HideMeta != nil {
-		set["hideMeta"] = *req.HideMeta
+		patch.HideMeta = req.HideMeta
 	}
 	if req.FileIO != nil {
-		set["fileIo"] = *req.FileIO
+		patch.FileIO = req.FileIO
 	}
-	if len(set) == 0 {
+	if patch.Empty() {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")
 		return
 	}
-	if err := h.repo.UpdateRoundFields(ctx, s.Kind, ct.ID, set); err != nil {
+	if err := h.repo.UpdateRoundFields(ctx, s.Kind, ct.ID, patch); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}

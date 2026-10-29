@@ -3,6 +3,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -28,24 +29,24 @@ func setRenderedHtml(set bson.M, mdKey, htmlKey string) {
 // v0.32 分层收紧：collection 字段全部私有——外部一律走具名方法（查询契约单点，
 // 索引命中有人把关；裸查询下沉见 site_stats.go 等）。
 type Repo struct {
-	cli               *mongo.Client
-	db                *mongo.Database
-	users             *mongo.Collection
-	roles             *mongo.Collection
-	problems          *mongo.Collection
-	submissions       *mongo.Collection
-	counters          *mongo.Collection
-	uploads           *mongo.Collection
-	solutions         *mongo.Collection
-	tags              *mongo.Collection
-	lists             *mongo.Collection // 题单（v0.18.3 章节化自学导航）
-	challenges        *mongo.Collection // 挑战模式会话/记录（v0.23）
-	discussions       *mongo.Collection // 讨论区主题帖（v0.24，scope+scopeId 通用模型）
-	discussReplies    *mongo.Collection // 讨论区回复（两层楼中楼）
-	discussLikes      *mongo.Collection // 讨论点赞（topic/reply × id × uid 唯一）
-	discussReports    *mongo.Collection // 讨论举报队列
-	discussMutes      *mongo.Collection // 讨论禁言记录
-	notifications     *mongo.Collection // 站内通知（v0.24）
+	cli            *mongo.Client
+	db             *mongo.Database
+	users          *mongo.Collection
+	roles          *mongo.Collection
+	problems       *mongo.Collection
+	submissions    *mongo.Collection
+	counters       *mongo.Collection
+	uploads        *mongo.Collection
+	solutions      *mongo.Collection
+	tags           *mongo.Collection
+	lists          *mongo.Collection // 题单（v0.18.3 章节化自学导航）
+	challenges     *mongo.Collection // 挑战模式会话/记录（v0.23）
+	discussions    *mongo.Collection // 讨论区主题帖（v0.24，scope+scopeId 通用模型）
+	discussReplies *mongo.Collection // 讨论区回复（两层楼中楼）
+	discussLikes   *mongo.Collection // 讨论点赞（topic/reply × id × uid 唯一）
+	discussReports *mongo.Collection // 讨论举报队列
+	discussMutes   *mongo.Collection // 讨论禁言记录
+	notifications  *mongo.Collection // 站内通知（v0.24）
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -96,6 +97,9 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 }
 
 func (r *Repo) Close(ctx context.Context) error { return r.cli.Disconnect(ctx) }
+
+// ErrEmptyPatch typed 补丁全字段为 nil（调用方应先 Empty() 拦成 400；此哨兵兜底防呆）。
+var ErrEmptyPatch = errors.New("没有需要更新的字段")
 
 // Ping 健康检查用。
 func (r *Repo) Ping(ctx context.Context) error { return r.cli.Ping(ctx, nil) }

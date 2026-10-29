@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/repo"
 )
@@ -341,14 +340,14 @@ func (h *Handlers) UpdateClass(c *gin.Context) {
 		return
 	}
 	uid, _, role, logged := currentUser(c)
-	set := bson.M{}
+	var patch repo.ClassPatch
 	if req.Name != nil {
 		name := trimTo(*req.Name, 64)
 		if name == "" {
 			fail(c, http.StatusBadRequest, "班级名称不能为空")
 			return
 		}
-		set["name"] = name
+		patch.Name = &name
 	}
 	if req.Intro != nil {
 		if len(*req.Intro) > maxStatementSize {
@@ -357,20 +356,21 @@ func (h *Handlers) UpdateClass(c *gin.Context) {
 		}
 		// TrimSpace 归一（同 lists.go 题单简介口径）：Markdown 编辑器清空后会留 "\n"
 		// 这类空白串，原样入库会让前端的「暂无简介」兜底失效
-		set["intro"] = strings.TrimSpace(*req.Intro)
+		intro := strings.TrimSpace(*req.Intro)
+		patch.Intro = &intro
 	}
 	if req.Private != nil {
 		if !logged || !(uid == cl.OwnerID || role == repo.RoleRoot) {
 			fail(c, http.StatusForbidden, "仅建班人或 root 可切换班级可见性")
 			return
 		}
-		set["private"] = *req.Private
+		patch.Private = req.Private
 	}
-	if len(set) == 0 {
+	if patch.Empty() {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")
 		return
 	}
-	if err := h.repo.UpdateClass(ctx, id, set); err != nil {
+	if err := h.repo.UpdateClass(ctx, id, patch); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}

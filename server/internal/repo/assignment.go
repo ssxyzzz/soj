@@ -62,7 +62,31 @@ func (r *Repo) GetAssignment(ctx context.Context, id int64) (*Assignment, error)
 }
 
 // UpdateAssignment 编辑作业名称/说明（set 键值由 handler 校验）。
-func (r *Repo) UpdateAssignment(ctx context.Context, id int64, set bson.M) error {
+// AssignmentPatch 作业字段补丁（nil 不动；typed 化同 ListPatch）。
+type AssignmentPatch struct {
+	Title     *string
+	Intro     *string // introHtml 渲染缓存随迁
+	Problems  *[]int64
+}
+
+func (p AssignmentPatch) Empty() bool {
+	return p.Title == nil && p.Intro == nil && p.Problems == nil
+}
+
+func (r *Repo) UpdateAssignment(ctx context.Context, id int64, p AssignmentPatch) error {
+	set := bson.M{}
+	if p.Title != nil {
+		set["title"] = *p.Title
+	}
+	if p.Intro != nil {
+		set["intro"] = *p.Intro
+	}
+	if p.Problems != nil {
+		set["problems"] = *p.Problems
+	}
+	if len(set) == 0 {
+		return ErrEmptyPatch
+	}
 	setRenderedHtml(set, "intro", "introHtml")
 	res, err := r.db.Collection("assignments").UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {

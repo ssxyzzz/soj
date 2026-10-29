@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/auth"
 	"soj/internal/repo"
@@ -141,7 +140,7 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	set := bson.M{}
+	var patch repo.UserPatch
 	if req.Role != nil {
 		// 初始管理员（ID=1）的角色不可修改：防止误降权把自己锁在 root 之外
 		if id == repo.InitialAdminID && *req.Role != repo.RoleRoot {
@@ -155,7 +154,7 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			fail(c, http.StatusInternalServerError, "读取角色失败")
 			return
 		}
-		set["role"] = *req.Role
+		patch.Role = req.Role
 	}
 	if req.Username != nil {
 		// 用户名是登录身份标识，独立权限位控制（默认仅 root）
@@ -167,7 +166,7 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "用户名需为 3-32 位字母/数字/下划线")
 			return
 		}
-		set["uname"] = *req.Username // User 结构体的 bson 字段名是 uname（裸 $set 不走结构体，勿用 API 字段名）
+		patch.Uname = req.Username // patch 内部映射到 bson 字段 uname（勿用 API 字段名）
 	}
 	if req.Nickname != nil {
 		nickname := trimTo(*req.Nickname, maxNicknameRunes)
@@ -175,7 +174,7 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "昵称不能为空")
 			return
 		}
-		set["nickname"] = nickname
+		patch.Nickname = &nickname
 	}
 	pwdResetUname := "" // 重置密码的审计对象（最终用户名：本请求可能同时改名）
 	if req.Username != nil {
@@ -193,13 +192,13 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			fail(c, http.StatusInternalServerError, "服务器内部错误")
 			return
 		}
-		set["pwdHash"] = hash
+		patch.PwdHash = &hash
 	}
-	if len(set) == 0 {
+	if patch.Empty() {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")
 		return
 	}
-	if err := h.repo.UpdateUser(c.Request.Context(), id, set); err != nil {
+	if err := h.repo.UpdateUser(c.Request.Context(), id, patch); err != nil {
 		if repo.IsNotFound(err) {
 			fail(c, http.StatusNotFound, "用户不存在")
 			return

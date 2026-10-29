@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/lang"
 	"soj/internal/repo"
@@ -118,7 +117,7 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	set := bson.M{}
+	var patch repo.UserPatch
 	if req.Nickname != nil {
 		if !hasPerm(c, repo.PermUserNicknameEdit) {
 			fail(c, http.StatusForbidden, "当前角色不允许修改昵称")
@@ -129,30 +128,31 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "昵称不能为空")
 			return
 		}
-		set["nickname"] = nickname
+		patch.Nickname = &nickname
 	}
-	bindStr := func(p *string, key string, max int) {
+	bindStr := func(p *string, dst **string, max int) {
 		if p != nil {
-			set[key] = trimTo(*p, max)
+			v := trimTo(*p, max)
+			*dst = &v
 		}
 	}
-	bindStr(req.Gender, "gender", 8)
-	bindStr(req.School, "school", 64)
-	bindStr(req.Grade, "grade", 16)
-	bindStr(req.Region, "region", 32)
+	bindStr(req.Gender, &patch.Gender, 8)
+	bindStr(req.School, &patch.School, 64)
+	bindStr(req.Grade, &patch.Grade, 16)
+	bindStr(req.Region, &patch.Region, 32)
 	if req.QQ != nil {
 		qq := trimTo(*req.QQ, 16)
 		if qq != "" && !qqDigits.MatchString(qq) {
 			fail(c, http.StatusBadRequest, "QQ 需为 5-16 位数字")
 			return
 		}
-		set["qq"] = qq
+		patch.QQ = &qq
 	}
 	if req.ProfileVis != nil {
-		set["profileVis"] = *req.ProfileVis
+		patch.ProfileVis = req.ProfileVis
 	}
 	if req.QQAvatar != nil {
-		set["qqAvatar"] = *req.QQAvatar
+		patch.QQAvatar = req.QQAvatar
 	}
 	if req.Prefs != nil {
 		// 合并语义：在既有偏好上覆盖本次出现的字段。编辑器工具栏的自动回存只带
@@ -239,13 +239,13 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 				return
 			}
 		}
-		set["prefs"] = &prefs
+		patch.Prefs = &prefs
 	}
-	if len(set) == 0 {
+	if patch.Empty() {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")
 		return
 	}
-	if err := h.repo.UpdateUser(c.Request.Context(), uid, set); err != nil {
+	if err := h.repo.UpdateUser(c.Request.Context(), uid, patch); err != nil {
 		if repo.IsNotFound(err) {
 			fail(c, http.StatusNotFound, "用户不存在")
 			return

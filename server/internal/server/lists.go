@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/repo"
 )
@@ -430,27 +429,28 @@ func (h *Handlers) UpdateList(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	set := bson.M{}
+	var patch repo.ListPatch
 	if req.Title != nil {
 		title := strings.TrimSpace(*req.Title)
 		if title == "" || len([]rune(title)) > 64 {
 			fail(c, http.StatusBadRequest, "题单名需为 1-64 字")
 			return
 		}
-		set["title"] = title
+		patch.Title = &title
 	}
 	if req.Intro != nil {
 		if len(*req.Intro) > 64<<10 {
 			fail(c, http.StatusBadRequest, "简介过长（上限 64KB）")
 			return
 		}
-		set["intro"] = strings.TrimSpace(*req.Intro)
+		intro := strings.TrimSpace(*req.Intro)
+		patch.Intro = &intro
 	}
 	if req.Hidden != nil {
-		set["hidden"] = *req.Hidden
+		patch.Hidden = req.Hidden
 	}
 	if req.Sort != nil {
-		set["sort"] = *req.Sort
+		patch.Sort = req.Sort
 	}
 	if req.Chapters != nil {
 		if err := repo.ValidateListShape(*req.Chapters); err != nil {
@@ -461,13 +461,13 @@ func (h *Handlers) UpdateList(c *gin.Context) {
 			ch := make([]repo.ListEntry, 0)
 			req.Chapters = &ch
 		}
-		set["chapters"] = *req.Chapters
+		patch.Chapters = req.Chapters
 	}
-	if len(set) == 0 {
+	if patch.Empty() {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")
 		return
 	}
-	if err := h.repo.UpdateProblemList(c.Request.Context(), id, set); err != nil {
+	if err := h.repo.UpdateProblemList(c.Request.Context(), id, patch); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}
@@ -507,7 +507,8 @@ func (h *Handlers) ReorderLists(c *gin.Context) {
 		return
 	}
 	for i, id := range req.IDs {
-		if err := h.repo.UpdateProblemList(c.Request.Context(), id, bson.M{"sort": int64(i)}); err != nil && !repo.IsNotFound(err) {
+		sort := int64(i)
+		if err := h.repo.UpdateProblemList(c.Request.Context(), id, repo.ListPatch{Sort: &sort}); err != nil && !repo.IsNotFound(err) {
 			fail(c, http.StatusInternalServerError, "排序保存失败")
 			return
 		}

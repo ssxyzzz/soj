@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
 
 	"soj/internal/repo"
 )
@@ -102,30 +101,31 @@ func (h *Handlers) UpdateAssignment(c *gin.Context) {
 		fail(c, http.StatusForbidden, "仅班级管理员可编辑作业")
 		return
 	}
-	set := bson.M{}
+	var patch repo.AssignmentPatch
 	if req.Title != nil {
 		title := trimTo(*req.Title, 64)
 		if title == "" {
 			fail(c, http.StatusBadRequest, "作业名称不能为空")
 			return
 		}
-		set["title"] = title
+		patch.Title = &title
 	}
 	if req.Intro != nil {
 		if len(*req.Intro) > maxStatementSize {
 			fail(c, http.StatusBadRequest, "作业说明过长（上限 256KB）")
 			return
 		}
-		set["intro"] = *req.Intro
+		patch.Intro = req.Intro
 	}
 	if req.ProblemIDs != nil {
-		set["problems"] = sanitizePids(*req.ProblemIDs)
+		problems := sanitizePids(*req.ProblemIDs)
+		patch.Problems = &problems
 	}
-	if len(set) == 0 {
+	if patch.Empty() {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")
 		return
 	}
-	if err := h.repo.UpdateAssignment(ctx, id, set); err != nil {
+	if err := h.repo.UpdateAssignment(ctx, id, patch); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}

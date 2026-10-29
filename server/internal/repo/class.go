@@ -246,8 +246,32 @@ func (r *Repo) JoinClass(ctx context.Context, classID, uid int64, uname, code st
 	return err
 }
 
-// UpdateClass 更新班级字段（名称/富文本公告，v0.7.3 编辑班级）。
-func (r *Repo) UpdateClass(ctx context.Context, classID int64, set bson.M) error {
+// ClassPatch 班级字段补丁（nil 不动；typed 化同 ListPatch）。
+type ClassPatch struct {
+	Name    *string
+	Intro   *string // introHtml 渲染缓存随迁
+	Private *bool
+}
+
+func (p ClassPatch) Empty() bool {
+	return p.Name == nil && p.Intro == nil && p.Private == nil
+}
+
+// UpdateClass 更新班级字段（名称/公告/可见性，v0.7.3 编辑班级）。
+func (r *Repo) UpdateClass(ctx context.Context, classID int64, p ClassPatch) error {
+	set := bson.M{}
+	if p.Name != nil {
+		set["name"] = *p.Name
+	}
+	if p.Intro != nil {
+		set["intro"] = *p.Intro
+	}
+	if p.Private != nil {
+		set["private"] = *p.Private
+	}
+	if len(set) == 0 {
+		return ErrEmptyPatch
+	}
 	setRenderedHtml(set, "intro", "introHtml")
 	res, err := r.db.Collection("classes").UpdateOne(ctx, bson.M{"_id": classID}, bson.M{"$set": set})
 	if err != nil {

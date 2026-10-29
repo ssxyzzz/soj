@@ -430,7 +430,76 @@ func (r *Repo) ListUsers(ctx context.Context, page, pageSize int, keyword, role 
 }
 
 // UpdateUser 管理端更新（set 中的字段由调用方校验，pwdHash 仅在重置密码时出现）。
-func (r *Repo) UpdateUser(ctx context.Context, id int64, set bson.M) error {
+// UserPatch 用户字段补丁（nil 不动；typed 化同 ListPatch）。
+// 覆盖个人资料自助（nickname/gender/school/grade/region/qq/qqAvatar/profileVis/prefs 整体）
+// 与管理端（role/uname/pwdHash）及内部点路径（prefsNotifyEmail → prefs.notifyEmail）。
+type UserPatch struct {
+	Nickname         *string
+	Gender           *string
+	School           *string
+	Grade            *string
+	Region           *string
+	QQ               *string
+	QQAvatar         *bool
+	ProfileVis       *ProfileVis
+	Prefs            *UserPrefs // 整体覆盖（调用方先读旧值合并）
+	Role             *string
+	Uname            *string
+	PwdHash          *string
+	PrefsNotifyEmail *[]string // 点路径 prefs.notifyEmail
+}
+
+func (p UserPatch) Empty() bool {
+	return p.Nickname == nil && p.Gender == nil && p.School == nil && p.Grade == nil &&
+		p.Region == nil && p.QQ == nil && p.QQAvatar == nil && p.ProfileVis == nil &&
+		p.Prefs == nil && p.Role == nil && p.Uname == nil && p.PwdHash == nil &&
+		p.PrefsNotifyEmail == nil
+}
+
+func (r *Repo) UpdateUser(ctx context.Context, id int64, p UserPatch) error {
+	set := bson.M{}
+	if p.Nickname != nil {
+		set["nickname"] = *p.Nickname
+	}
+	if p.Gender != nil {
+		set["gender"] = *p.Gender
+	}
+	if p.School != nil {
+		set["school"] = *p.School
+	}
+	if p.Grade != nil {
+		set["grade"] = *p.Grade
+	}
+	if p.Region != nil {
+		set["region"] = *p.Region
+	}
+	if p.QQ != nil {
+		set["qq"] = *p.QQ
+	}
+	if p.QQAvatar != nil {
+		set["qqAvatar"] = *p.QQAvatar
+	}
+	if p.ProfileVis != nil {
+		set["profileVis"] = *p.ProfileVis
+	}
+	if p.Prefs != nil {
+		set["prefs"] = *p.Prefs
+	}
+	if p.Role != nil {
+		set["role"] = *p.Role
+	}
+	if p.Uname != nil {
+		set["uname"] = *p.Uname // User 结构体的 bson 字段名是 uname（勿用 API 字段名）
+	}
+	if p.PwdHash != nil {
+		set["pwdHash"] = *p.PwdHash
+	}
+	if p.PrefsNotifyEmail != nil {
+		set["prefs.notifyEmail"] = *p.PrefsNotifyEmail
+	}
+	if len(set) == 0 {
+		return ErrEmptyPatch
+	}
 	res, err := r.users.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {
 		return err
@@ -446,7 +515,7 @@ func (r *Repo) UpdateNotifyEmailPrefs(ctx context.Context, id int64, cats []stri
 	if cats == nil {
 		cats = []string{}
 	}
-	return r.UpdateUser(ctx, id, bson.M{"prefs.notifyEmail": cats})
+	return r.UpdateUser(ctx, id, UserPatch{PrefsNotifyEmail: &cats})
 }
 
 // migrateRoles 一次性迁移：v0.3 之前的 user/teacher/admin 角色体系 → default/admin/root。

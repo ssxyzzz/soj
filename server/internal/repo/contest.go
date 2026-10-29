@@ -146,7 +146,62 @@ func (r *Repo) SetRoundFileIO(ctx context.Context, kind string, id int64, enable
 
 // UpdateRoundFields 组织者编辑比赛/考试（时间、题目集合/顺序、成绩表与赛时隐藏成绩开关）。
 // set 的键值由 handler 校验；题目清单整体替换（评分在 handler 内按原值保留）。
-func (r *Repo) UpdateRoundFields(ctx context.Context, kind string, id int64, set bson.M) error {
+// RoundPatch 比赛/考试字段补丁（nil 不动；typed 化同 ListPatch）。
+// Start/End/HiddenUntil 由调用方按「时长校验 + 隐藏期相对天数跟移」联动算好后整组传入。
+type RoundPatch struct {
+	Title       *string
+	Intro       *string // introHtml 渲染缓存随迁
+	Start       *time.Time
+	End         *time.Time
+	HiddenUntil *time.Time
+	Problems    *[]ContestProblem
+	Scoreboard  *bool
+	HideDuring  *bool
+	HideMeta    *bool
+	FileIO      *bool
+}
+
+func (p RoundPatch) Empty() bool {
+	return p.Title == nil && p.Intro == nil && p.Start == nil && p.End == nil &&
+		p.HiddenUntil == nil && p.Problems == nil && p.Scoreboard == nil &&
+		p.HideDuring == nil && p.HideMeta == nil && p.FileIO == nil
+}
+
+func (r *Repo) UpdateRoundFields(ctx context.Context, kind string, id int64, p RoundPatch) error {
+	set := bson.M{}
+	if p.Title != nil {
+		set["title"] = *p.Title
+	}
+	if p.Intro != nil {
+		set["intro"] = *p.Intro
+	}
+	if p.Start != nil {
+		set["start"] = *p.Start
+	}
+	if p.End != nil {
+		set["end"] = *p.End
+	}
+	if p.HiddenUntil != nil {
+		set["hiddenUntil"] = *p.HiddenUntil
+	}
+	if p.Problems != nil {
+		set["problems"] = *p.Problems
+	}
+	if p.Scoreboard != nil {
+		set["scoreboard"] = *p.Scoreboard
+	}
+	if p.HideDuring != nil {
+		set["hideDuring"] = *p.HideDuring
+	}
+	if p.HideMeta != nil {
+		set["hideMeta"] = *p.HideMeta
+	}
+	if p.FileIO != nil {
+		set["fileIo"] = *p.FileIO
+	}
+	if len(set) == 0 {
+		return ErrEmptyPatch
+	}
 	setRenderedHtml(set, "intro", "introHtml")
 	res, err := r.roundsCol(kind).UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {

@@ -138,7 +138,40 @@ func (r *Repo) ListProblemLists(ctx context.Context) ([]*ProblemList, error) {
 }
 
 // UpdateProblemList 更新题单（指针语义由 handler 组装 $set；chapters 整体覆盖）。
-func (r *Repo) UpdateProblemList(ctx context.Context, id int64, set bson.M) error {
+// ListPatch 题单字段补丁（nil 不动；v0.32 typed 化——字段名拼错从「静默写未知字段」变编译错）。
+type ListPatch struct {
+	Title    *string
+	Intro    *string // introHtml 渲染缓存随迁
+	Hidden   *bool
+	Sort     *int64
+	Chapters *[]ListEntry
+}
+
+// Empty 全字段 nil（调用方据此回 400「没有需要更新的字段」）。
+func (p ListPatch) Empty() bool {
+	return p.Title == nil && p.Intro == nil && p.Hidden == nil && p.Sort == nil && p.Chapters == nil
+}
+
+func (r *Repo) UpdateProblemList(ctx context.Context, id int64, p ListPatch) error {
+	set := bson.M{}
+	if p.Title != nil {
+		set["title"] = *p.Title
+	}
+	if p.Intro != nil {
+		set["intro"] = *p.Intro
+	}
+	if p.Hidden != nil {
+		set["hidden"] = *p.Hidden
+	}
+	if p.Sort != nil {
+		set["sort"] = *p.Sort
+	}
+	if p.Chapters != nil {
+		set["chapters"] = *p.Chapters
+	}
+	if len(set) == 0 {
+		return ErrEmptyPatch
+	}
 	setRenderedHtml(set, "intro", "introHtml")
 	res, err := r.lists.UpdateOne(ctx, bson.M{"_id": id}, bson.M{"$set": set})
 	if err != nil {
