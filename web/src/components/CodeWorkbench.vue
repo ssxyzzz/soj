@@ -8,6 +8,7 @@ import SelfTestPanel from '@/components/SelfTestPanel.vue'
 import { authApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions, mergedPrefs, templateFor } from '@/utils/code'
+import { parseIOSamples } from '@/utils/md'
 import type { ProblemDetail, UserPrefs } from '@/types'
 
 // 在线编程（v0.4.6 右列入口）：全屏覆盖层，左侧题面（ProblemStatement 与详情页主列同卡复用）、
@@ -52,6 +53,8 @@ const codeFontSize = computed(() => userStore.prefs.codeFontSize || 14)
 // 自测（v0.23）：stdio 传统题可用；面板悬在编辑器上方，自测不计入任何统计
 const selfTestOpen = ref(false)
 const selfTestEligible = computed(() => props.problem.challenge?.eligible ?? false)
+// 一键填充样例的数据源：题面 ```inputN/```outputN 围栏解析（utils/md）
+const ioSamples = computed(() => parseIOSamples(props.problem.description ?? ''))
 
 // 字体/字号即改即存：先乐观更新本地 store（编辑器点击瞬间重绘，不等网络往返），
 // 再全量字段落库（整体覆盖语义，见 utils/code.ts mergedPrefs）。
@@ -183,6 +186,7 @@ onBeforeUnmount(() => {
               :problem-id="problem.id"
               :language="lang"
               :code="code"
+              :samples="ioSamples"
             />
             <CodeEditor
               v-model="code"
@@ -300,7 +304,7 @@ onBeforeUnmount(() => {
 }
 .wb-selftest {
   flex: none;
-  max-height: 300px;
+  max-height: 40vh;
   overflow: auto;
 }
 .wb-editor {

@@ -175,3 +175,19 @@ export function bindCopyFeedback(root: HTMLElement): () => void {
     mo.disconnect()
   }
 }
+
+/** 题面样例解析（```inputN / ```outputN 围栏，与 pairIOSamples 同一口径）：
+    按题面顺序返回、编号配对（Map 保序）；输出缺失则期望留空；剔除围栏内容尾换行。
+    供在线编程/挑战页「一键填充样例」用（自测面板多组输入）。 */
+export function parseIOSamples(md: string): { stdin: string; expected: string }[] {
+  const inputs = new Map<string, string>()
+  const outputs = new Map<string, string>()
+  const re = /```(input|output)(\d+)[^\n]*\n([\s\S]*?)```/g
+  for (const m of md.matchAll(re)) {
+    ;(m[1] === 'input' ? inputs : outputs).set(m[2], m[3].replace(/\n$/, ''))
+  }
+  return Array.from(inputs.keys(), (n) => ({
+    stdin: inputs.get(n) ?? '',
+    expected: outputs.get(n) ?? '',
+  }))
+}

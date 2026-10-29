@@ -14,6 +14,7 @@ import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SelfTestPanel from '@/components/SelfTestPanel.vue'
 import { challengeApi, problemApi, submissionApi } from '@/api'
 import { isQueueStatus } from '@/utils/format'
+import { parseIOSamples } from '@/utils/md'
 import type { ProblemDetail } from '@/types'
 
 const route = useRoute()
@@ -42,6 +43,8 @@ let pollTimer: number | null = null
 
 // ---------- 自测（共用 SelfTestPanel；挑战中可用且计时照走） ----------
 const selfTestOpen = ref(false)
+// 一键填充样例的数据源：题面 ```inputN/```outputN 围栏解析（utils/md）
+const ioSamples = computed(() => parseIOSamples(problem.value?.description ?? ''))
 
 const LANGS = [
   { value: 'cpp', label: 'C++ 14' },
@@ -356,6 +359,7 @@ function swallow(e: Event) {
           :problem-id="pid"
           :language="language"
           :code="code"
+          :samples="ioSamples"
         />
         <!-- 编辑器：防粘贴四件套挂捕获层 -->
         <div
@@ -554,7 +558,7 @@ function swallow(e: Event) {
 .chal-selftest {
   flex: none;
   margin-bottom: 10px;
-  max-height: 300px;
+  max-height: 40vh;
   overflow: auto;
 }
 
