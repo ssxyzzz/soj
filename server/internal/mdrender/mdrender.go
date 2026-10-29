@@ -22,8 +22,11 @@ var (
 )
 
 // LuteVersion 引擎版本标记（与 go.mod 的 lute 依赖对应；升级依赖时同步改这里，
-// repo 层据此触发存量渲染缓存全量重刷，见 migrate_render.go）。
-const LuteVersion = "1.7.8"
+// repo 层据此触发存量渲染缓存全量重刷，见 migrate_render.go）。后缀标记渲染口径
+// 变更：-mdig = 开启行内公式「$ 后允许数字」（2026-10-29：luogu 题面 $1$、
+// $1 \leq N \leq 3\cdot 10^5$ 被 lute 默认的金额保护拒绝、整段显示原文；前端
+// Vditor 预览的 math.inlineDigit:true 早已放开——两端口径对齐）。
+const LuteVersion = "1.7.8-mdig"
 
 // Render md → 消毒后的 HTML 片段（不含 <html> 骨架，v-html 直用）。
 // 空串进空串出。超限/病态内容由写入口的体积上限把关（本层不做长度策略）。
@@ -45,6 +48,10 @@ func Render(md string) string {
 		// 服务端只产结构不产色：关闭内联高亮样式，输出标准 language-xxx class
 		// 交给前端 hljs（与现查看端一致）
 		eng.RenderOptions.CodeSyntaxHighlight = false
+		// 行内公式 $ 后允许数字（对齐前端 math.inlineDigit:true，MdViewInner 同款
+		// 注释——lute 默认的金额保护会拒 $1$ / $0$ / $1 \leq N \leq …$ 这类 OJ
+		// 题面数据范围的高频形态，html 里整段留原文）
+		eng.SetInlineMathAllowDigitAfterOpenMarker(true)
 	}
 	return eng.MarkdownStr("", md)
 }

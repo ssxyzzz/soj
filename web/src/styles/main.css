@@ -1077,8 +1077,14 @@ strong {
 }
 
 /* 行内 code 徽章化：选择器必须与 Vditor 主题同形（两个 :not 是特异度来源）；
-   底 #F2F3F4（拍板定值，较 EP fill-color 微暖一阶）+ 字重 medium——正文中略提级 */
-.soj-md.md-light .vditor-reset code:not(.hljs):not(.highlight-chroma) {
+   底 #F2F3F4（拍板定值，较 EP fill-color 微暖一阶）+ 字重 medium——正文中略提级。
+   :not(pre) > 结构限定必须有：本规则是后代选择器，若无它会罩进 pre 里的块级 code——
+   :not(.hljs) 本承担该职责，但依赖 hljs 高亮成功打类；围栏语言未知（样例围栏
+   ```input1/```output1、```text 等）时高亮失败不打 .hljs，块级 code 被误当行内代码
+   （padding 1px/字号 15.2px 覆盖块级 14px/13.5px），行号列 top 按 padding 写死恒等
+   的对齐链断裂 → 行号整体偏低 + 溢出滚动条（2026-10-29 用户走查实锤）。改为
+   父元素结构判定，与 hljs 成败解耦 */
+.soj-md.md-light .vditor-reset :not(pre) > code:not(.hljs):not(.highlight-chroma) {
   padding: 1px 6px;
   background-color: #f2f3f4;
   border: 1px solid var(--el-border-color-lighter);
