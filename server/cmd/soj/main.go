@@ -48,9 +48,9 @@ func main() {
 
 	sb := sandbox.New(cfg.SandboxAddr)
 
-	// 题目导入模式：导入后退出
+	// 题目导入模式：导入后退出（题面外链图急切转存，v0.31）
 	if *importDir != "" {
-		imp := &repo.Importer{Repo: r, DataDir: cfg.DataDir}
+		imp := &repo.Importer{Repo: r, DataDir: cfg.DataDir, TransferImages: true}
 		pr, err := imp.ImportDir(ctx, *importDir)
 		if err != nil {
 			log.Fatalf("[import] 导入失败: %v", err)

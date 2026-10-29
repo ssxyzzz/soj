@@ -246,6 +246,8 @@ func (h *Handlers) StartImport(c *gin.Context) {
 	}
 	skipSame := formValue(form, "skip_same_title") == "1"
 	defaultHidden := formValue(form, "default_hidden") == "1"
+	// 题面外链图转存（v0.31）：默认开，显式传 0 关闭（导入页开关）
+	transferImages := formValue(form, "transfer_images") != "0"
 	// 按题号跳过仅 SOJ 源有意义（Hydro 包数字目录是官方包结构，已弃用 ID）
 	if source == "soj" && formValue(form, "skip_existing_pid") == "1" {
 		job.mu.Lock()
@@ -275,12 +277,12 @@ func (h *Handlers) StartImport(c *gin.Context) {
 	zf.Close()
 	tmpZip.Close()
 
-	go h.runImportJob(ctx, job, tmpZip.Name(), uid, skipSame, defaultHidden, problemMB, zipMB)
+	go h.runImportJob(ctx, job, tmpZip.Name(), uid, skipSame, defaultHidden, transferImages, problemMB, zipMB)
 	ok(c, gin.H{"started": true, "source": source, "zip_mb": zipMB, "problem_mb": problemMB})
 }
 
 // runImportJob 后台逐题导入；整包级失败（zip/结构）落 job.State=failed。
-func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPath string, uid int64, skipSame, defaultHidden bool, problemMB, zipMB int) {
+func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPath string, uid int64, skipSame, defaultHidden, transferImages bool, problemMB, zipMB int) {
 	defer os.Remove(zipPath)
 	defer func() {
 		if r := recover(); r != nil {
@@ -362,8 +364,9 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 			Repo: h.repo, DataDir: h.cfg.DataDir, CreatorUID: uid,
 			// 按题号跳过模式认目录名前缀：不存在则以该号落库（存在已在上方跳过，
 			// 不可能顶号）；纯新建模式维持 v0.15 防顶号口径（前缀忽略、自动取号）
-			IgnoreDirPID:  !job.SkipExistingPID,
-			DefaultHidden: defaultHidden,
+			IgnoreDirPID:   !job.SkipExistingPID,
+			DefaultHidden:  defaultHidden,
+			TransferImages: transferImages, // 题面外链图急切转存（导入页开关，默认开）
 		}).ImportDir(ctx, dir)
 		if err != nil {
 			job.addResult(batchResult{Name: name, Status: "failed", Title: title, Reason: err.Error()})

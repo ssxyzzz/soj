@@ -13,9 +13,13 @@ import (
 	"soj/internal/repo"
 )
 
-func (h *Handlers) seedImporter() *repo.Importer {
-	return &repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir}
+// importer 数据卷感知的导入器构造（种子管理与资产异步转存共用）。
+func (h *Handlers) importer() *repo.Importer {
+	return &repo.Importer{Repo: h.repo, DataDir: h.cfg.DataDir, TransferImages: true}
 }
+
+// seedImporter 种子链的导入器（同 importer，语义别名保留给种子调用点）。
+func (h *Handlers) seedImporter() *repo.Importer { return h.importer() }
 
 // AdminSeedStatus GET /admin/seed：种子目录 ↔ 库内对账（面板展示与操作前预览）。
 func (h *Handlers) AdminSeedStatus(c *gin.Context) {

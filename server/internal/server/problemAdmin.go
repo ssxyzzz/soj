@@ -156,6 +156,9 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		TagIDs: tagIDs, MetaTagIDs: metaTagIDs, Difficulty: difficulty,
 		Compare: compare, FloatTolerance: tol,
 		ObjectiveQuestions: objQuestions,
+		// 网页建题不急切转存（外链图下载慢 CDN 最坏 60s 不挡建题请求）——
+		// 落库后异步转存（v0.31 编辑页口径同一入口）
+		TransferImages: false,
 	}
 	if ptype != repo.TypeObjective {
 		timeLimit := atoiDefault(formValue(form, "time_limit_ms"), 1000)
@@ -277,6 +280,8 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 			return
 		}
 	}
+	// 题面外链图后台异步转存（v0.31）：零按钮零感知，失败静默保外链
+	go h.importer().TransferStatementAssetsAsync(pr.ID)
 	ok(c, gin.H{"id": pr.ID})
 }
 
@@ -974,9 +979,9 @@ func isPackagingJunk(name string) bool {
 }
 
 // DownloadProblemTestdata 下载题包（权威导出新 SOJ 格式，import-design.md §3）：
-// problem.md（题面）+ problem.yaml（元数据；客观题另带 answer.yaml 答案 + answer.md 解析）
-// + data/config.yaml（按 db 当前值渲染）+ data/<卷内原名文件>。
-// problem.data.download 权限位 + 每日限额（root 恒不限）。
+// problem.md（题面，站内资产 URL 逆改写回 assets/ 相对引用——v0.31 自包含导出）
+// + problem.yaml（元数据；客观题另带 answer.yaml 答案 + answer.md 解析）
+// + data/config.yaml（按 db 当前值渲染）+ data/<卷内原名文件> + assets/<题面图>。
 func (h *Handlers) DownloadProblemTestdata(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -1007,16 +1012,20 @@ func (h *Handlers) DownloadProblemTestdata(c *gin.Context) {
 	}
 
 	var rels []string
+	hasData := false
 	if err := h.provider().Walk(id, func(rel string) error {
 		if strings.HasPrefix(rel, "data/") {
+			hasData = true
 			rels = append(rels, rel)
+		} else if strings.HasPrefix(rel, "assets/") {
+			rels = append(rels, rel) // 题面资产随题走（v0.31）
 		}
 		return nil
 	}); err != nil {
 		fail(c, http.StatusInternalServerError, "读取测试数据失败")
 		return
 	}
-	if len(rels) == 0 && !p.IsObjective() {
+	if !hasData && !p.IsObjective() {
 		fail(c, http.StatusNotFound, "该题还没有测试数据")
 		return
 	}
@@ -1059,7 +1068,8 @@ func (h *Handlers) exportProblemInto(ctx context.Context, zw *zip.Writer, p *rep
 		}
 	}
 	if p.Statement != "" {
-		if err := write("problem.md", []byte(p.Statement)); err != nil {
+		// 站内资产 URL → assets/ 相对引用（与导入改写互逆，导出包跨实例自包含）
+		if err := write("problem.md", []byte(repo.RewriteSiteAssetsToRelative(p.Statement, p.ID))); err != nil {
 			return err
 		}
 	}
@@ -1168,7 +1178,7 @@ func (h *Handlers) ExportProblems(c *gin.Context) {
 		}
 		var rels []string
 		if err := h.provider().Walk(id, func(rel string) error {
-			if strings.HasPrefix(rel, "data/") {
+			if strings.HasPrefix(rel, "data/") || strings.HasPrefix(rel, "assets/") {
 				rels = append(rels, rel)
 			}
 			return nil

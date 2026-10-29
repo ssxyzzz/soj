@@ -110,6 +110,9 @@ func Run(ctx context.Context, deps *Deps) {
 
 	// 题面图片公开读取（v0.5.1）：非 /api 前缀，随机文件名 + immutable 缓存
 	r.GET("/uploads/:file", h.ServeUpload)
+	// 题面资产公开读取（v0.31）：同 uploads 先例挂根路径——题面里引用的
+	// `/problems/:id/assets/<名>` 即此形（挂 /api 下会与该 URL 形不一致、落 SPA 回退）
+	r.GET("/problems/:id/assets/:file", AuthOptional(h), h.ServeProblemAsset)
 
 	api := r.Group("/api")
 	api.Use(h.rateLimit("global")) // IP 限流（v0.14）：私网来源跳过，公网直连生效

@@ -366,6 +366,8 @@ func (h *Handlers) SetProblemStatement(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}
+	// 题面外链图后台异步转存（v0.31）：落库后扫描下载、定点替换双存——前端零感知
+	go h.importer().TransferStatementAssetsAsync(id)
 	ok(c, gin.H{"id": id})
 }
 

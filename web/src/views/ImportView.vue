@@ -28,6 +28,9 @@ const sources: { id: Source | 'qduoj' | 'hoj'; label: string; hint: string; soon
 const fileList = ref<UploadUserFile[]>([])
 const skipSameTitle = ref(false)
 const defaultHidden = ref(false)
+// 题面外链图转存（v0.31）：默认开——导入时把题面里的外站图下载为本题资产（随题备份/
+// 迁移/删除），失败自动保留外链；关闭则题面照原样入库（保存题面后也不会自动转存）
+const transferImages = ref(true)
 // 已存在题号跳过（v0.18.1 验收调整，仅 SOJ 源）：目录名带题号前缀（题号_标题 /
 // 题号 标题，下划线与空格都认）——开启后按前缀题号落库、已存在则跳过不导入
 // （防导出包重复导回造成重复题；不覆盖既有题）；关闭则忽略前缀、一律自动取号
@@ -117,6 +120,7 @@ async function startImport() {
     fd.append('zip', f)
     if (skipSameTitle.value) fd.append('skip_same_title', '1')
     if (defaultHidden.value) fd.append('default_hidden', '1')
+    if (!transferImages.value) fd.append('transfer_images', '0') // 默认开，仅关闭时传 0
     if (source.value === 'soj' && skipExistingPID.value) fd.append('skip_existing_pid', '1')
     await importApi.upload(fd, (pct) => {
       uploadPct.value = pct
@@ -294,6 +298,13 @@ const finishedIssues = computed(() =>
         <el-switch v-model="skipExistingPID" :disabled="running" />
         <span>已存在题号跳过</span>
         <el-tooltip placement="top" content="目录名带题号前缀（题号_标题 或 题号 标题，Windows 直接压缩的包多为空格）：开启后按前缀题号落库、已存在的题号直接跳过（防导出包重复导回造成重复题，不覆盖既有题）；关闭则忽略前缀、一律自动取号新建">
+          <el-icon class="dim"><QuestionFilled /></el-icon>
+        </el-tooltip>
+      </div>
+      <div class="switch-row">
+        <el-switch v-model="transferImages" :disabled="running" />
+        <span>题面外链图转存</span>
+        <el-tooltip placement="top" content="开启后导入时自动把题面里引用的外站图片下载为本题自有资产（随题备份/迁移，不再依赖外站）；下载失败或超限（单图 5MB / 单题 20MB）自动保留外链。包内 assets/ 目录的图片始终随包导入，不受本开关影响">
           <el-icon class="dim"><QuestionFilled /></el-icon>
         </el-tooltip>
       </div>

@@ -29,6 +29,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"soj/internal/safefetch"
 	"soj/internal/testdata"
 )
 
@@ -56,6 +57,12 @@ type Importer struct {
 	IgnoreDirPID bool
 	// DefaultHidden yaml 未声明 hidden 时的缺省值（批量导入「导入后默认隐藏」开关）。
 	DefaultHidden bool
+	// TransferImages 题面外链图急切转存（v0.31）：导入时同步下载外链图落 assets 并改写
+	// 站内 URL（导入页开关，默认开——零值 false 由各调用方显式置 true；网页建题路径
+	// 置 false 改走保存后异步转存，不阻塞建题请求）。
+	TransferImages bool
+	// ImageFetcher 外链图下载器（测试注入 httptest 用；nil = 生产 safefetch.New）。
+	ImageFetcher *safefetch.Fetcher
 }
 
 // DirPID 从目录名解析数字前缀题号（无前缀返回 0）；server 层「已存在题号跳过」
@@ -542,6 +549,10 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 	}
 	store := testdata.NewLocalFS(im.DataDir)
 
+	// 题面终加工（v0.31 资产链）：assets/ 落库 + 相对引用改写 + 外链图转存——
+	// 必须在 UpsertProblem 渲染 statementHtml 之前完成
+	statement = []byte(im.prepareStatement(ctx, store, pid, dir, string(statement)))
+
 	// 数据对落卷（原名 data/<name>），序号按排序重排 1..N
 	cases := make([]CaseMeta, 0, len(pairs))
 	for i, pr := range pairs {
@@ -784,6 +795,8 @@ func (im *Importer) importObjective(ctx context.Context, dir string, pid int64, 
 			return nil, err
 		}
 	}
+	// 客观题题面同样可有图（v0.31 资产链，statementHtml 渲染前改写）
+	statement = []byte(im.prepareStatement(ctx, testdata.NewLocalFS(im.DataDir), pid, dir, string(statement)))
 	p := &Problem{
 		ID: pid, Title: meta.Title, Statement: string(statement),
 		Type: TypeObjective, Questions: qs,
@@ -834,7 +847,7 @@ func (im *Importer) ReplaceData(ctx context.Context, pid int64, dir string) (*Pr
 		return nil, err
 	}
 	store := testdata.NewLocalFS(im.DataDir)
-	_ = store.RemoveDir(pid, "data") // 纯替换语义：旧数据/附属全清
+	_ = store.RemoveDir(pid, "data") // 纯替换语义：旧数据/附属全清（只清 data/，题面资产 assets/ 不波及——v0.31）
 
 	cases := make([]CaseMeta, 0, len(pairs))
 	for i, pr := range pairs {
