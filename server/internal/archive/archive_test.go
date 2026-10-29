@@ -1,4 +1,7 @@
-package server
+package archive
+
+// 解压/摊平纯函数测试（自 server/problemAdmin_test.go 随迁——v0.32 巨型文件治理，
+// 用例与断言零变化，仅调用名改导出）。无 Mongo、无网络，CI 可跑。
 
 import (
 	"archive/zip"
@@ -46,8 +49,8 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 			"A+B Problem/2.in":        "4 5\n",
 			"A+B Problem/2.ans":       "9\n",
 		})
-		if err := unwrapSingleRootDir(dir); err != nil {
-			t.Fatalf("unwrapSingleRootDir: %v", err)
+		if err := UnwrapSingleRootDir(dir); err != nil {
+			t.Fatalf("UnwrapSingleRootDir: %v", err)
 		}
 		mustExist(t, dir, "cases/1/in")
 		mustExist(t, dir, "config.yaml")
@@ -61,8 +64,8 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 			"下载包/problem/cases/1/in":  "1 2\n",
 			"下载包/problem/cases/1/ans": "3\n",
 		})
-		if err := unwrapSingleRootDir(dir); err != nil {
-			t.Fatalf("unwrapSingleRootDir: %v", err)
+		if err := UnwrapSingleRootDir(dir); err != nil {
+			t.Fatalf("UnwrapSingleRootDir: %v", err)
 		}
 		mustExist(t, dir, "cases/1/in")
 		mustNotExist(t, dir, "下载包")
@@ -74,8 +77,8 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 			"cases/1/in":  "1 2\n",
 			"cases/1/ans": "3\n",
 		})
-		if err := unwrapSingleRootDir(dir); err != nil {
-			t.Fatalf("unwrapSingleRootDir: %v", err)
+		if err := UnwrapSingleRootDir(dir); err != nil {
+			t.Fatalf("UnwrapSingleRootDir: %v", err)
 		}
 		mustExist(t, dir, "cases/1/in")
 	})
@@ -86,8 +89,8 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 			"1.in":  "1 2\n",
 			"1.ans": "3\n",
 		})
-		if err := unwrapSingleRootDir(dir); err != nil {
-			t.Fatalf("unwrapSingleRootDir: %v", err)
+		if err := UnwrapSingleRootDir(dir); err != nil {
+			t.Fatalf("UnwrapSingleRootDir: %v", err)
 		}
 		mustExist(t, dir, "1.in")
 	})
@@ -100,8 +103,8 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 			"__MACOSX/pkg/._in": "\x00\x01",
 			".DS_Store":         "",
 		})
-		if err := unwrapSingleRootDir(dir); err != nil {
-			t.Fatalf("unwrapSingleRootDir: %v", err)
+		if err := UnwrapSingleRootDir(dir); err != nil {
+			t.Fatalf("UnwrapSingleRootDir: %v", err)
 		}
 		mustExist(t, dir, "cases/1/in")
 		mustNotExist(t, dir, "pkg")
@@ -113,8 +116,8 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 		mkTree(t, dir, map[string]string{
 			"data/test1.in": "1\n",
 		})
-		if err := unwrapSingleRootDir(dir); err != nil {
-			t.Fatalf("unwrapSingleRootDir: %v", err)
+		if err := UnwrapSingleRootDir(dir); err != nil {
+			t.Fatalf("UnwrapSingleRootDir: %v", err)
 		}
 		mustExist(t, dir, "data/test1.in")
 	})
@@ -122,8 +125,8 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 	t.Run("根下仅剩单个文件不动", func(t *testing.T) {
 		dir := t.TempDir()
 		mkTree(t, dir, map[string]string{"config.yaml": "samples: [1]\n"})
-		if err := unwrapSingleRootDir(dir); err != nil {
-			t.Fatalf("unwrapSingleRootDir: %v", err)
+		if err := UnwrapSingleRootDir(dir); err != nil {
+			t.Fatalf("UnwrapSingleRootDir: %v", err)
 		}
 		mustExist(t, dir, "config.yaml")
 	})
@@ -132,6 +135,7 @@ func TestUnwrapSingleRootDir(t *testing.T) {
 // TestSafeExtractZipGBKNames Windows 资源管理器压缩的中文包回归：条目名 GBK 字节、
 // 无 UTF-8 标志位（卖皮鞋的 GBK 序列含非法 UTF-8 字节，zip writer 恰好不设标志），
 // 解压后目录名应为正常中文；UTF-8 标志位正常的条目不受影响。
+// 限额沿用建题/替换口径（2000 条 / 200MB 总量 / 20MB 单文件）。
 func TestSafeExtractZipGBKNames(t *testing.T) {
 	gbk := func(s string) string {
 		b, err := simplifiedchinese.GB18030.NewEncoder().Bytes([]byte(s))
@@ -169,8 +173,8 @@ func TestSafeExtractZipGBKNames(t *testing.T) {
 	}
 
 	dst := filepath.Join(dir, "out")
-	if err := safeExtractZip(zipPath, dst); err != nil {
-		t.Fatalf("safeExtractZip: %v", err)
+	if err := SafeExtractZipLimits(zipPath, dst, 2000, 200<<20, 20<<20, "20MB", "200MB", nil); err != nil {
+		t.Fatalf("SafeExtractZipLimits: %v", err)
 	}
 	mustExist(t, dst, "1000 卖皮鞋/problem.md")
 	mustExist(t, dst, "1000 卖皮鞋/data/test1.in")

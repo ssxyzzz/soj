@@ -26,6 +26,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"gopkg.in/yaml.v3"
 
+	"soj/internal/archive"
 	"soj/internal/repo"
 )
 
@@ -302,7 +303,7 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 	if maxEntries < 2000 {
 		maxEntries = 2000
 	}
-	if err := safeExtractZipLimits(zipPath, tmpDir, maxEntries, int64(zipMB)*2<<20, int64(problemMB)<<20,
+	if err := archive.SafeExtractZipLimits(zipPath, tmpDir, maxEntries, int64(zipMB)*2<<20, int64(problemMB)<<20,
 		fmt.Sprintf("%dMB", problemMB), fmt.Sprintf("%dMB", zipMB*2), func(done, total int64) {
 			job.setExtract(done, total) // v0.18.2 解压实时进度
 		}); err != nil {
@@ -356,7 +357,7 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 			job.addResult(batchResult{Name: name, Status: "failed", Title: title, Reason: fmt.Sprintf("单题数据超过 %dMB 上限，请拆分后单独传", problemMB)})
 			continue
 		}
-		if err := unwrapSingleRootDir(dir); err != nil {
+		if err := archive.UnwrapSingleRootDir(dir); err != nil {
 			job.addResult(batchResult{Name: name, Status: "failed", Title: title, Reason: err.Error()})
 			continue
 		}
@@ -404,7 +405,7 @@ func splitImportDirs(root, source string) ([]string, error) {
 	}
 	dirs := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if e.IsDir() && !isPackagingJunk(e.Name()) && !strings.HasPrefix(e.Name(), ".") {
+		if e.IsDir() && !archive.IsPackagingJunk(e.Name()) && !strings.HasPrefix(e.Name(), ".") {
 			dirs = append(dirs, filepath.Join(root, e.Name()))
 		}
 	}
@@ -471,7 +472,7 @@ func describeImportEntries(dir string) string {
 	}
 	names := make([]string, 0, len(entries))
 	for _, e := range entries {
-		if isPackagingJunk(e.Name()) || strings.HasPrefix(e.Name(), ".") {
+		if archive.IsPackagingJunk(e.Name()) || strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
 		if e.IsDir() {
