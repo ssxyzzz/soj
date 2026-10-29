@@ -938,6 +938,22 @@ strong {
   line-height: 1.7;
 }
 
+/* 文章体根容器禁内滚（2026-10-29 用户 Edge/ego 截图实锤）：vditor index.css 的
+   `.vditor-reset{overflow:auto}` 让题面正文成为滚动容器——KaTeX 行内公式的 1~2px
+   垂直度量残差（.language-math/.sizing mtight 比行盒多出）即顶出一条整高的带箭头
+   滚动条（在右列卡片左侧，极易误读成「题面滚动条」）。文章体应自然生长、随页面
+   滚动（全站无内滚面设计）。实测 html 模式类直挂 .md-view-body、md 模式 preview
+   在同元素追加同类（双类同元素，一个选择器覆盖两模式）；.vditor-preview 两条为
+   vditor 内部面板形态的防御冗余。编辑器面（.md-editor.soj-md 下的
+   .vditor-sv.vditor-reset 等自滚容器）不携带 .md-view-body、不在 .vditor-preview
+   内，不受影响。表格/代码块各自的内部滚动是 vditor 有意设计，特异度更高不受此
+   处影响——横向超界照旧出横向滚动条 */
+.soj-md .md-view-body.vditor-reset,
+.soj-md .vditor-preview,
+.soj-md .vditor-preview .vditor-reset {
+  overflow: visible;
+}
+
 /* 标题梯度低于页头大标题（20/600 是题面卡层级顶点） */
 .soj-md .vditor-reset h1,
 .soj-md .vditor-reset h2,
