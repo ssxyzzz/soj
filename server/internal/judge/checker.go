@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
-
 	"soj/internal/lang"
 	"soj/internal/repo"
 	"soj/internal/sandbox"
@@ -52,7 +50,7 @@ func (cr *checkerRunner) ensureCompiled(ctx context.Context) (string, error) {
 	if status != "" {
 		return "", fmt.Errorf("校验器编译失败: %s", info)
 	}
-	if err := cr.j.Repo.UpdateProblemMeta(ctx, cr.p.ID, bson.M{"checkerFileId": fileID}); err == nil {
+	if err := cr.j.Repo.UpdateProblemMeta(ctx, cr.p.ID, repo.ProblemMetaPatch{CheckerFileID: &fileID}); err == nil {
 		cr.p.CheckerFileID = fileID
 	}
 	return fileID, nil

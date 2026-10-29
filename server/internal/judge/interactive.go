@@ -18,8 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
-
 	"soj/internal/lang"
 	"soj/internal/repo"
 	"soj/internal/sandbox"
@@ -59,7 +57,7 @@ func (ir *interactorRunner) ensureCompiled(ctx context.Context) (string, error) 
 	if status != "" {
 		return "", fmt.Errorf("交互器编译失败: %s", info)
 	}
-	if err := ir.j.Repo.UpdateProblemMeta(ctx, ir.p.ID, bson.M{"interactorFileId": fileID}); err == nil {
+	if err := ir.j.Repo.UpdateProblemMeta(ctx, ir.p.ID, repo.ProblemMetaPatch{InteractorFileID: &fileID}); err == nil {
 		ir.p.InteractorFileID = fileID
 	}
 	return fileID, nil
@@ -68,7 +66,7 @@ func (ir *interactorRunner) ensureCompiled(ctx context.Context) (string, error) 
 // recompile 丢弃失效的编译产物缓存并重编一次（沙箱容器重建/清理后旧 fileId 不再存在）。
 func (ir *interactorRunner) recompile(ctx context.Context) (string, error) {
 	ir.p.InteractorFileID = ""
-	_ = ir.j.Repo.UpdateProblemMeta(ctx, ir.p.ID, bson.M{"interactorFileId": ""})
+	_ = ir.j.Repo.UpdateProblemMeta(ctx, ir.p.ID, repo.ProblemMetaPatch{InteractorFileID: new(string)})
 	return ir.ensureCompiled(ctx)
 }
 

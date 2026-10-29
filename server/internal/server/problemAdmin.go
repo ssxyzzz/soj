@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/v2/bson"
 	"gopkg.in/yaml.v3"
 
 	"soj/internal/archive"
@@ -256,13 +255,13 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 		return
 	}
 	// 挑战时长与答案解析视频（v0.23）：随建题表单一并落库（复用编辑同款校验）
-	setMeta := bson.M{}
+	var meta repo.ProblemMetaPatch
 	if v := strings.TrimSpace(formValue(form, "video_url")); v != "" {
 		if len(v) > 1024 {
 			fail(c, http.StatusBadRequest, "视频链接过长（上限 1024 字符）")
 			return
 		}
-		setMeta["videoUrl"] = v
+		meta.VideoURL = &v
 	}
 	if raw := formValue(form, "challenge_time_sec"); raw != "" {
 		n, err := strconv.Atoi(raw)
@@ -270,10 +269,10 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "挑战时长需在 60–14400 秒（1 分钟 – 4 小时），留空按难度默认")
 			return
 		}
-		setMeta["challengeTimeSec"] = n
+		meta.ChallengeTimeSec = &n
 	}
-	if len(setMeta) > 0 {
-		if err := h.repo.UpdateProblemMeta(c.Request.Context(), pr.ID, setMeta); err != nil {
+	if !meta.Empty() {
+		if err := h.repo.UpdateProblemMeta(c.Request.Context(), pr.ID, meta); err != nil {
 			fail(c, http.StatusInternalServerError, "建题元数据保存失败")
 			return
 		}
@@ -366,8 +365,9 @@ func (h *Handlers) UpdateChecker(c *gin.Context) {
 		return
 	}
 	sha := fmt.Sprintf("%x", sha256.Sum256(data))
-	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{
-		"checkerFile": "data/checker.cpp", "checkerSha": sha, "checkerFileId": "",
+	file, empty := "data/checker.cpp", ""
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{
+		CheckerFile: &file, CheckerSHA: &sha, CheckerFileID: &empty,
 	}); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
@@ -424,13 +424,14 @@ func (h *Handlers) UpdateFunctionFile(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}
-	set := bson.M{}
+	var patch repo.ProblemMetaPatch
 	if kind == "driver" {
-		set["driverFile"], set["driverSha"] = name, fmt.Sprintf("%x", sha256.Sum256(data))
+		sha := fmt.Sprintf("%x", sha256.Sum256(data))
+		patch.DriverFile, patch.DriverSHA = &name, &sha
 	} else {
-		set["templateFile"] = name
+		patch.TemplateFile = &name
 	}
-	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, set); err != nil {
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, patch); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}
@@ -480,10 +481,11 @@ func (h *Handlers) UpdateInteractor(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}
-	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{
-		"interactorFile":   "data/interactor.cpp",
-		"interactorSha":    fmt.Sprintf("%x", sha256.Sum256(data)),
-		"interactorFileId": "", // 编译缓存失效，判题时自动重编
+	file, sha, empty := "data/interactor.cpp", fmt.Sprintf("%x", sha256.Sum256(data)), ""
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{
+		InteractorFile: &file,
+		InteractorSHA:  &sha,
+		InteractorFileID: &empty, // 编译缓存失效，判题时自动重编
 	}); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
@@ -510,7 +512,7 @@ func (h *Handlers) RemoveFunctionFile(c *gin.Context) {
 		return
 	}
 	_ = h.provider().Delete(id, "data/template.cpp")
-	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{"templateFile": ""}); err != nil {
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{TemplateFile: new(string)}); err != nil {
 		fail(c, http.StatusInternalServerError, "移除失败")
 		return
 	}
@@ -532,8 +534,8 @@ func (h *Handlers) RemoveChecker(c *gin.Context) {
 		return
 	}
 	_ = h.store.Delete(id, "data/checker.cpp")
-	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{
-		"checkerFile": "", "checkerSha": "", "checkerFileId": "",
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{
+		CheckerFile: new(string), CheckerSHA: new(string), CheckerFileID: new(string),
 	}); err != nil {
 		fail(c, http.StatusInternalServerError, "移除失败")
 		return
@@ -649,8 +651,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				fail(c, http.StatusBadRequest, err.Error())
 				return
 			}
-			setQ := bson.M{"questions": qs}
-			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, setQ); err != nil {
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{Questions: &qs}); err != nil {
 				fail(c, http.StatusInternalServerError, "保存失败")
 				return
 			}
@@ -661,8 +662,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				fail(c, http.StatusBadRequest, "标题需在 1-64 字符")
 				return
 			}
-			setT := bson.M{"title": t}
-			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, setT); err != nil {
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{Title: &t}); err != nil {
 				fail(c, http.StatusInternalServerError, "保存失败")
 				return
 			}
@@ -672,8 +672,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				fail(c, http.StatusBadRequest, err.Error())
 				return
 			}
-			setTags := bson.M{"tags": *req.TagIDs}
-			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, setTags); err != nil {
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{Tags: req.TagIDs}); err != nil {
 				fail(c, http.StatusInternalServerError, "保存失败")
 				return
 			}
@@ -683,7 +682,8 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				fail(c, http.StatusBadRequest, "难度需在 1-10 之间")
 				return
 			}
-			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{"difficulty": *req.Difficulty}); err != nil {
+			d := *req.Difficulty
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{Difficulty: &d}); err != nil {
 				fail(c, http.StatusInternalServerError, "保存失败")
 				return
 			}
@@ -693,7 +693,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				fail(c, http.StatusBadRequest, err.Error())
 				return
 			}
-			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, bson.M{"meta_tags": *req.MetaTagIDs}); err != nil {
+			if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{MetaTags: req.MetaTagIDs}); err != nil {
 				fail(c, http.StatusInternalServerError, "保存失败")
 				return
 			}
@@ -705,56 +705,56 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "questions_json 仅适用于客观题")
 		return
 	}
-	set := bson.M{}
+	var patch repo.ProblemMetaPatch
 	if req.Title != nil {
 		t := strings.TrimSpace(*req.Title)
 		if t == "" || len([]rune(t)) > 64 {
 			fail(c, http.StatusBadRequest, "标题需在 1-64 字符")
 			return
 		}
-		set["title"] = t
+		patch.Title = &t
 	}
 	if req.TimeLimitMS != nil {
 		if *req.TimeLimitMS < 100 || *req.TimeLimitMS > 600000 {
 			fail(c, http.StatusBadRequest, "时限需在 100-600000 毫秒")
 			return
 		}
-		set["timeLimitMs"] = *req.TimeLimitMS
+		patch.TimeLimitMS = req.TimeLimitMS
 	}
 	if req.MemoryLimitKB != nil {
 		if *req.MemoryLimitKB < 16 || *req.MemoryLimitKB > 1048576 {
 			fail(c, http.StatusBadRequest, "内存限制需在 16-1048576 MB")
 			return
 		}
-		set["memoryLimitKb"] = *req.MemoryLimitKB
+		patch.MemoryLimitKB = req.MemoryLimitKB
 	}
 	if req.Difficulty != nil {
 		if !repo.ValidDifficulty(*req.Difficulty) {
 			fail(c, http.StatusBadRequest, "难度需在 1-10 之间")
 			return
 		}
-		set["difficulty"] = *req.Difficulty
+		patch.Difficulty = req.Difficulty
 	}
 	if req.MetaTagIDs != nil {
 		if err := h.repo.ValidateMetaTagRefs(c.Request.Context(), *req.MetaTagIDs); err != nil {
 			fail(c, http.StatusBadRequest, err.Error())
 			return
 		}
-		set["meta_tags"] = *req.MetaTagIDs
+		patch.MetaTags = req.MetaTagIDs
 	}
 	if req.Compare != nil {
 		if !repo.ValidCompare(*req.Compare) {
 			fail(c, http.StatusBadRequest, "比对模式需为 exact / tolerant")
 			return
 		}
-		set["compare"] = *req.Compare
+		patch.Compare = req.Compare
 	}
 	if req.FloatTolerance != nil {
 		if *req.FloatTolerance <= 0 || *req.FloatTolerance > 1 {
 			fail(c, http.StatusBadRequest, "浮点容差需在 (0, 1] 之间")
 			return
 		}
-		set["floatTolerance"] = *req.FloatTolerance
+		patch.FloatTolerance = req.FloatTolerance
 	}
 	// 文件 IO 基础文件名：填 problem 即 problem.in / problem.out；允许清空
 	if req.FileIOName != nil {
@@ -764,11 +764,10 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 				fail(c, http.StatusBadRequest, "文件名仅支持字母/数字/下划线/连字符（不含扩展名）")
 				return
 			}
-			set["fileIoInput"] = t + ".in"
-			set["fileIoOutput"] = t + ".out"
+			in, out := t+".in", t+".out"
+			patch.FileIOInput, patch.FileIOOutput = &in, &out
 		} else {
-			set["fileIoInput"] = ""
-			set["fileIoOutput"] = ""
+			patch.FileIOInput, patch.FileIOOutput = new(string), new(string)
 		}
 	}
 	// 答案解析视频链接（v0.23）：B 站/直链 mp4，空串清除
@@ -778,7 +777,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "视频链接过长（上限 1024 字符）")
 			return
 		}
-		set["videoUrl"] = v
+		patch.VideoURL = &v
 	}
 	// 挑战时长（v0.23）：0 = 按难度×5min 默认；显式配置 60–14400 秒
 	if req.ChallengeTimeSec != nil {
@@ -787,7 +786,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "挑战时长需在 60–14400 秒（1 分钟 – 4 小时），留空按难度默认")
 			return
 		}
-		set["challengeTimeSec"] = n
+		patch.ChallengeTimeSec = &n
 	}
 	// 标签：节点 ID 数组，全部存在于树中才接受
 	if req.TagIDs != nil {
@@ -799,7 +798,7 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 		if ids == nil {
 			ids = []int64{}
 		}
-		set["tags"] = ids
+		patch.Tags = &ids
 	}
 	// 题内讨论代码门槛覆盖（v0.24）：0 = 跟随全局默认；1–100 生效
 	if req.DiscussCodeThr != nil {
@@ -808,13 +807,13 @@ func (h *Handlers) UpdateProblemMeta(c *gin.Context) {
 			fail(c, http.StatusBadRequest, "讨论代码门槛需在 0–100 之间（0 = 跟随全局默认）")
 			return
 		}
-		set["discussCodeThreshold"] = n
+		patch.DiscussCodeThreshold = &n
 	}
-	if len(set) == 0 {
+	if patch.Empty() {
 		fail(c, http.StatusBadRequest, "没有需要更新的字段")
 		return
 	}
-	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, set); err != nil {
+	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, patch); err != nil {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}

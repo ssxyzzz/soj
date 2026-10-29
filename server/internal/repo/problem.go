@@ -400,8 +400,82 @@ func (r *Repo) SetProblemStatement(ctx context.Context, pid int64, statement str
 }
 
 // UpdateProblemMeta 网页编辑题目元数据（set 键值由调用方校验，自动带上 updatedAt）。
-func (r *Repo) UpdateProblemMeta(ctx context.Context, pid int64, set bson.M) error {
-	set["updatedAt"] = time.Now()
+// ProblemMetaPatch 题目元数据补丁（nil 不动；v0.32 typed 化——字段名拼错从「静默写未知
+// 字段」变编译错）。覆盖元数据编辑表单（标题/时限/内存/难度/双树标签/比对/文件 IO/
+// 视频/挑战时长/讨论门槛/客观题整卷）与文件面（checker/driver/template/interactor
+// 四类附属文件的卷内名、sha、编译缓存 fileId——上传/移除/缓存失效三态全走这里）。
+type ProblemMetaPatch struct {
+	Title               *string
+	TimeLimitMS         *int
+	MemoryLimitKB       *int
+	Compare             *string
+	FloatTolerance      *float64
+	FileIOInput         *string
+	FileIOOutput        *string
+	Difficulty          *int
+	Tags                *[]int64
+	MetaTags            *[]int64 // bson: meta_tags
+	VideoURL            *string  // bson: videoUrl
+	ChallengeTimeSec    *int
+	DiscussCodeThreshold *int
+	Questions           *[]ObjectiveQuestion
+	CheckerFile         *string
+	CheckerSHA          *string // bson: checkerSha
+	CheckerFileID       *string // bson: checkerFileId（编译产物缓存；空串 = 失效重编）
+	DriverFile          *string
+	DriverSHA           *string
+	TemplateFile        *string
+	InteractorFile      *string
+	InteractorSHA       *string
+	InteractorFileID    *string
+}
+
+func (p ProblemMetaPatch) Empty() bool {
+	return p.Title == nil && p.TimeLimitMS == nil && p.MemoryLimitKB == nil &&
+		p.Compare == nil && p.FloatTolerance == nil && p.FileIOInput == nil &&
+		p.FileIOOutput == nil && p.Difficulty == nil && p.Tags == nil && p.MetaTags == nil &&
+		p.VideoURL == nil && p.ChallengeTimeSec == nil && p.DiscussCodeThreshold == nil &&
+		p.Questions == nil && p.CheckerFile == nil && p.CheckerSHA == nil &&
+		p.CheckerFileID == nil && p.DriverFile == nil && p.DriverSHA == nil &&
+		p.TemplateFile == nil && p.InteractorFile == nil && p.InteractorSHA == nil &&
+		p.InteractorFileID == nil
+}
+
+func (r *Repo) UpdateProblemMeta(ctx context.Context, pid int64, p ProblemMetaPatch) error {
+	set := bson.M{
+		"updatedAt": time.Now(),
+	}
+	setIf := func(ok bool, key string, v any) {
+		if ok {
+			set[key] = v
+		}
+	}
+	setIf(p.Title != nil, "title", p.Title)
+	setIf(p.TimeLimitMS != nil, "timeLimitMs", p.TimeLimitMS)
+	setIf(p.MemoryLimitKB != nil, "memoryLimitKb", p.MemoryLimitKB)
+	setIf(p.Compare != nil, "compare", p.Compare)
+	setIf(p.FloatTolerance != nil, "floatTolerance", p.FloatTolerance)
+	setIf(p.FileIOInput != nil, "fileIoInput", p.FileIOInput)
+	setIf(p.FileIOOutput != nil, "fileIoOutput", p.FileIOOutput)
+	setIf(p.Difficulty != nil, "difficulty", p.Difficulty)
+	setIf(p.Tags != nil, "tags", p.Tags)
+	setIf(p.MetaTags != nil, "meta_tags", p.MetaTags)
+	setIf(p.VideoURL != nil, "videoUrl", p.VideoURL)
+	setIf(p.ChallengeTimeSec != nil, "challengeTimeSec", p.ChallengeTimeSec)
+	setIf(p.DiscussCodeThreshold != nil, "discussCodeThreshold", p.DiscussCodeThreshold)
+	setIf(p.Questions != nil, "questions", p.Questions)
+	setIf(p.CheckerFile != nil, "checkerFile", p.CheckerFile)
+	setIf(p.CheckerSHA != nil, "checkerSha", p.CheckerSHA)
+	setIf(p.CheckerFileID != nil, "checkerFileId", p.CheckerFileID)
+	setIf(p.DriverFile != nil, "driverFile", p.DriverFile)
+	setIf(p.DriverSHA != nil, "driverSha", p.DriverSHA)
+	setIf(p.TemplateFile != nil, "templateFile", p.TemplateFile)
+	setIf(p.InteractorFile != nil, "interactorFile", p.InteractorFile)
+	setIf(p.InteractorSHA != nil, "interactorSha", p.InteractorSHA)
+	setIf(p.InteractorFileID != nil, "interactorFileId", p.InteractorFileID)
+	if len(set) == 1 { // 仅 updatedAt
+		return ErrEmptyPatch
+	}
 	res, err := r.problems.UpdateOne(ctx,
 		bson.M{"_id": pid}, bson.M{"$set": set})
 	if err != nil {
