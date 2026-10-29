@@ -12,6 +12,7 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
+import AiTutorPanel from '@/components/AiTutorPanel.vue'
 import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
 import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
 import SubStatus from '@/components/SubStatus.vue'
@@ -437,6 +438,11 @@ onUnmounted(stopPolling)
             <p class="hint link" @click="showMine = true">查看全部 →</p>
           </template>
           <p v-else class="hint">还没有提交过本题。</p>
+        </RailCard>
+
+        <!-- AI 助教（v0.33-④）：三级提示 + 找 bug 指引；AI 未配置整体隐藏、赛时封锁服务端把关 -->
+        <RailCard v-if="userStore.token && !problem.locked" ov="助教" title="AI 助教" class="aside-card">
+          <AiTutorPanel :pid="problem.id" />
         </RailCard>
 
         <!-- 答案解析（v0.23 验收调整）：视频讲解默认可看（不设 AC 门槛），文字题解满分∨老师门槛；

@@ -228,6 +228,10 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if err := r.EnsureAiCallIndexes(ctx); err != nil {
 		return err
 	}
+	// AI 两能（v0.33-④）：提示缓存唯一索引 + 找 bug 结果落档
+	if err := r.EnsureAiHintIndexes(ctx); err != nil {
+		return err
+	}
 	// 题解每题每人一篇（2026-10-26）：清历史重复 + 唯一索引兜底并发
 	if _, err := r.EnsureSolutionUnique(ctx); err != nil {
 		return err

@@ -718,6 +718,36 @@ export const shopApi = {
   myOrders: () => get<{ list: ShopOrder[] }>('/shop/my-orders'),
 }
 
+// ---------- AI 助教（v0.33-④）：分级提示 + 找 bug ----------
+
+export interface AiHintLevel {
+  level: number
+  unlocked: boolean
+  price: number
+  has_content: boolean
+}
+
+export const aiTutorApi = {
+  status: (pid: number) =>
+    get<{
+      enabled: boolean
+      levels?: AiHintLevel[]
+      debug_price?: number
+      daily_left?: number
+    }>(`/problems/${pid}/ai`),
+  getHint: (pid: number, level: number) =>
+    get<{ hint: { content: string; unlocked: boolean; at?: string } }>(`/problems/${pid}/ai/hint/${level}`),
+  buyHint: (pid: number, level: number) =>
+    post<{
+      hint: { content: string; unlocked: boolean }
+      charged: boolean
+      price?: number
+      balance?: number
+    }>(`/problems/${pid}/ai/hint/${level}`),
+  debug: (sid: number) =>
+    post<{ content: string; price: number; balance: number }>(`/submissions/${sid}/ai-debug`),
+}
+
 export const notifyApi = {
   badge: () => get<{ unread: number }>('/me/notifications/badge'),
   list: (params?: { filter?: string; type?: string; page?: number }) =>

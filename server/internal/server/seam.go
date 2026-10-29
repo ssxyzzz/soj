@@ -126,6 +126,11 @@ type RepoAPI interface {
 	RecordAiCall(ctx context.Context, c *repo.AiCall)
 	CountAiCallsToday(ctx context.Context, uid int64) (int64, error)
 	ListAiCalls(ctx context.Context, uid int64, page, pageSize int) ([]*repo.AiCall, int64, error)
+	GetAiHint(ctx context.Context, pid int64, level int) (*repo.AiHint, error)
+	EnsureAiHint(ctx context.Context, p *repo.Problem, level int, gen func() (string, error)) (*repo.AiHint, error)
+	RecordAiHintUnlock(ctx context.Context, uid, pid int64, level int, price int64) error
+	HasAiHintUnlock(ctx context.Context, uid, pid int64, level int) (bool, error)
+	SaveAiDebugResult(ctx context.Context, uid, sid, pid int64, content string) error
 	IsMember(ctx context.Context, classID, uid int64) (bool, error)
 	JoinClass(ctx context.Context, classID, uid int64, uname, code string) error
 	LastChallenge(ctx context.Context, uid, pid int64) (*repo.Challenge, error)

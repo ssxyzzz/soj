@@ -150,6 +150,11 @@ func Run(ctx context.Context, deps *Deps) {
 			api.GET("/shop", AuthRequired(h), h.ListShop)
 			api.POST("/shop/:id/order", AuthRequired(h), h.PlaceShopOrder)
 			api.GET("/shop/my-orders", AuthRequired(h), h.MyShopOrders)
+			// AI 助教（v0.33-④）：分级提示可跳级直购 + 找 bug
+			api.GET("/problems/:id/ai", AuthRequired(h), h.AiHintStatus)
+			api.GET("/problems/:id/ai/hint/:level", AuthRequired(h), h.GetAiHint)
+			api.POST("/problems/:id/ai/hint/:level", AuthRequired(h), h.BuyAiHint)
+			api.POST("/submissions/:sid/ai-debug", AuthRequired(h), h.AiDebug)
 
 		api.GET("/problems", AuthOptional(h), h.ListProblems)
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)

@@ -8,9 +8,10 @@ import { computed, ref, watch } from 'vue'
 import { useJudgePoll } from '@/composables/useJudgePoll'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { submissionApi } from '@/api'
+import { submissionApi, aiTutorApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import CodePane from '@/components/CodePane.vue'
+import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtSec, isQueueStatus, statusDesc } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
@@ -38,6 +39,57 @@ const cancelling = ref(false)
 const sub = computed<Submission | null>(() => polled.value ?? props.submission ?? detail.value)
 const heading = computed(() => props.title || (sub.value ? `评测详情 #${sub.value.id}` : '评测详情'))
 const canRejudge = computed(() => userStore.can('submission.view.all'))
+
+// AI 找 bug（v0.33-④）：非 AC 提交可分析（本人提交；服务端赛时封锁/计费/审计全把关）。
+// 结果 MdView 渲染在弹窗尾部；失败自动退费（服务端），拦截器 toast。
+const canAiDebug = computed(
+  () => !!sub.value && sub.value.status !== 'Accepted' && !isQueueStatus(sub.value.status) && !!userStore.token,
+)
+const aiDebugging = ref(false)
+const aiDebugContent = ref('')
+const aiDebugPrice = ref(0)
+
+async function onAiDebug() {
+  if (!sub.value) return
+  try {
+    await ElMessageBox.confirm(
+      `花 ${aiDebugPrice.value} 玉让 AI 分析这份代码的错误？（最小改动修复，不重写）`,
+      'AI 找 bug',
+      { confirmButtonText: `${aiDebugPrice.value} 玉分析`, cancelButtonText: '再想想', type: 'info' },
+    )
+  } catch {
+    return
+  }
+  aiDebugging.value = true
+  aiDebugContent.value = ''
+  try {
+    const r = await aiTutorApi.debug(sub.value.id)
+    aiDebugContent.value = r.content
+    userStore.setJade(r.balance, userStore.jadeCurrency || '玉')
+    ElMessage.success('分析完成')
+  } catch {
+    // 拦截器统一提示（余额不足/每日上限/赛时封锁/生成失败已退费）
+  } finally {
+    aiDebugging.value = false
+  }
+}
+
+// 打开弹窗时拉找 bug 单价（题目难度计价；AI 未配置静默隐藏按钮）
+const aiReady = ref(false)
+watch(
+  () => [props.modelValue, sub.value?.problem_id] as const,
+  async ([open, pid]) => {
+    if (!open || !pid || !userStore.token) return
+    try {
+      const r = await aiTutorApi.status(pid)
+      aiReady.value = r.enabled
+      aiDebugPrice.value = r.debug_price ?? 0
+    } catch {
+      aiReady.value = false
+    }
+  },
+  { immediate: true },
+)
 const judging = computed(() => isQueueStatus(sub.value?.status))
 // 取消评测：仅队列态（排队/评测/取消中）且 本人 ∨ 查看全部提交
 const canCancel = computed(
@@ -180,6 +232,17 @@ watch(
             >
               取消评测
             </el-button>
+            <el-button
+              v-if="canAiDebug && aiReady"
+              link
+              type="warning"
+              size="small"
+              class="lk-btn"
+              :loading="aiDebugging"
+              @click="onAiDebug"
+            >
+              AI 找 bug（{{ aiDebugPrice }} 玉）
+            </el-button>
           </div>
           <div class="dcell">语言<b>{{ sub.language }}</b></div>
           <div class="dcell">总耗时<b class="mono">{{ fmtSec(sub.time_ms) }}</b></div>
@@ -233,6 +296,12 @@ watch(
         <template v-else-if="sub.error_info">
           <div class="detail-sub">错误信息</div>
           <pre class="soj-codepane mono">{{ sub.error_info }}</pre>
+        </template>
+
+        <!-- AI 找 bug 结果（v0.33-④）：错误定位 → 原因 → 最小修复建议 -->
+        <template v-if="aiDebugContent">
+          <div class="detail-sub ai-debug-sub">✦ AI 找 bug</div>
+          <MdView :content="aiDebugContent" variant="compact" auto-height />
         </template>
       </template>
     </div>
