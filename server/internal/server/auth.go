@@ -21,10 +21,12 @@ import (
 
 var usernameRE = regexp.MustCompile(`^[a-zA-Z0-9_]{3,32}$`)
 
-// 登录失败锁定（v0.14）：连续失败 5 次锁 15 分钟，到期自动解锁，不做人工解锁路径。
+// 登录失败锁定（v0.14，2026-10-29 调 5 分钟）：连续失败 5 次锁 5 分钟，到期自动解锁，
+// 不做人工解锁路径。锁时长的取舍 = 防爆破 vs 定向锁定骚扰（知道用户名即可锁人），
+// 15→5 缩短被锁方的等待；防爆破强度靠失败次数闸与 IP 限流共同兜底。
 const (
 	loginMaxFailures  = 5
-	loginLockDuration = 15 * time.Minute
+	loginLockDuration = 5 * time.Minute
 )
 
 // 弱口令黑名单（v0.14）：仅拦截新设/修改，存量账号登录不受影响。
