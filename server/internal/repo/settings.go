@@ -69,6 +69,13 @@ type SystemSettings struct {
 	// 比赛奖池获奖比例（百分比，N=score>0 人数 → 名次奖名额 K=⌈N×比例/100⌉）；
 	// nil = 未设置按默认 50。
 	JadeAwardRatePct *int `bson:"jadeAwardRatePct,omitempty"`
+	// 题解解锁价系数（v0.33-②）：价 = 题目难度 × 系数（默认 5，D10=50 玉）；nil 按默认。
+	JadeSolutionUnlockMult *int `bson:"jadeSolutionUnlockMult,omitempty"`
+	// 悬赏额上下限（v0.33-②，默认 5 / 500）：发主楼挂悬赏的最小/最大玉数（≤余额为前提）。
+	JadeBountyMin *int `bson:"jadeBountyMin,omitempty"`
+	JadeBountyMax *int `bson:"jadeBountyMax,omitempty"`
+	// 实物兑换（v0.33-②）：整模块默认关，仅 root 可开（目录 + 人工履约）。
+	JadeShopEnabled *bool `bson:"jadeShopEnabled,omitempty"`
 }
 
 const (
@@ -95,8 +102,11 @@ const (
 	RegisterVerifyEmail = "email"
 
 	// 玉经济体（v0.33）默认值。
-	DefaultCurrencyName     = "玉"
-	DefaultJadeAwardRatePct = 50
+	DefaultCurrencyName           = "玉"
+	DefaultJadeAwardRatePct       = 50
+	DefaultJadeSolutionUnlockMult = 5
+	DefaultJadeBountyMin          = 5
+	DefaultJadeBountyMax          = 500
 )
 
 func downloadLimitPtr(v int) *int { return &v }
@@ -201,6 +211,18 @@ func (s *SystemSettings) normalizeDiscuss() {
 	if s.JadeAwardRatePct == nil || *s.JadeAwardRatePct < 1 || *s.JadeAwardRatePct > 100 {
 		s.JadeAwardRatePct = intPtr(DefaultJadeAwardRatePct)
 	}
+	if s.JadeSolutionUnlockMult == nil || *s.JadeSolutionUnlockMult < 1 || *s.JadeSolutionUnlockMult > 100 {
+		s.JadeSolutionUnlockMult = intPtr(DefaultJadeSolutionUnlockMult)
+	}
+	if s.JadeBountyMin == nil || *s.JadeBountyMin < 1 {
+		s.JadeBountyMin = intPtr(DefaultJadeBountyMin)
+	}
+	if s.JadeBountyMax == nil || *s.JadeBountyMax < *s.JadeBountyMin {
+		s.JadeBountyMax = intPtr(DefaultJadeBountyMax)
+	}
+	if s.JadeShopEnabled == nil {
+		s.JadeShopEnabled = boolPtr(false)
+	}
 }
 
 // 讨论区开关取值（nil 已在读取时兜底，防御直接构造的零值结构体）。
@@ -299,6 +321,34 @@ func (s *SystemSettings) JadeAwardRatePctVal() int {
 	return *s.JadeAwardRatePct
 }
 
+// JadeSolutionUnlockMultVal 题解解锁价系数（难度 × 系数；越界回默认 5）。
+func (s *SystemSettings) JadeSolutionUnlockMultVal() int {
+	if s.JadeSolutionUnlockMult == nil || *s.JadeSolutionUnlockMult < 1 || *s.JadeSolutionUnlockMult > 100 {
+		return DefaultJadeSolutionUnlockMult
+	}
+	return *s.JadeSolutionUnlockMult
+}
+
+// JadeBountyMinVal / JadeBountyMaxVal 悬赏额上下限（越界回默认 5 / 500）。
+func (s *SystemSettings) JadeBountyMinVal() int {
+	if s.JadeBountyMin == nil || *s.JadeBountyMin < 1 {
+		return DefaultJadeBountyMin
+	}
+	return *s.JadeBountyMin
+}
+
+func (s *SystemSettings) JadeBountyMaxVal() int {
+	if s.JadeBountyMax == nil || *s.JadeBountyMax < s.JadeBountyMinVal() {
+		return DefaultJadeBountyMax
+	}
+	return *s.JadeBountyMax
+}
+
+// JadeShopOpen 实物兑换模块是否开放（默认关）。
+func (s *SystemSettings) JadeShopOpen() bool {
+	return s.JadeShopEnabled != nil && *s.JadeShopEnabled
+}
+
 func intPtr(v int) *int { return &v }
 
 // UpdateSystemSettings 更新系统设置（文档不存在时创建）。
@@ -339,6 +389,10 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"problemSeqStart":        s.ProblemSeqStartVal(),
 			"currencyName":           s.CurrencyNameVal(),
 			"jadeAwardRatePct":       s.JadeAwardRatePctVal(),
+			"jadeSolutionUnlockMult": s.JadeSolutionUnlockMultVal(),
+			"jadeBountyMin":          s.JadeBountyMinVal(),
+			"jadeBountyMax":          s.JadeBountyMaxVal(),
+			"jadeShopEnabled":        s.JadeShopOpen(),
 		}},
 	)
 	return err

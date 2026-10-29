@@ -22,6 +22,50 @@ func jadeLedgerJSON(e *repo.JadeLedgerEntry) gin.H {
 	}
 }
 
+// UnlockSolution POST /api/problems/:id/solution-unlock —— 花玉解锁题解（v0.33-②）。
+// 价 = 难度 × 系数（后台可调，默认 5）；已可免费看（满分/教师）不再卖；解锁永久。
+func (h *Handlers) UnlockSolution(c *gin.Context) {
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	pid, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	ctx := c.Request.Context()
+	p, err := h.repo.GetProblemMeta(ctx, pid)
+	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
+		return
+	}
+	if h.solutionAllowed(c, uid, pid) {
+		fail(c, http.StatusBadRequest, "你已可免费查看该题题解（满分或教师权限）")
+		return
+	}
+	s, err := h.repo.GetSystemSettings(ctx)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取设置失败")
+		return
+	}
+	price := int64(p.EffDifficulty()) * int64(s.JadeSolutionUnlockMultVal())
+	already, err := h.repo.UnlockSolutionWithJade(ctx, uid, pid, price, p.Title)
+	if err != nil {
+		if err == repo.ErrInsufficientJade {
+			fail(c, http.StatusBadRequest, "余额不足，先去做几道题攒玉吧")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "解锁失败")
+		return
+	}
+	if already {
+		fail(c, http.StatusBadRequest, "该题题解已解锁过")
+		return
+	}
+	bal, _ := h.repo.JadeBalance(ctx, uid)
+	ok(c, gin.H{"unlocked": true, "balance": bal})
+}
+
 // MyJade GET /api/me/jade —— 导航栏余额（含货币名）。
 func (h *Handlers) MyJade(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)

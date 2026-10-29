@@ -38,7 +38,7 @@ async function refreshBadge() {
   }
 }
 
-// 玉余额（v0.33-①）：顶栏 chip 数据源；消费/获取后各页调 jadeApi.mine + setJade 自行刷新
+// 玉余额（v0.33-①）：用户菜单条目数据源；消费/获取后各页调 jadeApi.mine + setJade 自行刷新
 async function refreshJade() {
   if (!userStore.token) return
   try {
@@ -124,6 +124,8 @@ onMounted(() => {
 function onCommand(command: string) {
   if (command === 'me') {
     router.push(`/users/${userStore.uid}`) // 公开主页（v0.17）
+  } else if (command === 'jade') {
+    router.push('/jade') // 余额与流水独立页（2026-10-30）
   } else if (command === 'settings') {
     router.push('/settings')
   } else if (command === 'logout') {
@@ -150,6 +152,7 @@ function onCommand(command: string) {
           <el-menu-item index="/contests">比赛</el-menu-item>
           <el-menu-item index="/classes">班级</el-menu-item>
           <el-menu-item v-if="site.discussGlobalEnabled" index="/discuss">讨论</el-menu-item>
+          <el-menu-item v-if="site.jadeShopEnabled" index="/shop">兑换</el-menu-item>
           <el-menu-item index="/rank">排名</el-menu-item>
           <el-menu-item v-if="userStore.can('submission.view.all')" index="/submissions">提交记录</el-menu-item>
         </el-menu>
@@ -200,19 +203,8 @@ function onCommand(command: string) {
               </div>
             </div>
           </el-popover>
-          <!-- 玉余额 chip（v0.33-①）：货币名后台可配；点击进个人设置看流水 -->
-          <el-tooltip content="我的余额 · 点击查看流水" placement="bottom">
-            <button
-              v-if="userStore.jadeCurrency"
-              class="jade-chip"
-              type="button"
-              @click="router.push('/settings')"
-            >
-              <span class="jade-glyph" aria-hidden="true">◈</span>
-              <b>{{ userStore.jadeBalance }}</b>
-              <span class="jade-unit">{{ userStore.jadeCurrency }}</span>
-            </button>
-          </el-tooltip>
+          <!-- 玉余额挪入用户菜单（2026-10-30 拍板）：顶栏 chip 退役，余额在悬停菜单「我的主页」上方，
+               点击进独立流水页 /jade；货币名后台可配 -->
           <el-dropdown class="user-dropdown" @command="onCommand">
             <span class="user-chip">
               <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" decoding="async" />
@@ -226,6 +218,11 @@ function onCommand(command: string) {
               />
             </span>            <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item command="jade" class="jade-item">
+                <span class="jade-glyph" aria-hidden="true">◈</span>
+                <b class="jade-num">{{ userStore.jadeBalance }}</b>
+                <span class="jade-unit">{{ userStore.jadeCurrency }}</span>
+              </el-dropdown-item>
               <!-- v0.17：公开主页入口 -->
               <el-dropdown-item command="me">我的主页</el-dropdown-item>
               <el-dropdown-item command="settings">个人设置</el-dropdown-item>
@@ -518,40 +515,37 @@ function onCommand(command: string) {
 
 /* v3-full .user-chip：白底描边胶囊（渐变圆头像 30px + 昵称 700 + 等级徽章同装一体） */
 /* 玉余额 chip（v0.33-①）：与 user-chip 同族描边胶囊，玉青色数字强调 */
-.jade-chip {
-  display: inline-flex;
+/* 用户菜单玉余额条目（2026-10-30）：玉青数字强调，右端浅色提示；菜单 teleport 渲染，
+   但元素带本组件 scope 属性，scoped 规则可达 */
+.jade-item {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid var(--soj-line);
-  background: var(--el-fill-color-blank);
-  cursor: pointer;
-  box-shadow: 0 1px 2px rgba(11, 31, 69, 0.05);
-  transition: box-shadow 0.18s, border-color 0.18s;
-  white-space: nowrap;
-  font-size: var(--soj-fs-13);
+  gap: 6px;
+  min-width: 200px;
 }
 
-.jade-chip:hover {
-  border-color: var(--soj-blue-line);
-  box-shadow: 0 2px 8px rgba(11, 31, 69, 0.09);
-}
-
-.jade-chip .jade-glyph {
+.jade-item .jade-glyph {
   color: #0f9b8e;
   font-size: 14px;
   line-height: 1;
 }
 
-.jade-chip b {
+.jade-item .jade-num {
   color: #0f9b8e;
   font-weight: var(--soj-fw-bold);
+  font-variant-numeric: tabular-nums;
 }
 
-.jade-chip .jade-unit {
+.jade-item .jade-unit {
   color: var(--soj-text-2, var(--el-text-color-secondary));
+  font-size: var(--soj-fs-13);
+}
+
+.jade-item .jade-hint {
+  margin-left: auto;
+  padding-left: 16px;
+  color: var(--soj-ink-3, #5b6b85);
+  font-size: 12px;
 }
 
 .user-dropdown {

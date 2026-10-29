@@ -16,6 +16,8 @@ export const useSiteStore = defineStore('site', () => {
   const discussGlobalEnabled = ref(true)
   const discussProblemEnabled = ref(true)
   const discussContestEnabled = ref(true)
+  // 实物兑换开关（v0.33-②，默认关）：导航「兑换」入口显隐
+  const jadeShopEnabled = ref(false)
   let fetched = false
   let fetching: Promise<void> | null = null
 
@@ -32,6 +34,7 @@ export const useSiteStore = defineStore('site', () => {
           discussGlobalEnabled.value = r.discuss_global_enabled ?? true
           discussProblemEnabled.value = r.discuss_problem_enabled ?? true
           discussContestEnabled.value = r.discuss_contest_enabled ?? true
+          jadeShopEnabled.value = !!r.jade_shop_enabled
           fetched = true
         })
         .catch(() => {})
@@ -50,7 +53,7 @@ export const useSiteStore = defineStore('site', () => {
 
   return {
     registerOpen, icpNumber, registerVerifyMode, passwordResetEnabled,
-    discussGlobalEnabled, discussProblemEnabled, discussContestEnabled,
+    discussGlobalEnabled, discussProblemEnabled, discussContestEnabled, jadeShopEnabled,
     ensure, refresh,
   }
 })

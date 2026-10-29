@@ -244,12 +244,23 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		return
 	}
 
+	// 玉解锁（v0.33-②）：未达门槛的学生视角给解锁价与已解锁态（前端渲染「N 玉解锁」按钮）
+	unlockPrice := int64(p.EffDifficulty()) * int64(repo.DefaultJadeSolutionUnlockMult)
+	if st, serr := h.repo.GetSystemSettings(ctx); serr == nil {
+		unlockPrice = int64(p.EffDifficulty()) * int64(st.JadeSolutionUnlockMultVal())
+	}
+	solutionUnlocked := false
+	if logged && !hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn) {
+		if u, uerr := h.repo.HasJadeSolutionUnlock(ctx, uid, id); uerr == nil {
+			solutionUnlocked = u
+		}
+	}
 	resp := gin.H{
 		"id":                 p.ID,
 		"type":               p.Type, // 空 = 传统题（前端按 default 处理）
 		"title":              p.Title,
-		"description":        p.Statement, // 题面（Markdown，v0.8 起单一事实源）
-		"description_html": p.StatementHtml, // 渲染缓存（v0.30 写入时渲染；空 = 前端回退 md 客户端渲染）
+		"description":        p.Statement,     // 题面（Markdown，v0.8 起单一事实源）
+		"description_html":   p.StatementHtml, // 渲染缓存（v0.30 写入时渲染；空 = 前端回退 md 客户端渲染）
 		"time_limit_ms":      p.TimeLimitMS,
 		"memory_limit_kb":    p.MemoryLimitKB,
 		"difficulty":         p.EffDifficulty(),
@@ -262,18 +273,21 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"can_set_hidden":     h.problemEditable(c, p),
 		"can_edit_statement": h.problemEditable(c, p),
 		"can_view_others":    canViewOthers,    // 满分解锁后可在本页查看他人代码
-		"can_view_solutions": canViewSolutions, // 满分 ∨ 老师群体：题解弹窗入口提示用
-		"file_io_input":      p.FileIOInput,    // 文件名对：编辑配置用；场景 warning 展示实际文件名
-		"file_io_output":     p.FileIOOutput,
-		"meta_tags":          orEmptyInt64(p.MetaTags), // 来源标签树节点 ID（2026-10-25 双树），名字由前端来源树映射
-		"tags":               orEmptyInt64(p.Tags),     // 知识树节点 ID，名字由前端知识树映射
+		"can_view_solutions": canViewSolutions, // 满分 ∨ 老师群体 ∨ 玉解锁：题解弹窗入口提示用
+		// 玉解锁（v0.33-②）：解锁价（难度 × 系数）与已解锁态（上方就地计算）
+		"solution_unlock_price": unlockPrice,
+		"solution_unlocked":     solutionUnlocked,
+		"file_io_input":         p.FileIOInput, // 文件名对：编辑配置用；场景 warning 展示实际文件名
+		"file_io_output":        p.FileIOOutput,
+		"meta_tags":             orEmptyInt64(p.MetaTags), // 来源标签树节点 ID（2026-10-25 双树），名字由前端来源树映射
+		"tags":                  orEmptyInt64(p.Tags),     // 知识树节点 ID，名字由前端知识树映射
 	}
 	// 挑战模式（v0.23）：题目资格与生效时长（服务端权威，前端只做展示）；
 	// 编辑者额外下发原始配置供表单回填（0 = 未覆盖按难度默认）
 	resp["challenge"] = gin.H{"eligible": p.ChallengeEligible(), "sec": p.EffChallengeSec()}
 	if h.problemEditable(c, p) {
 		resp["challenge_time_sec"] = p.ChallengeTimeSec
-		resp["video_url"] = p.VideoURL // 编辑回填（展示侧的可见性门控在下方 canViewSolutions 分支）
+		resp["video_url"] = p.VideoURL                          // 编辑回填（展示侧的可见性门控在下方 canViewSolutions 分支）
 		resp["discuss_code_threshold"] = p.DiscussCodeThreshold // 题内讨论门槛覆盖回填（v0.24；0 = 跟全局）
 	}
 	// 答案解析视频（v0.23 验收调整）：默认可看（不设 AC 门槛，题目可见即可看）；

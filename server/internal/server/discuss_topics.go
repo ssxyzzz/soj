@@ -103,12 +103,17 @@ func (h *Handlers) CreateGlobalDiscuss(c *gin.Context) {
 		fail(c, http.StatusBadRequest, msg)
 		return
 	}
+	// 悬赏（v0.33-②）：上下限 + 余额校验；发布成功后冻结托管
+	if !h.validateBounty(c, uid, b.Bounty) {
+		return
+	}
 	now := time.Now()
 	t := &repo.DiscussTopic{
 		Scope: repo.DiscussScopeGlobal, ScopeID: 0, UID: uid,
 		Kind: b.Kind, Title: strings.TrimSpace(b.Title), Content: b.Content,
 		RelatedPids: b.RelatedPids, ListID: b.ListID, TagID: b.TagID,
-		CreatedAt: now, UpdatedAt: now, LastActiveAt: now,
+		Bounty:     b.Bounty,
+		CreatedAt:  now, UpdatedAt: now, LastActiveAt: now,
 	}
 	if t.RelatedPids == nil {
 		t.RelatedPids = []int64{}
@@ -117,6 +122,7 @@ func (h *Handlers) CreateGlobalDiscuss(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "发布失败")
 		return
 	}
+	h.freezeBounty(c, uid, t)
 	ok(c, gin.H{"id": t.ID})
 }
 
@@ -185,16 +191,21 @@ func (h *Handlers) CreateProblemDiscuss(c *gin.Context) {
 		fail(c, http.StatusBadRequest, msg)
 		return
 	}
+	if !h.validateBounty(c, uid, b.Bounty) {
+		return
+	}
 	now := time.Now()
 	t := &repo.DiscussTopic{
 		Scope: repo.DiscussScopeProblem, ScopeID: pid, UID: uid,
 		Kind: b.Kind, Title: strings.TrimSpace(b.Title), Content: b.Content,
+		Bounty:    b.Bounty,
 		CreatedAt: now, UpdatedAt: now, LastActiveAt: now,
 	}
 	if err := h.repo.InsertDiscussTopic(c.Request.Context(), t); err != nil {
 		fail(c, http.StatusInternalServerError, "发布失败")
 		return
 	}
+	h.freezeBounty(c, uid, t)
 	ok(c, gin.H{"id": t.ID})
 }
 
@@ -363,6 +374,20 @@ func topicJSON(t *repo.DiscussTopic, users map[int64]repo.User, liked map[int64]
 	}
 	if t.TagID > 0 {
 		item["tag_id"] = t.TagID
+	}
+	// 悬赏（v0.33-②）：挂了才下发；剩余 = 冻结 − 已打赏（退款后剩余归零）
+	if t.Bounty > 0 {
+		item["bounty"] = t.Bounty
+		if t.BountyPaid > 0 {
+			item["bounty_paid"] = t.BountyPaid
+		}
+		remain := t.Bounty - t.BountyPaid
+		if !t.BountyRefundedAt.IsZero() {
+			remain = 0
+		}
+		if remain > 0 {
+			item["bounty_remaining"] = remain
+		}
 	}
 	return item
 }
@@ -541,6 +566,8 @@ func (h *Handlers) DeleteDiscussTopic(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "删除失败")
 		return
 	}
+	// 悬赏退款（v0.33-②）：删帖退回未打赏部分（删帖前已读 t）
+	h.repo.RefundTopicBountyOnDelete(c.Request.Context(), t)
 	if byManager {
 		_ = h.repo.AddSecurityLog(c.Request.Context(), repo.SecurityLog{
 			Type: repo.SecDiscussDelete, UID: uid, Username: uname,

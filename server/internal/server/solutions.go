@@ -18,13 +18,18 @@ import (
 
 const maxSolutionBytes = 256 << 10
 
-// solutionAllowed 题解的看/写门槛：满分 ∨ 老师群体（题面编辑权限位）。root 恒过。
+// solutionAllowed 题解的看/写门槛：满分 ∨ 老师群体（题面编辑权限位）∨ 玉解锁（v0.33-②，
+// 解锁记录 = solution_unlock 流水，永久）。root 恒过。
 func (h *Handlers) solutionAllowed(c *gin.Context, uid, pid int64) bool {
 	if hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn) {
 		return true
 	}
 	solved, err := h.repo.HasSolved(c.Request.Context(), uid, pid)
-	return err == nil && solved
+	if err == nil && solved {
+		return true
+	}
+	unlocked, err := h.repo.HasJadeSolutionUnlock(c.Request.Context(), uid, pid)
+	return err == nil && unlocked
 }
 
 // solutionJSON 题解行 JSON。withContent = 携带 md 正文（编辑场景的单条详情用）；

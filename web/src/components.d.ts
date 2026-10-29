@@ -108,6 +108,7 @@ declare module 'vue' {
     SettingsDiscussPanel: typeof import('./components/admin/settings/SettingsDiscussPanel.vue')['default']
     SettingsMailPanel: typeof import('./components/admin/settings/SettingsMailPanel.vue')['default']
     SettingsPanel: typeof import('./components/admin/SettingsPanel.vue')['default']
+    ShopPanel: typeof import('./components/admin/ShopPanel.vue')['default']
     SolutionsDialog: typeof import('./components/problem/SolutionsDialog.vue')['default']
     SubmissionDetailDialog: typeof import('./components/SubmissionDetailDialog.vue')['default']
     SubmitDialog: typeof import('./components/SubmitDialog.vue')['default']

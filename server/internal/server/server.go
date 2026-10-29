@@ -145,6 +145,11 @@ func Run(ctx context.Context, deps *Deps) {
 			api.GET("/me", AuthRequired(h), h.Me)
 			api.GET("/me/jade", AuthRequired(h), h.MyJade)
 			api.GET("/me/jade/ledger", AuthRequired(h), h.MyJadeLedger)
+			api.POST("/problems/:id/solution-unlock", AuthRequired(h), h.UnlockSolution)
+			api.POST("/discuss/:tid/replies/:rid/tip", AuthRequired(h), h.tipDiscussReply)
+			api.GET("/shop", AuthRequired(h), h.ListShop)
+			api.POST("/shop/:id/order", AuthRequired(h), h.PlaceShopOrder)
+			api.GET("/shop/my-orders", AuthRequired(h), h.MyShopOrders)
 
 		api.GET("/problems", AuthOptional(h), h.ListProblems)
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)
@@ -391,6 +396,12 @@ func Run(ctx context.Context, deps *Deps) {
 				// 玉经济体（v0.33-①）：查玉/调玉为印钞面，root 专属
 				adminG.GET("/users/:id/jade", RequireRoot(), h.AdminUserJade)
 				adminG.POST("/users/:id/jade-adjust", RequireRoot(), h.AdminJadeAdjust)
+				// 实物兑换（v0.33-②）：目录 + 订单，root 专属
+				adminG.GET("/shop/items", RequireRoot(), h.AdminShopItems)
+				adminG.POST("/shop/items", RequireRoot(), h.AdminUpsertShopItem)
+				adminG.DELETE("/shop/items/:id", RequireRoot(), h.AdminDeleteShopItem)
+				adminG.GET("/shop/orders", RequireRoot(), h.AdminShopOrders)
+				adminG.POST("/shop/orders/:id/resolve", RequireRoot(), h.AdminResolveShopOrder)
 			}
 		}
 	}
@@ -400,6 +411,7 @@ func Run(ctx context.Context, deps *Deps) {
 
 	// 开赛/开考提醒扫描（v0.24）：Web 进程内每分钟一扫，判题进程（--judge-only）不启
 	go h.notifyStartLoop(ctx)
+	go h.bountyRefundLoop(ctx) // 悬赏到期退款（v0.33-②）：10 分钟巡检
 
 	slog.Info("SOJ 启动", "component", "web", "addr", cfg.Addr, "workers", cfg.JudgeWorkers, "sandbox", cfg.SandboxAddr)
 

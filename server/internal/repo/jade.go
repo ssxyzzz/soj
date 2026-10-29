@@ -57,6 +57,8 @@ func (r *Repo) EnsureJadeIndexes(ctx context.Context) error {
 	_, err := r.jadeLedger.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "kind", Value: 1}, {Key: "ref", Value: 1}}},
+		// 题解解锁判定（v0.33-②）：{uid, kind, ref} 点查
+		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "kind", Value: 1}, {Key: "ref", Value: 1}}},
 	})
 	return err
 }
@@ -184,6 +186,123 @@ func (r *Repo) GetJadeAward(ctx context.Context, uid, pid int64) (*JadeAward, er
 		return nil, err
 	}
 	return &a, nil
+}
+
+// ClearDiscussBounty 悬赏冻结失败时清掉话题上的悬赏标记（话题保留为普通帖）。
+func (r *Repo) ClearDiscussBounty(ctx context.Context, tid int64) error {
+	_, err := r.discussions.UpdateOne(ctx, bson.M{"_id": tid},
+		bson.M{"$set": bson.M{"bounty": 0, "bountyPaid": 0}})
+	return err
+}
+
+// TipDiscussBounty 悬赏打赏（托管池内划转）：话题 bountyPaid 前移（条件更新防超发）+
+// 入账回复作者（kind bounty_pay，ref=tid）。
+func (r *Repo) TipDiscussBounty(ctx context.Context, tid, rid, toUID, amount int64) error {
+	res, err := r.discussions.UpdateOne(ctx,
+		bson.M{"_id": tid, "$expr": bson.M{"$gte": bson.A{
+			bson.M{"$subtract": bson.A{"$bounty", "$bountyPaid"}}, amount}}},
+		bson.M{
+			"$inc": bson.M{"bountyPaid": amount},
+			"$set": bson.M{"lastActiveAt": time.Now(), "updatedAt": time.Now()},
+		})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return errors.New("打赏金额超过剩余悬赏")
+	}
+	if err := r.JadeCredit(ctx, toUID, amount, JadeKindBountyPay,
+		fmt.Sprintf("悬赏打赏（话题 #%d 回复 #%d）", tid, rid), tid); err != nil {
+		// 入账失败回滚托管划转（保持一致性；极端路径，尽力而为）
+		_, _ = r.discussions.UpdateOne(ctx, bson.M{"_id": tid},
+			bson.M{"$inc": bson.M{"bountyPaid": -amount}})
+		return err
+	}
+	return nil
+}
+
+// RefundDueBounties 悬赏自动退款：扫 bounty>0 ∧ 未退 ∧ 剩余>0 ∧ LastActiveAt 超期的话题，
+// 剩余托管退回发帖人（bountyRefundLoop 每 10 分钟调；limit 单轮上限防大扫）。
+func (r *Repo) RefundDueBounties(ctx context.Context, ttl time.Duration, limit int) (int, error) {
+	deadline := time.Now().Add(-ttl)
+	cursor, err := r.discussions.Find(ctx, bson.M{
+		"bounty": bson.M{"$gt": 0},
+		"bountyRefundedAt": bson.M{"$exists": false},
+		"lastActiveAt":     bson.M{"$lt": deadline},
+		"$expr":            bson.M{"$gt": bson.A{"$bounty", "$bountyPaid"}},
+	}, options.Find().SetLimit(int64(limit)))
+	if err != nil {
+		return 0, err
+	}
+	defer cursor.Close(ctx)
+	refunded := 0
+	for cursor.Next(ctx) {
+		var t DiscussTopic
+		if err := cursor.Decode(&t); err != nil {
+			continue
+		}
+		remain := t.Bounty - t.BountyPaid
+		if remain <= 0 {
+			continue
+		}
+		// 条件置退款标记（并发/重复扫幂等）
+		res, err := r.discussions.UpdateOne(ctx,
+			bson.M{"_id": t.ID, "bountyRefundedAt": bson.M{"$exists": false}},
+			bson.M{"$set": bson.M{"bountyRefundedAt": time.Now()}})
+		if err != nil || res.MatchedCount == 0 {
+			continue
+		}
+		if err := r.JadeCredit(ctx, t.UID, remain, JadeKindBountyRefund,
+			fmt.Sprintf("悬赏到期退回（话题 #%d，无人打赏部分）", t.ID), t.ID); err != nil {
+			continue
+		}
+		refunded++
+	}
+	return refunded, cursor.Err()
+}
+
+// RefundTopicBountyOnDelete 删帖退悬赏（版务/作者删帖路径调用）：剩余托管即时退回。
+func (r *Repo) RefundTopicBountyOnDelete(ctx context.Context, t *DiscussTopic) {
+	if t.Bounty <= 0 || !t.BountyRefundedAt.IsZero() {
+		return
+	}
+	remain := t.Bounty - t.BountyPaid
+	if remain <= 0 {
+		return
+	}
+	res, err := r.discussions.UpdateOne(ctx,
+		bson.M{"_id": t.ID, "bountyRefundedAt": bson.M{"$exists": false}},
+		bson.M{"$set": bson.M{"bountyRefundedAt": time.Now()}})
+	if err != nil || res.MatchedCount == 0 {
+		return
+	}
+	if err := r.JadeCredit(ctx, t.UID, remain, JadeKindBountyRefund,
+		fmt.Sprintf("话题删除退回悬赏（话题 #%d）", t.ID), t.ID); err != nil {
+		slog.Warn("删帖悬赏退款失败", "component", "jade", "tid", t.ID, "uid", t.UID, "error", err)
+	}
+}
+
+// HasJadeSolutionUnlock 是否已用玉解锁某题题解（解锁记录 = kind=solution_unlock 流水本身，
+// 解锁永久）。
+func (r *Repo) HasJadeSolutionUnlock(ctx context.Context, uid, pid int64) (bool, error) {
+	n, err := r.jadeLedger.CountDocuments(ctx,
+		bson.M{"uid": uid, "kind": JadeKindSolutionUnlock, "ref": pid})
+	return n > 0, err
+}
+
+// UnlockSolutionWithJade 扣玉解锁题解（解锁记录即流水；重复解锁由 server 层先查拦截，
+// 这里幂等兜底：已解锁直接返回已解锁）。
+func (r *Repo) UnlockSolutionWithJade(ctx context.Context, uid, pid int64, amount int64, title string) (already bool, err error) {
+	if has, err := r.HasJadeSolutionUnlock(ctx, uid, pid); err != nil {
+		return false, err
+	} else if has {
+		return true, nil
+	}
+	if err := r.JadeSpend(ctx, uid, amount, JadeKindSolutionUnlock,
+		fmt.Sprintf("解锁题解 #%d《%s》", pid, title), pid); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 // problemACRate 该题 AC 率（去重用户口径，与难度迁移启发式同源）：

@@ -3,7 +3,7 @@ import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 
-import { authApi, jadeApi, notifyApi } from '@/api'
+import { authApi, notifyApi } from '@/api'
 import { verifyApi } from '@/api/verify'
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
@@ -46,53 +46,6 @@ const notifyCats = reactive<{ type: string; label: string; enabled: boolean }[]>
 ])
 const hasEmail = ref(false)
 const savingNotify = ref(false)
-
-// 我的玉（v0.33-①）：余额 + 流水分页；进入页面即刷新（顶栏 chip 同步）
-const jadeBalance = ref(0)
-const jadeCurrency = ref('')
-const jadeList = ref<import('@/types').JadeLedgerEntry[]>([])
-const jadeTotal = ref(0)
-const jadePage = ref(1)
-const jadePageSize = 20
-const jadeLoading = ref(false)
-
-async function loadJade(page = 1) {
-  jadePage.value = page
-  jadeLoading.value = true
-  try {
-    const r = await jadeApi.ledger(page)
-    jadeList.value = r.list
-    jadeTotal.value = r.total
-    jadeBalance.value = r.balance
-    const m = await jadeApi.mine()
-    jadeCurrency.value = m.currency
-    userStore.setJade(m.balance, m.currency)
-  } finally {
-    jadeLoading.value = false
-  }
-}
-
-// 流水类型中文（与后端 jadeLedger kind 一一对应；未知类型透传原词）
-function jadeKindText(kind: string): string {
-  const map: Record<string, string> = {
-    award: '首次通过',
-    contest_rank: '比赛名次奖',
-    contest_participate: '比赛参与奖',
-    solution_unlock: '题解解锁',
-    bounty_freeze: '悬赏托管',
-    bounty_pay: '悬赏收入',
-    bounty_refund: '悬赏退回',
-    shop_order: '实物兑换',
-    ai_hint: 'AI 提示',
-    ai_debug: 'AI 找 bug',
-    admin_adjust: '管理员调整',
-  }
-  return map[kind] ?? kind
-}
-
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleString('zh-CN', { hour12: false })
-}
 
 async function load() {
   loading.value = true
@@ -174,7 +127,6 @@ async function savePrefs() {
 onMounted(() => {
   load()
   loadEmail()
-  loadJade()
   notifyApi
     .prefs()
     .then((r) => {
@@ -336,46 +288,6 @@ async function submitBind() {
         个人设置<small>{{ userStore.nickname || userStore.uid }}<template v-if="userStore.level?.level"> · Lv.{{ userStore.level.level }} {{ levels.nameOf(userStore.level.level) }}</template></small>
       </h1>
     </div>
-
-    <!-- 我的玉（v0.33-①）：余额 + 流水分页；获取与消费自动入账 -->
-    <el-card shadow="never" class="fcard">
-      <div class="panel-h" style="padding-left: 0">
-        <span class="pt">我的{{ jadeCurrency || '玉' }}</span>
-        <span class="dim" style="font-size: var(--soj-fs-13); margin-left: 10px">
-          首次通过题目得玉（难度定额 + 稀有掉落），比赛奖池随成绩发布结算
-        </span>
-      </div>
-      <div class="fbody">
-        <div class="jade-balance">
-          当前余额：<b>{{ jadeBalance }}</b> {{ jadeCurrency || '玉' }}
-        </div>
-        <el-table :data="jadeList" size="small" v-loading="jadeLoading" empty-text="还没有流水——去做道题吧">
-          <el-table-column label="时间" width="170">
-            <template #default="{ row }">{{ fmtTime(row.at) }}</template>
-          </el-table-column>
-          <el-table-column label="类型" width="110">
-            <template #default="{ row }">{{ jadeKindText(row.kind) }}</template>
-          </el-table-column>
-          <el-table-column label="变动" width="90">
-            <template #default="{ row }">
-              <span :class="row.delta > 0 ? 'jade-in' : 'jade-out'">{{ row.delta > 0 ? '+' : '' }}{{ row.delta }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="说明" min-width="220" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.reason }}</template>
-          </el-table-column>
-        </el-table>
-        <div v-if="jadeTotal > jadePageSize" class="jade-pager">
-          <el-pagination
-            layout="prev, pager, next"
-            :total="jadeTotal"
-            :page-size="jadePageSize"
-            :current-page="jadePage"
-            @current-change="loadJade"
-          />
-        </div>
-      </div>
-    </el-card>
 
     <!-- 个人信息 -->
     <el-card shadow="never" class="fcard">
@@ -653,34 +565,7 @@ async function submitBind() {
   margin-bottom: 16px;
 }
 
-/* 我的玉（v0.33-①）：余额行 + 收支配色 + 分页右对齐 */
-.jade-balance {
-  font-size: 15px;
-  margin: 4px 0 12px;
-}
-
-.jade-balance b {
-  color: #0f9b8e;
-  font-size: 22px;
-  font-weight: var(--soj-fw-bold);
-  margin-right: 2px;
-}
-
-.jade-in {
-  color: #0f9b8e;
-  font-weight: 600;
-}
-
-.jade-out {
-  color: var(--el-color-danger);
-  font-weight: 600;
-}
-
-.jade-pager {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
+/* 我的玉迁至独立页 /jade（2026-10-30） */
 
 .fcard :deep(.el-card__body) {
   padding: 8px 26px 14px;

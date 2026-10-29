@@ -99,29 +99,28 @@ onBeforeUnmount(() => {
 
 /* 局部网格：44px 双向线全屏铺底，radial mask 圆心跟随光斑——网格只在鼠标周围显影。
    2026-10-25 用户反馈：多档 alpha 落差做「越远越淡」的距离渐隐（560px 半径）
-   2026-10-30 用户反馈：再弱化一档——线 alpha 0.18→0.12，mask 各档同步压低（峰值存在感约减半），半径不动
-   2026-10-30 用户反馈：再调淡一半——线 alpha 0.12→0.06，mask 0.6/0.38/0.16→0.3/0.19/0.08（峰值 0.072→0.036，临界可感知档） */
+   2026-10-30 用户反馈：再弱化一档——线 alpha 0.18→0.12，mask 各档同步压低（峰值存在感约减半），半径不动 */
 .ambient-grid {
   position: absolute;
   inset: 0;
   --gx: 50vw;
   --gy: 40vh;
   background:
-    linear-gradient(rgb(var(--soj-teal-soft-rgb) / 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--soj-teal-soft-rgb) / 0.06) 1px, transparent 1px);
+    linear-gradient(rgb(var(--soj-teal-soft-rgb) / 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--soj-teal-soft-rgb) / 0.12) 1px, transparent 1px);
   background-size: 44px 44px;
   -webkit-mask-image: radial-gradient(
     circle 560px at var(--gx) var(--gy),
-    rgba(0, 0, 0, 0.3) 0%,
-    rgba(0, 0, 0, 0.19) 40%,
-    rgba(0, 0, 0, 0.08) 70%,
+    rgba(0, 0, 0, 0.6) 0%,
+    rgba(0, 0, 0, 0.38) 40%,
+    rgba(0, 0, 0, 0.16) 70%,
     transparent 100%
   );
   mask-image: radial-gradient(
     circle 560px at var(--gx) var(--gy),
-    rgba(0, 0, 0, 0.3) 0%,
-    rgba(0, 0, 0, 0.19) 40%,
-    rgba(0, 0, 0, 0.08) 70%,
+    rgba(0, 0, 0, 0.6) 0%,
+    rgba(0, 0, 0, 0.38) 40%,
+    rgba(0, 0, 0, 0.16) 70%,
     transparent 100%
   );
   opacity: 0;

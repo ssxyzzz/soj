@@ -188,6 +188,9 @@ export interface ProblemDetail {
   can_edit_statement?: boolean
   can_view_others?: boolean
   can_view_solutions?: boolean
+  /** 玉解锁（v0.33-②）：解锁价（难度 × 系数）与已解锁态——未达门槛的学生视角 */
+  solution_unlock_price?: number
+  solution_unlocked?: boolean
   file_io_input?: string
   file_io_output?: string
   locked?: boolean
@@ -922,6 +925,10 @@ export interface DiscussTopic {
   accepted_reply_id?: number
   edited?: boolean
   deleted?: boolean
+  /** 悬赏（v0.33-②）：冻结总额 / 已打赏 / 剩余可打（服务端 topicJSON 下发） */
+  bounty?: number
+  bounty_paid?: number
+  bounty_remaining?: number
   created_at: string
   last_active_at: string
   liked?: boolean
@@ -1029,6 +1036,11 @@ export interface AdminSettings {
   /** 玉经济体（v0.33-①）：货币名与比赛奖池获奖比例 */
   currency_name: string
   jade_award_rate_pct: number
+  /** 玉经济体（v0.33-②）：题解解锁系数 / 悬赏上下限 / 实物兑换开关 */
+  jade_solution_unlock_mult: number
+  jade_bounty_min: number
+  jade_bounty_max: number
+  jade_shop_enabled: boolean
 }
 
 /** 玉余额（v0.33-①）：/me/jade，currency 为后台可配货币名（默认「玉」）。 */
@@ -1037,7 +1049,7 @@ export interface JadeMine {
   currency: string
 }
 
-/** 玉流水行（v0.33-①）：kind 中文映射见 jadeKindText（SettingsView）。 */
+/** 玉流水行（v0.33-①）：kind 中文映射见 kindText（JadeView）。 */
 export interface JadeLedgerEntry {
   id: number
   delta: number

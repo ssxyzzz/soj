@@ -21,6 +21,11 @@ const problemSeqStart = ref(1001)
 // 玉经济体（v0.33-①）：货币名（1–6 字，全站文案统一读此值）+ 比赛奖池获奖比例
 const currencyName = ref('玉')
 const jadeAwardRatePct = ref(50)
+// 玉经济体（v0.33-②）：题解解锁系数 + 悬赏上下限 + 实物兑换开关
+const unlockMult = ref(5)
+const bountyMin = ref(5)
+const bountyMax = ref(500)
+const shopEnabled = ref(false)
 
 const saving = ref(false)
 
@@ -36,6 +41,10 @@ onMounted(async () => {
     problemSeqStart.value = s.problem_seq_start ?? 1001
     currencyName.value = s.currency_name || '玉'
     jadeAwardRatePct.value = s.jade_award_rate_pct ?? 50
+    unlockMult.value = s.jade_solution_unlock_mult ?? 5
+    bountyMin.value = s.jade_bounty_min ?? 5
+    bountyMax.value = s.jade_bounty_max ?? 500
+    shopEnabled.value = !!s.jade_shop_enabled
   } catch {
     // 加载失败保留默认值展示
   }
@@ -54,6 +63,10 @@ async function save() {
       problem_seq_start: problemSeqStart.value,
       currency_name: currencyName.value.trim(),
       jade_award_rate_pct: jadeAwardRatePct.value,
+      jade_solution_unlock_mult: unlockMult.value,
+      jade_bounty_min: bountyMin.value,
+      jade_bounty_max: bountyMax.value,
+      jade_shop_enabled: shopEnabled.value,
     })
     ElMessage.success('基础设置已保存')
     // ICP 改了页脚要即时跟随：重置站点公开状态缓存
@@ -119,6 +132,24 @@ async function save() {
         <el-input-number v-model="jadeAwardRatePct" :min="1" :max="100" />
         <span class="dim" style="margin-left: 8px">
           真正参赛（得分 &gt; 0）人数 × 该比例 = 名次奖名额（向上取整，至少 1 人），名次奖按线性递减瓜分名次奖池
+        </span>
+      </el-form-item>
+      <el-form-item label="题解解锁价系数">
+        <el-input-number v-model="unlockMult" :min="1" :max="100" />
+        <span class="dim" style="margin-left: 8px">
+          解锁价 = 题目难度 × 系数（默认 5，D10 = 50 玉）；首次通过后免费
+        </span>
+      </el-form-item>
+      <el-form-item label="悬赏额上下限（玉）">
+        <el-input-number v-model="bountyMin" :min="1" :max="100000" style="width: 130px" />
+          ～
+        <el-input-number v-model="bountyMax" :min="1" :max="1000000" style="width: 140px" />
+        <span class="dim" style="margin-left: 8px">发帖挂悬赏的范围（默认 5～500，另受余额约束）</span>
+      </el-form-item>
+      <el-form-item label="开放实物兑换">
+        <el-switch v-model="shopEnabled" />
+        <span class="dim" style="margin-left: 8px">
+          开启后导航栏出现「兑换」入口，物品目录与订单履约在后台「实物兑换」面板（root）
         </span>
       </el-form-item>
       <el-form-item label="ICP 备案号">

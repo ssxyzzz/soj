@@ -104,6 +104,22 @@ type RepoAPI interface {
 	JadeCredit(ctx context.Context, uid, delta int64, kind, reason string, ref int64) error
 	JadeLedgerPage(ctx context.Context, uid int64, page, pageSize int) ([]*repo.JadeLedgerEntry, int64, error)
 	JadeSpend(ctx context.Context, uid, amount int64, kind, reason string, ref int64) error
+	HasJadeSolutionUnlock(ctx context.Context, uid, pid int64) (bool, error)
+	UnlockSolutionWithJade(ctx context.Context, uid, pid, amount int64, title string) (already bool, err error)
+	TipDiscussBounty(ctx context.Context, tid, rid, toUID, amount int64) error
+	RefundDueBounties(ctx context.Context, ttl time.Duration, limit int) (int, error)
+	RefundTopicBountyOnDelete(ctx context.Context, t *repo.DiscussTopic)
+	ClearDiscussBounty(ctx context.Context, tid int64) error
+	ListActiveShopItems(ctx context.Context) ([]*repo.ShopItem, error)
+	ListShopItems(ctx context.Context) ([]*repo.ShopItem, error)
+	UpsertShopItem(ctx context.Context, it *repo.ShopItem) error
+	DeleteShopItem(ctx context.Context, id int64) error
+	PlaceShopOrder(ctx context.Context, uid int64, uname string, itemID int64, note string) (int64, error)
+	ListShopOrders(ctx context.Context, status string, page, pageSize int) ([]*repo.ShopOrder, int64, error)
+	MyShopOrders(ctx context.Context, uid int64) ([]*repo.ShopOrder, error)
+	GetShopOrder(ctx context.Context, id int64) (*repo.ShopOrder, error)
+	ResolveShopOrder(ctx context.Context, orderID int64, action string) error
+	UserIDsByRole(ctx context.Context, role string) ([]int64, error)
 	IsMember(ctx context.Context, classID, uid int64) (bool, error)
 	JoinClass(ctx context.Context, classID, uid int64, uname, code string) error
 	LastChallenge(ctx context.Context, uid, pid int64) (*repo.Challenge, error)

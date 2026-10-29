@@ -196,6 +196,7 @@ export const siteApi = {
       discuss_global_enabled: boolean
       discuss_problem_enabled: boolean
       discuss_contest_enabled: boolean
+      jade_shop_enabled?: boolean
     }>('/site'),
   // 公开站点统计（v0.19 首页对齐 v3 预览）：计数 + 平均判题时长 + 今日一题（可空，含标签名）
   stats: () =>
@@ -215,6 +216,8 @@ export const siteApi = {
 }
 
 export const problemApi = {
+  // 玉解锁题解（v0.33-②）：价 = 难度 × 系数；解锁永久，返回新余额供顶栏刷新
+  unlockSolutions: (id: number) => post<{ unlocked: boolean; balance: number }>(`/problems/${id}/solution-unlock`),
   list: (
     page: number,
     pageSize: number,
@@ -486,6 +489,15 @@ export const adminApi = {
   getUserJade: (id: number, page = 1) => get<JadeLedgerPage>(`/admin/users/${id}/jade`, { page }),
   adjustUserJade: (id: number, delta: number, reason: string) =>
     post<{ balance: number }>(`/admin/users/${id}/jade-adjust`, { delta, reason }),
+  // 实物兑换管理（v0.33-②，root）
+  shopItems: () => get<{ list: ShopItem[] }>('/admin/shop/items'),
+  shopUpsertItem: (body: Partial<ShopItem> & { name: string; price: number }) =>
+    post<{ id: number }>('/admin/shop/items', body),
+  shopDeleteItem: (id: number) => del<{ deleted: number }>(`/admin/shop/items/${id}`),
+  shopOrders: (status: string, page = 1) =>
+    get<{ list: ShopOrder[]; total: number }>('/admin/shop/orders', { status, page }),
+  shopResolveOrder: (id: number, action: 'fulfill' | 'reject') =>
+    post<{ resolved: number }>(`/admin/shop/orders/${id}/resolve`, { action }),
   // 安全日志（v0.14，root）：登录/锁定/改密/重置/限流事件，type 精确、q 按用户名/IP 模糊
   securityLogs: (page: number, pageSize: number, type?: string, q?: string) =>
     get<{ list: SecurityLogItem[]; total: number; types: string[] }>('/admin/security-logs', {
@@ -604,6 +616,7 @@ export interface DiscussTopicBody {
   list_id?: number
   tag_id?: number
   private?: boolean
+  bounty?: number // 悬赏（v0.33-②，题内+全局；发布即冻结托管）
 }
 
 export const discussApi = {
@@ -617,6 +630,9 @@ export const discussApi = {
     post<{ id: number }>(`/discuss/${tid}/replies`, { content, reply_to: replyTo || 0 }),
   deleteReply: (tid: number, rid: number) => del<{ deleted: number }>(`/discuss/${tid}/replies/${rid}`),
   accept: (tid: number, rid: number) => post<{ accepted: number }>(`/discuss/${tid}/replies/${rid}/accept`),
+  // 悬赏打赏（v0.33-②）：发帖人专属，从托管池划给回复作者
+  tip: (tid: number, rid: number, amount: number) =>
+    post<{ tipped: number }>(`/discuss/${tid}/replies/${rid}/tip`, { amount }),
   likeTopic: (tid: number) => post<{ liked: boolean; like_count: number }>(`/discuss/${tid}/like`),
   likeReply: (tid: number, rid: number) =>
     post<{ liked: boolean; like_count: number }>(`/discuss/${tid}/replies/${rid}/like`),
@@ -643,6 +659,38 @@ export const discussApi = {
 export const jadeApi = {
   mine: () => get<JadeMine>('/me/jade'),
   ledger: (page = 1) => get<JadeLedgerPage>('/me/jade/ledger', { page }),
+}
+
+// ---------- 实物兑换（v0.33-②，默认关；模块开着才有内容） ----------
+
+export interface ShopItem {
+  id: number
+  name: string
+  image: string
+  price: number
+  stock: number // -1 = 不限
+  per_user_limit: number // 0 = 不限购
+  active: boolean
+}
+
+export interface ShopOrder {
+  id: number
+  item_id: number
+  item_name: string
+  price: number
+  status: 'pending' | 'fulfilled' | 'rejected'
+  note: string
+  created_at: string
+  done_at: string
+  uid?: number
+  uname?: string
+}
+
+export const shopApi = {
+  list: () => get<{ list: ShopItem[]; balance: number }>('/shop'),
+  order: (itemId: number, note: string) =>
+    post<{ order_id: number; balance: number }>(`/shop/${itemId}/order`, { note }),
+  myOrders: () => get<{ list: ShopOrder[] }>('/shop/my-orders'),
 }
 
 export const notifyApi = {

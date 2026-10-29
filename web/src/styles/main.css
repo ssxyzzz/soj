@@ -906,6 +906,24 @@ strong {
   border-radius: 10px;
 }
 
+/* prev/next 对齐页钮胶囊（2026-10-30 反馈：箭头钮是 EP 默认盒——padding 撑得比页钮
+   宽一圈，禁用/常规底色与 is-background 页钮脱节）：同尺寸方盒、同底色；悬停加深
+   一档 + 主蓝箭头（同页钮 hover 口径）；禁用态沿用 EP（fill-light + placeholder，
+   恰与 pg-edge 禁用底一致）。限定 is-background，避免影响无 background 的分页 */
+.el-pagination.is-background .btn-prev,
+.el-pagination.is-background .btn-next {
+  width: var(--el-pagination-button-width);
+  min-width: 0;
+  padding: 0;
+  background-color: var(--el-fill-color);
+}
+
+.el-pagination.is-background .btn-prev:not(:disabled):not(.is-disabled):hover,
+.el-pagination.is-background .btn-next:not(:disabled):not(.is-disabled):hover {
+  background-color: var(--el-fill-color-dark);
+  color: var(--soj-blue);
+}
+
 /* 表格与描述列表：small 尺寸 EP 硬编码 12-14px，对齐 14 */
 .el-table--small {
   font-size: var(--soj-fs-body);

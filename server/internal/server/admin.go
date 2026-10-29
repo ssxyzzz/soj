@@ -302,6 +302,8 @@ func (h *Handlers) GetSiteInfo(c *gin.Context) {
 		// 讨论区三区总开关（公开 UI 显隐用）：关掉的区，导航项/入口卡片直接隐藏
 		"discuss_global_enabled":  s.DiscussGlobalOpen(),
 		"discuss_problem_enabled": s.DiscussProblemOpen(),
+		// 实物兑换开关（v0.33-②，公开）：导航入口显隐
+		"jade_shop_enabled": s.JadeShopOpen(),
 		"discuss_contest_enabled": s.DiscussContestOpen(),
 	})
 }
@@ -353,6 +355,10 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		ProblemSeqStart         *int  `json:"problem_seq_start"` // 自动题号起点
 		CurrencyName            *string `json:"currency_name"` // 货币名（v0.33，1–6 字，默认「玉」）
 		JadeAwardRatePct        *int  `json:"jade_award_rate_pct"` // 比赛奖池获奖比例 %（v0.33）
+		JadeSolutionUnlockMult  *int  `json:"jade_solution_unlock_mult"` // 题解解锁价系数（v0.33-②）
+		JadeBountyMin           *int  `json:"jade_bounty_min"` // 悬赏额下限（v0.33-②）
+		JadeBountyMax           *int  `json:"jade_bounty_max"` // 悬赏额上限（v0.33-②）
+		JadeShopEnabled         *bool `json:"jade_shop_enabled"` // 实物兑换开关（v0.33-②，root）
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -572,6 +578,34 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.JadeAwardRatePct = req.JadeAwardRatePct
+	}
+	if req.JadeSolutionUnlockMult != nil {
+		if *req.JadeSolutionUnlockMult < 1 || *req.JadeSolutionUnlockMult > 100 {
+			fail(c, http.StatusBadRequest, "题解解锁价系数需在 1–100 之间")
+			return
+		}
+		s.JadeSolutionUnlockMult = req.JadeSolutionUnlockMult
+	}
+	if req.JadeBountyMin != nil {
+		if *req.JadeBountyMin < 1 || *req.JadeBountyMin > 100000 {
+			fail(c, http.StatusBadRequest, "悬赏下限需在 1–100000 之间")
+			return
+		}
+		s.JadeBountyMin = req.JadeBountyMin
+	}
+	if req.JadeBountyMax != nil {
+		if *req.JadeBountyMax < 1 || *req.JadeBountyMax > 1000000 {
+			fail(c, http.StatusBadRequest, "悬赏上限需在 1–1000000 之间")
+			return
+		}
+		s.JadeBountyMax = req.JadeBountyMax
+	}
+	if s.JadeBountyMaxVal() < s.JadeBountyMinVal() {
+		fail(c, http.StatusBadRequest, "悬赏上限不能小于下限")
+		return
+	}
+	if req.JadeShopEnabled != nil {
+		s.JadeShopEnabled = req.JadeShopEnabled
 	}
 	// 与启动校验同一口径：smtp 通道开着但配置不全不让存——否则重启直接拒绝启动，
 	// 管理员把自己锁在门外（运行期 Mailer() 会降级 log，但重启过不去）。

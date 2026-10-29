@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // 发帖/编辑话题弹窗（v0.24）：三区共用一个表单体，按 scope 切类型集合与附加字段。
 // 比赛赛时学生提交自动走「仅组织者可见」（服务端权威，前端只提示）。
-import { computed, ref, watch } from 'vue'
+// 悬赏（v0.33-②）：题内 + 全局可挂（发布即冻结托管，14 天无打赏未退部分自动退回）。
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import MdEditor from '@/components/MdEditor.vue'
-import { discussApi, type DiscussTopicBody } from '@/api'
+import { discussApi, jadeApi, type DiscussTopicBody } from '@/api'
+import { useUserStore } from '@/stores/user'
 import type { DiscussScope, DiscussTopic } from '@/types'
 import { DiscussKindSets } from './discussMeta'
 
@@ -27,6 +29,21 @@ const kind = ref('')
 const content = ref('')
 const relatedInput = ref('')
 const submitting = ref(false)
+// 悬赏（v0.33-②）：余额够下限才显示输入；0 = 不挂
+const userStore = useUserStore()
+const bounty = ref(0)
+const myBalance = ref(0)
+const canBounty = computed(() => props.scope !== 'contest' && !isEdit.value && userStore.token && myBalance.value >= 5)
+
+onMounted(async () => {
+  if (!userStore.token) return
+  try {
+    const m = await jadeApi.mine()
+    myBalance.value = m.balance
+  } catch {
+    /* 静默：拉不到余额就不显示悬赏输入 */
+  }
+})
 
 const kinds = computed(() => DiscussKindSets[props.scope] || [])
 const isEdit = computed(() => !!props.editTopic)
@@ -46,6 +63,7 @@ watch(
       kind.value = ''
       content.value = ''
       relatedInput.value = ''
+      bounty.value = 0
     }
   },
 )
@@ -81,6 +99,7 @@ async function submit() {
     }
     const related = parseRelated()
     if (related) body.related_pids = related
+    if (!isEdit.value && canBounty.value && bounty.value > 0) body.bounty = bounty.value
     if (isEdit.value && props.editTopic) {
       await discussApi.update(props.editTopic.id, body)
       ElMessage.success('已保存')
@@ -139,6 +158,19 @@ async function submit() {
     <div v-if="scope === 'global'" class="post-row">
       <el-input v-model="relatedInput" placeholder="相关题号（可选，逗号分隔，如 12, 35）" />
     </div>
+    <div v-if="canBounty" class="post-row bounty-row">
+      <span class="bounty-label">悬赏</span>
+      <el-input-number
+        v-model="bounty"
+        :min="0"
+        :max="Math.min(myBalance, 500)"
+        :step="5"
+        style="width: 160px"
+      />
+      <span class="post-hint" style="margin-top: 0">
+        玉（余额 {{ myBalance }}；发布即冻结，打赏给有帮助的回复，14 天无打赏自动退回，0 = 不挂悬赏）
+      </span>
+    </div>
     <MdEditor v-model="content" :height="isProblem ? '320px' : '380px'" variant="compact" />
     <div v-if="isProblem" class="post-hint">
       代码块按分数门槛展示：未达到本题「讨论代码门槛」的同学看不到你贴的代码
@@ -168,5 +200,13 @@ async function submit() {
   font-size: 12px;
   color: var(--soj-ink-3);
   margin-top: 8px;
+}
+.bounty-row {
+  align-items: center;
+}
+.bounty-label {
+  font-size: 13px;
+  color: var(--soj-ink-2);
+  white-space: nowrap;
 }
 </style>

@@ -71,6 +71,13 @@ type DiscussTopic struct {
 
 	Deleted  bool   `bson:"deleted,omitempty"` // 软删除（有回复的主楼保楼层）
 	Edited   bool   `bson:"edited,omitempty"`
+
+	// 悬赏（v0.33-②）：发布即冻结托管（Bounty 玉从发帖人余额扣入托管，打赏可分多次
+	// 打光 BountyPaid；14 天无打赏未退部分自动退回 BountyRefundedAt）。退款判定口径：
+	// LastActiveAt（最后回复/互动时间）起算 14 天。
+	Bounty           int64     `bson:"bounty,omitempty"`
+	BountyPaid       int64     `bson:"bountyPaid,omitempty"`
+	BountyRefundedAt time.Time `bson:"bountyRefundedAt,omitempty"` // 零值 = 未退
 	ReportN  int64  `bson:"reportN,omitempty"` // 未处理举报数（自动折叠阈值用）
 	Folded   bool   `bson:"folded,omitempty"`  // 举报达标自动折叠（点开才显示）
 

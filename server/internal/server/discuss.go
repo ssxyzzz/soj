@@ -14,6 +14,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -331,6 +332,50 @@ type discussTopicBody struct {
 	ListID      int64   `json:"list_id"`      // global：关联题单
 	TagID       int64   `json:"tag_id"`       // global：关联知识树节点
 	Private     *bool   `json:"private"`      // contest：赛时私密提问
+	Bounty      int64   `json:"bounty"`       // 悬赏额（v0.33-②，0 = 不挂；题内+全局，发布即冻结托管）
+}
+
+// validateBounty 悬赏额校验（v0.33-②）：0 = 不挂；否则需在后台上下限内且 ≤ 当前余额。
+// 返回 ok=false 时已写响应。上下限默认 5 / 500，后台可调（拍板 2026-10-29）。
+func (h *Handlers) validateBounty(c *gin.Context, uid int64, bounty int64) bool {
+	if bounty == 0 {
+		return true
+	}
+	s, err := h.repo.GetSystemSettings(c.Request.Context())
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取设置失败")
+		return false
+	}
+	if bounty < int64(s.JadeBountyMinVal()) {
+		fail(c, http.StatusBadRequest, fmt.Sprintf("悬赏至少 %d 玉", s.JadeBountyMinVal()))
+		return false
+	}
+	if bounty > int64(s.JadeBountyMaxVal()) {
+		fail(c, http.StatusBadRequest, fmt.Sprintf("悬赏最多 %d 玉", s.JadeBountyMaxVal()))
+		return false
+	}
+	bal, err := h.repo.JadeBalance(c.Request.Context(), uid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取余额失败")
+		return false
+	}
+	if bal < bounty {
+		fail(c, http.StatusBadRequest, "余额不足，先去做题攒玉吧")
+		return false
+	}
+	return true
+}
+
+// freezeBounty 悬赏托管冻结（发帖成功后调用）：扣玉入托管，失败则删话题回滚（尽力而为）。
+func (h *Handlers) freezeBounty(c *gin.Context, uid int64, t *repo.DiscussTopic) {
+	if t.Bounty <= 0 {
+		return
+	}
+	if err := h.repo.JadeSpend(c.Request.Context(), uid, t.Bounty,
+		repo.JadeKindBountyFreeze, "发布悬赏："+truncRunes(t.Title, 40), t.ID); err != nil {
+		slog.Warn("悬赏冻结失败（话题保留、无悬赏态）", "component", "jade", "tid", t.ID, "uid", uid, "error", err)
+		_ = h.repo.ClearDiscussBounty(c.Request.Context(), t.ID)
+	}
 }
 
 // validateTopicBody 校验发帖体；非法返回错误消息。

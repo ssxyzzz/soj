@@ -220,6 +220,10 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if err := r.EnsureJadeIndexes(ctx); err != nil {
 		return err
 	}
+	// 实物兑换（v0.33-②）：订单索引
+	if err := r.EnsureShopIndexes(ctx); err != nil {
+		return err
+	}
 	// 题解每题每人一篇（2026-10-26）：清历史重复 + 唯一索引兜底并发
 	if _, err := r.EnsureSolutionUnique(ctx); err != nil {
 		return err

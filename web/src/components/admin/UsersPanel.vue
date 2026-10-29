@@ -191,6 +191,8 @@ function openEdit(row: AdminUser & { email?: string; phone?: string }) {
   editForm.email = row.email ?? ''
   editForm.phone = row.phone ?? ''
   showEdit.value = true
+  openXp(row) // 经验/玉调整并入编辑弹窗（2026-10-30 拍板）：打开即带出当前值
+  openJade(row)
 }
 
 async function unbindEmail() {
@@ -259,25 +261,24 @@ async function submitEdit() {
   }
 }
 
-// ---- 经验调整弹窗：查看当前等级/经验，正数加、负数减（流水留审计）----
-const showXp = ref(false)
+// ---- 经验调整（并入编辑弹窗，2026-10-30）：查看当前等级/经验，正数加、负数减（流水留审计）----
 const xpSaving = ref(false)
 const xpTarget = reactive({ id: 0, username: '' })
 const xpInfo = ref<UserLevelInfo | null>(null)
 const xpForm = reactive({ delta: 100, reason: '' })
 
-async function openXp(row: AdminUser) {
+function openXp(row: AdminUser) {
   xpTarget.id = row.id
   xpTarget.username = row.username
   xpInfo.value = null
   xpForm.delta = 100
   xpForm.reason = ''
-  showXp.value = true
-  try {
-    xpInfo.value = await adminApi.getUserLevel(row.id)
-  } catch {
-    // 拉取失败弹窗内显示占位，仍允许提交调整
-  }
+  adminApi
+    .getUserLevel(row.id)
+    .then((info) => (xpInfo.value = info))
+    .catch(() => {
+      // 拉取失败弹窗内显示占位，仍允许提交调整
+    })
 }
 
 async function submitXp() {
@@ -306,27 +307,26 @@ async function submitXp() {
   }
 }
 
-// ---- 玉调整弹窗（v0.33-①，root 专属）：查当前余额，正数加、负数减（流水留审计） ----
-const showJade = ref(false)
+// ---- 玉调整（v0.33-①，root 专属；并入编辑弹窗，2026-10-30）：查当前余额，正加负减（流水留审计） ----
 const jadeSaving = ref(false)
 const jadeTarget = reactive({ id: 0, username: '' })
 const jadeBalance = ref<number | null>(null)
 const jadeForm = reactive({ delta: 10, reason: '' })
 const canJade = userStore.role === 'root'
 
-async function openJade(row: AdminUser) {
+function openJade(row: AdminUser) {
   jadeTarget.id = row.id
   jadeTarget.username = row.username
   jadeBalance.value = null
   jadeForm.delta = 10
   jadeForm.reason = ''
-  showJade.value = true
-  try {
-    const r = await adminApi.getUserJade(row.id)
-    jadeBalance.value = r.balance
-  } catch {
-    // 拉取失败弹窗内显示占位，仍允许提交调整
-  }
+  if (!canJade) return
+  adminApi
+    .getUserJade(row.id)
+    .then((r) => (jadeBalance.value = r.balance))
+    .catch(() => {
+      // 拉取失败弹窗内显示占位，仍允许提交调整
+    })
 }
 
 async function submitJade() {
@@ -417,11 +417,9 @@ defineExpose({ refresh: () => load() })
             <b class="nickname">{{ row.nickname }}</b>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column label="操作" width="80">
           <template #default="{ row }">
             <el-button size="small" link type="primary" @click="openEdit(row as AdminUser)">编辑</el-button>
-            <el-button size="small" link type="primary" @click="openXp(row as AdminUser)">经验</el-button>
-            <el-button v-if="canJade" size="small" link type="success" @click="openJade(row as AdminUser)">玉</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -513,7 +511,8 @@ defineExpose({ refresh: () => load() })
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showEdit" :title="`编辑 · ${editForm.originUsername}`" width="520">
+    <!-- 编辑弹窗（2026-10-30 拍板加宽 520→720）：账号信息 + 经验调整 + 玉调整（root）三段合一 -->
+    <el-dialog v-model="showEdit" :title="`编辑 · ${editForm.originUsername}`" width="720">
       <el-form label-position="top">
         <el-form-item label="绑定信息">
           <div class="bind-row">
@@ -531,35 +530,33 @@ defineExpose({ refresh: () => load() })
             </el-button>
           </div>
         </el-form-item>
-        <el-form-item label="用户名">
-          <el-input
-            v-model="editForm.username"
-            :disabled="!canRename"
-            :placeholder="canRename ? '3-32 位字母/数字/下划线' : '无修改用户名权限，只读'"
-          />
-        </el-form-item>
-        <el-form-item label="昵称">
-          <el-input v-model="editForm.nickname" maxlength="6" placeholder="用于榜单、题解等公开页面展示（6 字以内）" />
-        </el-form-item>
-        <el-form-item label="新密码">
-          <el-input
-            v-model="editForm.password"
-            type="password"
-            show-password
-            placeholder="至少 8 位；留空表示不修改密码"
-          />
-        </el-form-item>
-        <el-form-item label="确认新密码">
-          <el-input v-model="editForm.confirm" type="password" show-password placeholder="再次输入新密码" />
-        </el-form-item>
+        <div class="edit-grid">
+          <el-form-item label="用户名">
+            <el-input
+              v-model="editForm.username"
+              :disabled="!canRename"
+              :placeholder="canRename ? '3-32 位字母/数字/下划线' : '无修改用户名权限，只读'"
+            />
+          </el-form-item>
+          <el-form-item label="昵称">
+            <el-input v-model="editForm.nickname" maxlength="6" placeholder="用于榜单、题解等公开页面展示（6 字以内）" />
+          </el-form-item>
+          <el-form-item label="新密码">
+            <el-input
+              v-model="editForm.password"
+              type="password"
+              show-password
+              placeholder="至少 8 位；留空表示不修改密码"
+            />
+          </el-form-item>
+          <el-form-item label="确认新密码">
+            <el-input v-model="editForm.confirm" type="password" show-password placeholder="再次输入新密码" />
+          </el-form-item>
+        </div>
       </el-form>
-      <template #footer>
-        <el-button @click="showEdit = false">取消</el-button>
-        <el-button type="primary" :loading="editSaving" @click="submitEdit">确认修改</el-button>
-      </template>
-    </el-dialog>
 
-    <el-dialog v-model="showXp" :title="`调整经验 · ${xpTarget.username}`" width="520">
+      <!-- 经验调整：当前等级徽章 + 正加负减 + 可选备注，独立提交 -->
+      <el-divider content-position="left">经验调整</el-divider>
       <div class="xp-current">
         <template v-if="xpInfo">
           <TierBadge :tier="xpInfo.level" kind="level" size="md" />
@@ -573,39 +570,41 @@ defineExpose({ refresh: () => load() })
         </template>
         <span v-else class="xp-loading">读取等级中…</span>
       </div>
-      <el-form label-position="top">
-        <el-form-item label="调整经验" required>
-          <el-input-number v-model="xpForm.delta" :step="50" :step-strictly="false" style="width: 200px" />
-          <span class="dim" style="margin-left: 8px">正数增加、负数减少；单次 ±1000000 以内</span>
-        </el-form-item>
-        <el-form-item label="备注（可选，随调整流水留档）">
-          <el-input v-model="xpForm.reason" maxlength="100" show-word-limit placeholder="如：竞赛奖励 / 违规扣减" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showXp = false">关闭</el-button>
-        <el-button type="primary" :loading="xpSaving" @click="submitXp">确认调整</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 玉调整（v0.33-①，root）：当前余额 + 正加负减 + 必填原因 -->
-    <el-dialog v-model="showJade" :title="`调整玉 · ${jadeTarget.username}`" width="520">
-      <div class="xp-current">
-        <span v-if="jadeBalance !== null" class="xp-nums">当前余额 <b>{{ jadeBalance }}</b> 玉</span>
-        <span v-else class="xp-loading">读取余额中…</span>
+      <div class="adj-row">
+        <el-input-number v-model="xpForm.delta" :step="50" :step-strictly="false" style="width: 150px" />
+        <el-input
+          v-model="xpForm.reason"
+          maxlength="100"
+          show-word-limit
+          placeholder="备注（可选，随调整流水留档，如：竞赛奖励 / 违规扣减）"
+        />
+        <el-button type="primary" :loading="xpSaving" @click="submitXp">调整经验</el-button>
       </div>
-      <el-form label-position="top">
-        <el-form-item label="调整数量" required>
-          <el-input-number v-model="jadeForm.delta" :step="10" :step-strictly="false" style="width: 200px" />
-          <span class="dim" style="margin-left: 8px">正数增加、负数减少（扣减不透支）</span>
-        </el-form-item>
-        <el-form-item label="原因（必填，随流水留审计）">
-          <el-input v-model="jadeForm.reason" maxlength="200" show-word-limit placeholder="如：比赛奖励 / 兑现 / 违规扣减" />
-        </el-form-item>
-      </el-form>
+      <p class="adj-hint dim">正数增加、负数减少；单次 ±1000000 以内</p>
+
+      <!-- 玉调整（v0.33-①，root）：当前余额 + 正加负减 + 必填原因，独立提交 -->
+      <template v-if="canJade">
+        <el-divider content-position="left">玉调整</el-divider>
+        <div class="xp-current">
+          <span v-if="jadeBalance !== null" class="xp-nums">当前余额 <b>{{ jadeBalance }}</b> 玉</span>
+          <span v-else class="xp-loading">读取余额中…</span>
+        </div>
+        <div class="adj-row">
+          <el-input-number v-model="jadeForm.delta" :step="10" :step-strictly="false" style="width: 150px" />
+          <el-input
+            v-model="jadeForm.reason"
+            maxlength="200"
+            show-word-limit
+            placeholder="原因（必填，随流水留审计，如：比赛奖励 / 兑现 / 违规扣减）"
+          />
+          <el-button type="success" :loading="jadeSaving" @click="submitJade">调整玉</el-button>
+        </div>
+        <p class="adj-hint dim">正数增加、负数减少（扣减不透支）</p>
+      </template>
+
       <template #footer>
-        <el-button @click="showJade = false">关闭</el-button>
-        <el-button type="primary" :loading="jadeSaving" @click="submitJade">确认调整</el-button>
+        <el-button @click="showEdit = false">取消</el-button>
+        <el-button type="primary" :loading="editSaving" @click="submitEdit">确认修改</el-button>
       </template>
     </el-dialog>
   </el-card>
@@ -667,12 +666,35 @@ defineExpose({ refresh: () => load() })
   font-weight: var(--soj-fw-bold);
 }
 
-/* 经验调整弹窗：当前等级徽章 + 经验数字 */
+/* 经验调整段（并入编辑弹窗，2026-10-30）：当前等级徽章 + 经验数字 */
 .xp-current {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+/* 编辑弹窗账号字段两列排（加宽后用满 720） */
+.edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 18px;
+}
+
+/* 经验/玉调整行：数值 | 原因 | 提交，一行放下 */
+.adj-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.adj-row .el-input {
+  flex: 1;
+}
+
+.adj-hint {
+  margin: 6px 0 0;
+  font-size: 12px;
 }
 
 /* 绑定信息行（v0.16）：信息在左、root 解绑按钮在右 */

@@ -117,6 +117,41 @@ const submitDisabledReason = computed(() => {
   return ''
 })
 
+// 玉解锁题解（v0.33-②）：登录 ∧ 不可免费看 ∧ 未解锁 → 显示「N 玉解锁」按钮
+const canUnlockSolutions = computed(
+  () =>
+    !!userStore.token &&
+    !!problem.value &&
+    !problem.value.can_view_solutions &&
+    !problem.value.solution_unlocked &&
+    (problem.value.solution_unlock_price ?? 0) > 0,
+)
+const unlocking = ref(false)
+async function unlockSolutions() {
+  const p = problem.value
+  if (!p) return
+  try {
+    await ElMessageBox.confirm(
+      `花 ${p.solution_unlock_price} 玉解锁本题全部文字题解？解锁即时生效、永久可见（首次通过后本就免费）。`,
+      '解锁题解',
+      { type: 'warning', confirmButtonText: `解锁（${p.solution_unlock_price} 玉）`, cancelButtonText: '再想想' },
+    )
+  } catch {
+    return
+  }
+  unlocking.value = true
+  try {
+    const r = await problemApi.unlockSolutions(p.id)
+    userStore.setJade(r.balance, userStore.jadeCurrency || '玉') // 顶栏余额即时刷新
+    ElMessage.success('题解已解锁')
+    await load() // 重拉详情：can_view_solutions 翻真
+  } catch {
+    // 拦截器统一提示（余额不足等）
+  } finally {
+    unlocking.value = false
+  }
+}
+
 // 客观题（v0.9）：提交走主列作答区，在线编程不适用；函数题（v0.9.1）：模板预填 + 语言锁 C++
 const isObjective = computed(() => problem.value?.type === 'objective')
 const isFunction = computed(() => problem.value?.type === 'function')
@@ -405,9 +440,10 @@ onUnmounted(stopPolling)
         </RailCard>
 
         <!-- 答案解析（v0.23 验收调整）：视频讲解默认可看（不设 AC 门槛），文字题解满分∨老师门槛；
-             两钮同款白底黑字；比赛/考试锁定期整卡不显示 -->
+             两钮同款白底黑字；比赛/考试锁定期整卡不显示。
+             玉解锁（v0.33-②）：未达门槛的学生可花玉解锁文字题解（难度 × 系数定价，解锁永久） -->
         <RailCard
-          v-if="!problem.locked && (problem.solution_video_url || problem.can_view_solutions)"
+          v-if="!problem.locked && (problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions)"
           ov="解析"
           title="答案解析"
           class="aside-card"
@@ -415,7 +451,13 @@ onUnmounted(stopPolling)
           <div class="entry-actions">
             <el-button v-if="problem.solution_video_url" @click="showVideo = true">视频讲解</el-button>
             <el-button v-if="problem.can_view_solutions" @click="openSolutions">文字题解</el-button>
+            <el-button v-if="canUnlockSolutions" type="primary" plain :loading="unlocking" @click="unlockSolutions">
+              花 {{ problem.solution_unlock_price }} 玉解锁文字题解
+            </el-button>
           </div>
+          <p v-if="canUnlockSolutions" class="hint">
+            首次通过后免费；解锁即时生效、永久可见本题全部文字题解。
+          </p>
         </RailCard>
 
         <!-- 讨论入口（v0.24）：题内思路讨论弹窗；赛时整题锁定（服务端闸门，弹窗内提示） -->

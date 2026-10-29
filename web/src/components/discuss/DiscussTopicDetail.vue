@@ -127,6 +127,37 @@ async function accept(rep: DiscussReply) {
   emit('changed')
 }
 
+// 悬赏打赏（v0.33-②）：发帖人专属；输入金额从托管池划给回复作者
+const canTip = computed(() => !!topic.value?.bounty_remaining && topic.value.uid === userStore.uid)
+async function tipReply(rep: DiscussReply) {
+  if (!topic.value) return
+  const remain = topic.value.bounty_remaining ?? 0
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `打赏多少玉给这条回复？（悬赏剩余 ${remain} 玉，可分多次打光）`,
+      '悬赏打赏',
+      {
+        confirmButtonText: '打赏',
+        cancelButtonText: '取消',
+        inputPattern: /^[1-9]\d*$/,
+        inputErrorMessage: '需为正整数',
+        inputValue: String(Math.min(remain, 5)),
+      },
+    )
+    const amount = Number(value)
+    if (amount > remain) {
+      ElMessage.warning(`最多打赏 ${remain} 玉`)
+      return
+    }
+    const r = await discussApi.tip(topic.value.id, rep.id, amount)
+    ElMessage.success(`已打赏 ${r.tipped} 玉`)
+    await load()
+    emit('changed')
+  } catch {
+    /* 取消或拦截器已提示 */
+  }
+}
+
 async function removeTopic() {
   if (!topic.value) return
   try {
@@ -220,6 +251,12 @@ onMounted(load)
               {{ discussKindLabel(topic.scope, topic.kind) }}
             </el-tag>
             <el-tag v-if="topic.official" type="success" size="small" effect="plain" round>已官方解答</el-tag>
+            <!-- 悬赏（v0.33-②）：冻结托管徽章；剩余为 0 显示「已打光」 -->
+            <el-tag v-if="topic.bounty" type="warning" size="small" effect="dark" round>
+              ◈ 悬赏 {{ topic.bounty }} 玉
+              <template v-if="topic.bounty_remaining">（剩 {{ topic.bounty_remaining }}）</template>
+              <template v-else-if="topic.bounty_paid">（已打光）</template>
+            </el-tag>
           </div>
           <h2 class="dtd-title">
             {{ topic.deleted ? '该帖已删除' : topic.title }}
@@ -313,6 +350,9 @@ onMounted(load)
               </el-button>
               <el-button v-if="topic.can_accept && !r.deleted && topic.accepted_reply_id !== r.id" text size="small" type="success" @click="accept(r)">
                 采纳
+              </el-button>
+              <el-button v-if="canTip && !r.deleted && r.uid !== userStore.uid" text size="small" type="warning" @click="tipReply(r)">
+                ◈ 打赏
               </el-button>
               <el-button v-if="r.uid === userStore.uid || topic.can_manage" text size="small" type="danger" plain @click="removeReply(r)">
                 删除

@@ -43,6 +43,12 @@ const router = createRouter({
           meta: { title: '讨论', requiresAuth: true },
         },
         {
+          path: 'shop',
+          name: 'shop',
+          component: () => import('@/views/ShopView.vue'),
+          meta: { title: '实物兑换', requiresAuth: true },
+        },
+        {
           path: 'notifications',
           name: 'notifications',
           component: () => import('@/views/NotificationsView.vue'),
@@ -157,6 +163,13 @@ const router = createRouter({
           name: 'settings',
           component: () => import('@/views/SettingsView.vue'),
           meta: { title: '个人设置', requiresAuth: true },
+        },
+        {
+          path: 'jade',
+          name: 'jade',
+          // 我的玉（v0.33-①）：余额与流水独立页（2026-10-30 拍板：不并入 settings）
+          component: () => import('@/views/JadeView.vue'),
+          meta: { title: '我的玉', requiresAuth: true },
         },
         {
           path: 'admin',
