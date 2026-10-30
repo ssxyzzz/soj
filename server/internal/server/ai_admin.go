@@ -38,10 +38,6 @@ func (h *Handlers) AdminGetAIConfig(c *gin.Context) {
 		"daily_limit":       s.AiDailyLimitVal(),
 		"staff_daily_limit": s.AiStaffDailyLimitVal(),
 		"tutor_name":        s.AiTutorNameVal(),
-		"discount": gin.H{
-			"lv1": *s.AiDiscount1Lv, "pct1": *s.AiDiscount1Pct,
-			"lv2": *s.AiDiscount2Lv, "pct2": *s.AiDiscount2Pct,
-		},
 	})
 }
 
@@ -59,12 +55,6 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 		DailyLimit      *int    `json:"daily_limit"`
 		StaffDailyLimit *int    `json:"staff_daily_limit"` // 特权层（教师/管理员）每日上限，0 = 不限
 		TutorName       *string `json:"tutor_name"`
-		Discount        *struct {
-			Lv1  *int `json:"lv1"`
-			Pct1 *int `json:"pct1"`
-			Lv2  *int `json:"lv2"`
-			Pct2 *int `json:"pct2"`
-		} `json:"discount"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -115,7 +105,7 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 		return
 	}
 	// 计费参数走系统设置（同一表单一并保存）；提示/找bug 单价已写死推导（2026-10-30），不再可配
-	if req.DailyLimit != nil || req.StaffDailyLimit != nil || req.Discount != nil || req.TutorName != nil {
+	if req.DailyLimit != nil || req.StaffDailyLimit != nil || req.TutorName != nil {
 		if s, err := h.repo.GetSystemSettings(ctx); err == nil {
 			if req.DailyLimit != nil {
 				s.AiDailyLimit = req.DailyLimit
@@ -134,10 +124,6 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 					return
 				}
 				s.AiTutorName = name
-			}
-			if req.Discount != nil {
-				s.AiDiscount1Lv, s.AiDiscount1Pct = req.Discount.Lv1, req.Discount.Pct1
-				s.AiDiscount2Lv, s.AiDiscount2Pct = req.Discount.Lv2, req.Discount.Pct2
 			}
 			_ = h.repo.UpdateSystemSettings(ctx, s)
 		}

@@ -529,7 +529,6 @@ export const adminApi = {
       daily_limit: number
       staff_daily_limit: number
       tutor_name: string
-      discount: { lv1: number; pct1: number; lv2: number; pct2: number }
     }>('/admin/ai/config'),
   aiSaveConfig: (body: {
     providers: { name: string; base_url: string; api_key: string; model: string }[]
@@ -537,7 +536,6 @@ export const adminApi = {
     daily_limit: number
     staff_daily_limit: number
     tutor_name: string
-    discount: { lv1: number; pct1: number; lv2: number; pct2: number }
   }) => post<{ saved: boolean }>('/admin/ai/config', body),
   aiCalls: (page = 1, uid?: number) =>
     get<{

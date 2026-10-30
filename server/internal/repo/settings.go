@@ -84,10 +84,6 @@ type SystemSettings struct {
 	AiHintPrice1      *int64 `bson:"aiHintPrice1,omitempty"`
 	AiHintPrice2      *int64 `bson:"aiHintPrice2,omitempty"`
 	AiDebugPrice      *int64 `bson:"aiDebugPrice,omitempty"`
-	AiDiscount1Lv     *int   `bson:"aiDiscount1Lv,omitempty"`
-	AiDiscount1Pct    *int   `bson:"aiDiscount1Pct,omitempty"`
-	AiDiscount2Lv     *int   `bson:"aiDiscount2Lv,omitempty"`
-	AiDiscount2Pct    *int   `bson:"aiDiscount2Pct,omitempty"`
 	// AI 助教名字（v0.33-④ 验收调整：默认「小玉」，1–12 字，前端面板/按钮文案统一读）。
 	AiTutorName string `bson:"aiTutorName,omitempty"`
 	// 资料自改开关（v0.34）：五字段逐个可锁（昵称/性别/年级/学校/地区），true = 允许
@@ -170,31 +166,12 @@ const (
 	DefaultAiHintPrice1   = 2 // 已退役（上表公式接管），字段保留不读写
 	DefaultAiHintPrice2   = 6 // 已退役
 	DefaultAiDebugPrice   = 8 // 已退役
-	DefaultAiDiscount1Lv  = 5 // Lv.5–7 九折
-	DefaultAiDiscount1Pct = 90
-	DefaultAiDiscount2Lv  = 8 // Lv.8+ 八折
-	DefaultAiDiscount2Pct = 80
 	DefaultAiTutorName    = "小玉"
 )
 
 func downloadLimitPtr(v int) *int { return &v }
 func boolPtr(v bool) *bool        { return &v }
 func int64Ptr(v int64) *int64     { return &v }
-
-// aiDiscountLvVal / aiDiscountPctVal 直接构造的 settings（未过 normalize）读侧兜底。
-func aiDiscountLvVal(v *int, def int) int {
-	if v == nil || *v < 1 || *v > 10 {
-		return def
-	}
-	return *v
-}
-
-func aiDiscountPctVal(v *int, def int) int {
-	if v == nil || *v < 10 || *v > 100 {
-		return def
-	}
-	return *v
-}
 
 // DownloadDailyLimit 限额取值：未设置回默认（存量 settings 文档无此字段时为 nil）。
 func (s *SystemSettings) DownloadDailyLimit() int {
@@ -319,21 +296,6 @@ func (s *SystemSettings) normalizeDiscuss() {
 	}
 	if s.AiDebugPrice == nil || *s.AiDebugPrice < 0 {
 		s.AiDebugPrice = int64Ptr(DefaultAiDebugPrice)
-	}
-	if s.AiDiscount1Lv == nil || *s.AiDiscount1Lv < 1 || *s.AiDiscount1Lv > 10 {
-		s.AiDiscount1Lv = intPtr(DefaultAiDiscount1Lv)
-	}
-	if s.AiDiscount1Pct == nil || *s.AiDiscount1Pct < 10 || *s.AiDiscount1Pct > 100 {
-		s.AiDiscount1Pct = intPtr(DefaultAiDiscount1Pct)
-	}
-	if s.AiDiscount2Lv == nil || *s.AiDiscount2Lv < 1 || *s.AiDiscount2Lv > 10 {
-		s.AiDiscount2Lv = intPtr(DefaultAiDiscount2Lv)
-	}
-	if s.AiDiscount2Pct == nil || *s.AiDiscount2Pct < 10 || *s.AiDiscount2Pct > 100 {
-		s.AiDiscount2Pct = intPtr(DefaultAiDiscount2Pct)
-	}
-	if *s.AiDiscount2Lv < *s.AiDiscount1Lv {
-		s.AiDiscount2Lv = s.AiDiscount1Lv
 	}
 }
 
@@ -514,8 +476,8 @@ func (s *SystemSettings) AiTutorNameVal() string {
 //	题解解锁价 S = 难度 × 解锁系数（后台可调，默认 5）
 //	两级提示合计 = S×70%（向下取整，保底 2 玉），理解:思路 = 1:2 拆分
 //	找 bug = S×90%（向下取整）
-//	等级折扣（两档）相乘后同样向下取整；任何单价下限 1 玉。
-func (s *SystemSettings) AiPrice(kind string, difficulty, level int) int64 {
+//	任何单价下限 1 玉。
+func (s *SystemSettings) AiPrice(kind string, difficulty int) int64 {
 	solution := int64(difficulty) * int64(s.JadeSolutionUnlockMultVal())
 	var price int64
 	switch kind {
@@ -535,19 +497,6 @@ func (s *SystemSettings) AiPrice(kind string, difficulty, level int) int64 {
 		}
 	default: // debug
 		price = solution * AiDebugPct / 100
-	}
-	if level > 0 {
-		pct := 100
-		lv2, pct2 := aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv), aiDiscountPctVal(s.AiDiscount2Pct, DefaultAiDiscount2Pct)
-		lv1, pct1 := aiDiscountLvVal(s.AiDiscount1Lv, DefaultAiDiscount1Lv), aiDiscountPctVal(s.AiDiscount1Pct, DefaultAiDiscount1Pct)
-		if level >= lv2 {
-			pct = pct2
-		} else if level >= lv1 {
-			pct = pct1
-		}
-		if pct < 100 {
-			price = price * int64(pct) / 100 // 向下取整（2026-10-30 拍板）
-		}
 	}
 	if price < 1 {
 		price = 1
@@ -603,10 +552,6 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"aiHintPrice2":            s.AiHintPrice2Val(),
 			"aiDebugPrice":            s.AiDebugPriceVal(),
 			"aiTutorName":             s.AiTutorNameVal(),
-			"aiDiscount1Lv":           aiDiscountLvVal(s.AiDiscount1Lv, DefaultAiDiscount1Lv),
-			"aiDiscount1Pct":          aiDiscountPctVal(s.AiDiscount1Pct, DefaultAiDiscount1Pct),
-			"aiDiscount2Lv":           aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv),
-			"aiDiscount2Pct":          aiDiscountPctVal(s.AiDiscount2Pct, DefaultAiDiscount2Pct),
 			// 资料自改开关（v0.34）：归一后整组覆盖；gradePromoYear 不在此处——晋级逻辑独占
 			"profileEdit": s.ProfileEditCfg(),
 		}},
