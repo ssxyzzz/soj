@@ -59,7 +59,7 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 	// QQ 头像（v0.23）：绑定开关开且填了 QQ 号时下发头像直链（QQ 号本身可保持私密）；
 	// 前端有 avatar_url 用图，否则回退首字头像
 	if u.QQAvatar && u.QQ != "" {
-		out["avatar_url"] = "https://q1.qlogo.cn/g?b=qq&nk=" + u.QQ + "&s=100"
+		out["avatar_url"] = qqAvatarURL(u.QQ)
 	}
 
 	// 等级（徽章 + 距下一级进度）与全站排名：聚合失败降级省略，不阻塞主页

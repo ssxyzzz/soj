@@ -20,6 +20,12 @@ import (
 
 var qqDigits = regexp.MustCompile(`^\d{5,16}$`)
 
+// qqAvatarURL QQ 头像直链（v0.23）：/me/profile（顶栏/设置页）与公开主页共用一源
+//——曾两处手抄漂移致顶栏裂图（v0.34 回归，2026-10-30 修复），收口单点。
+func qqAvatarURL(qq string) string {
+	return "https://q1.qlogo.cn/g?b=qq&nk=" + qq + "&s=100"
+}
+
 // maxNicknameRunes 昵称长度上限（字符数，中文按 1 计；2026-10-27 用户拍板 6 字以内）。
 // 本人设置/管理端/注册三处写入口统一走此值，trimTo 静默截断。
 const maxNicknameRunes = 6
@@ -76,7 +82,7 @@ func profileJSON(u *repo.User, editable repo.ProfileEditConfig) gin.H {
 	}
 	// QQ 头像（v0.23）：设置页与顶栏头像共用；绑定开关开且已填 QQ 才下发
 	if u.QQAvatar && u.QQ != "" {
-		info["avatar_url"] = "https://q1.qlogo.cn/g?qq&nk=" + u.QQ + "&s=100"
+		info["avatar_url"] = qqAvatarURL(u.QQ)
 	}
 	return info
 }
