@@ -39,10 +39,10 @@ func TestStripCSVBOM(t *testing.T) {
 }
 
 func TestUserImportTemplateShape(t *testing.T) {
-	// 模板行结构自检：说明行以 # 开头、表头为中文花名册七列（与 AdminUserImportTemplate 同源口径）
+	// 模板行结构自检：说明行以 # 开头、表头为中文花名册八列（与 AdminUserImportTemplate 同源口径）
 	rows := [][]string{
 		{"# SOJ 批量建号·中文花名册模板"},
-		{"id", "姓名", "性别", "年级", "学校", "地区", "角色"},
+		{"id", "姓名", "性别", "年级", "学校", "地区", "角色", "密码"},
 	}
 	comment := 0
 	header := -1
@@ -56,11 +56,37 @@ func TestUserImportTemplateShape(t *testing.T) {
 	if comment != 1 || header != 1 {
 		t.Fatalf("模板结构异常：注释行 %d / 表头行下标 %d", comment, header)
 	}
-	if got, want := strings.Join(rows[header], ","), "id,姓名,性别,年级,学校,地区,角色"; got != want {
+	if got, want := strings.Join(rows[header], ","), "id,姓名,性别,年级,学校,地区,角色,密码"; got != want {
 		t.Fatalf("表头 = %s，期望 %s", got, want)
 	}
 	if !bytes.Contains([]byte("\xEF\xBB\xBF"), []byte("\xEF")) {
 		t.Fatal("BOM 常量自检")
+	}
+}
+
+func TestUserImportParsePasswordColumn(t *testing.T) {
+	// 密码列：填了用填的（原样保留），留空随机生成；弱口令/过短标问题行
+	rows, err := userImportParse([][]string{
+		{"姓名", "id", "密码"},
+		{"张三", "1001", "Passw0rd!"},
+		{"李四", "1002", ""},
+		{"王五", "1003", "12345678"},
+		{"赵六", "1004", "short"},
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[0].Password != "Passw0rd!" {
+		t.Errorf("显式密码应原样使用：%q", rows[0].Password)
+	}
+	if rows[1].Password == "" || len(rows[1].Password) != 8 {
+		t.Errorf("留空应随机生成 8 位：%q", rows[1].Password)
+	}
+	if !containsProblem(rows[2], "密码过于简单") {
+		t.Errorf("弱口令应标问题：%v", rows[2].Problems)
+	}
+	if !containsProblem(rows[3], "密码长度需在 8-64 位之间") {
+		t.Errorf("过短密码应标问题：%v", rows[3].Problems)
 	}
 }
 

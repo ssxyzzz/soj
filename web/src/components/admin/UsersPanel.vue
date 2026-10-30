@@ -524,8 +524,8 @@ defineExpose({ refresh: () => load() })
           style="margin-bottom: 14px"
         />
         <p class="dim" style="margin: 0 0 10px">
-          用户名默认 = 姓名拼音 + id（张三 1001 → zhangsan1001，多音字可在预览里改）；初始密码每人随机生成，
-          建号后导出表格发放；id 即站内用户 ID，可留空自动顺延分配（预览表可见可改，与已占用号冲突会标红提示）。
+          用户名默认 = 姓名拼音 + id（张三 1001 → zhangsan1001，多音字可在预览里改）；初始密码每人随机生成
+          （密码列填了用填的），建号后导出表格发放；id 即站内用户 ID，可留空自动顺延分配（预览表可见可改，与已占用号冲突会标红提示）。
           支持 GBK/UTF-8 编码（Excel 直接另存的 CSV 可用）。
         </p>
         <div class="import-actions">
