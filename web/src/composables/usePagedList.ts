@@ -4,6 +4,8 @@ import { ref, type Ref } from 'vue'
  * 「筛选 + 分页列表页」状态样板（v0.29 收敛）：page/total/loading 三件套 +
  * 筛选变动重置回第一页。load 由调用方提供（通常配合 api 层 AbortController：
  * 筛选变更取消在途旧请求，避免慢网络下旧响应覆盖新筛选结果）。
+ * v0.37 加 silent 载入：定时轮询刷新走 load(true)，不置 loading——
+ * 否则每拍整表 v-loading 遮罩闪一次（提交记录页 5s 自动刷新的「老在转圈」体感）。
  */
 export function usePagedList<T>(fetchPage: (page: number) => Promise<{ list: T[]; total: number }>, opts?: { pageSize?: number }) {
   const list: Ref<T[]> = ref([])
@@ -13,16 +15,16 @@ export function usePagedList<T>(fetchPage: (page: number) => Promise<{ list: T[]
   const loading = ref(false)
   let seq = 0 // 防竞态：只认最新一次请求的结果（比 AbortController 更粗但零依赖，两层可并用）
 
-  async function load() {
+  async function load(silent = false) {
     const my = ++seq
-    loading.value = true
+    if (!silent) loading.value = true
     try {
       const r = await fetchPage(page.value)
       if (my !== seq) return // 已有更新的筛选请求在途/完成，丢弃本拍
       list.value = r.list
       total.value = r.total
     } finally {
-      if (my === seq) loading.value = false
+      if (my === seq && !silent) loading.value = false
     }
   }
 

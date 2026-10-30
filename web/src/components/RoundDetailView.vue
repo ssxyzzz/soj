@@ -7,7 +7,7 @@ import { usePolling } from '@/composables/usePolling'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { authApi, contestApi, examApi, type RoundKind } from '@/api'
+import { contestApi, examApi, type RoundKind } from '@/api'
 import { downloadFile } from '@/api/download'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import EditRoundDialog from '@/components/EditRoundDialog.vue'
@@ -268,10 +268,9 @@ async function rejudgeAll() {
 onMounted(() => {
   tagStore.ensure() // 标签名映射异步就绪，题目表标签列响应式跟随
   if (userStore.token) {
-    authApi.me().then((me) => {
-      myUid.value = me.id
-      if (boardVisible.value && !leaders.value.length) loadLeaders()
-    }).catch(() => {})
+    // uid 已随登录持久化在 store（v0.37 去掉挂载时白拉一次 /me 的往返）
+    myUid.value = userStore.uid
+    if (boardVisible.value && !leaders.value.length) loadLeaders()
   }
   load()
   clock.start() // 每秒时钟（usePolling：后台标签暂停、卸载自清）

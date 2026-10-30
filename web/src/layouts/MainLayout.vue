@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { usePolling } from '@/composables/usePolling'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -101,6 +101,18 @@ const avatarChar = computed(() => {
   const n = userStore.nickname || '我'
   return n.slice(0, 1).toUpperCase()
 })
+// QQ 头像外域失败兜底（v0.37）：校园网墙掉 qlogo 时顶栏裂图——@error 回退首字头像
+//（内存态标记，不落库；换新头像 URL 由 profile 刷新重置）
+const avatarBroken = ref(false)
+watch(
+  () => userStore.avatarUrl,
+  () => {
+    avatarBroken.value = false
+  },
+)
+function onAvatarError() {
+  avatarBroken.value = true
+}
 
 // 登录态下拉取用户偏好（默认语言/模板）与等级（顶栏徽章），供提交弹窗/在线编程消费；
 // 设置页保存后同步更新 store。失败静默（未登录/过期由拦截器统一处理）。
@@ -207,7 +219,7 @@ function onCommand(command: string) {
                点击进独立流水页 /jade；货币名后台可配 -->
           <el-dropdown class="user-dropdown" @command="onCommand">
             <span class="user-chip">
-              <img v-if="userStore.avatarUrl" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" decoding="async" />
+              <img v-if="userStore.avatarUrl && !avatarBroken" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" decoding="async" @error="onAvatarError" />
               <span v-else class="avatar">{{ avatarChar }}</span>
               <span class="uname">{{ userStore.nickname || '已登录' }}</span>
               <TierBadge

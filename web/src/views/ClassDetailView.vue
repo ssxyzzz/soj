@@ -156,8 +156,8 @@ async function load() {
   loading.value = true
   try {
     cl.value = await classApi.detail(Number(route.params.id))
-    await loadAssignments()
-    await loadExams()
+    // v0.37 作业/考试并行拉（原串行两连，高延迟链路省一跳 ~100ms；两者互不依赖）
+    await Promise.allSettled([loadAssignments(), loadExams()])
   } catch {
     router.replace('/classes')
   } finally {

@@ -42,6 +42,14 @@ onMounted(load)
 watch(() => route.params.id, load)
 
 const avatarChar = computed(() => (page.value?.nickname || page.value?.username || '?').slice(0, 1).toUpperCase())
+// QQ 头像外域失败兜底（v0.37）：qlogo 被墙时裂图——@error 回退首字头像（换人访问随 load 重置）
+const avatarBroken = ref(false)
+watch(() => route.params.id, () => {
+  avatarBroken.value = false
+})
+function onAvatarError() {
+  avatarBroken.value = true
+}
 
 // ---- 等级进度（距下一级）：xp 相对当前级阈值；Lv.10 满格 ----
 const lvPct = computed(() => {
@@ -137,7 +145,7 @@ function openDetail(id: number) {
 
           <!-- 头部资料卡：昵称 + 等级 + 进度条 + 资料 + 统计 -->
           <div class="card hero">
-            <img v-if="page.avatar_url" :src="page.avatar_url" alt="" class="avatar avatar-img" loading="lazy" decoding="async" />
+            <img v-if="page.avatar_url && !avatarBroken" :src="page.avatar_url" alt="" class="avatar avatar-img" loading="lazy" decoding="async" @error="onAvatarError" />
             <div v-else class="avatar">{{ avatarChar }}</div>
             <div class="who">
               <div class="name-row">

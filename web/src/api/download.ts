@@ -8,11 +8,22 @@ import { client } from './index'
 
 // 文件名优先取服务端 Content-Disposition（RFC 5987 filename*，中文文件名），
 // 无则用调用方兜底名；url 传 API 路径（client 的 baseURL 已是 /api）。
-export async function downloadFile(url: string, fallbackName: string): Promise<void> {
+// onProgress（v0.37）：导出包常无 Content-Length（zip 流式现压），按已收字节数报
+// 「已下载 X MB」——大包在慢链路上不再盲转，调用方可绑到按钮 loading 文案。
+export async function downloadFile(
+  url: string,
+  fallbackName: string,
+  onProgress?: (loadedMB: number) => void,
+): Promise<void> {
   try {
     const r = await client.get(url, {
       responseType: 'blob',
       timeout: 0, // 服务端导出现算榜单/进度，放宽超时
+      onDownloadProgress: onProgress
+        ? (e) => {
+            onProgress(e.loaded / 1048576)
+          }
+        : undefined,
     })
     const cd = (r.headers['content-disposition'] as string) ?? ''
     const star = cd.match(/filename\*=UTF-8''([^;]+)/i)

@@ -10,6 +10,7 @@ import { QuestionFilled, UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 
 import { importApi } from '@/api'
+import { usePolling } from '@/composables/usePolling'
 import PageShell from '@/components/PageShell.vue'
 import type { BatchImportStatus } from '@/types'
 
@@ -53,7 +54,6 @@ const extractPct = computed(() => {
   return Math.min(100, Math.round(((status.value.extract_done ?? 0) / t) * 100))
 })
 
-let timer: ReturnType<typeof setInterval> | undefined
 let loadSeq = 0
 
 async function refreshStatus() {
@@ -62,22 +62,23 @@ async function refreshStatus() {
   try {
     s = await importApi.status()
   } catch {
-    return
+    return // 暂态失败继续轮（拦截器已提示）
   }
-  if (seq !== loadSeq) return
+  if (seq !== loadSeq) return // 已被更新一拍超越，弃掉本拍（usePolling 防重入后几乎不可达）
   status.value = s
-  if (finished.value) stopPolling()
+  return !finished.value
 }
 
+// 任务状态轮询（v0.37 迁 usePolling）：后台标签自动暂停 + 防重入 + 30 分钟硬上限
+//（原手写 setInterval 无上限——任务卡 running 时页面停留期间无限轮询）
+const statusPoll = usePolling(refreshStatus, 1000, { maxDurationMs: 30 * 60_000 })
+
 function ensurePolling() {
-  if (!timer) timer = setInterval(refreshStatus, 1000)
+  statusPoll.restart()
 }
 
 function stopPolling() {
-  if (timer) {
-    clearInterval(timer)
-    timer = undefined
-  }
+  statusPoll.stop()
 }
 
 onMounted(() => {
@@ -85,8 +86,7 @@ onMounted(() => {
     if (running.value) ensurePolling()
   })
 })
-
-onBeforeUnmount(stopPolling)
+// 卸载停轮由 usePolling 的 onScopeDispose 接管（v0.37 迁移后不再手工清理）
 
 // v0.18.2 终态清空文件列表：表单常驻后 el-upload 的 limit=1 会因残留旧文件拦截新选择
 // （on-exceed 而非 on-change，旧文件被原样再传一遍）。终态 = 上一批已完结，清列表放行新包。

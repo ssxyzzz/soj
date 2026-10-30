@@ -258,6 +258,12 @@ function backToProblem() {
 
 // ---------- 递交（走正常判题管道，带挑战会话） ----------
 const verdict = ref('')
+// 评测等待看护（v0.37）：judging 锁住「递交评测」按钮——判题卡 Judging 时学生被
+// 锁死到时限耗尽。60s 仍未出分即解锁重交（原提交结果出来照常展示，重交会换跟踪
+// 目标）；5 分钟硬停轮询，防队列僵死型无限等待。
+let judgeStartedAt = 0
+const JUDGE_UNLOCK_MS = 60_000
+const JUDGE_GIVEUP_MS = 5 * 60_000
 async function doSubmit() {
   if (phase.value !== 'running' || submitting.value || judging.value) return
   if (!code.value.trim()) {
@@ -272,6 +278,7 @@ async function doSubmit() {
       changelog: changelog.value,
     })
     judging.value = true
+    judgeStartedAt = Date.now()
     pollVerdict(id)
   } catch {
     /* 拦截器已 toast */
@@ -289,6 +296,16 @@ function pollVerdict(sid: number) {
       // 会把取消收尾期当终态，v0.29 根修分叉）
       const terminal = !isQueueStatus(s.status)
       if (!terminal) {
+        const waited = Date.now() - judgeStartedAt
+        if (waited > JUDGE_UNLOCK_MS && judging.value) {
+          judging.value = false
+          ElMessage.warning('评测等待异常偏长——已解锁重新递交；原提交出分后仍会展示')
+        }
+        if (waited > JUDGE_GIVEUP_MS) {
+          judging.value = false
+          ElMessage.error('评测等待超时（5 分钟）——请刷新查看结果或联系老师')
+          return
+        }
         pollVerdict(sid)
         return
       }

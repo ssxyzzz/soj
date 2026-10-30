@@ -181,8 +181,32 @@ func (s *SystemSettings) DownloadDailyLimit() int {
 	return *s.DataDownloadDailyLimit
 }
 
+// settingsCacheTTL 系统设置缓存有效期：设置变更的最长可见延迟（Update 走写穿失效，
+// 实际延迟仅剩「另一个进程改库」这种不存在的路径；TTL 只是兜底）。
+const settingsCacheTTL = 5 * time.Second
+
 // GetSystemSettings 读取系统设置，未初始化时返回默认值。
+// v0.37 进程缓存：提交/讨论列表/AI 计费等热路径每请求一次点查，5s 缓存全省；
+// 返回 clone（bson round-trip 深拷贝，指针字段随加随对，调用方改动不伤缓存）。
 func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
+	r.setMu.RLock()
+	cached := r.setCache
+	fresh := cached != nil && time.Since(r.setAt) < settingsCacheTTL
+	r.setMu.RUnlock()
+	if fresh {
+		return cloneSystemSettings(cached), nil
+	}
+	s, err := r.loadSystemSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.setMu.Lock()
+	r.setCache, r.setAt = s, time.Now()
+	r.setMu.Unlock()
+	return cloneSystemSettings(s), nil
+}
+
+func (r *Repo) loadSystemSettings(ctx context.Context) (*SystemSettings, error) {
 	var s SystemSettings
 	err := r.db.Collection("settings").FindOne(ctx, bson.M{"_id": "system"}).Decode(&s)
 	if IsNotFound(err) {
@@ -221,6 +245,20 @@ func (r *Repo) GetSystemSettings(ctx context.Context) (*SystemSettings, error) {
 	}
 	s.normalizeDiscuss()
 	return &s, nil
+}
+
+// cloneSystemSettings 深拷贝（bson round-trip）：结构体指针字段十余个且会随版本增，
+// 手写逐字段拷贝必漏；round-trip 对该结构幂等且微秒级。
+func cloneSystemSettings(s *SystemSettings) *SystemSettings {
+	raw, err := bson.Marshal(s)
+	if err != nil {
+		return s // 理论不可达（纯数据结构），兜底退回原值
+	}
+	var out SystemSettings
+	if err := bson.Unmarshal(raw, &out); err != nil {
+		return s
+	}
+	return &out
 }
 
 // normalizeDiscuss 讨论区设置兜底（存量文档缺字段回默认）。
@@ -557,6 +595,11 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"profileEdit": s.ProfileEditCfg(),
 		}},
 	)
+	if err == nil {
+		r.setMu.Lock()
+		r.setCache = nil // 写穿失效（v0.37 缓存配套）
+		r.setMu.Unlock()
+	}
 	return err
 }
 

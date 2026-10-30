@@ -270,14 +270,20 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 		rawRounds[key] = rs
 		return rs
 	}
+	// 题目摘要一次批量取（v0.37：原逐题 GetProblem 读整文档——题面 statement 双份
+	// 256KB × 题数，20 题作业 MB 级 DB 传输；摘要投影只要 title/difficulty/hidden/tags）
+	summaries, sumErr := h.repo.ProblemSummariesByIDs(ctx, allPids)
+	if sumErr != nil {
+		summaries = map[int64]*repo.ProblemSummary{} // 批量失败按「全部缺项」处理（与原逐题失败跳过同级）
+	}
 	problems := make([]gin.H, 0, len(a.Problems))
 	for _, pid := range a.Problems {
 		lk := lockMap[pid]
 		if lk != nil && lk.Phase != "running" {
 			continue // 赛前/隐藏期对该视角隐藏
 		}
-		p, err := h.repo.GetProblem(ctx, pid)
-		if err != nil || p.Hidden {
+		p := summaries[pid]
+		if p == nil || p.Hidden {
 			continue // 题目已删除或主题库隐藏（备题）
 		}
 		item := gin.H{"id": p.ID, "title": p.Title, "difficulty": p.Difficulty}
@@ -335,7 +341,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 		edit := make([]gin.H, 0, len(a.Problems))
 		for _, pid := range a.Problems {
 			item := gin.H{"id": pid, "title": ""}
-			if p, err := h.repo.GetProblem(ctx, pid); err == nil {
+			if p := summaries[pid]; p != nil {
 				item["title"] = p.Title
 				item["hidden"] = p.Hidden
 			}

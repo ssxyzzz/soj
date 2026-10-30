@@ -8,6 +8,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { problemApi, submissionApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
+import { usePolling } from '@/composables/usePolling'
 import CodeEditor from '@/components/CodeEditor.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -38,7 +39,6 @@ const userStore = useUserStore()
 
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
-let timer: ReturnType<typeof setInterval> | undefined
 
 // 右列弹窗：在线编程 / 榜单 / 答案解析（视频+文字题解）/ 我的提交（提交走副列内嵌编辑器）
 const showWorkbench = ref(false)
@@ -315,29 +315,49 @@ async function loadRecentMine() {
   }
 }
 
-function startPolling(id: number) {
-  stopPolling()
-  timer = setInterval(async () => {
+// 判题结果轮询（v0.37 迁 usePolling）：后台标签页自动暂停（原手写 setInterval 在
+// 切走标签后继续空转）、5 分钟上限——判题队列僵死时不再无限轮询，到限提示后由
+// 学生手动刷新兜底。拉取失败即停（拦截器已提示），终态走完成提示与副列刷新。
+let pollingSid = 0
+const judgePoll = usePolling(
+  async () => {
+    const id = pollingSid
+    if (!id) return false
     try {
       const s = await submissionApi.get(id)
       if (!isQueueStatus(s.status)) {
-        stopPolling()
+        pollingSid = 0
         mineDialogRef.value?.refresh()
         loadRecentMine()
         const st = statusStyle(s.status)
         ElMessage.success(`#${id} 判题完成：${st.label}${s.score != null ? ` · ${s.score} 分` : ''}`)
+        return false
       }
+      return true
     } catch {
-      stopPolling()
+      pollingSid = 0
+      return false
     }
-  }, 1200)
+  },
+  1200,
+  {
+    maxDurationMs: 5 * 60_000,
+    onExpire: () => {
+      const id = pollingSid
+      pollingSid = 0
+      ElMessage.warning(`#${id} 判题等待超时（5 分钟）——请稍后刷新查看结果；持续异常请联系老师`)
+    },
+  },
+)
+
+function startPolling(id: number) {
+  pollingSid = id
+  judgePoll.restart()
 }
 
 function stopPolling() {
-  if (timer) {
-    clearInterval(timer)
-    timer = undefined
-  }
+  pollingSid = 0
+  judgePoll.stop()
 }
 
 // 隐藏开关（仅题面编辑者可见；状态 tag 已删，按钮文案即状态）

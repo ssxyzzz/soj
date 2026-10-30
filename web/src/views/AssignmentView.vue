@@ -5,7 +5,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { assignmentApi, authApi } from '@/api'
+import { assignmentApi } from '@/api'
 import { downloadFile } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
@@ -238,9 +238,7 @@ async function removeAssignment() {
 onMounted(() => {
   tagStore.ensure() // 标签名映射异步就绪，题目表标签列响应式跟随
   if (userStore.token) {
-    authApi.me().then((me) => {
-      myUid.value = me.id
-    }).catch(() => {})
+    myUid.value = userStore.uid // uid 已随登录持久化（v0.37 去掉白拉的 /me）
   }
   load()
 })

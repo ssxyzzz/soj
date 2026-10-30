@@ -127,8 +127,10 @@ function onPageChange(p: number) {
   load()
 }
 
-// 页面打开期间每 5 秒自动刷新一次判题状态（usePolling：后台标签页暂停、卸载自清）
-const poll = usePolling(() => load(), 5000)
+// 页面打开期间每 5 秒自动刷新一次判题状态（usePolling：后台标签页暂停、卸载自清）。
+// v0.37 静默刷新：走 load(true) 不置 loading——原每拍整表 v-loading 遮罩闪一次，
+// 是「列表老在转圈」体感的直接来源；首载与翻页仍带遮罩。
+const poll = usePolling(() => load(true), 5000)
 onMounted(() => {
   load()
   poll.start()

@@ -18,6 +18,8 @@ const pid = Number(route.params.id)
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
 const savingEdit = ref(false)
+// 数据 zip 替换上传进度（v0.37）：-1 = 非上传态；大包上传期给实感不盲转
+const uploadPct = ref(-1)
 const editInitial = ref<{
   title?: string
   type?: 'default' | 'objective' | 'function' | 'interactive'
@@ -116,26 +118,39 @@ async function saveChecker() {
   }
 }
 
-// 函数题（v0.9.1）：driver/template 即时上传替换（不随「确认修改」提交）
+// 函数题（v0.9.1）：driver/template 即时上传替换（不随「确认修改」提交）。
+// v0.37 补在途状态：原上传无任何反馈，慢网下以为没点上反复传
+const uploadingFunc = ref<'driver' | 'template' | null>(null)
 async function uploadFuncFile(kind: 'driver' | 'template', file: UploadUserFile) {
   const f = (file.raw as File) ?? null
-  if (!f) return
-  const fd = new FormData()
-  fd.append('file', f)
-  await problemApi.uploadFunctionFile(pid, kind, fd)
-  ElMessage.success(kind === 'driver' ? '驱动器已更新，之后的评测按新驱动器合编' : '学生模板已更新')
-  await load()
+  if (!f || uploadingFunc.value) return
+  uploadingFunc.value = kind
+  try {
+    const fd = new FormData()
+    fd.append('file', f)
+    await problemApi.uploadFunctionFile(pid, kind, fd)
+    ElMessage.success(kind === 'driver' ? '驱动器已更新，之后的评测按新驱动器合编' : '学生模板已更新')
+    await load()
+  } finally {
+    uploadingFunc.value = null
+  }
 }
 
 // 交互题（v0.9.2）：interactor 即时上传替换（判题编译缓存随保存失效自动重编）
+const uploadingInteractor = ref(false)
 async function uploadInteractor(file: UploadUserFile) {
   const f = (file.raw as File) ?? null
-  if (!f) return
-  const fd = new FormData()
-  fd.append('file', f)
-  await problemApi.uploadInteractor(pid, fd)
-  ElMessage.success('交互器已更新，之后的评测按新交互器判分')
-  await load()
+  if (!f || uploadingInteractor.value) return
+  uploadingInteractor.value = true
+  try {
+    const fd = new FormData()
+    fd.append('file', f)
+    await problemApi.uploadInteractor(pid, fd)
+    ElMessage.success('交互器已更新，之后的评测按新交互器判分')
+    await load()
+  } finally {
+    uploadingInteractor.value = false
+  }
 }
 
 async function removeTemplate() {
@@ -210,12 +225,15 @@ async function onSubmit(p: ProblemFormPayload) {
     if (p.zip) {
       const fd = new FormData()
       fd.append('zip', p.zip)
-      await problemApi.replaceTestdata(pid, fd)
+      await problemApi.replaceTestdata(pid, fd, (pct) => {
+        uploadPct.value = pct
+      })
     }
     ElMessage.success('题目已保存')
     router.push(`/problems/${pid}`)
   } finally {
     savingEdit.value = false
+    uploadPct.value = -1
   }
 }
 
@@ -252,7 +270,7 @@ function onCancel() {
               :show-file-list="false"
               :on-change="(f: UploadUserFile) => uploadFuncFile('driver', f)"
             >
-              <el-button size="small" text type="primary">{{ problem.function?.has_driver ? '替换' : '上传' }} driver.cpp</el-button>
+              <el-button size="small" text type="primary" :loading="uploadingFunc === 'driver'">{{ problem.function?.has_driver ? '替换' : '上传' }} driver.cpp</el-button>
             </el-upload>
           </div>
           <div class="checker-status" style="margin-top: 8px">
@@ -266,7 +284,7 @@ function onCancel() {
               :show-file-list="false"
               :on-change="(f: UploadUserFile) => uploadFuncFile('template', f)"
             >
-              <el-button size="small" text type="primary">{{ problem.function?.has_template ? '替换' : '上传' }} template.cpp</el-button>
+              <el-button size="small" text type="primary" :loading="uploadingFunc === 'template'">{{ problem.function?.has_template ? '替换' : '上传' }} template.cpp</el-button>
             </el-upload>
             <el-button v-if="problem.function?.has_template" size="small" text type="danger" @click="removeTemplate">移除</el-button>
           </div>
@@ -284,7 +302,7 @@ function onCancel() {
               :show-file-list="false"
               :on-change="uploadInteractor"
             >
-              <el-button size="small" text type="primary">{{ problem.interactive?.has_interactor ? '替换' : '上传' }} interactor.cpp</el-button>
+              <el-button size="small" text type="primary" :loading="uploadingInteractor">{{ problem.interactive?.has_interactor ? '替换' : '上传' }} interactor.cpp</el-button>
             </el-upload>
           </div>
         </div>
@@ -344,10 +362,23 @@ function onCancel() {
         </el-card>
       </template>
     </ProblemForm>
+    <!-- 数据 zip 替换上传进度（v0.37）：大包在慢链路上传期给实感，传完随保存结束消失 -->
+    <el-progress
+      v-if="uploadPct >= 0"
+      :percentage="uploadPct"
+      :stroke-width="14"
+      striped
+      striped-flow
+      class="upload-progress"
+    />
   </div>
 </template>
 
 <style scoped>
+.upload-progress {
+  margin-top: 10px;
+}
+
 .obj-tips p {
   font-size: var(--soj-fs-body);
   line-height: 1.7;

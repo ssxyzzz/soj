@@ -65,6 +65,7 @@ const keySaved = ref(false)
 const jobState = computed(() => backupStatus.value?.job ?? null)
 const jobRunning = computed(() => jobState.value?.state === 'running')
 let pollTimer: ReturnType<typeof setInterval> | undefined
+let pollFails = 0
 
 function stopPoll() {
   if (pollTimer) {
@@ -75,8 +76,21 @@ function stopPoll() {
 
 function startPoll() {
   stopPoll()
+  pollFails = 0
   pollTimer = setInterval(async () => {
-    await loadBackup()
+    try {
+      await loadBackup()
+      pollFails = 0
+    } catch {
+      // 状态查询持续失败（v0.37）：拦截器已在 toast，这里只管停表复位按钮——
+      // 原实现轮询永不停，「立即备份」按钮永久转圈；任务本身仍在服务器后台跑
+      if (++pollFails >= 5) {
+        stopPoll()
+        backingUp.value = false
+        ElMessage.error('备份状态查询持续失败——请刷新页面查看；任务仍在服务器后台执行')
+      }
+      return
+    }
     const st = jobState.value?.state
     if (st && st !== 'running') {
       stopPoll()

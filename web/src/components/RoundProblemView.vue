@@ -2,13 +2,14 @@
 // 比赛/考试做题页共享组件（v0.5.4 ① 合并，原 ContestProblemView/ExamProblemView 94→97% 同构）。
 // 差异仅三处：文案（比赛/考试）、详情页路由前缀（/contests|/exams）、加载失败回退
 // （比赛回赛事页、考试回班级列表）——全部由 kind 派生。
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
 import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
+import { usePolling } from '@/composables/usePolling'
 import CodePane from '@/components/CodePane.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import SubStatus from '@/components/SubStatus.vue'
@@ -196,16 +197,39 @@ async function handleSubmit(lang: string, code: string) {
   }
 }
 
-let pollTimer: ReturnType<typeof setInterval> | undefined
-function pollRevealed(sid: number) {
-  if (pollTimer) clearInterval(pollTimer)
-  pollTimer = setInterval(async () => {
-    await loadMine()
-    const s = mine.value.find((x) => x.id === sid)
-    if (s && s.status && !isQueueStatus(s.status)) {
-      if (pollTimer) clearInterval(pollTimer)
+// 赛后已揭榜提交轮询（v0.37 迁 usePolling）：原手写 setInterval 只在「找到该 sid
+// 且终态」才停——loadMine 失败或 sid 出页窗时 1.5s 死循环 + 拦截器每拍 toast 刷屏。
+// 现在：拉取失败或连续 5 拍未找到该 sid 即停（列表里已经看不到它，无需再刷）；
+// 后台标签自动暂停；10 分钟硬上限兜底。
+let revealedSid = 0
+let pollMisses = 0
+const revealedPoll = usePolling(
+  async () => {
+    if (!revealedSid) return false
+    let loaded = false
+    try {
+      await loadMine()
+      loaded = true
+    } catch {
+      /* 拦截器已提示；连续失败走 miss 计数停轮 */
     }
-  }, 1500)
+    const s = loaded ? mine.value.find((x) => x.id === revealedSid) : undefined
+    if (s && s.status && !isQueueStatus(s.status)) return false
+    if (!s) {
+      if (++pollMisses >= 5) return false
+    } else {
+      pollMisses = 0
+    }
+    return true
+  },
+  1500,
+  { maxDurationMs: 10 * 60_000 },
+)
+
+function pollRevealed(sid: number) {
+  revealedSid = sid
+  pollMisses = 0
+  revealedPoll.restart()
 }
 
 onMounted(load)
@@ -217,10 +241,7 @@ watch(
     if (nv && nv !== ov) load()
   },
 )
-
-onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
-})
+// 轮询生命周期由 usePolling 的 onScopeDispose 接管（v0.37 迁移后不再手工清理）
 </script>
 
 <template>

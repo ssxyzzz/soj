@@ -11,9 +11,15 @@ import { problemApi } from '@/api'
 // 本页只保留提交流程：元数据 + 题面 + 测试数据 zip 一次 FormData 交齐。
 const router = useRouter()
 const saving = ref(false)
+// 上传进度（v0.37）：-1 = 非上传态；大 zip 在慢链路上传时按钮旁给实感，不再盲转
+const uploadPct = ref(-1)
+const onUploadProgress = (pct: number) => {
+  uploadPct.value = pct
+}
 
 async function onSubmit(p: ProblemFormPayload) {
   saving.value = true
+  uploadPct.value = -1
   try {
     const fd = new FormData()
     fd.append('title', p.title)
@@ -27,7 +33,7 @@ async function onSubmit(p: ProblemFormPayload) {
       if (p.driver) fd.append('driver', p.driver)
       if (p.template) fd.append('template', p.template)
       if (p.zip) fd.append('zip', p.zip)
-      const r = await problemApi.create(fd)
+      const r = await problemApi.create(fd, onUploadProgress)
       ElMessage.success(`题目 #${r.id} 创建成功`)
       router.push(`/problems/${r.id}`)
       return
@@ -41,7 +47,7 @@ async function onSubmit(p: ProblemFormPayload) {
     fd.append('difficulty', String(p.difficulty))
       if (p.interactor) fd.append('interactor', p.interactor)
       if (p.zip) fd.append('zip', p.zip)
-      const r = await problemApi.create(fd)
+      const r = await problemApi.create(fd, onUploadProgress)
       ElMessage.success(`题目 #${r.id} 创建成功`)
       router.push(`/problems/${r.id}`)
       return
@@ -54,7 +60,7 @@ async function onSubmit(p: ProblemFormPayload) {
     fd.append('meta_tag_ids', JSON.stringify(p.meta_tag_ids ?? []))
     fd.append('difficulty', String(p.difficulty))
       fd.append('questions_json', JSON.stringify(p.questions))
-      const r = await problemApi.create(fd)
+      const r = await problemApi.create(fd, onUploadProgress)
       ElMessage.success(`题目 #${r.id} 创建成功`)
       router.push(`/problems/${r.id}`)
       return
@@ -74,11 +80,12 @@ async function onSubmit(p: ProblemFormPayload) {
     fd.append('difficulty', String(p.difficulty))
     fd.append('zip', p.zip!)
     if (p.checker) fd.append('checker', p.checker)
-    const r = await problemApi.create(fd)
+    const r = await problemApi.create(fd, onUploadProgress)
     ElMessage.success(`题目 #${r.id} 创建成功`)
     router.push(`/problems/${r.id}`)
   } finally {
     saving.value = false
+    uploadPct.value = -1
   }
 }
 </script>
@@ -105,4 +112,19 @@ async function onSubmit(p: ProblemFormPayload) {
       </el-card>
     </template>
   </ProblemForm>
+  <!-- 数据 zip 上传进度（v0.37）：大包在慢链路上传期给实感，传完随保存结束消失 -->
+  <el-progress
+    v-if="uploadPct >= 0"
+    :percentage="uploadPct"
+    :stroke-width="14"
+    striped
+    striped-flow
+    class="upload-progress"
+  />
 </template>
+
+<style scoped>
+.upload-progress {
+  margin-top: 10px;
+}
+</style>

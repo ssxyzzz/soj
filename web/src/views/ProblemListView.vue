@@ -72,22 +72,33 @@ const picking = ref(false)
 function onSelChange(rows: ProblemListItem[]) {
   selected.value = new Set(rows.map((r) => r.id))
 }
+// 导出已下字节数（v0.37）：zip 流式现压无总长，按「已下载 X MB」给实感
+const exportMB = ref(0)
 async function exportSelected() {
   if (!selected.value.size || exporting.value) return
   exporting.value = true
+  exportMB.value = 0
   try {
     const ids = [...selected.value].sort((a, b) => a - b).join(',')
-    await downloadFile(`/problems/export?ids=${ids}`, `soj-packages-${selected.value.size}.zip`)
+    await downloadFile(
+      `/problems/export?ids=${ids}`,
+      `soj-packages-${selected.value.size}.zip`,
+      (mb) => {
+        exportMB.value = mb
+      },
+    )
     selected.value = new Set()
     picking.value = false
   } finally {
     exporting.value = false
+    exportMB.value = 0
   }
 }
 
 async function load() {
   loading.value = true
   try {
+    const my = ++loadSeq
     const r = await problemApi.list(
       page.value,
       pageSize,
@@ -96,11 +107,23 @@ async function load() {
       diffSel.value.length ? diffSel.value : undefined,
       metaSel.value.length ? metaSel.value : undefined,
     )
+    if (my !== loadSeq) return // 已有更新的筛选请求在途，丢弃旧响应（v0.37 竞态保护）
     list.value = r.list
     total.value = r.total
   } finally {
     loading.value = false
   }
+}
+let loadSeq = 0
+// 筛选连点合并（v0.37）：快速勾一组标签/难度 = 每次即发请求；300ms 去抖只发末次，
+// 高延迟链路（~100ms/请求）下省一串无效往返
+let filterTimer: ReturnType<typeof setTimeout> | undefined
+function loadDebounced() {
+  if (filterTimer) clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => {
+    filterTimer = undefined
+    load()
+  }, 300)
 }
 
 function search() {
@@ -120,13 +143,13 @@ function resetSearch() {
 function onTagChange(ids: number[]) {
   tagSel.value = ids
   page.value = 1
-  load()
+  loadDebounced()
 }
 
 function onDiffChange(ids: number[]) {
   diffSel.value = ids
   page.value = 1
-  load()
+  loadDebounced()
 }
 
 // 难度胶囊面板（2026-10-25：el-select 换十档胶囊一字排开）单点切换
@@ -143,7 +166,7 @@ function toggleTagCol() {
 function onMetaChange(ids: number[]) {
   metaSel.value = ids
   page.value = 1
-  load()
+  loadDebounced()
 }
 
 // 标签（标签树）一键清空（只清这一路，不动关键词/知识点/难度）
@@ -414,7 +437,7 @@ onMounted(() => {
                 :disabled="!selected.size"
                 @click="exportSelected"
               >
-                导出已选（{{ selected.size }}）
+                {{ exporting && exportMB > 0 ? `打包中·已 ${exportMB.toFixed(1)}MB` : `导出已选（${selected.size}）` }}
               </el-button>
               <el-button
                 style="width: 100%"

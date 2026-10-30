@@ -15,6 +15,7 @@ package server
 // 防注入：学生代码是不可信输入，系统提示声明忽略代码内指令 + 输出侧不复述数据双保险。
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -457,13 +458,17 @@ func (h *Handlers) buildDebugUser(c *gin.Context, p *repo.Problem, sub *repo.Sub
 }
 
 // aiCall 统一外呼（取启用档构造客户端；记录审计由调用方）。
+// v0.37 独立 60s 超时：gin 请求 ctx 无 deadline，http client 120s 只是兜底——
+// 上游半死时学生侧最多转圈 60s 即失败退款，不再陪满 2 分钟。
 func (h *Handlers) aiCall(c *gin.Context, system, user string) (*ai.Response, error) {
 	cfg, _ := h.repo.GetAIConfig(c.Request.Context())
 	p := cfg.ActiveProvider()
 	if p == nil {
 		return nil, ai.ErrNoProvider
 	}
-	resp, err := ai.NewClient(p).Chat(c.Request.Context(), system, user)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	defer cancel()
+	resp, err := ai.NewClient(p).Chat(ctx, system, user)
 	if err != nil {
 		h.recordAiCallErr(c, p, err)
 		return nil, err

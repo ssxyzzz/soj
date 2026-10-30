@@ -21,11 +21,15 @@ const (
 
 // rankCache 排行榜进程内缓存：全榜（有已发布 AC 的用户）一次聚合，按页切片下发。
 // 几百人规模聚合本身毫秒级，缓存只为避免榜单页被频繁刷新时重复打库。进程重启缓存自动重建。
+// v0.37 改 stale-while-revalidate（照抄 boardsCache 范式）：原实现持锁做全库聚合，
+// 30s TTL 过期后第一个请求刷新期间所有 /rank 在 mutex 上排队——榜单页偶发串行卡的
+// 根源；现在过期先回旧榜、后台单飞刷新，冷启动（无旧榜）才同步付一次。
 type rankCache struct {
-	mu    sync.Mutex
-	repo  *repo.Repo
-	at    time.Time
-	items []gin.H
+	mu      sync.Mutex
+	repo    *repo.Repo
+	at      time.Time
+	items   []gin.H
+	loading bool // 刷新单飞：过期后并发请求只触发一个后台刷新
 }
 
 func newRankCache(r *repo.Repo) *rankCache { return &rankCache{repo: r} }
@@ -33,13 +37,47 @@ func newRankCache(r *repo.Repo) *rankCache { return &rankCache{repo: r} }
 // get 全榜条目（rank 为全榜绝对名次，切片后无需重算）；出错返回 nil 由调用方降级
 func (rc *rankCache) get(ctx context.Context) []gin.H {
 	rc.mu.Lock()
-	defer rc.mu.Unlock()
 	if rc.items != nil && time.Since(rc.at) < rankTTL {
-		return rc.items
+		items := rc.items
+		rc.mu.Unlock()
+		return items
 	}
+	stale := rc.items
+	loading := rc.loading
+	rc.mu.Unlock()
+	if stale != nil {
+		if !loading {
+			rc.mu.Lock()
+			rc.loading = true
+			rc.mu.Unlock()
+			// 后台刷新用独立 ctx + 超时：请求 ctx 随响应结束而取消，不该带走刷新
+			go func() {
+				defer func() {
+					rc.mu.Lock()
+					rc.loading = false
+					rc.mu.Unlock()
+				}()
+				if _, err := rc.refresh(context.Background()); err != nil {
+					slog.Warn("排行榜后台刷新失败，沿用旧榜", "component", "rank", "error", err)
+				}
+			}()
+		}
+		return stale
+	}
+	items, err := rc.refresh(ctx)
+	if err != nil {
+		return nil // 冷启动聚合失败：无旧榜可回，由调用方决定降级行为
+	}
+	return items
+}
+
+// refresh 聚合全榜并落缓存（出错保留旧缓存不动）。
+func (rc *rankCache) refresh(ctx context.Context) ([]gin.H, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	rows, err := rc.repo.RankBoard(ctx, rankBoardCap)
 	if err != nil {
-		return nil // 出错时保留旧缓存不动，由调用方决定降级行为
+		return nil, err
 	}
 	// 等级（v0.11）：一次聚合批算全榜各难度 AC 数再定级；失败降级为不带 level 字段
 	levels := map[int64]int{}
@@ -71,8 +109,10 @@ func (rc *rankCache) get(ctx context.Context) []gin.H {
 		}
 		items = append(items, item)
 	}
+	rc.mu.Lock()
 	rc.items, rc.at = items, time.Now()
-	return items
+	rc.mu.Unlock()
+	return items, nil
 }
 
 // Rank 解题排行榜（分页榜单：每页 rankPageSize 名 + 观察者位次，榜单 30s 缓存）。

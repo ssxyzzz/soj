@@ -77,9 +77,14 @@ async function waitForRender() {
     Array.from(document.querySelectorAll<HTMLImageElement>('.paper-sheet img')).map((img) =>
       img.complete
         ? Promise.resolve()
-        : new Promise<void>((resolve) => {
-            img.onload = img.onerror = () => resolve()
-          }),
+        : // v0.37 加超时：外域图挂起（连接不失败也不完成）时 onload/onerror 都不触发，
+          // 打印按钮会永远没反应——单图最多等 8s 后放行（打印出裂图好过没反应）
+          Promise.race([
+            new Promise<void>((resolve) => {
+              img.onload = img.onerror = () => resolve()
+            }),
+            new Promise<void>((resolve) => setTimeout(resolve, 8000)),
+          ]),
     ),
   )
   // Vditor 的 KaTeX 渲染也是异步的：等 .katex 数量稳定，避免打印时公式仍是 TeX 源码

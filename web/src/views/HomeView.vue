@@ -37,38 +37,54 @@ function submitSearch() {
 }
 
 onMounted(async () => {
-  // 游客可见面收紧（v0.7.3）：班级接口需登录，游客跳过加载（班级卡片区自然隐藏）
+  // v0.37 四块并行（原串行 await 四连：公网链路每请求 ~100ms 双跳，尾块要等
+  // ~400ms——allSettled 后整页数据一次到位，各块失败仍互不影响）
+  const tasks: Promise<void>[] = [
+    // 站点统计 + 今日一题（后端 60s 缓存；失败整块隐藏，不影响页面其余部分）
+    siteApi
+      .stats()
+      .then((s) => {
+        stats.value = s
+      })
+      .catch(() => {
+        stats.value = null
+      }),
+    noticeApi
+      .get()
+      .then((n) => {
+        notice.value = n.content.trim()
+      })
+      .catch(() => {
+        // 公告加载失败不影响首页其他内容
+      }),
+  ]
+  // 游客可见面收紧（v0.7.3）：班级/比赛接口需登录，游客跳过加载（区块自然隐藏）；
+  // 比赛列表 401 会把人从公开首页弹去登录页（2026-10-25 修复⑬），同样只对登录者拉
   if (userStore.token) {
-    try {
-      const list = await classApi.list()
-      classes.value = list.slice(0, 3)
-    } catch {
-      // 班级加载失败不影响首页其他内容
-    }
+    tasks.push(
+      classApi
+        .list()
+        .then((list) => {
+          classes.value = list.slice(0, 3)
+        })
+        .catch(() => {
+          // 班级加载失败不影响首页其他内容
+        }),
+    )
+    tasks.push(
+      contestApi
+        .list()
+        .then((all) => {
+          // 最近赛事：进行中/待开赛优先，不足补已结束，最多 3 张
+          const pri = (s: ContestListItem['status']) => (s === 'running' ? 0 : s === 'scheduled' ? 1 : 2)
+          contests.value = [...all].sort((a, b) => pri(a.status) - pri(b.status)).slice(0, 3)
+        })
+        .catch(() => {
+          contests.value = []
+        }),
+    )
   }
-  try {
-    notice.value = (await noticeApi.get()).content.trim()
-  } catch {
-    // 公告加载失败不影响首页其他内容
-  }
-  // 站点统计 + 今日一题（后端 60s 缓存；失败整块隐藏，不影响页面其余部分）
-  try {
-    stats.value = await siteApi.stats()
-  } catch {
-    stats.value = null
-  }
-  // 最近赛事：进行中/待开赛优先，不足补已结束，最多 3 张。
-  // 比赛列表接口 AuthRequired（v0.7.3 游客可见面收紧）——游客跳过加载，
-  // 否则 401 拦截器会把人从公开首页弹去登录页（2026-10-25 修复⑬）
-  if (userStore.token) {
-    try {
-      const all = await contestApi.list()
-      const pri = (s: ContestListItem['status']) => (s === 'running' ? 0 : s === 'scheduled' ? 1 : 2)
-      contests.value = [...all].sort((a, b) => pri(a.status) - pri(b.status)).slice(0, 3)
-    } catch {
-      contests.value = []
-    }
-  }
+  await Promise.allSettled(tasks)
 })
 </script>
 

@@ -238,9 +238,17 @@ export const problemApi = {
     }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   paper: (id: number) => get<PaperData>(`/problems/${id}/paper`),
-  create: (form: FormData) =>
+  create: (form: FormData, onProgress?: (pct: number) => void) =>
     client
-      .post<ApiResponse<{ id: number }>>('/problems', form, { timeout: 0 })
+      .post<ApiResponse<{ id: number }>>('/problems', form, {
+        timeout: 0,
+        // v0.37：测试数据 zip 上传进度（巨型包上传期不再盲等转圈，同 importApi.upload）
+        onUploadProgress: onProgress
+          ? (e) => {
+              if (e.total) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)))
+            }
+          : undefined,
+      })
       .then((r) => r.data.data),
   updateMeta: (id: number, body: Record<string, unknown>) =>
     patch<{ updated: number }>(`/problems/${id}/meta`, body), // 客观题编辑带 question_json（v0.9）
@@ -271,9 +279,18 @@ export const problemApi = {
     patch<{ pinned: boolean }>(`/problems/${id}/solutions/${sid}/pinned`, { pinned }),
   setHidden: (id: number, hidden: boolean) =>
     patch<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
-  // 整包替换测试数据（编辑题目）：旧测试点全部删除，按新 zip 重建
-  replaceTestdata: (id: number, form: FormData) =>
-    client.post(`/problems/${id}/testdata`, form, { timeout: 0 }).then((r) => r.data.data),
+  // 整包替换测试数据（编辑题目）：旧测试点全部删除，按新 zip 重建（v0.37 附上传进度）
+  replaceTestdata: (id: number, form: FormData, onProgress?: (pct: number) => void) =>
+    client
+      .post(`/problems/${id}/testdata`, form, {
+        timeout: 0,
+        onUploadProgress: onProgress
+          ? (e) => {
+              if (e.total) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)))
+            }
+          : undefined,
+      })
+      .then((r) => r.data.data),
   submissions: (id: number, page: number, pageSize: number, sort?: string, lang?: string, uid?: number) =>
     get<SubmissionListResult>(`/problems/${id}/submissions`, {
       page,
@@ -467,10 +484,13 @@ export const adminApi = {
       )
       .then((r) => r.data.data),
   importUsersCommit: (rows: UserImportRow[]) =>
-    post<{ total: number; success: number; failed: { row: number; username: string; reason: string }[] }>(
-      '/admin/users/import-commit',
-      { rows },
-    ),
+    client
+      .post<ApiResponse<{ total: number; success: number; failed: { row: number; username: string; reason: string }[] }>>(
+        '/admin/users/import-commit',
+        { rows },
+        { timeout: 120_000 }, // 大名单逐行建号可能超默认 20s（v0.37）
+      )
+      .then((r) => r.data.data),
   // 年级晋级（v0.34）：状态查询（晋级全自动，无手动触发）
   gradePromotionInfo: () => get<GradePromotionInfo>('/admin/grade-promotion'),
   updateUser: (
@@ -558,8 +578,16 @@ export const adminApi = {
   duplicateProblems: () => get<{ groups: DuplicateGroup[]; total: number }>('/admin/problems/duplicates'),
   // 种子题管理（root）：对账 / 清除 / 重新部署种子目录题包
   seedStatus: () => get<SeedStatus>('/admin/seed'),
-  seedDeploy: () => post<{ outcomes: SeedOutcome[] }>('/admin/seed/deploy'),
-  seedClear: () => post<{ stats: SeedClearStats }>('/admin/seed/clear'),
+  // 种子题部署/清除（v0.37）：万题级部署/级联清除远超默认 20s——前端先断会误导重试
+  //（后端继续执行造成重复操作），timeout 提到 5 分钟
+  seedDeploy: () =>
+    client
+      .post<ApiResponse<{ outcomes: SeedOutcome[] }>>('/admin/seed/deploy', {}, { timeout: 300_000 })
+      .then((r) => r.data.data),
+  seedClear: () =>
+    client
+      .post<ApiResponse<{ stats: SeedClearStats }>>('/admin/seed/clear', {}, { timeout: 300_000 })
+      .then((r) => r.data.data),
   // 角色管理（后端硬编码 root，不可下放）
   listRoles: () =>
     get<{ list: RoleInfo[]; catalog: PermInfo[]; groups: PermGroupInfo[] }>('/admin/roles'),

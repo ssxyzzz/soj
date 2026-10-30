@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -50,14 +51,26 @@ type Repo struct {
 	jadeAwards     *mongo.Collection // 玉首 AC 发放记录（v0.33，{uid,pid} 唯一防重发）
 	jadeLedger     *mongo.Collection // 玉流水（v0.33）
 	jadeBalances   *mongo.Collection // 玉余额物化（v0.33，条件原子扣减防双花）
+
+	// 系统设置进程缓存（v0.37）：热路径单文档点查 5s 缓存，UpdateSystemSettings
+	// 写穿失效。缓存存归一化后的值，外发 clone（调用方拿到独立副本，防误改缓存）。
+	setMu    sync.RWMutex
+	setCache *SystemSettings
+	setAt    time.Time
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
+// v0.37 显式超时（原全默认：选服 30s/连接 30s，Mongo 重启或抖动时无 deadline 的
+// 请求会挂几十秒——「偶发全站转圈」的合理解释）：连不上 5s 快速失败。连接池与
+// 操作级超时保持默认——不设全局 op timeout，防误伤长聚合/启动建索引。
 func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 	var cli *mongo.Client
 	var err error
 	for i := 0; i < 30; i++ {
-		cli, err = mongo.Connect(options.Client().ApplyURI(uri))
+		cli, err = mongo.Connect(options.Client().
+			ApplyURI(uri).
+			SetConnectTimeout(5*time.Second).
+			SetServerSelectionTimeout(5*time.Second))
 		if err == nil {
 			pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 			err = cli.Ping(pingCtx, nil)

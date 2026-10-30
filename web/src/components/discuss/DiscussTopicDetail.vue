@@ -66,17 +66,31 @@ async function load() {
   }
 }
 
+// 点赞 in-flight 守卫（v0.37）：主楼用 -1、回复用楼层 id；慢网连点 = 连发多个
+// 赞/取消请求，最终状态随机的根源
+const likeBusy = new Set<number>()
 async function toggleLikeTopic() {
-  if (!topic.value) return
-  const r = await discussApi.likeTopic(topic.value.id)
-  topic.value.liked = r.liked
-  topic.value.like_count = r.like_count
+  if (!topic.value || likeBusy.has(-1)) return
+  likeBusy.add(-1)
+  try {
+    const r = await discussApi.likeTopic(topic.value.id)
+    topic.value.liked = r.liked
+    topic.value.like_count = r.like_count
+  } finally {
+    likeBusy.delete(-1)
+  }
 }
 
 async function toggleLikeReply(rep: DiscussReply) {
-  const r = await discussApi.likeReply(rep.tid, rep.id)
-  rep.liked = r.liked
-  rep.like_count = r.like_count
+  if (likeBusy.has(rep.id)) return
+  likeBusy.add(rep.id)
+  try {
+    const r = await discussApi.likeReply(rep.tid, rep.id)
+    rep.liked = r.liked
+    rep.like_count = r.like_count
+  } finally {
+    likeBusy.delete(rep.id)
+  }
 }
 
 function startReply(rid = 0) {
@@ -129,9 +143,13 @@ async function accept(rep: DiscussReply) {
 
 // 悬赏打赏（v0.33-②）：发帖人专属；输入金额从托管池划给回复作者
 const canTip = computed(() => !!topic.value?.bounty_remaining && topic.value.uid === userStore.uid)
+// 打赏 in-flight 守卫（v0.37）：扣玉操作，慢网双击 = 双扣；后端余额条件扣减只是防
+// 透支，拦不住「两次都成功」的合法双扣
+let tipping = false
 async function tipReply(rep: DiscussReply) {
-  if (!topic.value) return
+  if (!topic.value || tipping) return
   const remain = topic.value.bounty_remaining ?? 0
+  tipping = true
   try {
     const { value } = await ElMessageBox.prompt(
       `打赏多少玉给这条回复？（悬赏剩余 ${remain} 玉，可分多次打光）`,
@@ -155,6 +173,8 @@ async function tipReply(rep: DiscussReply) {
     emit('changed')
   } catch {
     /* 取消或拦截器已提示 */
+  } finally {
+    tipping = false
   }
 }
 
