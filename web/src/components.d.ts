@@ -76,6 +76,7 @@ declare module 'vue' {
     ElTag: typeof import('element-plus/es')['ElTag']
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     ElUpload: typeof import('element-plus/es')['ElUpload']
+    FeastOverlay: typeof import('./components/game/FeastOverlay.vue')['default']
     FitTags: typeof import('./components/problem/FitTags.vue')['default']
     HomeAmbient: typeof import('./components/HomeAmbient.vue')['default']
     LevelPanel: typeof import('./components/admin/LevelPanel.vue')['default']

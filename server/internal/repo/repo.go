@@ -52,6 +52,8 @@ type Repo struct {
 	jadeLedger     *mongo.Collection // 玉流水（v0.33）
 	jadeBalances   *mongo.Collection // 玉余额物化（v0.33，条件原子扣减防双花）
 	jadeBlessings  *mongo.Collection // 升维祝福审计（v0.40，{uid,level} 唯一幂等）
+	achievements   *mongo.Collection // 成就解锁记录（v0.41，{uid,code} 唯一幂等）
+	dailyProblems  *mongo.Collection // 每日一题（v0.41，_id = 日期串）
 
 	// 系统设置进程缓存（v0.37）：热路径单文档点查 5s 缓存，UpdateSystemSettings
 	// 写穿失效。缓存存归一化后的值，外发 clone（调用方拿到独立副本，防误改缓存）。
@@ -126,6 +128,8 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		jadeLedger:    db.Collection("jadeLedger"),
 		jadeBalances:  db.Collection("jadeBalances"),
 		jadeBlessings: db.Collection("jadeBlessings"),
+		achievements:  db.Collection("achievements"),
+		dailyProblems: db.Collection("dailyProblems"),
 		acRates:       map[int64]acRateEntry{},
 	}, nil
 }

@@ -54,6 +54,11 @@ func (r *Repo) EnsureJadeIndexes(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
+	if _, err := r.achievements.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "code", Value: 1}}, Options: options.Index().SetUnique(true)},
+	}); err != nil {
+		return err
+	}
 	if _, err := r.jadeBlessings.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "level", Value: 1}}, Options: options.Index().SetUnique(true)},
 	}); err != nil {
@@ -174,10 +179,12 @@ func (r *Repo) JadeLedgerPage(ctx context.Context, uid int64, page, pageSize int
 
 // JadeAward 首 AC 发放记录（base/drop 按 AC 时点固化；测试与后续调试面读出）。
 type JadeAward struct {
-	Base  int64     `bson:"base"`
-	Drop  int64     `bson:"drop"`
-	Total int64     `bson:"total"`
-	At    time.Time `bson:"at"`
+	Base    int64     `bson:"base"`
+	Drop    int64     `bson:"drop"`
+	Total   int64     `bson:"total"`
+	Daily   bool      `bson:"daily,omitempty"`   // 每日一题 ×2（v0.41）
+	Revenge bool      `bson:"revenge,omitempty"` // 一血偿还 ×1.5（v0.41）
+	At      time.Time `bson:"at"`
 }
 
 // GetJadeAward 某用户某题的首 AC 发放记录（无则 nil, nil）。
@@ -484,6 +491,16 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool
 		drop *= 2
 		reasonExtra = "，升维祝福 ×2"
 	}
+	// 每日一题（v0.41）：当日题掉落 ×2；复仇（v0.41）：错题重战掉落 ×1.5（向上取整）
+	daily, revenge := r.IsTodayDaily(ctx, pid), r.isRevenge(ctx, uid, pid)
+	if daily {
+		drop *= 2
+		reasonExtra += "，每日一题 ×2"
+	}
+	if revenge && drop > 0 {
+		drop = (drop*3 + 1) / 2
+		reasonExtra += "，一血偿还 ×1.5"
+	}
 	total = int64(base + drop)
 	id, err := r.nextSeq(ctx, "jadeAward")
 	if err != nil {
@@ -491,7 +508,8 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool
 	}
 	_, err = r.jadeAwards.InsertOne(ctx, bson.M{
 		"_id": id, "uid": uid, "pid": pid,
-		"base": base, "drop": drop, "total": total, "at": time.Now(),
+		"base": base, "drop": drop, "total": total,
+		"daily": daily, "revenge": revenge, "at": time.Now(),
 	})
 	if mongo.IsDuplicateKeyError(err) {
 		return false, 0, nil

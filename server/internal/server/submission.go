@@ -273,6 +273,30 @@ func (h *Handlers) GetSubmission(c *gin.Context) {
 	if masked {
 		resp["masked"] = true
 	}
+	// 游戏感批（v0.41）：本人 + 已终态 → 附开箱数据（发玉/连击/坚持/新成就），
+	// 前端判题轮询命中此端点，AC 瞬间触发开箱动画与飞玉。
+	terminal := s.Status != "" && s.Status != "Judging" && s.Status != "Pending" &&
+		s.Status != "Compiling"
+	if logged && uid == s.UID && terminal {
+		game := gin.H{}
+		if s.JadeTotal > 0 {
+			game["jade_total"] = s.JadeTotal
+			game["jade_daily"] = s.JadeDaily
+			game["jade_revenge"] = s.JadeRevenge
+		}
+		if st, err := h.repo.GetGameStats(c.Request.Context(), uid); err == nil {
+			game["combo_cur"] = st.ComboCur
+			game["combo_best"] = st.ComboBest
+			game["streak_days"] = st.StreakDays
+			game["streak_best"] = st.StreakBest
+		}
+		if codes, err := h.repo.AchievementsForSubmit(c.Request.Context(), uid, id); err == nil && len(codes) > 0 {
+			game["achievements"] = codes
+		}
+		if len(game) > 0 {
+			resp["game"] = game
+		}
+	}
 	ok(c, resp)
 }
 

@@ -12,7 +12,7 @@ import SubStatus from '@/components/SubStatus.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import TierBadge from '@/components/TierBadge.vue'
 import PageShell from '@/components/PageShell.vue'
-import { userApi } from '@/api'
+import { gameApi, userApi } from '@/api'
 import { useLevelsStore } from '@/stores/levels'
 import type { UserPage, UserPageFirstAC } from '@/types'
 import { fmtDate, fmtRel } from '@/utils/format'
@@ -38,7 +38,34 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+// 游戏感批（v0.41）：本人主页加载成就墙 / 知识星图 / 错题本（公开主页不显示）
+const isOwnProfile = computed(() => Number(route.params.id) === (Number(localStorage.getItem('soj_uid')) || -1))
+const achs = ref<{ code: string; name: string; desc: string; tier: string; icon: string; unlocked_at?: string }[]>([])
+const achUnlocked = ref(0)
+const stars = ref<{ tag_id: number; name: string; solved: number; lit: boolean }[]>([])
+const wrongbook = ref<{ pid: number; title: string; difficulty: number; best_score: number }[]>([])
+
+async function loadGame() {
+  if (!isOwnProfile.value) return
+  try {
+    const [a, sm, wb] = await Promise.all([
+      gameApi.achievements(),
+      gameApi.starmap(),
+      gameApi.wrongbook(1),
+    ])
+    achs.value = a.list
+    achUnlocked.value = a.unlocked
+    stars.value = sm.list
+    wrongbook.value = wb.list
+  } catch {
+    /* 静默：游戏区块不阻塞主页 */
+  }
+}
+
+onMounted(() => {
+  load()
+  void loadGame()
+})
 watch(() => route.params.id, load)
 
 const avatarChar = computed(() => (page.value?.nickname || page.value?.username || '?').slice(0, 1).toUpperCase())
@@ -247,6 +274,57 @@ function openDetail(id: number) {
                 <el-tag v-if="e.hidden" size="small" type="danger" effect="plain" class="hid">隐藏</el-tag>
                 <span class="when mono">{{ fmtDate(e.first_ac_at) }}</span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 成就墙（v0.41，仅本人） -->
+        <div v-if="isOwnProfile && achs.length" class="card ach-card">
+          <div class="done-head">
+            <h3>成就墙</h3>
+            <span class="dim">{{ achUnlocked }} / {{ achs.length }}</span>
+          </div>
+          <div class="ach-grid">
+            <div
+              v-for="a in achs"
+              :key="a.code"
+              class="ach"
+              :class="[a.tier, { on: a.unlocked_at }]"
+              :title="a.unlocked_at ? a.desc : a.desc + '（未解锁）'"
+            >
+              <span class="ach-icon">{{ a.icon }}</span>
+              <span class="ach-name">{{ a.name }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 知识星图（v0.41，仅本人）：知识点 AC≥3 点亮 -->
+        <div v-if="isOwnProfile && stars.length" class="card star-card">
+          <div class="done-head">
+            <h3>知识星图</h3>
+            <span class="dim">已点亮 {{ stars.filter((x) => x.lit).length }} / {{ stars.length }} 站（AC ≥ 3 题点亮）</span>
+          </div>
+          <div class="star-grid">
+            <div v-for="s in stars" :key="s.tag_id" class="star" :class="{ lit: s.lit }">
+              <span class="star-dot">✦</span>
+              <span class="star-name">{{ s.name || '未知' }}</span>
+              <span class="star-n mono">{{ s.solved }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 错题本（v0.41，仅本人）：复仇入口 -->
+        <div v-if="isOwnProfile && wrongbook.length" class="card wb-card">
+          <div class="done-head">
+            <h3>错题本</h3>
+            <span class="dim">复仇成功掉落 ×1.5</span>
+          </div>
+          <div class="glist">
+            <div v-for="w in wrongbook" :key="w.pid" class="prow">
+              <router-link class="plink" :to="`/problems/${w.pid}`">
+                <span class="mono pid">P{{ w.pid }}</span> {{ w.title }}
+              </router-link>
+              <span class="when mono">上次 {{ w.best_score }} 分</span>
             </div>
           </div>
         </div>
@@ -653,4 +731,66 @@ function openDetail(id: number) {
     justify-content: space-between;
   }
 }
+</style>
+
+<style scoped>
+/* 成就墙（v0.41） */
+.ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 8px;
+}
+
+.ach {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--el-border-color);
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
+.ach.on {
+  opacity: 1;
+  filter: none;
+  border-style: solid;
+}
+
+.ach.on.bronze { border-color: #d0a068; }
+.ach.on.silver { border-color: #9aa7b5; }
+.ach.on.gold { border-color: #e2a93b; background: #fffbeb; }
+.ach.on.color { border-color: #7c3aed; background: #f5f3ff; }
+
+.ach-icon { font-size: 18px; }
+.ach-name { font-size: 13px; font-weight: 600; }
+
+/* 知识星图 */
+.star-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.star {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--el-border-color);
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.star.lit {
+  border: 1px solid var(--soj-blue);
+  color: var(--soj-blue);
+  background: var(--soj-blue-soft);
+  font-weight: 600;
+}
+
+.star-dot { font-size: 14px; }
+.star-n { font-size: 12px; }
 </style>

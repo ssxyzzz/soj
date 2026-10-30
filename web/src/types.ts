@@ -281,6 +281,7 @@ export interface Submission {
   exam_id?: number
   exam_title?: string
   detail?: CaseResult[]
+  game?: SubmissionGame // 开箱数据（v0.41，本人终态可见）
 }
 
 // 单个测试点结果（与后端 CaseResult 对应）
@@ -712,6 +713,7 @@ export interface UserProfile {
   avatar_url?: string // QQ 头像直链（绑定开关开 + 已填 QQ 时下发；顶栏/主页共用）
   prefs: UserPrefs
   level?: LevelBadgeInfo // 学生等级（v0.11；顶栏徽章与补全门槛提示用）
+  game?: { combo_cur: number; combo_best: number; streak_days: number; streak_best: number } // v0.41
 }
 
 // ---------- 题解（v0.5.2-1） ----------
@@ -1088,6 +1090,27 @@ export interface UserImportRow {
   username: string
   password: string
   problems?: string[]
+}
+
+/** 每日复仇/错题本行（v0.41）。 */
+export interface RevengeRow {
+  pid: number
+  title: string
+  difficulty: number
+  best_score: number
+  last_at: string
+}
+
+/** 提交结果开箱数据（v0.41，本人 AC/终态可见）。 */
+export interface SubmissionGame {
+  jade_total?: number
+  jade_daily?: boolean
+  jade_revenge?: boolean
+  combo_cur?: number
+  combo_best?: number
+  streak_days?: number
+  streak_best?: number
+  achievements?: string[]
 }
 
 /** 玉余额（v0.33-①）：/me/jade，currency 为后台可配货币名（默认「玉」）。 */

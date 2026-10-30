@@ -28,6 +28,8 @@ const DiscussDialog = defineAsyncComponent(() => import('@/components/discuss/Di
 const SolutionsDialog = defineAsyncComponent(() => import('@/components/problem/SolutionsDialog.vue'))
 import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
+import { useGameFeastStore } from '@/stores/gameFeast'
+import { pickTaunt } from '@/utils/gameText'
 import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
 import { fmtRel, fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
 import type { ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/types'
@@ -36,6 +38,7 @@ const route = useRoute()
 const router = useRouter()
 const site = useSiteStore()
 const userStore = useUserStore()
+const feast = useGameFeastStore()
 
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
@@ -336,6 +339,12 @@ const judgePoll = usePolling(
         mineDialogRef.value?.refresh()
         loadRecentMine()
         const st = statusStyle(s.status)
+        // 游戏感批（v0.41）：AC 开箱（首 AC 带发玉数据）与 WA 吐槽
+        if (s.status === 'Accepted' && s.game && (s.game.jade_total || s.game.combo_cur)) {
+          feast.feast(s.game, s.score ?? 0, problem.value?.title ?? '')
+        } else if (s.status === 'Wrong Answer') {
+          ElMessage({ message: pickTaunt(), type: 'warning', duration: 2600, grouping: true })
+        }
         ElMessage.success(`#${id} 判题完成：${st.label}${s.score != null ? ` · ${s.score} 分` : ''}`)
         return false
       }

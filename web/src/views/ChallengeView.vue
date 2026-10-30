@@ -8,6 +8,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { playPerfect } from '@/utils/gameSounds'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
@@ -316,6 +317,7 @@ function pollVerdict(sid: number) {
         phase.value = 'success'
         stopSnapshots()
         clearDraft()
+        void loadGhostAndRating()
       } else {
         ElMessage.error(`评测结果：${s.status}，倒计时继续，加油！`)
       }
@@ -331,6 +333,52 @@ const usedText = computed(() => {
   const m = Math.floor(total / 60)
   const s = Math.max(0, total % 60)
   return `${m}:${s < 10 ? '0' : ''}${s}`
+})
+
+// ---- 游戏感批（v0.41）：幽灵竞速 + S/A/B/C 评级 + 超越播报 ----
+const ghost = ref<{ who: string; progress: number } | null>(null) // 全场最快纪录的推进进度 0–1
+const rating = ref('')
+const surpassed = ref('') // 超越播报文案（结算后 toast）
+const ghostBestMs = ref(0)
+
+async function loadGhostAndRating() {
+  // 幽灵：本题挑战榜最快纪录（登录可见）；未上榜 = 无幽灵
+  try {
+    const b = await problemApi.boards(pid)
+    const rows = b.challenge ?? []
+    if (rows.length) {
+      ghostBestMs.value = rows[0].duration_ms ?? 0
+      ghost.value = { who: rows[0].nickname, progress: 0 }
+    }
+  } catch {
+    /* 静默 */
+  }
+  const usedMs = challengeSec.value * 1000 - remainingMs.value
+  // 评级：按用时占挑战时长的比例（≤20% S / ≤40% A / ≤65% B / 其余 C）
+  const ratio = usedMs / (challengeSec.value * 1000)
+  rating.value = ratio <= 0.2 ? 'S' : ratio <= 0.4 ? 'A' : ratio <= 0.65 ? 'B' : 'C'
+  // 超越播报：结算拉榜，算本次名次与被超越者（简单口径：榜单上用时比我长的人数）
+  try {
+    const b = await problemApi.boards(pid)
+    const rows = b.challenge ?? []
+    const mine = rows.findIndex((x: { uid: number }) => x.uid === (Number(localStorage.getItem('soj_uid')) || -1))
+    if (mine >= 0 && mine < rows.length - 1) {
+      surpassed.value = `⚡ 超越了 ${rows.length - 1 - mine} 人 · 当前挑战榜 #${mine + 1}`
+    } else if (mine >= 0) {
+      surpassed.value = '⚡ 登顶挑战榜！'
+    }
+    if (surpassed.value) ElMessage({ message: surpassed.value, type: 'success', duration: 4000 })
+    if (rating.value === 'S') playPerfect()
+  } catch {
+    /* 静默 */
+  }
+}
+
+// 幽灵推进（running 相位每秒由 remainingMs 触发计算）
+const ghostPct = computed(() => {
+  if (!ghost.value) return 0
+  const usedMs = challengeSec.value * 1000 - remainingMs.value
+  return Math.min(100, Math.round((usedMs / Math.max(1, ghostBestMs.value)) * 100))
 })
 
 // 防复制粘贴四件套（只拦不罚）：绑定在编辑器包裹层捕获阶段
@@ -363,6 +411,15 @@ function swallow(e: Event) {
       </div>
     </header>
 
+    <!-- 幽灵竞速（v0.41）：与全场最快纪录的用时差距条 -->
+    <div v-if="phase === 'running' && ghost" class="ghost-bar" :class="{ ahead: ghostPct < 50 }">
+      <span class="ghost-label">👻 {{ ghost.who }} 的纪录</span>
+      <div class="ghost-track">
+        <div class="ghost-fill" :style="{ width: ghostPct + '%' }" />
+        <span class="ghost-you" :style="{ left: `min(${ghostPct}%, calc(100% - 34px))` }">你</span>
+      </div>
+      <span class="ghost-pct mono">{{ ghostPct }}%</span>
+    </div>
     <!-- 主体：左题面右编辑器 -->
     <div class="chal-body" v-if="problem">
       <aside class="chal-statement">
@@ -439,10 +496,11 @@ function swallow(e: Event) {
     <!-- 成功 / 失败全屏横幅 -->
     <div class="chal-overlay" v-if="phase === 'success'">
       <div class="chal-overlay-card success">
-        <div class="chal-result-emoji">🎉</div>
+        <div class="chal-rating" :class="rating">{{ rating }}</div>
         <h2 class="chal-overlay-title">挑战成功！</h2>
         <p class="chal-overlay-desc">
           用时 <b>{{ usedText }}</b> 已计入本题挑战榜
+          <template v-if="surpassed"><br />{{ surpassed }}</template>
         </p>
         <el-button type="primary" @click="backToProblem">查看挑战榜</el-button>
       </div>
@@ -703,6 +761,100 @@ function swallow(e: Event) {
   }
   .chal-timer.urgent {
     animation: none;
+  }
+}
+</style>
+
+<style scoped>
+/* 结算评级（v0.41）：S/A/B/C 大字 */
+.chal-rating {
+  font-size: 84px;
+  font-weight: 900;
+  line-height: 1;
+  animation: ratingIn 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+.chal-rating.S {
+  color: #f59e0b;
+  text-shadow: 0 0 30px rgba(245, 158, 11, 0.6);
+}
+
+.chal-rating.A { color: var(--soj-blue); }
+.chal-rating.B { color: #059669; }
+.chal-rating.C { color: var(--el-text-color-secondary); }
+
+@keyframes ratingIn {
+  from {
+    opacity: 0;
+    transform: scale(2.4) rotate(-10deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(-3deg);
+  }
+}
+
+/* 幽灵竞速条 */
+.ghost-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  margin: 0 20px 8px;
+  border-radius: 12px;
+  background: var(--soj-blue-soft);
+  font-size: 13px;
+}
+
+.ghost-label {
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.ghost-track {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--el-border-color-lighter);
+}
+
+.ghost-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #9ca3af, #6b7280);
+  transition: width 0.6s linear;
+}
+
+.ghost-you {
+  position: absolute;
+  top: -4px;
+  transform: translateX(-50%);
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--soj-blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  transition: left 0.6s linear;
+}
+
+.ghost-bar.ahead .ghost-fill {
+  background: linear-gradient(90deg, #34d399, #059669);
+}
+
+.ghost-pct {
+  min-width: 44px;
+  text-align: right;
+  color: var(--el-text-color-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chal-rating,
+  .ghost-fill,
+  .ghost-you {
+    animation: none;
+    transition: none;
   }
 }
 </style>

@@ -6,12 +6,20 @@ import MdView from '@/components/MdView.vue'
 import TierBadge from '@/components/TierBadge.vue'
 
 import { classApi, contestApi, noticeApi, siteApi } from '@/api'
-import { useUserStore } from '@/stores/user'
+import { authApi, gameApi } from '@/api'
 import { fmtDay, fmtShort } from '@/utils/format'
+import { pickDailyQuote } from '@/utils/gameText'
+import { useUserStore } from '@/stores/user'
 import type { ClassCard, ContestListItem } from '@/types'
 
 const router = useRouter()
 const userStore = useUserStore()
+
+// 游戏感批（v0.41）：每日钩子
+const daily = ref<{ enabled: boolean; pid?: number; title?: string; difficulty?: number; done?: boolean; solved_today?: number } | null>(null)
+const revenge = ref<{ pid: number; title: string; difficulty: number; best_score: number }[]>([])
+const streakDays = ref(0)
+const dailyQuote = pickDailyQuote()
 const classes = ref<ClassCard[]>([])
 const notice = ref('')
 
@@ -57,7 +65,35 @@ onMounted(async () => {
       .catch(() => {
         // 公告加载失败不影响首页其他内容
       }),
+    // 每日一题（v0.41：/api/daily 确定性选题，带 ×2 与完成态）
+    gameApi
+      .daily()
+      .then((d) => {
+        daily.value = d.enabled ? d : null
+      })
+      .catch(() => {
+        daily.value = null
+      }),
   ]
+  // 登录用户：复仇推荐 + 坚持火焰
+  if (userStore.token) {
+    tasks.push(
+      gameApi
+        .revenge()
+        .then((r) => {
+          revenge.value = r.list
+        })
+        .catch(() => {
+          revenge.value = []
+        }),
+      authApi
+        .getProfile()
+        .then((p: { game?: { streak_days?: number } }) => {
+          streakDays.value = p.game?.streak_days ?? 0
+        })
+        .catch(() => {}),
+    )
+  }
   // 游客可见面收紧（v0.7.3）：班级/比赛接口需登录，游客跳过加载（区块自然隐藏）；
   // 比赛列表 401 会把人从公开首页弹去登录页（2026-10-25 修复⑬），同样只对登录者拉
   if (userStore.token) {
@@ -127,8 +163,27 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 今日一题（按日随机可见题，同一天恒定；题库为空时隐藏） -->
-    <div v-if="stats?.featured" class="dotd">
+    <!-- 每日一句 + 坚持火焰（v0.41） -->
+    <div class="daily-quote">
+      <span class="dq-text">「{{ dailyQuote }}」</span>
+      <span v-if="streakDays > 0" class="streak-flame" title="连续有 AC 的天数">🔥 连续 {{ streakDays }} 天</span>
+    </div>
+
+    <!-- 今日挑战（v0.41 /api/daily：确定性选题，当日首 AC 掉落 ×2） -->
+    <div v-if="daily" class="dotd">
+      <div>
+        <span class="dotd-cap">今日挑战 · {{ today }}<el-tag v-if="!daily.done" size="small" type="warning" class="ml8">首 AC 掉落 ×2</el-tag><el-tag v-else size="small" type="success" class="ml8">已完成 ✓</el-tag></span>
+        <div class="dotd-title">{{ daily.pid }} {{ daily.title }}</div>
+        <div class="dotd-meta">
+          <TierBadge :tier="daily.difficulty || 3" kind="difficulty" size="sm" />
+          <span v-if="daily.solved_today != null">今日 {{ daily.solved_today }} 人已通过</span>
+        </div>
+      </div>
+      <el-button type="primary" style="margin-left: auto" @click="router.push(`/problems/${daily.pid}`)">
+        {{ daily.done ? '再做一遍' : '接受挑战' }}
+      </el-button>
+    </div>
+    <div v-else-if="stats?.featured" class="dotd">
       <div>
         <span class="dotd-cap">今日一题 · {{ today }}</span>
         <div class="dotd-title">{{ stats.featured.id }} {{ stats.featured.title }}</div>
@@ -140,6 +195,19 @@ onMounted(async () => {
       <el-button type="primary" style="margin-left: auto" @click="router.push(`/problems/${stats.featured.id}`)">
         去做这道题
       </el-button>
+    </div>
+
+    <!-- 复仇之战（v0.41：错题重战，成功掉落 ×1.5） -->
+    <div v-if="revenge.length" class="dotd revenge">
+      <div>
+        <span class="dotd-cap">⚔️ 复仇之战<small>曾错过的题，掉落 ×1.5</small></span>
+        <div class="rev-list">
+          <button v-for="r in revenge" :key="r.pid" class="rev-row" @click="router.push(`/problems/${r.pid}`)">
+            <b>{{ r.pid }} {{ r.title }}</b>
+            <span class="rev-meta">上次 {{ r.best_score }} 分</span>
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 最近赛事：进行中/待开赛优先，不足补已结束；无赛事整块隐藏 -->
@@ -608,5 +676,71 @@ onMounted(async () => {
   .dotd :deep(.el-button) {
     margin-left: 0 !important;
   }
+}
+</style>
+
+<style scoped>
+/* 每日一句 + 火焰（v0.41） */
+.daily-quote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 0;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--soj-blue-soft);
+  font-size: 14px;
+}
+
+.dq-text {
+  color: var(--soj-blue);
+  font-weight: 600;
+}
+
+.streak-flame {
+  font-weight: 800;
+  color: #b45309;
+  white-space: nowrap;
+}
+
+/* 复仇卡 */
+.revenge {
+  border-left: 3px solid #dc2626;
+}
+
+.dotd-cap small {
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
+  font-weight: 400;
+}
+
+.rev-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.rev-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: none;
+  background: transparent;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  text-align: left;
+}
+
+.rev-row:hover {
+  background: var(--soj-blue-soft);
+}
+
+.rev-meta {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 </style>

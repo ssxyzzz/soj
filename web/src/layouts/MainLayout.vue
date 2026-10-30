@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import { usePolling } from '@/composables/usePolling'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
@@ -10,6 +11,10 @@ import { notifyTypeMeta } from '@/components/discuss/discussMeta'
 import { useLevelsStore } from '@/stores/levels'
 import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
+import FeastOverlay from '@/components/game/FeastOverlay.vue'
+import { gameApi } from '@/api'
+import { isMuted, setMuted, playLevelUp } from '@/utils/gameSounds'
+import { pickWelcome } from '@/utils/gameText'
 import { applyTheme, initTheme, type ThemeName } from '@/utils/theme'
 import { APP_VERSION as appVersion } from '@/utils/version'
 import { fmtRel } from '@/utils/format'
@@ -74,6 +79,42 @@ async function refreshJade() {
 }
 
 const blessActive = computed(() => !!blessUntil.value && new Date(blessUntil.value) > new Date())
+
+// ---- 游戏感批（v0.41）----
+const soundOff = ref(isMuted())
+function toggleMute() {
+  setMuted(!soundOff.value)
+  soundOff.value = isMuted()
+  if (!soundOff.value) playLevelUp() // 开声试音
+}
+// 降临横幅：60s 轮询最近 Lv≥7 升级，未播过的弹一次（localStorage 记最近一条）
+const heralds = ref<{ uid: number; level: number; nickname: string; at: string }[]>([])
+let heraldTimer: number | undefined
+async function pollHeralds() {
+  if (!userStore.token) return
+  try {
+    const r = await gameApi.heralds()
+    const last = Number(localStorage.getItem('soj_herald_last') ?? 0)
+    const fresh = r.list.filter(
+      (x) => x.uid * 100000 + x.level > last && Date.now() - new Date(x.at).getTime() < 3600_000,
+    )
+    if (fresh.length) {
+      heralds.value = fresh
+      localStorage.setItem('soj_herald_last', String(Math.max(...fresh.map((x) => x.uid * 100000 + x.level))))
+      if (fresh.some((x) => x.level >= 10)) playLevelUp()
+      setTimeout(() => (heralds.value = []), 8000)
+    }
+  } catch {
+    /* 静默 */
+  }
+}
+// 登录欢迎语：登录态首刷后弹一次（sessionStorage 会话内一次）
+function welcomeOnce() {
+  if (!userStore.token || sessionStorage.getItem('soj_welcomed')) return
+  sessionStorage.setItem('soj_welcomed', '1')
+  const lv = userStore.level?.level ?? 0
+  ElMessage({ message: pickWelcome(lv), type: 'success', duration: 3200 })
+}
 
 async function loadRecent() {
   if (!userStore.token) return
@@ -157,6 +198,13 @@ onMounted(() => {
   refreshBadge() // 通知角标首刷（v0.24）
   badgePoll.start() // 60s 轮询（usePolling：后台标签暂停、卸载自清）
   refreshJade() // 玉余额首刷（v0.33-①）
+  pollHeralds()
+  heraldTimer = window.setInterval(pollHeralds, 60_000)
+  welcomeOnce()
+})
+
+onBeforeUnmount(() => {
+  if (heraldTimer) clearInterval(heraldTimer)
 })
 
 function onCommand(command: string) {
@@ -177,12 +225,29 @@ function onCommand(command: string) {
   <el-container class="layout">
     <!-- 全站网格氛围（2026-10-25 修复⑯）：网格在鼠标处显影，静态画布撤下；teleport 到 body -->
     <AmbientGrid />
+    <!-- 降临横幅（v0.41）：Lv≥7 升级全站播报 -->
+    <Transition name="herald-slide">
+      <div v-if="heralds.length" class="herald-banner" :class="{ gold: heralds.some((x) => x.level >= 10) }">
+        <span v-for="x in heralds" :key="x.uid" class="herald-line">
+          ⚡ Lv.{{ x.level }} 大佬 <b>{{ x.nickname }}</b> 降临
+        </span>
+      </div>
+    </Transition>
+    <FeastOverlay />
     <el-header class="header">
       <div class="header-inner">
         <!-- 品牌：渐变闪电标志（与 /favicon.svg 同源）+ 流彩渐变字 -->
         <div class="brand" @click="router.push('/')">
           <img class="brand-mark" src="/favicon.svg" alt="SOJ" /><span class="brand-word">SOJ</span>
         </div>
+        <button
+          v-if="userStore.token"
+          class="mute-btn"
+          :title="soundOff ? '开启音效' : '静音'"
+          @click="toggleMute"
+        >
+          {{ soundOff ? '🔇' : '🔊' }}
+        </button>
         <nav class="menu nav-links" aria-label="主导航">
           <RouterLink
             v-for="item in navItems"
@@ -757,6 +822,66 @@ function onCommand(command: string) {
 @media (prefers-reduced-motion: reduce) {
   .bless-chip {
     animation: none;
+  }
+}
+</style>
+
+<style scoped>
+.mute-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+.mute-btn:hover {
+  background: var(--soj-blue-soft);
+}
+
+/* 降临横幅（v0.41）：顶部滑入，Lv10 金色 */
+.herald-banner {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2600;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 22px;
+  border-radius: 999px;
+  background: rgba(31, 73, 186, 0.92);
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 8px 28px rgba(31, 73, 186, 0.4);
+}
+
+.herald-banner.gold {
+  background: linear-gradient(135deg, #b45309, #f59e0b);
+}
+
+.herald-line b {
+  margin: 0 2px;
+}
+
+.herald-slide-enter-active,
+.herald-slide-leave-active {
+  transition: all 0.5s ease;
+}
+
+.herald-slide-enter-from,
+.herald-slide-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-24px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .herald-slide-enter-active,
+  .herald-slide-leave-active {
+    transition: opacity 0.3s;
   }
 }
 </style>

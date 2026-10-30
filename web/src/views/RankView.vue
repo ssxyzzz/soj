@@ -33,6 +33,44 @@ const podiumOrder = computed(() => [podium.value[1], podium.value[0], podium.val
 // 表格：自己的条目置顶（含榜外名次），后面跟当前页榜单——方便查看自己
 const tableRows = computed(() => (me.value ? [me.value, ...list.value] : list.value))
 
+// ---- 多榜制（v0.41）：等级/刷题共用 /api/rank 数据（客户端重排），连击/坚持走 game-rank ----
+const board = ref<'level' | 'solve' | 'combo' | 'streak'>('level')
+const gameRows = ref<{ rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]>([])
+const gameMeRank = ref(0)
+const gameMeValue = ref(0)
+const gameLoading = ref(false)
+
+async function loadGameBoard() {
+  gameLoading.value = true
+  try {
+    const kind: 'combo' | 'streak' = board.value === 'streak' ? 'streak' : 'combo'
+    const r = await import('@/api').then((m) => m.gameApi.gameRank(kind))
+    gameRows.value = r.list
+    gameMeRank.value = r.my_rank ?? 0
+    gameMeValue.value = r.my_value ?? 0
+  } finally {
+    gameLoading.value = false
+  }
+}
+
+function switchBoard(b: 'level' | 'solve' | 'combo' | 'streak') {
+  board.value = b
+  if (b === 'combo' || b === 'streak') void loadGameBoard()
+}
+
+const levelRows = computed(() => {
+  const rows = tableRows.value
+  if (board.value !== 'level') return rows
+  return [...rows].sort((a, b) => (b.level ?? 0) - (a.level ?? 0) || b.solved - a.solved)
+})
+const displayRows = computed<Record<string, unknown>[]>(() => {
+  if (board.value === 'combo' || board.value === 'streak') return gameRows.value as unknown as Record<string, unknown>[]
+  return levelRows.value as unknown as Record<string, unknown>[]
+})
+const boardTitle = computed(() =>
+  ({ level: '等级榜', solve: '刷题榜', combo: '连击榜', streak: '坚持榜' })[board.value],
+)
+
 function onPageChange(p: number) {
   page.value = p
   lq.sync({ page: p > 1 ? p : undefined })
@@ -82,10 +120,25 @@ onMounted(() => {
       </div>
     </div>
 
-    <el-card v-if="tableRows.length" class="tbl-card">
+    <el-card class="tbl-card">
+      <div class="board-tabs">
+        <button
+          v-for="b in (['level', 'solve', 'combo', 'streak'] as const)"
+          :key="b"
+          class="board-tab"
+          :class="{ on: board === b }"
+          @click="switchBoard(b)"
+        >
+          {{ { level: '🏆 等级榜', solve: '⚔️ 刷题榜', combo: '🔥 连击榜', streak: '📅 坚持榜' }[b] }}
+        </button>
+      </div>
+      <div v-if="(board === 'combo' || board === 'streak') && gameMeRank" class="my-game-rank">
+        我的{{ boardTitle }}名次：<b>#{{ gameMeRank }}</b>（当前 {{ gameMeValue }}）
+      </div>
       <el-table
+        v-loading="gameLoading"
         stripe
-        :data="tableRows"
+        :data="displayRows"
         :row-class-name="rowClass as never"
       >
         <el-table-column label="排名" width="88">
@@ -101,17 +154,31 @@ onMounted(() => {
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column label="等级" width="150">
-          <template #default="{ row }">
-            <TierBadge v-if="row.level" :tier="row.level" kind="level" />
-            <span v-else class="dim">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="解题数" width="100">
-          <template #default="{ row }">
-            <span class="mono">{{ row.solved }}</span>
-          </template>
-        </el-table-column>
+        <template v-if="board === 'combo' || board === 'streak'">
+          <el-table-column :label="board === 'combo' ? '当前连击' : '连续天数'" width="130">
+            <template #default="{ row }">
+              <span class="mono game-val">{{ row.value }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="历史最佳" width="110">
+            <template #default="{ row }">
+              <span class="mono dim">{{ row.best }}</span>
+            </template>
+          </el-table-column>
+        </template>
+        <template v-else>
+          <el-table-column label="等级" width="150">
+            <template #default="{ row }">
+              <TierBadge v-if="row.level" :tier="row.level" kind="level" />
+              <span v-else class="dim">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="解题数" width="100">
+            <template #default="{ row }">
+              <span class="mono">{{ row.solved }}</span>
+            </template>
+          </el-table-column>
+        </template>
       </el-table>
       <!-- 超过一页才出翻页器；翻页换的是表格内容，领奖台只在第一页出现 -->
       <div v-if="total > pageSize" class="pager">
@@ -124,7 +191,10 @@ onMounted(() => {
           @current-change="onPageChange"
         />
       </div>
-      <el-empty v-if="!loading && !tableRows.length" description="还没有人通过题目，快去抢占第一！" />
+      <el-empty
+        v-if="!loading && (board === 'combo' || board === 'streak' ? !displayRows.length : !tableRows.length)"
+        :description="board === 'combo' ? '还没有连击记录——连续 AC 不失误就能上榜' : board === 'streak' ? '还没有坚持记录——每天至少 AC 一题开始积累' : '还没有人通过题目，快去抢占第一！'"
+      />
     </el-card>
 
     <div class="rank-footer">
@@ -278,5 +348,44 @@ onMounted(() => {
     grid-template-columns: 1fr;
     gap: 12px;
   }
+}
+</style>
+
+<style scoped>
+/* 多榜制（v0.41）：四榜切换胶囊 */
+.board-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.board-tab {
+  border: 1px solid var(--el-border-color);
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--el-text-color-regular);
+}
+
+.board-tab.on {
+  background: var(--soj-blue);
+  border-color: var(--soj-blue);
+  color: #fff;
+  font-weight: 700;
+}
+
+.my-game-rank {
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+
+.game-val {
+  font-weight: 800;
+  color: var(--soj-blue);
+  font-size: 16px;
 }
 </style>

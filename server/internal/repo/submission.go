@@ -80,6 +80,10 @@ type Submission struct {
 	HeartbeatAt *time.Time    `bson:"heartbeatAt,omitempty"` // 租约心跳（v0.7.1）：判题中周期刷新，超时由回收者重排队
 	Priority    int           `bson:"priority"`              // 队列优先级：领取按其降序（v0.7.1）
 	ChallengeID int64         `bson:"challengeId,omitempty"` // 挑战模式会话 ID（v0.23；0 = 普通提交）
+	// 游戏感批（v0.41）：首 AC 发玉回填（开箱 payload——判题路径写，本人提交详情下发）
+	JadeTotal   int64         `bson:"jadeTotal,omitempty"`
+	JadeDaily   bool          `bson:"jadeDaily,omitempty"`
+	JadeRevenge bool          `bson:"jadeRevenge,omitempty"`
 	CreatedAt   time.Time     `bson:"createdAt"`
 	JudgedAt    *time.Time    `bson:"judgedAt,omitempty"`
 }
@@ -407,6 +411,25 @@ func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64,
 		invalidateLeaderboard(kind, rid)
 	}
 	return res.ModifiedCount, nil
+}
+
+// SetSubmissionJade 首 AC 发玉结果回填提交文档（开箱 payload，尽力而为）：
+// 从 jadeAwards 取本发放记录的 total/daily/revenge 标记写回提交。
+func (r *Repo) SetSubmissionJade(ctx context.Context, uid, pid, sid int64) error {
+	var a JadeAward
+	if err := r.jadeAwards.FindOne(ctx, bson.M{"uid": uid, "pid": pid}).Decode(&a); err != nil {
+		return err
+	}
+	_, err := r.submissions.UpdateOne(ctx, bson.M{"_id": sid},
+		bson.M{"$set": bson.M{"jadeTotal": a.Total, "jadeDaily": a.Daily, "jadeRevenge": a.Revenge}})
+	return err
+}
+
+// CountOtherSubmissions 同用户同题的其他提交数（首发满分判定：0 = 此前无提交）。
+func (r *Repo) CountOtherSubmissions(ctx context.Context, uid, pid, excludeSID int64) (int64, error) {
+	return r.submissions.CountDocuments(ctx,
+		bson.M{"uid": uid, "pid": pid, "_id": bson.M{"$ne": excludeSID}},
+		options.Count().SetLimit(1))
 }
 
 func (r *Repo) GetSubmission(ctx context.Context, id int64) (*Submission, error) {

@@ -115,6 +115,13 @@ func (h *Handlers) GetMyProfile(c *gin.Context) {
 			}
 		}
 	}
+	// 游戏感批（v0.41）：连击/坚持现状（首页火焰与个人主页消费）
+	if st, err := h.repo.GetGameStats(c.Request.Context(), uid); err == nil {
+		info["game"] = gin.H{
+			"combo_cur": st.ComboCur, "combo_best": st.ComboBest,
+			"streak_days": st.StreakDays, "streak_best": st.StreakBest,
+		}
+	}
 	ok(c, info)
 }
 

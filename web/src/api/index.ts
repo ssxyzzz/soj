@@ -19,6 +19,7 @@ import type {
   LevelConfigInfo,
   AdminLevelConfig,
   LoginResult,
+  RevengeRow,
   UserImportRow,
   UserLevelInfo,
   ObjectiveQuestionFull,
@@ -143,6 +144,36 @@ async function put<T>(url: string, body?: unknown): Promise<T> {
 export async function del<T>(url: string): Promise<T> {
   const resp = await client.delete<ApiResponse<T>>(url)
   return resp.data.data
+}
+
+// 游戏感批（v0.41）：每日钩子 / 成就星图 / 降临 / 双榜
+export const gameApi = {
+  daily: () =>
+    get<{
+      enabled: boolean
+      pid?: number
+      title?: string
+      difficulty?: number
+      done?: boolean
+      solved_today?: number
+    }>('/daily'),
+  revenge: () => get<{ list: RevengeRow[] }>('/me/revenge'),
+  wrongbook: (page = 1) => get<{ list: RevengeRow[] }>('/me/wrongbook', { page }),
+  achievements: () =>
+    get<{
+      list: { code: string; name: string; desc: string; tier: string; icon: string; unlocked_at?: string }[]
+      unlocked: number
+    }>('/me/achievements'),
+  starmap: () => get<{ list: { tag_id: number; name: string; solved: number; lit: boolean }[]; lit: number }>(
+    '/me/starmap',
+  ),
+  heralds: () =>
+    get<{ list: { uid: number; level: number; nickname: string; at: string }[] }>('/heralds'),
+  gameRank: (type: 'combo' | 'streak') =>
+    get<{ list: { rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]; my_rank?: number; my_value?: number }>(
+      '/game-rank',
+      { type },
+    ),
 }
 
 export const authApi = {

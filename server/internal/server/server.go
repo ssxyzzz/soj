@@ -166,6 +166,14 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/problems/:id/challenge/status", AuthRequired(h), h.ChallengeStatus)
 		api.POST("/problems/:id/challenge/quit", AuthRequired(h), h.QuitChallenge)
 		api.POST("/problems/:id/run", AuthRequired(h), h.SelfTestRun)
+		// 游戏感批（v0.41）：每日钩子 / 成就星图 / 降临 / 双榜（只读 + 本人数据）
+		api.GET("/daily", AuthOptional(h), h.GetDaily)
+		api.GET("/me/revenge", AuthRequired(h), h.MyRevenge)
+		api.GET("/me/wrongbook", AuthRequired(h), h.MyWrongbook)
+		api.GET("/me/achievements", AuthRequired(h), h.MyAchievements)
+		api.GET("/me/starmap", AuthRequired(h), h.MyStarMap)
+		api.GET("/heralds", AuthOptional(h), h.GetHeralds)
+		api.GET("/game-rank", AuthOptional(h), h.GameRank)
 		api.GET("/problems/:id/boards", AuthRequired(h), h.ProblemBoards)
 		// 标签树（v0.5.5，2026-10-25 双树）：公开读（题库筛选/详情卡/建题表单共用），
 		// ?tree=meta 取来源标签树；写走 /admin/tagtree（同样带 ?tree）

@@ -154,6 +154,7 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 		if awarded, _, err := j.Repo.MaybeAwardJade(ctx, sub.UID, sub.ProblemID); err != nil {
 			slog.Warn("首 AC 玉发放失败", "component", "jade", "sid", sub.ID, "error", err)
 		} else if awarded {
+			_ = j.Repo.SetSubmissionJade(ctx, sub.UID, sub.ProblemID, sub.ID) // 开箱 payload 回填（尽力而为）
 			// 升维祝福（v0.40）：升级只可能发生在 AC 时刻——首 AC 后检测等级抬升
 			if berr := j.Repo.EnsureLevelBlessingForUser(ctx, sub.UID); berr != nil {
 				slog.Warn("升维祝福检测失败", "component", "jade", "sid", sub.ID, "error", berr)
@@ -164,6 +165,25 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 	// 已终态的会话重复触发为 no-op，重测幂等）
 	if status == repo.StatusAccepted && sub.ChallengeID != 0 {
 		j.Repo.FinalizeChallengeOnAC(ctx, sub.UID, sub.ProblemID, sub.ID, len(sub.Code))
+	}
+	// 游戏感批（v0.41）：连击/坚持计数器（仅 published——比赛期提交不动计数，
+	// Cancelled 主动放弃不清零）+ AC 成就判定。尽力而为不污染判题结果。
+	if sub.Published {
+		if _, terr := j.Repo.TrackJudgeOutcome(ctx, sub.UID, sub.ProblemID, status == repo.StatusAccepted); terr != nil {
+			slog.Warn("连击/坚持计数失败", "component", "game", "sid", sub.ID, "error", terr)
+		}
+		if status == repo.StatusAccepted {
+			perfect := score == 100
+			if perfect {
+				if n, cerr := j.Repo.CountOtherSubmissions(ctx, sub.UID, sub.ProblemID, sub.ID); cerr == nil && n > 0 {
+					perfect = false // 此前已有提交 = 非首发
+				}
+			}
+			if _, aerr := j.Repo.EvaluateAchievements(ctx, sub.UID, sub.ID, sub.ProblemID,
+				score, time.Now(), perfect, sub.ChallengeID != 0); aerr != nil {
+				slog.Warn("成就判定失败", "component", "game", "sid", sub.ID, "error", aerr)
+			}
+		}
 	}
 }
 
