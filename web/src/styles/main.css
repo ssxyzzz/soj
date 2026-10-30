@@ -2603,3 +2603,13 @@ button.soj-inv-chip.is-clickable:focus-visible {
     animation: none;
   }
 }
+
+/* URL 即状态（v0.39）：列表/卡片标题链接化——视觉与原纯文本标题一致，仅补可点暗示 */
+a.clink {
+  color: inherit;
+  text-decoration: none;
+}
+
+a.clink:hover {
+  color: var(--el-color-primary);
+}

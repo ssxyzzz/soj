@@ -18,6 +18,10 @@ declare module 'vue-router' {
 
 const router = createRouter({
   history: createWebHistory(),
+  // URL 即状态（v0.39）：后退/前进恢复上次滚动位置，新导航回顶
+  scrollBehavior(_to, _from, savedPosition) {
+    return savedPosition ?? { top: 0 }
+  },
   routes: [
     {
       path: '/',

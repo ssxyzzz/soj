@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { classApi } from '@/api'
@@ -153,6 +153,11 @@ const showJoin = ref(false)
 const joinTargetCode = ref('')
 const joiningTarget = ref(false)
 
+// 标题链接目标（v0.39 链接化）：与整卡点击同口径
+function classHref(c: ClassCard) {
+  return `/classes/${c.id}`
+}
+
 function openJoin(c: ClassCard) {
   if (!userStore.token) {
     ElMessage.warning('请先登录')
@@ -201,7 +206,7 @@ onMounted(load)
             @click="router.push(`/classes/${c.id}`)"
           >
             <div class="name-row">
-              <h3 class="name">{{ c.name }}</h3>
+              <h3 class="name"><RouterLink :to="classHref(c)" class="clink" @click.stop>{{ c.name }}</RouterLink></h3>
               <span v-if="c.private" class="cl-chip lock">🔒 私密</span>
               <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口。
                    私密徽章与身份徽章互相独立（2026-10-25：私密班的建班人不再丢「xxx的班」） -->

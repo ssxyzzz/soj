@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { rankApi } from '@/api'
 import TierBadge from '@/components/TierBadge.vue'
 import { usePagedList } from '@/composables/usePagedList'
+import { useListQuery } from '@/composables/useListQuery'
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 import type { RankItem } from '@/types'
@@ -22,6 +23,9 @@ const { list, total, page, pageSize, loading, load } = usePagedList<RankItem>(as
   return { list: res.items, total: res.total }
 }, { pageSize: 100 })
 
+// URL 即状态（v0.39）：页码进 query，返回不丢页（仅页码，榜单无筛选）
+const lq = useListQuery()
+
 // v3-full 排名页：前三名领奖台卡（渐变大数字 + 首字头像）；仅第一页展示
 const podium = computed(() => (page.value === 1 ? list.value.slice(0, 3) : []))
 // 领奖台展示顺序：2 - 1 - 3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
@@ -31,6 +35,7 @@ const tableRows = computed(() => (me.value ? [me.value, ...list.value] : list.va
 
 function onPageChange(p: number) {
   page.value = p
+  lq.sync({ page: p > 1 ? p : undefined })
   load()
 }
 
@@ -43,7 +48,10 @@ function rowClass({ row }: { row: RankItem }): { 'me-row': boolean } {
   return { 'me-row': row.user_id === userStore.uid }
 }
 
-onMounted(load)
+onMounted(() => {
+  page.value = lq.num('page')
+  load()
+})
 </script>
 
 <template>

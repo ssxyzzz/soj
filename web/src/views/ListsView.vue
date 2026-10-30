@@ -3,7 +3,7 @@
 // 左信息块（色块首字 + 名称 + N 题·M 章 + 简介摘要 + 我的进度）+ 右难度分布柱状图
 //（只画有题的档，同源十档色轴）；副列按 web-design.md：题单管理卡（新建）+ 口径卡。
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import PageShell from '@/components/PageShell.vue'
@@ -136,7 +136,7 @@ async function create() {
               <span class="lav" :style="{ background: avColor(l.id) }">{{ (l.title || '?').slice(0, 1).toUpperCase() }}</span>
               <div class="grow">
                 <div class="ltitle-row">
-                  <h3>{{ l.title }}</h3>
+                  <h3><RouterLink :to="`/lists/${l.id}`" class="clink" @click.stop>{{ l.title }}</RouterLink></h3>
                   <el-tag v-if="l.hidden" size="small" type="danger" effect="plain">隐藏</el-tag>
                 </div>
                 <div class="lmeta">

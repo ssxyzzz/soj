@@ -7,11 +7,15 @@ import { useRouter } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
 import { notifyApi } from '@/api'
 import { notifyTypeMeta } from '@/components/discuss/discussMeta'
+import { useListQuery } from '@/composables/useListQuery'
 import { useUserStore } from '@/stores/user'
 import { fmtRel } from '@/utils/format'
 import type { NotificationItem } from '@/types'
 
 const router = useRouter()
+
+// URL 即状态（v0.39）：load 入口统一回写（filter/type/page 三态；query 仅挂载复原源）
+const lq = useListQuery()
 const userStore = useUserStore()
 const loading = ref(false)
 const filter = ref<'all' | 'unread'>('all')
@@ -34,6 +38,12 @@ const TYPE_OPTIONS: [string, string][] = [
 ]
 
 async function load(p = 1) {
+  page.value = p
+  lq.sync({
+    page: p > 1 ? p : undefined,
+    filter: filter.value !== 'all' ? filter.value : undefined,
+    type: type.value || undefined,
+  })
   loading.value = true
   try {
     const r = await notifyApi.list({
@@ -76,7 +86,9 @@ onMounted(() => {
     router.replace('/login?redirect=/notifications')
     return
   }
-  load(1)
+  filter.value = lq.str('filter') === 'unread' ? 'unread' : 'all'
+  type.value = lq.str('type')
+  load(lq.num('page'))
 })
 </script>
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { usePolling } from '@/composables/usePolling'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 
 import { contestApi } from '@/api'
@@ -159,7 +159,7 @@ function openContest(c: ContestListItem) {
           <div v-for="c in filtered" :key="c.id" class="card crow" @click="openContest(c)">
             <span class="mini-tag" :class="c.status">{{ contestLabel[c.status] }}</span>
             <div class="grow">
-              <h3>{{ c.title }}</h3>
+              <h3><RouterLink :to="`/contests/${c.id}`" class="clink" @click.stop>{{ c.title }}</RouterLink></h3>
               <div class="meta">{{ fmtShort(c.start) }} ~ {{ fmtShort(c.end) }} · {{ c.problem_count }} 题</div>
             </div>
             <div class="when">

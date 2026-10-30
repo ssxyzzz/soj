@@ -15,6 +15,7 @@ import DiffChart from '@/components/DiffChart.vue'
 import TierBadge from '@/components/TierBadge.vue'
 import UserNameLevel from '@/components/UserNameLevel.vue'
 import { listApi } from '@/api'
+import { useListQuery } from '@/composables/useListQuery'
 import { useUserStore } from '@/stores/user'
 import type { ListChapter, ListDetail, ListProblemEntry, ListRankResult } from '@/types'
 import { fmtDay } from '@/utils/format'
@@ -26,6 +27,8 @@ const userStore = useUserStore()
 const detail = ref<ListDetail | null>(null)
 const loading = ref(true)
 const tab = ref<'problems' | 'rank'>('problems')
+// URL 即状态（v0.39）：tab + 排名页码进 query（rp 键避开题库 page 语义）
+const lq = useListQuery()
 const expanded = ref<Record<string, boolean>>({})
 
 async function load() {
@@ -36,7 +39,12 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+onMounted(() => {
+  tab.value = lq.str('tab') === 'rank' ? 'rank' : 'problems'
+  rankPage.value = lq.num('rp')
+  load()
+  if (tab.value === 'rank') loadRank()
+})
 watch(() => route.params.id, load)
 
 const pct = computed(() => {
@@ -144,10 +152,12 @@ async function loadRank() {
   }
 }
 watch(tab, (t) => {
+  lq.sync({ tab: t !== 'problems' ? t : undefined, rp: t === 'rank' && rankPage.value > 1 ? rankPage.value : undefined })
   if (t === 'rank' && !rank.value) loadRank()
 })
 function onRankPage(p: number) {
   rankPage.value = p
+  lq.sync({ tab: tab.value !== 'problems' ? tab.value : undefined, rp: p > 1 ? p : undefined })
   loadRank()
 }
 

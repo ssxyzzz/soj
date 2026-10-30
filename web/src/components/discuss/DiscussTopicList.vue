@@ -2,7 +2,9 @@
 // 讨论区话题列表（v0.24）：题内弹窗 / 比赛弹窗 / 导航栏讨论页共用的列表渲染。
 // 数据获取由父级传入 fetcher（三区的列表接口各不相同，渲染同构），点击话题上抛。
 import { onMounted, ref, watch } from 'vue'
+import { RouterLink } from 'vue-router'
 
+import { useListQuery } from '@/composables/useListQuery'
 import { fmtRel } from '@/utils/format'
 import type { DiscussListResult, DiscussScope, DiscussTopic } from '@/types'
 import { discussKind, discussKindLabel } from './discussMeta'
@@ -12,6 +14,9 @@ const props = defineProps<{
   fetcher: (page: number) => Promise<DiscussListResult>
   /** 外部触发的刷新令牌（父级发帖成功后 +1） */
   refreshToken?: number
+  /** URL 即状态（v0.39）：仅路由级宿主（导航栏讨论页）开启——页码进 query、
+   * 标题渲染 RouterLink；弹窗宿主（题内/比赛）无路由语义，保持原样 */
+  syncQuery?: boolean
 }>()
 
 const emit = defineEmits<{ (e: 'open', topic: DiscussTopic): void }>()
@@ -22,7 +27,11 @@ const total = ref(0)
 const list = ref<DiscussTopic[]>([])
 const banner = ref('')
 
+// v0.39：路由态页码 ↔ query（挂载复原 + load 入口回写）；query 仅复原源不回读触发
+const lq = useListQuery()
+
 async function load(p = 1) {
+  if (props.syncQuery) lq.sync({ page: p > 1 ? p : undefined })
   loading.value = true
   try {
     const r = await props.fetcher(p)
@@ -46,7 +55,7 @@ watch(
   () => props.refreshToken,
   () => load(1),
 )
-onMounted(() => load(1))
+onMounted(() => load(props.syncQuery ? lq.num('page') : 1))
 </script>
 
 <template>
@@ -80,7 +89,8 @@ onMounted(() => load(1))
         <el-tag v-if="t.locked" type="info" size="small" effect="plain" round>已锁定</el-tag>
       </div>
       <div class="dt-title">
-        <span class="t">{{ t.title }}</span>
+        <RouterLink v-if="syncQuery" :to="`/discuss/${t.id}`" class="t" @click.stop>{{ t.title }}</RouterLink>
+        <span v-else class="t">{{ t.title }}</span>
         <span v-if="t.accepted_reply_id" class="solved" title="楼主已采纳答案">✓已解决</span>
       </div>
       <div class="dt-meta">

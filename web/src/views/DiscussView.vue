@@ -99,7 +99,7 @@ onMounted(async () => {
         </el-input>
       </div>
 
-      <DiscussTopicList scope="global" :fetcher="fetcher" :refresh-token="refreshToken" @open="openTopic" />
+      <DiscussTopicList scope="global" :fetcher="fetcher" :refresh-token="refreshToken" sync-query @open="openTopic" />
     </template>
 
     <template #aside>

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 
 import { submissionApi, userApi } from '@/api'
 import { usePagedList } from '@/composables/usePagedList'
+import { useListQuery } from '@/composables/useListQuery'
 import { usePolling } from '@/composables/usePolling'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
@@ -12,11 +13,30 @@ import SubStatus from '@/components/SubStatus.vue'
 import { fmtMem, fmtRel, fmtSec, statusDesc, statusMap } from '@/utils/format'
 import type { LookupUser, Submission } from '@/types'
 
+const route = useRoute()
 const router = useRouter()
 const pageSize = 20
+
+// URL 即状态（v0.39）：挂载从 query 复原筛选与页码，变更回写（reload 包装——各筛选
+// 处理器零改动）；query 仅作复原源，绝不 watch 回读触发请求
+const lq = useListQuery()
+function qsync() {
+  lq.sync({
+    page: page.value > 1 ? page.value : undefined,
+    kw: kw.value.trim() || undefined,
+    status: statusFilter.value || undefined,
+    lang: langFilter.value || undefined,
+    uid: userFilter.value || undefined,
+    mine: mineOnly.value ? 1 : undefined,
+  })
+}
+function reload() {
+  qsync()
+  baseReload()
+}
 // v0.29 收敛：分页三件套与筛选重置样板进 usePagedList，5s 轮询进 usePolling
 //（后台标签页自动暂停，不再空转刷新）
-const { list, total, page, loading, load, reload } = usePagedList<Submission>((p) =>
+const { list, total, page, loading, load, reload: baseReload } = usePagedList<Submission>((p) =>
   submissionApi.list({
     page: p,
     page_size: pageSize,
@@ -124,6 +144,7 @@ function toggleMine() {
 
 function onPageChange(p: number) {
   page.value = p
+  qsync()
   load()
 }
 
@@ -132,6 +153,12 @@ function onPageChange(p: number) {
 // 是「列表老在转圈」体感的直接来源；首载与翻页仍带遮罩。
 const poll = usePolling(() => load(true), 5000)
 onMounted(() => {
+  page.value = lq.num('page')
+  kw.value = lq.str('kw')
+  statusFilter.value = lq.str('status')
+  langFilter.value = lq.str('lang')
+  userFilter.value = lq.ids('uid')[0]
+  mineOnly.value = route.query.mine === '1'
   load()
   poll.start()
 })

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { usePolling } from '@/composables/usePolling'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AmbientGrid from '@/components/AmbientGrid.vue'
 import TierBadge from '@/components/TierBadge.vue'
@@ -22,6 +22,27 @@ const levels = useLevelsStore()
 const site = useSiteStore()
 
 const active = computed(() => route.path)
+
+// URL 即状态（v0.39）：顶栏导航自绘 RouterLink 胶囊（原 el-menu router 模式渲染
+// <li> 非 <a>——中键/Ctrl+点/右键新开全不可用）；视觉沿用 v3 胶囊样式
+const navItems = computed(() => {
+  const items: { to: string; label: string }[] = [
+    { to: '/', label: '首页' },
+    { to: '/problems', label: '题库' },
+    { to: '/lists', label: '题单' },
+    { to: '/contests', label: '比赛' },
+    { to: '/classes', label: '班级' },
+  ]
+  if (site.discussGlobalEnabled) items.push({ to: '/discuss', label: '讨论' })
+  if (site.jadeShopEnabled) items.push({ to: '/shop', label: '兑换' })
+  items.push({ to: '/rank', label: '排名' })
+  if (userStore.can('submission.view.all')) items.push({ to: '/submissions', label: '提交记录' })
+  return items
+})
+
+function navActive(to: string): boolean {
+  return to === '/' ? active.value === '/' : active.value === to || active.value.startsWith(to + '/')
+}
 const adminActive = computed(() => route.path.startsWith('/admin'))
 
 // 站内通知铃铛（v0.24）：未读角标 60s 轮询 + 下拉最近 10 条；点条目跳深链并标已读
@@ -157,17 +178,18 @@ function onCommand(command: string) {
         <div class="brand" @click="router.push('/')">
           <img class="brand-mark" src="/favicon.svg" alt="SOJ" /><span class="brand-word">SOJ</span>
         </div>
-        <el-menu mode="horizontal" router :default-active="active" class="menu" :ellipsis="false">
-          <el-menu-item index="/">首页</el-menu-item>
-          <el-menu-item index="/problems">题库</el-menu-item>
-          <el-menu-item index="/lists">题单</el-menu-item>
-          <el-menu-item index="/contests">比赛</el-menu-item>
-          <el-menu-item index="/classes">班级</el-menu-item>
-          <el-menu-item v-if="site.discussGlobalEnabled" index="/discuss">讨论</el-menu-item>
-          <el-menu-item v-if="site.jadeShopEnabled" index="/shop">兑换</el-menu-item>
-          <el-menu-item index="/rank">排名</el-menu-item>
-          <el-menu-item v-if="userStore.can('submission.view.all')" index="/submissions">提交记录</el-menu-item>
-        </el-menu>
+        <nav class="menu nav-links" aria-label="主导航">
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="nav-a"
+            :class="{ on: navActive(item.to) }"
+            :aria-current="navActive(item.to) ? 'page' : undefined"
+          >
+            {{ item.label }}
+          </RouterLink>
+        </nav>
         <router-link v-if="userStore.canAdmin" to="/admin" class="admin-link" :class="{ on: adminActive }">
           管理后台
         </router-link>
@@ -368,7 +390,13 @@ function onCommand(command: string) {
 }
 
 /* v3-full 菜单胶囊（.nav-links a：8px 15px、15px 字号，hover/on 浅蓝底）：项高自适应居中 */
-.menu :deep(.el-menu-item) {
+.nav-links {
+  display: flex;
+  align-items: center;
+}
+
+/* v3-full 菜单胶囊（v0.39 链接化：el-menu → RouterLink，参数同源 8px 15px / 999 / soft 底） */
+.nav-links a {
   align-self: center;
   height: auto;
   line-height: 1.2;
@@ -376,20 +404,21 @@ function onCommand(command: string) {
   border-radius: 999px;
   margin: 0 1px;
   border-bottom: none;
+  font-size: 15px;
+  color: inherit;
+  text-decoration: none;
   transition: background-color 0.18s, color 0.18s;
 }
 
-.menu :deep(.el-menu-item:hover),
-.menu :deep(.el-menu-item:focus) {
+.nav-links a:hover,
+.nav-links a:focus-visible {
   background-color: var(--soj-blue-soft);
-  border-bottom: none;
 }
 
-.menu :deep(.el-menu-item.is-active) {
+.nav-links a.on {
   background-color: var(--soj-blue-soft);
   color: var(--soj-blue);
   font-weight: var(--soj-fw-bold);
-  border-bottom: none;
 }
 
 /* v3-full .admin-link：独立描边胶囊（激活 = 蓝边蓝字浅蓝底），不再借 el-menu 形态 */

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { ArrowDown, CircleClose, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
 
 import { authApi, problemApi, rankApi } from '@/api'
@@ -13,11 +13,11 @@ import TagFilter from '@/components/problem/TagFilter.vue'
 import TierBadge from '@/components/TierBadge.vue'
 import { useLevelsStore } from '@/stores/levels'
 import { useTagTreeStore } from '@/stores/tagtree'
+import { useListQuery } from '@/composables/useListQuery'
 import { useUserStore } from '@/stores/user'
 import type { ProblemListItem } from '@/types'
 
 const router = useRouter()
-const route = useRoute()
 
 // 客观题小类徽章（v0.9）：带「题」字，与详情页题型标签口径一致
 function kindBadge(kind?: string) {
@@ -128,6 +128,7 @@ function loadDebounced() {
 
 function search() {
   page.value = 1
+  qsync()
   load()
 }
 
@@ -137,18 +138,21 @@ function resetSearch() {
   diffSel.value = []
   metaSel.value = []
   page.value = 1
+  qsync()
   load()
 }
 
 function onTagChange(ids: number[]) {
   tagSel.value = ids
   page.value = 1
+  qsync()
   loadDebounced()
 }
 
 function onDiffChange(ids: number[]) {
   diffSel.value = ids
   page.value = 1
+  qsync()
   loadDebounced()
 }
 
@@ -166,6 +170,7 @@ function toggleTagCol() {
 function onMetaChange(ids: number[]) {
   metaSel.value = ids
   page.value = 1
+  qsync()
   loadDebounced()
 }
 
@@ -173,6 +178,7 @@ function onMetaChange(ids: number[]) {
 function clearAdv() {
   metaSel.value = []
   page.value = 1
+  qsync()
   load()
 }
 
@@ -205,12 +211,16 @@ const sparkHeights = computed(() => {
   return arr.map((n) => Math.max(3, Math.round((n / max) * 100)))
 })
 
-function problemRoute(row: { id?: number; locked?: boolean; lock_kind?: string; contest_id?: number; exam_id?: number }) {
+// 目标地址（v0.39 链接化）：标题列 RouterLink 与整行点击共用同一口径
+function rowHref(row: { id?: number; locked?: boolean; lock_kind?: string; contest_id?: number; exam_id?: number }) {
   if (row.locked) {
-    router.push(row.lock_kind === 'exam' && row.exam_id ? `/exams/${row.exam_id}` : `/contests/${row.contest_id}`)
-    return
+    return row.lock_kind === 'exam' && row.exam_id ? `/exams/${row.exam_id}` : `/contests/${row.contest_id}`
   }
-  router.push(`/problems/${row.id}`)
+  return `/problems/${row.id}`
+}
+
+function problemRoute(row: Parameters<typeof rowHref>[0]) {
+  router.push(rowHref(row))
 }
 
 // 通过率 = AC 提交 / 总提交（百分比，整数省小数）
@@ -222,16 +232,29 @@ function acceptRate(row: { submit_count?: number; accepted_count?: number }): st
 
 function onPageChange(p: number) {
   page.value = p
+  qsync()
   load()
 }
 
+// ---- URL 即状态（v0.39）：挂载从 query 复原现场，变更 qsync 回写（不 watch 回读） ----
+const lq = useListQuery()
+
+function qsync() {
+  lq.sync({
+    page: page.value > 1 ? page.value : undefined,
+    kw: keyword.value.trim() || undefined,
+    tag: tagSel.value.length ? tagSel.value.join(',') : undefined,
+    diff: diffSel.value.length ? diffSel.value.join(',') : undefined,
+    meta: metaSel.value.length ? metaSel.value.join(',') : undefined,
+  })
+}
+
 onMounted(() => {
-  // v0.19 首页 hero 搜索联动：?kw= 直达关键词搜索结果
-  const kw = String(route.query.kw ?? '').trim()
-  if (kw) {
-    keyword.value = kw
-    search()
-  }
+  page.value = lq.num('page')
+  keyword.value = lq.str('kw') // 含 v0.19 首页 hero ?kw= 联动（同源收敛）
+  tagSel.value = lq.ids('tag')
+  diffSel.value = lq.ids('diff')
+  metaSel.value = lq.ids('meta')
   load()
   loadMyStats()
   tagStore.ensure() // 标签树异步就绪后筛选区自动出现（v-if 响应 store）
@@ -342,7 +365,7 @@ onMounted(() => {
           </el-table-column>
           <el-table-column label="题目" min-width="320">
             <template #default="{ row }">
-              <span class="tlink">{{ row.title }}</span>
+              <RouterLink :to="rowHref(row)" class="tlink" @click.stop>{{ row.title }}</RouterLink>
               <el-tag v-if="typeBadge(row)" size="small" class="ml8 ptype-tag">
                 {{ typeBadge(row) }}
               </el-tag>

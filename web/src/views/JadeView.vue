@@ -4,9 +4,13 @@
 // 获取与消费自动入账：首次通过、比赛奖池、题解解锁、悬赏、兑换、AI 功能等。
 import { onMounted, ref } from 'vue'
 import { jadeApi } from '@/api'
+import { useListQuery } from '@/composables/useListQuery'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
+
+// URL 即状态（v0.39）：页码进 query，返回不丢页
+const lq = useListQuery()
 
 const balance = ref(0)
 const currency = ref('')
@@ -18,6 +22,7 @@ const loading = ref(false)
 
 async function load(pageNo = 1) {
   page.value = pageNo
+  lq.sync({ page: pageNo > 1 ? pageNo : undefined })
   loading.value = true
   try {
     const r = await jadeApi.ledger(pageNo)
@@ -54,7 +59,7 @@ function fmtTime(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN', { hour12: false })
 }
 
-onMounted(() => load())
+onMounted(() => load(lq.num('page')))
 </script>
 
 <template>
