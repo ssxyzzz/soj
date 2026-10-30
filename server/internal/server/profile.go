@@ -3,6 +3,8 @@ package server
 // 个人设置（v0.4.8）：本人自助字段（昵称/性别/学校/年级/QQ）+ 偏好（默认语言/代码模板）。
 // 昵称修改受 user.nickname.edit 权限位控制（默认角色默认开启）；其余字段仅 /me/profile
 // 与管理员用户列表返回，不进任何公开响应（userJSON 保持不动）。
+// 资料自改开关（v0.34）：后台系统设置逐字段可锁（昵称/性别/年级/学校/地区），锁定的
+// 字段 PATCH 拒收、前端只读；editable 五标志随 profile 下发（昵称 = 权限位 AND 开关）。
 
 import (
 	"fmt"
@@ -32,9 +34,20 @@ func trimTo(s string, max int) string {
 	return string(r)
 }
 
-// profileJSON 本人视角的个人信息 + 偏好；canEditNickname 由当前生效权限位现算，
-// 前端据此决定昵称输入框可用状态（不依赖登录时缓存的旧权限）。
-func profileJSON(u *repo.User, canEditNickname bool) gin.H {
+// profileEditable 当前用户五个资料字段的自改判定：后台逐字段开关（默认全开），
+// 昵称再 AND user.nickname.edit 权限位（双闸——保留角色粒度）。
+func (h *Handlers) profileEditable(c *gin.Context) repo.ProfileEditConfig {
+	cfg := *repo.DefaultProfileEditConfig()
+	if s, err := h.repo.GetSystemSettings(c.Request.Context()); err == nil {
+		cfg = s.ProfileEditCfg()
+	}
+	cfg.Nickname = cfg.Nickname && hasPerm(c, repo.PermUserNicknameEdit)
+	return cfg
+}
+
+// profileJSON 本人视角的个人信息 + 偏好；editable 为五字段自改标志（v0.34），
+// 前端据此决定输入框可用状态（不依赖登录时缓存的旧权限/旧设置）。
+func profileJSON(u *repo.User, editable repo.ProfileEditConfig) gin.H {
 	prefs := u.Prefs
 	if prefs == nil {
 		prefs = &repo.UserPrefs{}
@@ -44,20 +57,26 @@ func profileJSON(u *repo.User, canEditNickname bool) gin.H {
 	}
 	vis := u.EffProfileVis()
 	info := gin.H{
-		"nickname":          u.Nickname,
-		"can_edit_nickname": canEditNickname,
-		"gender":            u.Gender,
-		"school":            u.School,
-		"grade":             u.Grade,
-		"region":            u.Region,
-		"qq":                u.QQ,
-		"profile_vis":       vis, // 资料公开开关（v0.23）：设置页开关回填
-		"qq_avatar":         u.QQAvatar,
-		"prefs":             prefs,
+		"nickname": u.Nickname,
+		"editable": gin.H{
+			"nickname": editable.Nickname,
+			"gender":   editable.Gender,
+			"grade":    editable.Grade,
+			"school":   editable.School,
+			"region":   editable.Region,
+		},
+		"gender":      u.Gender,
+		"school":      u.School,
+		"grade":       u.GradeName(), // 年级显示名（v0.34 结构化）；空串 = 未设置
+		"region":      u.Region,
+		"qq":          u.QQ,
+		"profile_vis": vis, // 资料公开开关（v0.23）：设置页开关回填
+		"qq_avatar":   u.QQAvatar,
+		"prefs":       prefs,
 	}
 	// QQ 头像（v0.23）：设置页与顶栏头像共用；绑定开关开且已填 QQ 才下发
 	if u.QQAvatar && u.QQ != "" {
-		info["avatar_url"] = "https://q1.qlogo.cn/g?b=qq&nk=" + u.QQ + "&s=100"
+		info["avatar_url"] = "https://q1.qlogo.cn/g?qq&nk=" + u.QQ + "&s=100"
 	}
 	return info
 }
@@ -78,7 +97,7 @@ func (h *Handlers) GetMyProfile(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取失败")
 		return
 	}
-	info := profileJSON(u, hasPerm(c, repo.PermUserNicknameEdit))
+	info := profileJSON(u, h.profileEditable(c))
 	// 等级（v0.11）：徽章/进度渲染；聚合失败降级省略，不阻塞个人设置
 	if lv := h.levelBadgeInfo(c, uid); lv != nil {
 		info["level"] = lv
@@ -118,9 +137,15 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		return
 	}
 	var patch repo.UserPatch
+	editable := h.profileEditable(c)
+	// 锁定字段拒收（v0.34 资料自改开关）：昵称另有权限位文案，其余统一「管理员已锁定」
 	if req.Nickname != nil {
 		if !hasPerm(c, repo.PermUserNicknameEdit) {
 			fail(c, http.StatusForbidden, "当前角色不允许修改昵称")
+			return
+		}
+		if !editable.Nickname {
+			fail(c, http.StatusForbidden, "管理员已锁定昵称的修改")
 			return
 		}
 		nickname := trimTo(*req.Nickname, maxNicknameRunes)
@@ -130,6 +155,22 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		}
 		patch.Nickname = &nickname
 	}
+	if req.Gender != nil && !editable.Gender {
+		fail(c, http.StatusForbidden, "管理员已锁定性别的修改")
+		return
+	}
+	if req.Grade != nil && !editable.Grade {
+		fail(c, http.StatusForbidden, "管理员已锁定年级的修改")
+		return
+	}
+	if req.School != nil && !editable.School {
+		fail(c, http.StatusForbidden, "管理员已锁定学校的修改")
+		return
+	}
+	if req.Region != nil && !editable.Region {
+		fail(c, http.StatusForbidden, "管理员已锁定地区的修改")
+		return
+	}
 	bindStr := func(p *string, dst **string, max int) {
 		if p != nil {
 			v := trimTo(*p, max)
@@ -138,8 +179,18 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 	}
 	bindStr(req.Gender, &patch.Gender, 8)
 	bindStr(req.School, &patch.School, 64)
-	bindStr(req.Grade, &patch.Grade, 16)
 	bindStr(req.Region, &patch.Region, 32)
+	if req.Grade != nil {
+		// 年级（v0.34 结构化）：API 收显示名/数字（空串 = 清空回未设置），
+		// 无法识别的文本拒绝（下拉不该出现，防直连接口写脏数据）
+		g := strings.TrimSpace(*req.Grade)
+		if no := repo.ParseGrade(g); no > 0 || g == "" {
+			patch.GradeNo = &no
+		} else {
+			fail(c, http.StatusBadRequest, "年级无法识别（支持：一年级…高三 / 初一…初三 / 数字 1-12）")
+			return
+		}
+	}
 	if req.QQ != nil {
 		qq := trimTo(*req.QQ, 16)
 		if qq != "" && !qqDigits.MatchString(qq) {
@@ -258,5 +309,5 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取失败")
 		return
 	}
-	ok(c, profileJSON(u, hasPerm(c, repo.PermUserNicknameEdit)))
+	ok(c, profileJSON(u, h.profileEditable(c)))
 }

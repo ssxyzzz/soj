@@ -27,6 +27,11 @@ func (h *Handlers) AdminListUsers(c *gin.Context) {
 			j["locked_until"] = u.LockedUntil // 锁定中（v0.14 登录失败锁定），前端徽章展示
 		}
 		j["phone"] = u.Phone // 绑定信息（v0.16）：管理端可见；phone 未启用 UI，仅落库展示
+		// 资料（v0.34）：管理端编辑弹窗回填（grade 为显示名，空串 = 未设置）
+		j["gender"] = u.Gender
+		j["grade"] = u.GradeName()
+		j["school"] = u.School
+		j["region"] = u.Region
 		items = append(items, j)
 	}
 	ok(c, gin.H{"list": items, "total": total})
@@ -135,6 +140,11 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		Password *string `json:"password"`
 		Nickname *string `json:"nickname"`
 		Username *string `json:"username"`
+		// 资料（v0.34）：管理端编辑不受自改开关限制——锁定后的唯一修改口 + 迁移补录入口
+		Gender *string `json:"gender"`
+		Grade  *string `json:"grade"`  // 显示名/数字（空串 = 清空）；见 repo.ParseGrade
+		School *string `json:"school"`
+		Region *string `json:"region"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -175,6 +185,28 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 			return
 		}
 		patch.Nickname = &nickname
+	}
+	// 资料字段（v0.34）：性别/学校/地区 trim 截断同自助口径；年级显示名/数字解析
+	if req.Gender != nil {
+		g := trimTo(*req.Gender, 8)
+		patch.Gender = &g
+	}
+	if req.School != nil {
+		s := trimTo(*req.School, 64)
+		patch.School = &s
+	}
+	if req.Region != nil {
+		rg := trimTo(*req.Region, 32)
+		patch.Region = &rg
+	}
+	if req.Grade != nil {
+		g := strings.TrimSpace(*req.Grade)
+		if no := repo.ParseGrade(g); no > 0 || g == "" {
+			patch.GradeNo = &no
+		} else {
+			fail(c, http.StatusBadRequest, "年级无法识别（支持：一年级…高三 / 初一…初三 / 数字 1-12）")
+			return
+		}
 	}
 	pwdResetUname := "" // 重置密码的审计对象（最终用户名：本请求可能同时改名）
 	if req.Username != nil {
@@ -282,6 +314,12 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"problem_seq_start":          s.ProblemSeqStartVal(),
 		"currency_name":              s.CurrencyNameVal(),
 		"jade_award_rate_pct":        s.JadeAwardRatePctVal(),
+		// 资料自改开关（v0.34）：五字段逐个可锁
+		"profile_edit_nickname": s.OpenNickname(),
+		"profile_edit_gender":   s.OpenGender(),
+		"profile_edit_grade":    s.OpenGrade(),
+		"profile_edit_school":   s.OpenSchool(),
+		"profile_edit_region":   s.OpenRegion(),
 	})
 }
 
@@ -359,6 +397,12 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		JadeBountyMin           *int  `json:"jade_bounty_min"` // 悬赏额下限（v0.33-②）
 		JadeBountyMax           *int  `json:"jade_bounty_max"` // 悬赏额上限（v0.33-②）
 		JadeShopEnabled         *bool `json:"jade_shop_enabled"` // 实物兑换开关（v0.33-②，root）
+		// 资料自改开关（v0.34）：五字段逐个可锁（true = 允许本人改）
+		ProfileEditNickname *bool `json:"profile_edit_nickname"`
+		ProfileEditGender   *bool `json:"profile_edit_gender"`
+		ProfileEditGrade    *bool `json:"profile_edit_grade"`
+		ProfileEditSchool   *bool `json:"profile_edit_school"`
+		ProfileEditRegion   *bool `json:"profile_edit_region"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -607,6 +651,27 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	if req.JadeShopEnabled != nil {
 		s.JadeShopEnabled = req.JadeShopEnabled
 	}
+	// 资料自改开关（v0.34）：先归一到当前生效配置再覆盖出现项（未出现的保持原值）
+	if req.ProfileEditNickname != nil || req.ProfileEditGender != nil || req.ProfileEditGrade != nil ||
+		req.ProfileEditSchool != nil || req.ProfileEditRegion != nil {
+		pe := s.ProfileEditCfg()
+		if req.ProfileEditNickname != nil {
+			pe.Nickname = *req.ProfileEditNickname
+		}
+		if req.ProfileEditGender != nil {
+			pe.Gender = *req.ProfileEditGender
+		}
+		if req.ProfileEditGrade != nil {
+			pe.Grade = *req.ProfileEditGrade
+		}
+		if req.ProfileEditSchool != nil {
+			pe.School = *req.ProfileEditSchool
+		}
+		if req.ProfileEditRegion != nil {
+			pe.Region = *req.ProfileEditRegion
+		}
+		s.ProfileEdit = &pe
+	}
 	// 与启动校验同一口径：smtp 通道开着但配置不全不让存——否则重启直接拒绝启动，
 	// 管理员把自己锁在门外（运行期 Mailer() 会降级 log，但重启过不去）。
 	if s.MailChannelVal() == repo.MailChannelSMTP && !s.SMTP.Ready() {
@@ -635,5 +700,11 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"smtp_from":              s.SMTP.From,
 		"register_verify_mode":   s.RegisterVerifyModeVal(),
 		"password_reset_enabled": s.PasswordResetOpen(),
+		// 资料自改开关（v0.34）
+		"profile_edit_nickname": s.OpenNickname(),
+		"profile_edit_gender":   s.OpenGender(),
+		"profile_edit_grade":    s.OpenGrade(),
+		"profile_edit_school":   s.OpenSchool(),
+		"profile_edit_region":   s.OpenRegion(),
 	})
 }

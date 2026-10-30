@@ -1,15 +1,41 @@
 <script setup lang="ts">
 // 系统设置 · 账号与通知页（2026-10-28 拆分）：注册取号起点 / 通知保留 / 全站广播频次。
-import { onMounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+// v0.34 增：资料自改五开关（昵称/性别/年级/学校/地区）+ 年级自动晋级状态与手动晋级。
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
+import type { GradePromotionInfo } from '@/types'
 
 const userSeqStart = ref(100)
 const notifyRetentionDays = ref(90)
 const notifyBroadcastPerDay = ref(1)
 
-const saving = ref(false)
+// 资料自改开关（v0.34）：false = 学生端锁定该字段（root 用户管理仍可改）
+const profileEdit = ref({ nickname: true, gender: true, grade: true, school: true, region: true })
+const profileFields = [
+  { k: 'nickname' as const, label: '昵称' },
+  { k: 'gender' as const, label: '性别' },
+  { k: 'grade' as const, label: '年级' },
+  { k: 'school' as const, label: '学校' },
+  { k: 'region' as const, label: '地区' },
+]
+
+// 年级晋级（v0.34）：状态展示 + 手动立即晋级（错时钟/提前晋级兜底）
+const promo = ref<GradePromotionInfo | null>(null)
+const promoLoading = ref(false)
+const promoting = ref(false)
+
+const saveSettings = ref(false)
+const saving = computed(() => saveSettings.value)
+
+const promoTotal = computed(() =>
+  promo.value ? promo.value.grades.reduce((s, g) => s + g.count, 0) : 0,
+)
+/** 会被一次手动晋级推动的人数（1–12 档；高三→已毕业也算） */
+const promoAffected = computed(() =>
+  promo.value ? promo.value.grades.filter((g) => g.no >= 1 && g.no <= 12).reduce((s, g) => s + g.count, 0) : 0,
+)
 
 onMounted(async () => {
   try {
@@ -17,23 +43,75 @@ onMounted(async () => {
     userSeqStart.value = s.user_seq_start ?? 100
     notifyRetentionDays.value = s.notify_retention_days ?? 90
     notifyBroadcastPerDay.value = s.notify_broadcast_per_day ?? 1
+    profileEdit.value.nickname = s.profile_edit_nickname ?? true
+    profileEdit.value.gender = s.profile_edit_gender ?? true
+    profileEdit.value.grade = s.profile_edit_grade ?? true
+    profileEdit.value.school = s.profile_edit_school ?? true
+    profileEdit.value.region = s.profile_edit_region ?? true
   } catch {
     // 加载失败保留默认值展示
   }
+  loadPromo()
 })
 
+async function loadPromo() {
+  promoLoading.value = true
+  try {
+    promo.value = await adminApi.gradePromotionInfo()
+  } catch {
+    promo.value = null
+  } finally {
+    promoLoading.value = false
+  }
+}
+
 async function save() {
-  saving.value = true
+  saveSettings.value = true
   try {
     await adminApi.updateSettings({
       user_seq_start: userSeqStart.value,
       notify_retention_days: notifyRetentionDays.value,
       notify_broadcast_per_day: notifyBroadcastPerDay.value,
+      profile_edit_nickname: profileEdit.value.nickname,
+      profile_edit_gender: profileEdit.value.gender,
+      profile_edit_grade: profileEdit.value.grade,
+      profile_edit_school: profileEdit.value.school,
+      profile_edit_region: profileEdit.value.region,
     })
     ElMessage.success('账号与通知设置已保存')
   } finally {
-    saving.value = false
+    saveSettings.value = false
   }
+}
+
+async function forcePromo() {
+  if (!promo.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确认立即让全部年级晋级一次（${promoAffected.value} 名 1–12 档用户各 +1、高三 → 已毕业，未设置不动）？` +
+        '该操作不可撤销，请确认学期衔接无误。',
+      '手动年级晋级',
+      { type: 'warning', confirmButtonText: '立即晋级', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  promoting.value = true
+  try {
+    const r = await adminApi.gradePromotionForce()
+    ElMessage.success(`年级晋级完成：影响 ${r.promoted} 名用户`)
+    await loadPromo()
+  } catch {
+    // 拦截器统一提示
+  } finally {
+    promoting.value = false
+  }
+}
+
+function fmtNext(at: string | undefined) {
+  if (!at) return '—'
+  const d = new Date(at)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 </script>
 
@@ -51,6 +129,50 @@ async function save() {
         <el-input-number v-model="userSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
         <span class="dim" style="margin-left: 8px">
           自动分配的用户 ID 从该号起（默认 100）；调大即时生效、只前进不回退（计数器已超过起点时从计数器继续）；后台手动指定 ID 不受此限
+        </span>
+      </el-form-item>
+
+      <el-divider content-position="left">资料自改（v0.34）</el-divider>
+      <el-form-item label="允许本人修改的字段">
+        <div class="pe-switches">
+          <label v-for="f in profileFields" :key="f.k" class="pe-sw">
+            <el-switch v-model="profileEdit[f.k]" />
+            <span>{{ f.label }}</span>
+          </label>
+        </div>
+      </el-form-item>
+      <el-form-item>
+        <span class="dim">
+          关闭 = 学生端该字段只读（保存不生效）；root 用户管理编辑不受限。昵称同时受角色权限位
+          user.nickname.edit 约束（双闸）；QQ / 邮箱不锁。年级关闭后仍会每年自动晋级。
+        </span>
+      </el-form-item>
+
+      <el-divider content-position="left">年级自动晋级（v0.34）</el-divider>
+      <el-form-item label="当前学年">
+        <span v-if="promo">
+          {{ promo.current_year }}–{{ promo.current_year + 1 }} 学年 · 下次自动晋级 {{ fmtNext(promo.next_at) }}（每年 9 月 1 日）
+        </span>
+        <span v-else class="dim">读取中…</span>
+      </el-form-item>
+      <el-form-item label="各档位在册">
+        <span v-if="promo && promoTotal" class="grade-counts">
+          <span
+            v-for="g in promo.grades.filter((x) => x.count > 0)"
+            :key="g.no"
+            class="gc"
+          >
+            {{ g.name || '未设置' }} <b>{{ g.count }}</b>
+          </span>
+        </span>
+        <span v-else class="dim">暂无设年级的用户</span>
+      </el-form-item>
+      <el-form-item label="手动晋级">
+        <el-button type="warning" :loading="promoting" :disabled="!promo" @click="forcePromo">
+          立即晋级一次
+        </el-button>
+        <span class="dim" style="margin-left: 8px">
+          兜底用（如服务器时钟异常 / 学期提前）：全体 1–12 档 +1、高三 → 已毕业；自动晋级不受影响
         </span>
       </el-form-item>
 
@@ -72,5 +194,29 @@ async function save() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.pe-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.pe-sw {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.grade-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.gc {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 </style>

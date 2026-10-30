@@ -346,9 +346,13 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.GET("/users", RequirePerm(repo.PermAdminUserManage), h.AdminListUsers)
 				adminG.POST("/users", RequirePerm(repo.PermAdminUserManage), h.AdminCreateUser)
 				adminG.PATCH("/users/:id", RequirePerm(repo.PermAdminUserManage), h.AdminUpdateUser)
-				// 批量建号（v0.24 小批）：CSV 模板下载 + 表格导入，与建号同权限位
+				// 批量建号（v0.34 中文花名册·两段式）：模板下载 + 上传识别 + 确认建号，与建号同权限位
 				adminG.GET("/users/import-template", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportTemplate)
-				adminG.POST("/users/import", RequirePerm(repo.PermAdminUserManage), h.AdminImportUsers)
+				adminG.POST("/users/import-preview", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportPreview)
+				adminG.POST("/users/import-commit", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportCommit)
+				// 年级晋级状态与手动晋级（v0.34）：系统设置权限位（root 后台面板）
+				adminG.GET("/grade-promotion", RequirePerm(repo.PermAdminSettings), h.AdminGradePromotionInfo)
+				adminG.POST("/grade-promotion", RequirePerm(repo.PermAdminSettings), h.AdminGradePromotionForce)
 				// 解绑邮箱（v0.16）：root 硬编码（学生换邮箱场景，不设权限位）
 				adminG.DELETE("/users/:id/email", RequireRoot(), h.AdminUnbindEmail)
 				adminG.GET("/settings", RequirePerm(repo.PermAdminSettings), h.GetSettings)

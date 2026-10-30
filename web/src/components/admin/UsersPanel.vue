@@ -14,7 +14,8 @@ import { verifyApi } from '@/api/verify'
 import TierBadge from '@/components/TierBadge.vue'
 import { useAdminRolesStore } from '@/stores/adminRoles'
 import { useUserStore } from '@/stores/user'
-import type { AdminUser, UserLevelInfo } from '@/types'
+import type { AdminUser, UserImportRow, UserLevelInfo } from '@/types'
+import { GRADE_OPTIONS } from '@/utils/grades'
 
 const roleStore = useAdminRolesStore()
 const userStore = useUserStore()
@@ -119,11 +120,20 @@ async function create() {
   }
 }
 
-// ---- 批量建号（CSV 表格导入，v0.24 小批）----
+// ---- 批量建号·中文花名册（v0.34 两段式）：上传识别 → 预览确认 → 建号导出 ----
 const showImport = ref(false)
+const importStep = ref(1) // 1 上传 / 2 预览 / 3 结果
 const importing = ref(false)
 const importFile = ref<UploadUserFile[]>([])
+const previewRows = ref<UserImportRow[]>([])
 const importResult = ref<{ total: number; success: number; failed: { row: number; username: string; reason: string }[] } | null>(null)
+
+const importValid = computed(() => previewRows.value.filter((r) => !r.problems?.length))
+
+// 问题行标红底（el-table row-class-name）
+function importRowClass({ row }: { row: UserImportRow }) {
+  return row.problems?.length ? 'import-bad-row' : ''
+}
 
 function downloadTemplate() {
   downloadFile('/admin/users/import-template', 'SOJ批量建号模板.csv')
@@ -133,18 +143,43 @@ function onImportFile(file: UploadUserFile) {
   importFile.value = [file]
 }
 
-async function runImport() {
+async function runPreview() {
   const f = importFile.value[0]?.raw as File | undefined
   if (!f) {
     ElMessage.warning('请先选择 CSV 文件')
     return
   }
   importing.value = true
-  importResult.value = null
   try {
     const fd = new FormData()
     fd.append('file', f)
-    importResult.value = await adminApi.importUsers(fd)
+    const r = await adminApi.importUsersPreview(fd)
+    previewRows.value = r.rows
+    importStep.value = 2
+    if (!r.rows.length) ElMessage.warning('表格里没有识别到任何账号行')
+  } finally {
+    importing.value = false
+  }
+}
+
+async function runCommit() {
+  if (!importValid.value.length) {
+    ElMessage.warning('没有可导入的行（全部存在问题，请修正后重新上传）')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `确认为 ${importValid.value.length} 个账号建号？初始密码在结果页导出后发放给学生。`,
+      '确认建号',
+      { type: 'warning', confirmButtonText: '确认建号', cancelButtonText: '返回预览' },
+    )
+  } catch {
+    return
+  }
+  importing.value = true
+  try {
+    importResult.value = await adminApi.importUsersCommit(importValid.value)
+    importStep.value = 3
     if (importResult.value.success > 0) {
       ElMessage.success(`批量建号完成：成功 ${importResult.value.success} 个`)
       await load()
@@ -156,9 +191,38 @@ async function runImport() {
   }
 }
 
+// 导出已建账号（用户名/ID/姓名/初始密码；只导成功的行——按行号从失败清单排除）
+function exportAccounts() {
+  if (!importResult.value) return
+  const failedRows = new Set(importResult.value.failed.map((f) => f.row))
+  const created = importValid.value.filter((r) => !failedRows.has(r.row))
+  if (!created.length) {
+    ElMessage.warning('本次没有成功建号的账号')
+    return
+  }
+  const esc = (s: string | number) => {
+    const v = String(s ?? '')
+    return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+  }
+  const lines = [
+    '# 初始密码仅此一次导出，请妥善保管发放；学生首次登录后可自行修改',
+    'username,id,姓名,初始密码',
+    ...created.map((r) => [r.username, r.id, r.name, r.password].map(esc).join(',')),
+  ]
+  // 带 BOM：Excel 直开不乱码
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `SOJ建号_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
 function resetImport() {
   importFile.value = []
+  previewRows.value = []
   importResult.value = null
+  importStep.value = 1
 }
 
 // ---- 编辑弹窗：用户名 / 昵称 / 密码 / 确认密码 ----
@@ -179,9 +243,13 @@ const editForm = reactive({
   confirm: '',
   email: '',
   phone: '',
+  gender: '',
+  grade: '',
+  school: '',
+  region: '',
 })
 
-function openEdit(row: AdminUser & { email?: string; phone?: string }) {
+function openEdit(row: AdminUser) {
   editForm.id = row.id
   editForm.username = row.username
   editForm.originUsername = row.username
@@ -190,6 +258,10 @@ function openEdit(row: AdminUser & { email?: string; phone?: string }) {
   editForm.confirm = ''
   editForm.email = row.email ?? ''
   editForm.phone = row.phone ?? ''
+  editForm.gender = row.gender ?? ''
+  editForm.grade = row.grade ?? ''
+  editForm.school = row.school ?? ''
+  editForm.region = row.region ?? ''
   showEdit.value = true
   openXp(row) // 经验/玉调整并入编辑弹窗（2026-10-30 拍板）：打开即带出当前值
   openJade(row)
@@ -252,6 +324,10 @@ async function submitEdit() {
       nickname: editForm.nickname.trim(),
       ...(renamed ? { username: editForm.username.trim() } : {}),
       ...(editForm.password ? { password: editForm.password } : {}),
+      gender: editForm.gender,
+      grade: editForm.grade,
+      school: editForm.school.trim(),
+      region: editForm.region.trim(),
     })
     ElMessage.success('用户信息已修改')
     showEdit.value = false
@@ -431,44 +507,103 @@ defineExpose({ refresh: () => load() })
       :image-size="60"
     />
 
-    <!-- 批量建号（v0.24 小批）：下载模板 → 填表 → 上传 CSV；逐行 best-effort，失败行全量明细 -->
-    <el-dialog v-model="showImport" title="批量导入用户" width="640">
-      <el-alert
-        title="三步：下载模板 → 按列填写（id 可留空自动分配，起点见系统设置-注册取号起点）→ 上传 CSV"
-        type="info"
-        :closable="false"
-        style="margin-bottom: 14px"
-      />
-      <div class="import-actions">
-        <el-button @click="downloadTemplate">⬇ 下载模板</el-button>
-        <el-upload
-          :file-list="importFile"
-          accept=".csv"
-          :auto-upload="false"
-          :limit="1"
-          :on-change="onImportFile"
-          :on-remove="() => (importFile = [])"
-          style="flex: 1"
-        >
-          <el-button>选择 CSV 文件</el-button>
-        </el-upload>
-      </div>
-      <template v-if="importResult">
-        <el-divider content-position="left">导入结果</el-divider>
-        <p class="import-summary">
-          共 {{ importResult.total }} 行 · 成功
-          <b class="ok">{{ importResult.success }}</b> · 失败
-          <b class="bad">{{ importResult.failed.length }}</b>
+    <!-- 批量建号·中文花名册（v0.34 两段式）：上传识别 → 预览确认（id/用户名可改）→ 建号导出 -->
+    <el-dialog v-model="showImport" title="批量导入用户" width="920" @closed="resetImport">
+      <el-steps :active="importStep" align-finish style="margin-bottom: 16px">
+        <el-step title="上传花名册" />
+        <el-step title="预览确认" />
+        <el-step title="建号完成" />
+      </el-steps>
+
+      <!-- 第一步：下载模板 → 填表 → 上传识别 -->
+      <template v-if="importStep === 1">
+        <el-alert
+          title="下载模板 → 填写花名册（id、姓名必填；性别/年级/学校/地区/角色选填）→ 上传识别"
+          type="info"
+          :closable="false"
+          style="margin-bottom: 14px"
+        />
+        <p class="dim" style="margin: 0 0 10px">
+          用户名默认 = 姓名拼音 + id（张三 1001 → zhangsan1001，多音字可在预览里改）；初始密码每人随机生成，
+          建号后导出表格发放；id 即站内用户 ID。支持 GBK/UTF-8 编码（Excel 直接另存的 CSV 可用）。
         </p>
-        <el-table v-if="importResult.failed.length" :data="importResult.failed" size="small" max-height="240">
-          <el-table-column label="表格行号" prop="row" width="90" />
-          <el-table-column label="用户名" prop="username" width="150" show-overflow-tooltip />
-          <el-table-column label="失败原因" prop="reason" min-width="180" show-overflow-tooltip />
+        <div class="import-actions">
+          <el-button @click="downloadTemplate">⬇ 下载模板</el-button>
+          <el-upload
+            :file-list="importFile"
+            accept=".csv"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="onImportFile"
+            :on-remove="() => (importFile = [])"
+            style="flex: 1"
+          >
+            <el-button>选择 CSV 文件</el-button>
+          </el-upload>
+        </div>
+      </template>
+
+      <!-- 第二步：识别结果预览（问题行标红禁选；id/用户名可改，改完即刻生效于建号） -->
+      <template v-else-if="importStep === 2">
+        <p class="import-summary">
+          共识别 {{ previewRows.length }} 行 · 可导入
+          <b class="ok">{{ importValid.length }}</b> · 有问题
+          <b class="bad">{{ previewRows.length - importValid.length }}</b>
+          <span class="dim">（问题行不会建号；id 与用户名可直接修改纠错）</span>
+        </p>
+        <el-table :data="previewRows" size="small" max-height="380" :row-class-name="importRowClass">
+          <el-table-column label="行号" prop="row" width="64" />
+          <el-table-column label="ID" width="120">
+            <template #default="{ row }">
+              <el-input v-model.number="row.id" size="small" :disabled="!!row.problems?.length" />
+            </template>
+          </el-table-column>
+          <el-table-column label="姓名" prop="name" width="90" show-overflow-tooltip />
+          <el-table-column label="性别" prop="gender" width="56" />
+          <el-table-column label="年级" prop="grade" width="70" show-overflow-tooltip />
+          <el-table-column label="学校" prop="school" min-width="110" show-overflow-tooltip />
+          <el-table-column label="用户名" min-width="150">
+            <template #default="{ row }">
+              <el-input v-if="!row.problems?.length" v-model="row.username" size="small" />
+              <span v-else>{{ row.username || '—' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="初始密码" prop="password" width="110" />
+          <el-table-column label="问题" min-width="150">
+            <template #default="{ row }">
+              <el-tag v-for="p in row.problems" :key="p" type="danger" size="small" style="margin-right: 4px">
+                {{ p }}
+              </el-tag>
+            </template>
+          </el-table-column>
         </el-table>
       </template>
+
+      <!-- 第三步：建号结果 + 账号导出 -->
+      <template v-else>
+        <p class="import-summary">
+          共 {{ importResult?.total ?? 0 }} 行 · 成功
+          <b class="ok">{{ importResult?.success ?? 0 }}</b> · 失败
+          <b class="bad">{{ importResult?.failed.length ?? 0 }}</b>
+        </p>
+        <el-button type="success" :disabled="!importResult?.success" @click="exportAccounts">
+          ⬇ 导出已建账号（用户名 / ID / 姓名 / 初始密码）
+        </el-button>
+        <el-table v-if="importResult?.failed.length" :data="importResult.failed" size="small" max-height="240" style="margin-top: 10px">
+          <el-table-column label="表格行号" prop="row" width="90" />
+          <el-table-column label="用户名" prop="username" width="180" show-overflow-tooltip />
+          <el-table-column label="失败原因" prop="reason" min-width="200" show-overflow-tooltip />
+        </el-table>
+      </template>
+
       <template #footer>
         <el-button @click="showImport = false">关闭</el-button>
-        <el-button type="primary" :loading="importing" @click="runImport">开始导入</el-button>
+        <el-button v-if="importStep === 2" @click="importStep = 1">上一步</el-button>
+        <el-button v-if="importStep === 1" type="primary" :loading="importing" @click="runPreview">识别表格</el-button>
+        <el-button v-else-if="importStep === 2" type="primary" :loading="importing" @click="runCommit">
+          确认建号（{{ importValid.length }} 个）
+        </el-button>
+        <el-button v-else type="primary" @click="resetImport">再导一批</el-button>
       </template>
     </el-dialog>
 
@@ -552,7 +687,27 @@ defineExpose({ refresh: () => load() })
           <el-form-item label="确认新密码">
             <el-input v-model="editForm.confirm" type="password" show-password placeholder="再次输入新密码" />
           </el-form-item>
+          <el-form-item label="性别">
+            <el-select v-model="editForm.gender" clearable placeholder="未填写" style="width: 160px">
+              <el-option value="男" label="男" />
+              <el-option value="女" label="女" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="年级">
+            <el-select v-model="editForm.grade" clearable placeholder="未设置" style="width: 160px">
+              <el-option v-for="g in GRADE_OPTIONS" :key="g" :value="g" :label="g" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="学校">
+            <el-input v-model="editForm.school" maxlength="64" placeholder="选填" />
+          </el-form-item>
+          <el-form-item label="地区">
+            <el-input v-model="editForm.region" maxlength="32" placeholder="选填" />
+          </el-form-item>
         </div>
+        <p class="dim" style="margin: -6px 0 0">
+          资料修改不受学生端「资料自改开关」限制；年级每年 9 月 1 日自动晋级（高一升高二…高三→已毕业）。
+        </p>
       </el-form>
 
       <!-- 经验调整：当前等级徽章 + 正加负减 + 可选备注，独立提交 -->
@@ -732,5 +887,10 @@ defineExpose({ refresh: () => load() })
 
 .import-summary .bad {
   color: var(--el-color-danger);
+}
+
+/* 两段式预览（v0.34）：问题行红底提示（scoped 需穿透 el-table 行类名） */
+:deep(.import-bad-row) {
+  --el-table-tr-bg-color: var(--el-color-danger-light-9);
 }
 </style>

@@ -1,46 +1,67 @@
 package server
 
-// 批量建号（v0.24 小批）：CSV 表格上传 + 模板下载，admin.user.manage 权限位（路由侧）。
-// 列固定 id,username,password,nickname,role（id/昵称/角色可留空，表头序无关、按名映射）；
-// # 注释行与空行忽略；逐行独立处理（best-effort），失败行全部列出不中断——班级场景
-// 一次导入几十上百个号，单行错误不该让人重传整份表格。ID 占用冲突由唯一索引兜底，
-// 手动 ID 建号走 CreateUserWithID（计数器 $max 避让，后续自增不撞）。
+// 批量建号·中文花名册模式（v0.34，两段式）：上传识别（preview）→ 预览确认（可改
+// id/用户名）→ 建号（commit）→ 前端导出账号 CSV。表头中英别名按名映射（序无关）；
+// GBK/GB18030 自动识别（Excel 另存 CSV 常为 GBK）；用户名默认 = 姓名拼音小写连写 +
+// id（张三 1001 → zhangsan1001，go-pinyin 默认读音，多音字预览可改）；初始密码每人
+// 随机 8 位去混淆字符（明文只在预览/结果/导出三处出现，不落日志与审计）。
+// 老英文模板（username/password 列填了优先）经同一张映射表自然可用。
+// admin.user.manage 权限位（路由侧）；逐行 best-effort、失败行全量明细（沿 v0.24 口径）。
 
 import (
+	"bytes"
+	"crypto/rand"
 	"encoding/csv"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"github.com/mozillazg/go-pinyin"
+	"golang.org/x/text/encoding/simplifiedchinese"
 
 	"soj/internal/repo"
 )
 
 const (
-	maxUserImportBytes = 2 << 20 // 单文件 2MB（1000 行 CSV 远用不满）
+	maxUserImportBytes = 2 << 20 // 单文件 2MB（1000 行花名册远用不满）
 	maxUserImportRows  = 1000    // 单次最多建 1000 个号
 )
 
-// AdminUserImportTemplate GET /api/admin/users/import-template —— 建号模板下载（带 BOM，Excel 直开）。
-func (h *Handlers) AdminUserImportTemplate(c *gin.Context) {
-	rows := [][]string{
-		{"# SOJ 批量建号模板：每行一个账号，以 # 开头的行会被忽略"},
-		{"# 列说明：id 可留空（自动分配，起点见后台「系统设置-注册取号起点」，默认 100，也可手动指定）；username 需 3-32 位字母/数字/下划线；password 至少 8 位；nickname 留空默认同用户名；role 留空默认 default"},
-		{"id", "username", "password", "nickname", "role"},
-		{"1001", "zhangsan", "Passw0rd!", "张三", "default"},
-		{"", "lisi", "Passw0rd!", "李四", "default"},
-	}
-	serveCSV(c, csvSafeName("SOJ批量建号模板.csv"), rows)
+// userImportCols 列别名表：中文名/英文名 → 规范键（表头小写 trim 后查表）。
+var userImportCols = map[string]string{
+	// id / 学号（花名册语义：站内用户 ID，拼进默认用户名）
+	"id": "id", "学号": "id", "编号": "id",
+	// 姓名（落昵称，拼音生成默认用户名）
+	"姓名": "name", "名字": "name", "nickname": "name", "昵称": "name",
+	"性别": "gender", "gender": "gender",
+	"年级": "grade", "grade": "grade",
+	"学校": "school", "school": "school",
+	"地区": "region", "region": "region",
+	"角色": "role", "role": "role",
+	// 老英文模板列：填了优先（用户名覆盖拼音生成、密码覆盖随机）
+	"username": "username", "用户名": "username",
+	"password": "password", "密码": "password",
 }
 
-// userImportResultRow 单行结果（失败明细下发前端表格）。
-type userImportResultRow struct {
-	Row      int    `json:"row"`
-	Username string `json:"username"`
-	Reason   string `json:"reason"`
+// AdminUserImportTemplate GET /api/admin/users/import-template —— 中文花名册模板下载
+//（带 BOM，Excel 直开；注释行说明列语义与生成规则）。
+func (h *Handlers) AdminUserImportTemplate(c *gin.Context) {
+	rows := [][]string{
+		{"# SOJ 批量建号·中文花名册模板：每行一个账号，以 # 开头的行会被忽略"},
+		{"# 必填：id（即站内用户 ID）、姓名；选填：性别、年级（如：初一/高一/7/12年级）、学校、地区、角色（默认 default）"},
+		{"# 用户名默认 = 姓名拼音小写 + id（张三 1001 → zhangsan1001），可在导入预览里逐行修改；初始密码每人随机生成，建号后导出表格发放"},
+		{"# 兼容老模板：username/password 列填了优先使用（此法 id 可留空自动分配）"},
+		{"id", "姓名", "性别", "年级", "学校", "地区", "角色"},
+		{"1001", "张三", "男", "初一", "市第一中学", "山东济南", ""},
+		{"1002", "李四", "女", "高一", "市第一中学", "", "default"},
+	}
+	serveCSV(c, csvSafeName("SOJ批量建号模板.csv"), rows)
 }
 
 // stripCSVBOM 去掉首字段可能的 UTF-8 BOM（表格软件另存常带）。
@@ -48,41 +69,85 @@ func stripCSVBOM(s string) string {
 	return strings.TrimPrefix(s, "\xEF\xBB\xBF")
 }
 
-// AdminImportUsers POST /api/admin/users/import —— CSV 批量建号。
-func (h *Handlers) AdminImportUsers(c *gin.Context) {
-	_, uname, _, _ := currentUser(c)
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUserImportBytes)
-	form, err := c.MultipartForm()
-	if err != nil {
-		fail(c, http.StatusBadRequest, "上传失败：请求体过大或格式错误（单文件上限 2MB）")
-		return
+// decodeUserImportCSV 编码自动识别后解析：UTF-8（含 BOM）直接读，含非法 UTF-8
+// 序列按 GB18030 解码再读（Excel 另存 CSV 默认 GBK，中文花名册刚需）。
+func decodeUserImportCSV(raw []byte) ([][]string, error) {
+	raw = bytes.TrimPrefix(raw, []byte("\xEF\xBB\xBF"))
+	if !utf8.Valid(raw) {
+		if decoded, err := simplifiedchinese.GB18030.NewDecoder().Bytes(raw); err == nil {
+			raw = decoded
+		}
 	}
-	files := form.File["file"]
-	if len(files) == 0 {
-		fail(c, http.StatusBadRequest, "未选择文件")
-		return
-	}
-	fh := files[0]
-	src, err := fh.Open()
-	if err != nil {
-		fail(c, http.StatusBadRequest, "读取文件失败")
-		return
-	}
-	defer src.Close()
-
-	reader := csv.NewReader(io.LimitReader(src, maxUserImportBytes))
+	reader := csv.NewReader(bytes.NewReader(raw))
 	reader.FieldsPerRecord = -1 // 列数自校验（表头按名映射），不依赖每行等列
-	records, err := reader.ReadAll()
-	if err != nil {
-		fail(c, http.StatusBadRequest, "CSV 解析失败："+err.Error())
-		return
-	}
-	if len(records) > maxUserImportRows+16 { // 16 行余量容纳注释与表头
-		fail(c, http.StatusBadRequest, fmt.Sprintf("行数过多（上限 %d 个账号），请分批导入", maxUserImportRows))
-		return
-	}
+	return reader.ReadAll()
+}
 
-	// 定位表头并按列名映射（首条非空非注释行）
+// pwAlphabet 随机密码字符集（8 位，去混淆：0/O/1/l/I 不入池）。
+const pwAlphabet = "23456789abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ"
+
+// genImportPassword crypto/rand 随机 8 位初始密码。
+func genImportPassword() string {
+	b := make([]byte, 8)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(pwAlphabet))))
+		if err != nil {
+			b[i] = pwAlphabet[i%len(pwAlphabet)] // 系统熵源故障时退化为确定性序列（几乎不可能）
+			continue
+		}
+		b[i] = pwAlphabet[n.Int64()]
+	}
+	return string(b)
+}
+
+// pinyinUsername 默认用户名：姓名拼音小写连写 + id。汉字段走 go-pinyin 默认读音
+//（多音字由预览行内修改兜底）；非汉字仅保留字母数字小写直拼（英文名/数字），
+// 空白与 ·/- 等分隔符丢弃。
+func pinyinUsername(name string, id int64) string {
+	args := pinyin.NewArgs()
+	var sb strings.Builder
+	var han strings.Builder
+	flush := func() {
+		if han.Len() == 0 {
+			return
+		}
+		for _, part := range pinyin.LazyPinyin(han.String(), args) {
+			sb.WriteString(strings.ToLower(part))
+		}
+		han.Reset()
+	}
+	for _, r := range name {
+		if unicode.Is(unicode.Han, r) {
+			han.WriteRune(r)
+			continue
+		}
+		flush()
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			sb.WriteRune(unicode.ToLower(r))
+		}
+	}
+	flush()
+	return sb.String() + strconv.FormatInt(id, 10)
+}
+
+// userImportRow 一行识别结果（预览下发 + 确认回传同构；id/username 预览可改）。
+type userImportRow struct {
+	Row      int      `json:"row"` // CSV 行号（含表头 1-based，与 Excel 一致）
+	ID       int64    `json:"id"`  // 0 = 自动分配（老模式）
+	Name     string   `json:"name"`
+	Gender   string   `json:"gender"`
+	Grade    string   `json:"grade"` // 显示名（空 = 未设置）
+	School   string   `json:"school"`
+	Region   string   `json:"region"`
+	Role     string   `json:"role"`
+	Username string   `json:"username"`
+	Password string   `json:"password"`
+	Problems []string `json:"problems,omitempty"`
+}
+
+// userImportParse 上传文件 → 识别行集合（两段共用）：表头定位 + 逐行解析生成与
+// 静态校验（格式/表内重复）；DB 占用查重由调用方批量补标。
+func userImportParse(records [][]string) (rows []userImportRow, err error) {
 	col := map[string]int{}
 	headerSeen := false
 	start := 0
@@ -92,33 +157,223 @@ func (h *Handlers) AdminImportUsers(c *gin.Context) {
 		}
 		for j, cell := range rec {
 			name := strings.ToLower(strings.TrimSpace(stripCSVBOM(cell)))
-			if name != "" {
-				col[name] = j
+			if name == "" {
+				continue
+			}
+			if key, ok := userImportCols[name]; ok {
+				col[key] = j
 			}
 		}
-		for _, want := range []string{"username", "password"} {
-			if _, ok := col[want]; !ok {
-				fail(c, http.StatusBadRequest, "表头缺少列 "+want+"（请使用官方模板的列名：id,username,password,nickname,role）")
-				return
-			}
+		// 表头必填判定：中文花名册需 id+姓名；老英文模板有 username 列即可（id 可留空自动分配）
+		_, hasID := col["id"]
+		_, hasName := col["name"]
+		_, hasUsername := col["username"]
+		if !hasUsername && !(hasID && hasName) {
+			return nil, fmt.Errorf("表头缺少必填列（花名册需 id+姓名；老模板可用 username/password，详见下载的模板说明）")
 		}
 		headerSeen = true
 		start = i + 1
 		break
 	}
 	if !headerSeen {
-		fail(c, http.StatusBadRequest, "表格为空：请先在第一行填写列名（或直接使用下载的模板）")
-		return
+		return nil, fmt.Errorf("表格为空：请先在第一行填写列名（或直接使用下载的模板）")
 	}
-	get := func(rec []string, name string) string {
-		idx, ok := col[name]
+	get := func(rec []string, key string) string {
+		idx, ok := col[key]
 		if !ok || idx >= len(rec) {
 			return ""
 		}
 		return strings.TrimSpace(rec[idx])
 	}
 
-	// 角色集合一次拉取（表内逐行查库太浪费）
+	seenID := map[int64]bool{}
+	seenUname := map[string]bool{}
+	rowNo := start
+	for _, rec := range records[start:] {
+		rowNo++
+		if isUserImportSkipRow(rec) {
+			continue
+		}
+		row := userImportRow{
+			Row:     rowNo,
+			Name:    get(rec, "name"),
+			Gender:  trimTo(get(rec, "gender"), 8),
+			Grade:   strings.TrimSpace(get(rec, "grade")),
+			School:  trimTo(get(rec, "school"), 64),
+			Region:  trimTo(get(rec, "region"), 32),
+			Role:    get(rec, "role"),
+			Username: get(rec, "username"),
+			Password: get(rec, "password"),
+		}
+		if row.Name == "" && row.Username == "" && row.Password == "" && row.Gender == "" &&
+			row.Grade == "" && row.School == "" && row.Region == "" && row.Role == "" && get(rec, "id") == "" {
+			continue // 全空行
+		}
+
+		// id：花名册必填（默认用户名要拼）；显式 username 的老模式行可留空自动分配
+		if idStr := get(rec, "id"); idStr != "" {
+			id, perr := strconv.ParseInt(idStr, 10, 64)
+			if perr != nil || id < 1 || id > 1_000_000_000 {
+				row.Problems = append(row.Problems, "id 需为正整数（上限 10 亿）")
+			} else {
+				row.ID = id
+			}
+		} else if row.Username == "" {
+			row.Problems = append(row.Problems, "id 必填（拼音用户名由它拼接）")
+		}
+
+		// 年级：可空；非空必须能识别（防脏档位）
+		if row.Grade != "" && repo.ParseGrade(row.Grade) == 0 {
+			row.Problems = append(row.Problems, "年级无法识别（支持：一年级…高三 / 初一…初三 / 数字 1-12）")
+		}
+
+		// 用户名：显式列优先，否则拼音 + id
+		if row.Username == "" {
+			if row.Name == "" {
+				row.Problems = append(row.Problems, "姓名必填")
+			} else if row.ID > 0 {
+				row.Username = pinyinUsername(row.Name, row.ID)
+			}
+		}
+		if row.Username != "" && !usernameRE.MatchString(row.Username) {
+			row.Problems = append(row.Problems, "用户名需为 3-32 位字母/数字/下划线")
+		}
+		// 密码：显式列优先（合法性后判），否则预览阶段即生成（确认沿用同一批）
+		if row.Password == "" {
+			row.Password = genImportPassword()
+		}
+		if msg := passwordProblem(row.Password); msg != "" {
+			row.Problems = append(row.Problems, msg)
+		}
+
+		// 表内重复
+		if row.ID > 0 {
+			if seenID[row.ID] {
+				row.Problems = append(row.Problems, "表内 id 重复")
+			}
+			seenID[row.ID] = true
+		}
+		if row.Username != "" {
+			lu := strings.ToLower(row.Username)
+			if seenUname[lu] {
+				row.Problems = append(row.Problems, "表内用户名重复")
+			}
+			seenUname[lu] = true
+		}
+		rows = append(rows, row)
+	}
+	if len(rows) > maxUserImportRows {
+		return nil, fmt.Errorf("行数过多（上限 %d 个账号），请分批导入", maxUserImportRows)
+	}
+	return rows, nil
+}
+
+// markDBConflicts 批量查库补标占用冲突（ID/用户名小写归一判重）。
+func (h *Handlers) markDBConflicts(c *gin.Context, rows []userImportRow) {
+	ids := make([]int64, 0, len(rows))
+	unames := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if r.ID > 0 {
+			ids = append(ids, r.ID)
+		}
+		if r.Username != "" {
+			unames = append(unames, r.Username)
+		}
+	}
+	existingIDs, err := h.repo.ExistingUserIDs(c.Request.Context(), ids)
+	if err != nil {
+		return // 查重失败不拦预览，建号时唯一索引兜底
+	}
+	existingUnames, err := h.repo.ExistingUsernames(c.Request.Context(), unames)
+	if err != nil {
+		return
+	}
+	for i := range rows {
+		if rows[i].ID > 0 && existingIDs[rows[i].ID] {
+			rows[i].Problems = append(rows[i].Problems, "用户 ID 已被占用")
+		}
+		if rows[i].Username != "" && existingUnames[strings.ToLower(rows[i].Username)] {
+			rows[i].Problems = append(rows[i].Problems, "用户名已存在")
+		}
+	}
+}
+
+// readImportUploadFile 取上传文件原文（2MB 上限）。
+func readImportUploadFile(c *gin.Context) ([]byte, string, bool) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUserImportBytes)
+	form, err := c.MultipartForm()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "上传失败：请求体过大或格式错误（单文件上限 2MB）")
+		return nil, "", false
+	}
+	files := form.File["file"]
+	if len(files) == 0 {
+		fail(c, http.StatusBadRequest, "未选择文件")
+		return nil, "", false
+	}
+	fh := files[0]
+	src, err := fh.Open()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "读取文件失败")
+		return nil, "", false
+	}
+	defer src.Close()
+	raw, err := io.ReadAll(io.LimitReader(src, maxUserImportBytes))
+	if err != nil {
+		fail(c, http.StatusBadRequest, "读取文件失败")
+		return nil, "", false
+	}
+	return raw, fh.Filename, true
+}
+
+// AdminUserImportPreview POST /api/admin/users/import-preview —— 第一段：上传识别。
+// 返回逐行识别结果（含生成的用户名/密码与问题清单），前端预览表展示、可改后确认。
+func (h *Handlers) AdminUserImportPreview(c *gin.Context) {
+	raw, _, okFile := readImportUploadFile(c)
+	if !okFile {
+		return
+	}
+	records, err := decodeUserImportCSV(raw)
+	if err != nil {
+		fail(c, http.StatusBadRequest, "CSV 解析失败："+err.Error())
+		return
+	}
+	rows, err := userImportParse(records)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.markDBConflicts(c, rows)
+	valid := 0
+	for _, r := range rows {
+		if len(r.Problems) == 0 {
+			valid++
+		}
+	}
+	ok(c, gin.H{"rows": rows, "total": len(rows), "valid": valid})
+}
+
+// AdminUserImportCommit POST /api/admin/users/import-commit —— 第二段：确认建号。
+// 回传行全量重校验（不信任预览数据），逐行 best-effort；失败行全量明细。
+func (h *Handlers) AdminUserImportCommit(c *gin.Context) {
+	_, uname, _, _ := currentUser(c)
+	var req struct {
+		Rows []userImportRow `json:"rows"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	if len(req.Rows) == 0 {
+		fail(c, http.StatusBadRequest, "没有待导入的行")
+		return
+	}
+	if len(req.Rows) > maxUserImportRows {
+		fail(c, http.StatusBadRequest, fmt.Sprintf("行数过多（上限 %d），请分批导入", maxUserImportRows))
+		return
+	}
+
+	// 角色集合一次拉取
 	roles, err := h.repo.ListRoles(c.Request.Context())
 	roleSet := map[string]bool{}
 	if err == nil {
@@ -127,84 +382,85 @@ func (h *Handlers) AdminImportUsers(c *gin.Context) {
 		}
 	}
 
-	seenUsernames := map[string]bool{}
-	failed := make([]userImportResultRow, 0, 8)
+	type failRow struct {
+		Row      int    `json:"row"`
+		Username string `json:"username"`
+		Reason   string `json:"reason"`
+	}
+	seenID := map[int64]bool{}
+	seenUname := map[string]bool{}
+	failed := make([]failRow, 0, 8)
 	success := 0
-	rowNo := start
-	for _, rec := range records[start:] {
-		rowNo++
-		if isUserImportSkipRow(rec) {
-			continue
+	for _, row := range req.Rows {
+		row.Username = strings.TrimSpace(row.Username)
+		row.Password = strings.TrimSpace(row.Password)
+		row.Name = strings.TrimSpace(row.Name)
+		reason := ""
+		switch {
+		case row.Username == "":
+			reason = "用户名不能为空"
+		case !usernameRE.MatchString(row.Username):
+			reason = "用户名需为 3-32 位字母/数字/下划线"
+		case seenUname[strings.ToLower(row.Username)]:
+			reason = "表内用户名重复"
+		case row.ID < 0 || row.ID > 1_000_000_000:
+			reason = "用户 ID 需为正整数（上限 10 亿）"
+		case row.ID > 0 && seenID[row.ID]:
+			reason = "表内 id 重复"
 		}
-		username := get(rec, "username")
-		password := get(rec, "password")
-		idStr := get(rec, "id")
-		nickname := get(rec, "nickname")
-		role := get(rec, "role")
-		// CSV 数据行号（含表头计数的 1-based，跟 Excel 行号一致，方便定位）
-		failRow := func(reason string) {
-			failed = append(failed, userImportResultRow{Row: rowNo, Username: username, Reason: reason})
-		}
-
-		if username == "" && password == "" && idStr == "" && nickname == "" && role == "" {
-			continue
-		}
-		lu := strings.ToLower(username)
-		if !usernameRE.MatchString(username) {
-			failRow("用户名需为 3-32 位字母/数字/下划线")
-			continue
-		}
-		if seenUsernames[lu] {
-			failRow("表内用户名重复")
-			continue
-		}
-		if msg := passwordProblem(password); msg != "" {
-			failRow(msg)
-			continue
-		}
-		if role == "" {
-			role = repo.RoleDefault
-		}
-		if !roleSet[role] {
-			failRow("角色不存在：" + role)
-			continue
-		}
-		if nickname == "" {
-			nickname = username
-		}
-		seenUsernames[lu] = true
-
-		if idStr != "" {
-			id, perr := strconv.ParseInt(idStr, 10, 64)
-			if perr != nil || id < 1 || id > 1_000_000_000 {
-				failRow("用户 ID 需为正整数（上限 10 亿）")
-				continue
+		if reason == "" {
+			if msg := passwordProblem(row.Password); msg != "" {
+				reason = msg
+			} else if row.Grade != "" && repo.ParseGrade(row.Grade) == 0 {
+				reason = "年级无法识别"
+			} else if row.Role == "" {
+				row.Role = repo.RoleDefault
+			} else if !roleSet[row.Role] {
+				reason = "角色不存在：" + row.Role
 			}
-			_, err = h.repo.CreateUserWithID(c.Request.Context(), id, username, password, nickname, role)
-		} else {
-			_, err = h.repo.CreateUserWithPassword(c.Request.Context(), username, password, nickname, role)
 		}
-		if err != nil {
-			if isDupKey(err) {
-				if _, _, uerr := h.repo.GetUserByUsername(c.Request.Context(), username); uerr == nil {
-					failRow("用户名已存在")
-				} else if idStr != "" {
-					failRow("用户 ID 已被占用")
-				} else {
-					failRow("用户已存在")
+		if reason == "" {
+			lu := strings.ToLower(row.Username)
+			seenUname[lu] = true
+			if row.ID > 0 {
+				seenID[row.ID] = true
+			}
+			nickname := trimTo(row.Name, maxNicknameRunes)
+			if nickname == "" {
+				nickname = row.Username
+			}
+			_, err := h.repo.CreateUserWithProfile(c.Request.Context(), row.ID, row.Username,
+				row.Password, nickname, row.Role, repo.UserProfile{
+					Gender:  trimTo(row.Gender, 8),
+					GradeNo: repo.ParseGrade(row.Grade),
+					School:  trimTo(row.School, 64),
+					Region:  trimTo(row.Region, 32),
+				})
+			if err != nil {
+				switch {
+				case isDupKey(err):
+					if _, _, uerr := h.repo.GetUserByUsername(c.Request.Context(), row.Username); uerr == nil {
+						reason = "用户名已存在"
+					} else if row.ID > 0 {
+						reason = "用户 ID 已被占用"
+					} else {
+						reason = "用户已存在"
+					}
+				default:
+					reason = "创建失败（系统错误）"
 				}
+			} else {
+				success++
 				continue
 			}
-			failRow("创建失败（系统错误）")
-			continue
 		}
-		success++
+		failed = append(failed, failRow{Row: row.Row, Username: row.Username, Reason: reason})
 	}
 
 	if success > 0 {
 		_ = h.repo.AddSecurityLog(c.Request.Context(), repo.SecurityLog{
 			Type: repo.SecUserImport, Username: uname,
-			Detail: fmt.Sprintf("批量建号：成功 %d / 失败 %d（文件 %s）", success, len(failed), fh.Filename),
+			Detail: fmt.Sprintf("批量建号：成功 %d / 失败 %d", success, len(failed)),
 		})
 	}
 	ok(c, gin.H{

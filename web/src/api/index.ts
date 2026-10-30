@@ -14,10 +14,12 @@ import type {
   ContestListItem,
   ContestMySubmission,
   ExamListItem,
+  GradePromotionInfo,
   LeaderRow,
   LevelConfigInfo,
   AdminLevelConfig,
   LoginResult,
+  UserImportRow,
   UserLevelInfo,
   ObjectiveQuestionFull,
   PaperData,
@@ -455,17 +457,36 @@ export const adminApi = {
     }),
   createUser: (username: string, password: string, nickname: string, role: string, id?: number) =>
     post<{ id: number }>('/admin/users', { username, password, nickname, role, id }),
-  // 批量建号（v0.24 小批）：CSV 上传逐行 best-effort，失败行全量返回；模板下载走 download.ts 的 downloadFile
-  importUsers: (form: FormData) =>
+  // 批量建号·中文花名册（v0.34 两段式）：上传识别 → 预览确认 → 建号；模板下载走 download.ts
+  importUsersPreview: (form: FormData) =>
     client
-      .post<ApiResponse<{ total: number; success: number; failed: { row: number; username: string; reason: string }[] }>>(
-        '/admin/users/import',
+      .post<ApiResponse<{ rows: UserImportRow[]; total: number; valid: number }>>(
+        '/admin/users/import-preview',
         form,
         { timeout: 0 },
       )
       .then((r) => r.data.data),
-  updateUser: (id: number, patchBody: { role?: string; password?: string; nickname?: string; username?: string }) =>
-    patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
+  importUsersCommit: (rows: UserImportRow[]) =>
+    post<{ total: number; success: number; failed: { row: number; username: string; reason: string }[] }>(
+      '/admin/users/import-commit',
+      { rows },
+    ),
+  // 年级晋级（v0.34）：状态查询 + 手动立即晋级
+  gradePromotionInfo: () => get<GradePromotionInfo>('/admin/grade-promotion'),
+  gradePromotionForce: () => post<{ promoted: number }>('/admin/grade-promotion', {}),
+  updateUser: (
+    id: number,
+    patchBody: {
+      role?: string
+      password?: string
+      nickname?: string
+      username?: string
+      gender?: string
+      grade?: string
+      school?: string
+      region?: string
+    },
+  ) => patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
   getSettings: () => get<AdminSettings>('/admin/settings'),
   updateSettings: (patch: Partial<AdminSettings>) => put<AdminSettings>('/admin/settings', patch),
   // 等级面板（v0.11，root）

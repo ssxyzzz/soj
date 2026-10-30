@@ -45,7 +45,7 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 		out["school"] = u.School
 	}
 	if vis.Grade {
-		out["grade"] = u.Grade
+		out["grade"] = u.GradeName() // 年级显示名（v0.34 结构化）；空串 = 未设置
 	}
 	if vis.RegionPublic() {
 		out["region"] = u.Region

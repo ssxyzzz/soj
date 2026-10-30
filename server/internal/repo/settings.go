@@ -92,7 +92,43 @@ type SystemSettings struct {
 	AiDiscount2Pct    *int   `bson:"aiDiscount2Pct,omitempty"`
 	// AI 助教名字（v0.33-④ 验收调整：默认「小玉」，1–12 字，前端面板/按钮文案统一读）。
 	AiTutorName string `bson:"aiTutorName,omitempty"`
+	// 资料自改开关（v0.34）：五字段逐个可锁（昵称/性别/年级/学校/地区），true = 允许
+	// 本人自助修改；nil = 全开（存量部署行为不变）。昵称为双闸：开关 AND user.nickname.edit
+	// 权限位。QQ/邮箱不锁（头像绑定与验证链路）。root 用户管理不受限（锁定后的修改口）。
+	ProfileEdit *ProfileEditConfig `bson:"profileEdit,omitempty"`
+	// 年级晋级标记（v0.34）：最近已执行的学年起始年（9/1 切换）；0/缺失 = 从未执行。
+	// 由晋级逻辑独占读写（EnsureGradePromotion / ForceGradePromotion），不经系统设置表单。
+	GradePromoYear int `bson:"gradePromoYear,omitempty"`
 }
+
+// ProfileEditConfig 资料自改逐字段开关（true = 允许本人改）。
+type ProfileEditConfig struct {
+	Nickname bool `bson:"nickname" json:"nickname"`
+	Gender   bool `bson:"gender" json:"gender"`
+	Grade    bool `bson:"grade" json:"grade"`
+	School   bool `bson:"school" json:"school"`
+	Region   bool `bson:"region" json:"region"`
+}
+
+// DefaultProfileEditConfig 全开（存量行为）。
+func DefaultProfileEditConfig() *ProfileEditConfig {
+	return &ProfileEditConfig{Nickname: true, Gender: true, Grade: true, School: true, Region: true}
+}
+
+// ProfileEditCfg 读取归一（nil 回全开默认）。
+func (s *SystemSettings) ProfileEditCfg() ProfileEditConfig {
+	if s.ProfileEdit == nil {
+		return *DefaultProfileEditConfig()
+	}
+	return *s.ProfileEdit
+}
+
+// Open* 单字段判定（管理端设置回显用；nil = 全开，防御直接构造的零值结构体）。
+func (s *SystemSettings) OpenNickname() bool { return s.ProfileEdit == nil || s.ProfileEdit.Nickname }
+func (s *SystemSettings) OpenGender() bool   { return s.ProfileEdit == nil || s.ProfileEdit.Gender }
+func (s *SystemSettings) OpenGrade() bool    { return s.ProfileEdit == nil || s.ProfileEdit.Grade }
+func (s *SystemSettings) OpenSchool() bool   { return s.ProfileEdit == nil || s.ProfileEdit.School }
+func (s *SystemSettings) OpenRegion() bool   { return s.ProfileEdit == nil || s.ProfileEdit.Region }
 
 const (
 	DefaultRateLimitPerMinute   = 3
@@ -585,6 +621,8 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"aiDiscount1Pct":          aiDiscountPctVal(s.AiDiscount1Pct, DefaultAiDiscount1Pct),
 			"aiDiscount2Lv":           aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv),
 			"aiDiscount2Pct":          aiDiscountPctVal(s.AiDiscount2Pct, DefaultAiDiscount2Pct),
+			// 资料自改开关（v0.34）：归一后整组覆盖；gradePromoYear 不在此处——晋级逻辑独占
+			"profileEdit": s.ProfileEditCfg(),
 		}},
 	)
 	return err

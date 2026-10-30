@@ -53,8 +53,8 @@ type User struct {
 	CreatedAt    time.Time  `bson:"createdAt"`
 	Gender       string     `bson:"gender,omitempty"` // 性别/学校/年级/地区/QQ：本人自助修改
 	School       string     `bson:"school,omitempty"`
-	Grade        string     `bson:"grade,omitempty"`
-	Region       string     `bson:"region,omitempty"` // 地区（v0.23）：省市等自由文本，公开主页按开关展示
+	GradeNo      int        `bson:"gradeNo,omitempty"` // 年级档位（v0.34）：0=未设置、1–12=一年级…高三、13=已毕业；显示名见 GradeName
+	Region       string     `bson:"region,omitempty"`  // 地区（v0.23）：省市等自由文本，公开主页按开关展示
 	QQ           string     `bson:"qq,omitempty"`
 	Prefs        *UserPrefs `bson:"prefs,omitempty"`
 	// 密码版本（v0.14）：改密/重置 +1，JWT claims 携带签发时的版本，不一致即 401——
@@ -71,6 +71,9 @@ type User struct {
 	ProfileVis *ProfileVis `bson:"profileVis,omitempty"`
 	QQAvatar   bool        `bson:"qqAvatar,omitempty"`
 }
+
+// GradeName 年级显示名（档位见 grade.go；未设置返回空串）。
+func (u *User) GradeName() string { return GradeName(u.GradeNo) }
 
 // ProfileVis 个人资料对外可见开关：true = 对外公开（公开主页可见），false = 仅自己可见。
 // json 标签必须显式小写：gin.H 响应走 encoding/json，无标签会序列化成大写字段名
@@ -244,6 +247,60 @@ func (r *Repo) CreateUserWithID(ctx context.Context, id int64, username, passwor
 		bson.M{"$max": bson.M{"seq": id}},
 		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
 	).Decode(&doc); err != nil {
+		return id, err
+	}
+	return id, nil
+}
+
+// UserProfile 建号时一并落库的资料字段（v0.34 花名册导入；性别/学校/地区为空串不落）。
+type UserProfile struct {
+	Gender  string
+	GradeNo int
+	School  string
+	Region  string
+}
+
+// CreateUserWithProfile 指定 ID + 资料建号（v0.34 批量导入）：CreateUserWithID 的
+// 花名册变体，姓名即昵称、性别/年级/学校/地区随号落库。id ≤ 0 时走自动取号
+//（老英文模板 username 手填、id 留空的行）。
+func (r *Repo) CreateUserWithProfile(ctx context.Context, id int64, username, password, nickname, role string, p UserProfile) (int64, error) {
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return 0, err
+	}
+	if id <= 0 {
+		if id, err = r.nextUserSeq(ctx); err != nil {
+			return 0, err
+		}
+	}
+	doc := bson.M{
+		"_id": id, "uname": username, "pwdHash": hash,
+		"nickname": nickname, "role": role, "createdAt": time.Now(),
+	}
+	if p.Gender != "" {
+		doc["gender"] = p.Gender
+	}
+	if p.GradeNo > 0 {
+		doc["gradeNo"] = p.GradeNo
+	}
+	if p.School != "" {
+		doc["school"] = p.School
+	}
+	if p.Region != "" {
+		doc["region"] = p.Region
+	}
+	_, err = r.users.InsertOne(ctx, doc)
+	if err != nil {
+		return 0, err
+	}
+	var seqDoc struct {
+		Seq int64 `bson:"seq"`
+	}
+	if err := r.counters.FindOneAndUpdate(ctx,
+		bson.M{"_id": "user"},
+		bson.M{"$max": bson.M{"seq": id}},
+		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
+	).Decode(&seqDoc); err != nil {
 		return id, err
 	}
 	return id, nil
@@ -431,13 +488,13 @@ func (r *Repo) ListUsers(ctx context.Context, page, pageSize int, keyword, role 
 
 // UpdateUser 管理端更新（set 中的字段由调用方校验，pwdHash 仅在重置密码时出现）。
 // UserPatch 用户字段补丁（nil 不动；typed 化同 ListPatch）。
-// 覆盖个人资料自助（nickname/gender/school/grade/region/qq/qqAvatar/profileVis/prefs 整体）
+// 覆盖个人资料自助（nickname/gender/school/gradeNo/region/qq/qqAvatar/profileVis/prefs 整体）
 // 与管理端（role/uname/pwdHash）及内部点路径（prefsNotifyEmail → prefs.notifyEmail）。
 type UserPatch struct {
 	Nickname         *string
 	Gender           *string
 	School           *string
-	Grade            *string
+	GradeNo          *int
 	Region           *string
 	QQ               *string
 	QQAvatar         *bool
@@ -450,7 +507,7 @@ type UserPatch struct {
 }
 
 func (p UserPatch) Empty() bool {
-	return p.Nickname == nil && p.Gender == nil && p.School == nil && p.Grade == nil &&
+	return p.Nickname == nil && p.Gender == nil && p.School == nil && p.GradeNo == nil &&
 		p.Region == nil && p.QQ == nil && p.QQAvatar == nil && p.ProfileVis == nil &&
 		p.Prefs == nil && p.Role == nil && p.Uname == nil && p.PwdHash == nil &&
 		p.PrefsNotifyEmail == nil
@@ -467,8 +524,8 @@ func (r *Repo) UpdateUser(ctx context.Context, id int64, p UserPatch) error {
 	if p.School != nil {
 		set["school"] = *p.School
 	}
-	if p.Grade != nil {
-		set["grade"] = *p.Grade
+	if p.GradeNo != nil {
+		set["gradeNo"] = *p.GradeNo
 	}
 	if p.Region != nil {
 		set["region"] = *p.Region

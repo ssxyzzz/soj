@@ -8,9 +8,11 @@ import { verifyApi } from '@/api/verify'
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 import { autocompleteAvailable, languageOptions, mergedPrefs } from '@/utils/code'
+import { GRADE_OPTIONS } from '@/utils/grades'
 
 // 个人设置（v0.4.8）：本人自助字段（昵称/性别/学校/年级/QQ）+ 偏好（默认语言/代码模板）。
-// 昵称是否可改由后端按 user.nickname.edit 权限位现算（can_edit_nickname），默认角色默认开启。
+// 五字段自改标志（v0.34）：后端按「系统设置逐字段开关」现算（昵称再 AND user.nickname.edit
+// 权限位）；锁定字段只读且保存时不提交。
 const router = useRouter()
 const userStore = useUserStore()
 const levels = useLevelsStore()
@@ -20,7 +22,7 @@ const savingProfile = ref(false)
 const savingPrefs = ref(false)
 
 const nickname = ref('')
-const canEditNickname = ref(false)
+const editable = reactive({ nickname: false, gender: false, grade: false, school: false, region: false })
 
 // '' 表示未填写（后端显式空串=清空）
 const profileForm = reactive({ gender: '', school: '', grade: '', region: '', qq: '' })
@@ -52,7 +54,7 @@ async function load() {
   try {
     const p = await authApi.getProfile()
     nickname.value = p.nickname ?? ''
-    canEditNickname.value = p.can_edit_nickname
+    if (p.editable) Object.assign(editable, p.editable)
     profileForm.gender = p.gender ?? ''
     profileForm.school = p.school ?? ''
     profileForm.grade = p.grade ?? ''
@@ -79,18 +81,19 @@ async function load() {
 }
 
 async function saveProfile() {
-  if (canEditNickname.value && !nickname.value.trim()) {
+  if (editable.nickname && !nickname.value.trim()) {
     ElMessage.warning('昵称不能为空')
     return
   }
   savingProfile.value = true
   try {
     const p = await authApi.updateProfile({
-      ...(canEditNickname.value ? { nickname: nickname.value.trim() } : {}),
-      gender: profileForm.gender,
-      school: profileForm.school,
-      grade: profileForm.grade,
-      region: profileForm.region,
+      ...(editable.nickname ? { nickname: nickname.value.trim() } : {}),
+      // 锁定字段不提交（后端也会拒收，双保险）
+      ...(editable.gender ? { gender: profileForm.gender } : {}),
+      ...(editable.school ? { school: profileForm.school } : {}),
+      ...(editable.grade ? { grade: profileForm.grade } : {}),
+      ...(editable.region ? { region: profileForm.region } : {}),
       qq: profileForm.qq,
       profileVis: { ...profileVis },
       qqAvatar: qqAvatar.value,
@@ -298,18 +301,18 @@ async function submitBind() {
           <div class="fctrl">
             <el-input
               v-model="nickname"
-              :disabled="!canEditNickname"
+              :disabled="!editable.nickname"
               maxlength="6"
               placeholder="用于榜单、题解等公开页面展示"
               style="width: 320px"
             />
-            <span v-if="!canEditNickname" class="fd-inline">当前角色不允许自行修改昵称，请联系管理员</span>
+            <span v-if="!editable.nickname" class="fd-inline">当前角色不允许或管理员已锁定昵称修改，请联系管理员</span>
           </div>
         </div>
         <div class="frow">
           <span class="fl">性别</span>
           <div class="fctrl-line">
-            <el-select v-model="profileForm.gender" clearable placeholder="未填写" style="width: 160px">
+            <el-select v-model="profileForm.gender" clearable placeholder="未填写" :disabled="!editable.gender" style="width: 160px">
               <el-option value="男" label="男" />
               <el-option value="女" label="女" />
             </el-select>
@@ -317,36 +320,42 @@ async function submitBind() {
               <el-switch v-model="profileVis.gender" />
               <span>{{ profileVis.gender ? '对外公开' : '仅自己可见' }}</span>
             </label>
+            <span v-if="!editable.gender" class="fd-inline">已由管理员锁定</span>
           </div>
         </div>
         <div class="frow">
           <span class="fl">学校</span>
           <div class="fctrl-line">
-            <el-input v-model="profileForm.school" maxlength="64" placeholder="选填" style="width: 320px" />
+            <el-input v-model="profileForm.school" maxlength="64" placeholder="选填" :disabled="!editable.school" style="width: 320px" />
             <label class="vis-sw">
               <el-switch v-model="profileVis.school" />
               <span>{{ profileVis.school ? '对外公开' : '仅自己可见' }}</span>
             </label>
+            <span v-if="!editable.school" class="fd-inline">已由管理员锁定</span>
           </div>
         </div>
         <div class="frow">
-          <span class="fl">年级<div class="fd">选填，如：初一 / 高二 / 大一</div></span>
+          <span class="fl">年级<div class="fd">每年 9 月 1 日自动晋级（高三 → 已毕业）</div></span>
           <div class="fctrl-line">
-            <el-input v-model="profileForm.grade" maxlength="16" placeholder="选填" style="width: 320px" />
+            <el-select v-model="profileForm.grade" clearable placeholder="未设置" :disabled="!editable.grade" style="width: 320px">
+              <el-option v-for="g in GRADE_OPTIONS" :key="g" :value="g" :label="g" />
+            </el-select>
             <label class="vis-sw">
               <el-switch v-model="profileVis.grade" />
               <span>{{ profileVis.grade ? '对外公开' : '仅自己可见' }}</span>
             </label>
+            <span v-if="!editable.grade" class="fd-inline">已由管理员锁定</span>
           </div>
         </div>
         <div class="frow">
           <span class="fl">地区</span>
           <div class="fctrl-line">
-            <el-input v-model="profileForm.region" maxlength="32" placeholder="选填，如：安徽合肥" style="width: 320px" />
+            <el-input v-model="profileForm.region" maxlength="32" placeholder="选填，如：安徽合肥" :disabled="!editable.region" style="width: 320px" />
             <label class="vis-sw">
               <el-switch v-model="profileVis.region" />
               <span>{{ profileVis.region ? '对外公开' : '仅自己可见' }}</span>
             </label>
+            <span v-if="!editable.region" class="fd-inline">已由管理员锁定</span>
           </div>
         </div>
         <div class="frow">

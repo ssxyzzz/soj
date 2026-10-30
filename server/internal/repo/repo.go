@@ -296,6 +296,11 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 
 	// 存量 md 渲染缓存迁移（v0.30）：后台渐进补齐，不阻塞启动
 	r.bootstrapRenderedHtmlAsync()
+	// 年级晋级对齐（v0.34）：启动时跑一次懒触发（跨 9/1 重启也即时晋级；
+	// 运行期由读路径兜底），失败不阻塞启动
+	if _, perr := r.EnsureGradePromotion(ctx); perr != nil {
+		slog.Warn("启动年级晋级检查失败（读路径会重试）", "component", "boot", "error", perr)
+	}
 	return err
 }
 
@@ -308,6 +313,7 @@ var freshSkipFlags = []string{
 	"roundFlagsV1", "classLeaveV1", "assignmentScoreViewV1", "contestScorePermV1",
 	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
 	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2", "listManageV1",
+	"gradeNoV1",
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
@@ -691,6 +697,16 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		if err := setFlag("difficultyV1"); err != nil {
+			return err
+		}
+	}
+	if !flagDone("gradeNoV1") {
+		// v0.34：年级自由文本 → gradeNo 档位（转不出的置未设置由 root 补录），
+		// 晋级标记垫到当前学年（迁移不算晋级）
+		if _, _, err := r.migrateGradeNo(ctx); err != nil {
+			return err
+		}
+		if err := setFlag("gradeNoV1"); err != nil {
 			return err
 		}
 	}

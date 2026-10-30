@@ -516,6 +516,13 @@ export interface AdminUser {
   nickname: string
   role: string
   locked_until?: string // 锁定中（v0.14 登录失败锁定）才有值，ISO 时间
+  // 资料（v0.34）：管理端列表/编辑弹窗回填（grade 为显示名，空串 = 未设置）
+  email?: string
+  phone?: string
+  gender?: string
+  grade?: string
+  school?: string
+  region?: string
 }
 
 // ---------- 安全日志（v0.14，root 后台） ----------
@@ -693,10 +700,11 @@ export interface UserPrefs {
 // 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）
 export interface UserProfile {
   nickname: string
-  can_edit_nickname: boolean // 当前角色是否可自助改昵称（后端按生效权限位现算）
+  /** 五字段自改标志（v0.34）：后端按「系统设置逐字段开关」现算（昵称再 AND 权限位） */
+  editable: { nickname: boolean; gender: boolean; grade: boolean; school: boolean; region: boolean }
   gender: string
   school: string
-  grade: string
+  grade: string // 年级显示名（v0.34 结构化）；空串 = 未设置
   region: string
   qq: string
   profile_vis: { gender: boolean; school: boolean; grade: boolean; region: boolean; qq: boolean } // 资料公开开关（v0.23）
@@ -1041,6 +1049,35 @@ export interface AdminSettings {
   jade_bounty_min: number
   jade_bounty_max: number
   jade_shop_enabled: boolean
+  /** 资料自改开关（v0.34）：false = 学生端锁定、仅 root 用户管理可改 */
+  profile_edit_nickname: boolean
+  profile_edit_gender: boolean
+  profile_edit_grade: boolean
+  profile_edit_school: boolean
+  profile_edit_region: boolean
+}
+
+/** 年级晋级状态（v0.34）：/admin/grade-promotion。 */
+export interface GradePromotionInfo {
+  current_year: number
+  next_at: string
+  last_year: number
+  grades: { no: number; name: string; count: number }[]
+}
+
+/** 批量建号预览行（v0.34 两段式）：id/username 预览可改后回传 commit。 */
+export interface UserImportRow {
+  row: number
+  id: number
+  name: string
+  gender: string
+  grade: string
+  school: string
+  region: string
+  role: string
+  username: string
+  password: string
+  problems?: string[]
 }
 
 /** 玉余额（v0.33-①）：/me/jade，currency 为后台可配货币名（默认「玉」）。 */
