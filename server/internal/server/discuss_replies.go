@@ -1,7 +1,7 @@
 package server
 
 // 讨论区·回复互动（v0.32 自 discuss.go 五拆，纯搬家行为零变化）：
-// 回复（两层楼中楼 + @提及通知）/ 软删除 / 楼主采纳（+经验）/ 点赞。
+// 回复（两层楼中楼 + @提及通知）/ 软删除 / 楼主采纳 / 点赞。
 // 闸门与公共体在 discuss.go；话题 CRUD 在 discuss_topics.go。
 
 import (
@@ -229,7 +229,7 @@ func (h *Handlers) DeleteDiscussReply(c *gin.Context) {
 	ok(c, gin.H{"deleted": rid})
 }
 
-// AcceptDiscussReply POST /api/discuss/:tid/replies/:rid/accept —— 题内：楼主采纳（+经验）。
+// AcceptDiscussReply POST /api/discuss/:tid/replies/:rid/accept —— 题内：楼主采纳（标记最佳答案并通知被采纳者）。
 func (h *Handlers) AcceptDiscussReply(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
 	if !logged {
@@ -278,16 +278,13 @@ func (h *Handlers) AcceptDiscussReply(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "采纳失败")
 		return
 	}
-	// 激励：被采纳 + 经验（后台可配，走 xpAdjust 流水天然留痕）
-	s, _ := h.repo.GetSystemSettings(c.Request.Context())
-	if xp := s.DiscussAcceptXpVal(); xp > 0 && rep.UID != uid {
-		if err := h.repo.AddXpAdjust(c.Request.Context(), rep.UID, xp,
-			fmt.Sprintf("讨论回复被采纳（话题 #%d）", tid), uid); err == nil {
-			h.notifyOne(c.Request.Context(), rep.UID, repo.NotifyInput{
-				Typ: repo.NotifyAccept, Title: truncRunes(t.Title, 40),
-				Body: fmt.Sprintf("你的回复被采纳为答案（+%d 经验）", xp), Link: "/discuss/" + fmt.Sprint(tid), RefID: tid,
-			}, s, repo.NotifyAccept)
-		}
+	// 通知被采纳者（经验奖励机制已于 v0.34 验收调整移除——采纳保留、不再发经验）
+	if rep.UID != uid {
+		s, _ := h.repo.GetSystemSettings(c.Request.Context())
+		h.notifyOne(c.Request.Context(), rep.UID, repo.NotifyInput{
+			Typ: repo.NotifyAccept, Title: truncRunes(t.Title, 40),
+			Body: "你的回复被采纳为答案", Link: "/discuss/" + fmt.Sprint(tid), RefID: tid,
+		}, s, repo.NotifyAccept)
 	}
 	ok(c, gin.H{"accepted": rid})
 }

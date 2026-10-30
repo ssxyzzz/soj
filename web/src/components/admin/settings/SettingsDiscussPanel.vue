@@ -15,7 +15,6 @@ const discussTopicDailyLimit = ref(5)
 const discussReplyIntervalSec = ref(30)
 const discussNewbieHours = ref(48)
 const discussReportFold = ref(3)
-const discussAcceptXp = ref(10)
 
 const saving = ref(false)
 
@@ -31,7 +30,6 @@ onMounted(async () => {
     discussReplyIntervalSec.value = s.discuss_reply_interval_sec ?? 30
     discussNewbieHours.value = s.discuss_newbie_hours ?? 48
     discussReportFold.value = s.discuss_report_fold ?? 3
-    discussAcceptXp.value = s.discuss_accept_xp ?? 10
   } catch {
     // 加载失败保留默认值展示
   }
@@ -50,7 +48,6 @@ async function save() {
       discuss_reply_interval_sec: discussReplyIntervalSec.value,
       discuss_newbie_hours: discussNewbieHours.value,
       discuss_report_fold: discussReportFold.value,
-      discuss_accept_xp: discussAcceptXp.value,
     })
     ElMessage.success('讨论区设置已保存')
     // 导航项/入口卡片显隐走公开站点缓存，改完即时生效
@@ -109,10 +106,6 @@ async function save() {
       <el-form-item label="举报自动折叠阈值">
         <el-input-number v-model="discussReportFold" :min="0" :max="100" />
         <span class="dim" style="margin-left: 8px">同一内容未处理举报达到该人数自动折叠（0 = 不自动折叠）</span>
-      </el-form-item>
-      <el-form-item label="采纳经验奖励">
-        <el-input-number v-model="discussAcceptXp" :min="0" :max="1000" />
-        <span class="dim" style="margin-left: 8px">回复被楼主采纳加的经验值（0 = 不奖励）</span>
       </el-form-item>
     </el-form>
   </el-card>

@@ -1036,7 +1036,6 @@ export interface AdminSettings {
   discuss_reply_interval_sec: number
   discuss_newbie_hours: number
   discuss_report_fold: number
-  discuss_accept_xp: number
   notify_retention_days: number
   notify_broadcast_per_day: number
   user_seq_start: number

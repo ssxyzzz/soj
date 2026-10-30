@@ -51,8 +51,6 @@ type SystemSettings struct {
 	DiscussNewbieHours *int `bson:"discussNewbieHours,omitempty"`
 	// 举报自动折叠阈值：同一目标未处理举报达到 N 条自动折叠；0 = 不自动折叠。
 	DiscussReportFold *int `bson:"discussReportFold,omitempty"`
-	// 回复被采纳的经验奖励（走 xpAdjust 流水）；0 = 不奖励。
-	DiscussAcceptXp *int `bson:"discussAcceptXp,omitempty"`
 	// 通知保留天数（TTL 在插入时按当时值写死）；0 = 按默认 90。
 	NotifyRetentionDays *int `bson:"notifyRetentionDays,omitempty"`
 	// root 全站广播每日上限；0 = 不限。
@@ -144,7 +142,6 @@ const (
 	DefaultDiscussReplyInterval   = 30 // 回复间隔秒
 	DefaultDiscussNewbieHours     = 48 // 新号冷静期
 	DefaultDiscussReportFold      = 3  // 举报折叠阈值
-	DefaultDiscussAcceptXp        = 10 // 采纳经验奖励
 	DefaultNotifyRetentionDays    = 90 // 通知保留天数
 	DefaultNotifyBroadcastPerDay  = 1  // 广播每日上限
 
@@ -275,9 +272,6 @@ func (s *SystemSettings) normalizeDiscuss() {
 	if s.DiscussReportFold == nil || *s.DiscussReportFold < 0 {
 		s.DiscussReportFold = intPtr(DefaultDiscussReportFold)
 	}
-	if s.DiscussAcceptXp == nil || *s.DiscussAcceptXp < 0 {
-		s.DiscussAcceptXp = intPtr(DefaultDiscussAcceptXp)
-	}
 	if s.NotifyRetentionDays == nil || *s.NotifyRetentionDays <= 0 {
 		s.NotifyRetentionDays = intPtr(DefaultNotifyRetentionDays)
 	}
@@ -387,13 +381,6 @@ func (s *SystemSettings) DiscussReportFoldVal() int64 {
 		return DefaultDiscussReportFold
 	}
 	return int64(*s.DiscussReportFold)
-}
-
-func (s *SystemSettings) DiscussAcceptXpVal() int64 {
-	if s.DiscussAcceptXp == nil || *s.DiscussAcceptXp < 0 {
-		return DefaultDiscussAcceptXp
-	}
-	return int64(*s.DiscussAcceptXp)
 }
 
 func (s *SystemSettings) NotifyRetentionDaysVal() int {
@@ -601,7 +588,6 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"discussReplyIntervalSec": s.DiscussReplyIntervalVal(),
 			"discussNewbieHours":      s.DiscussNewbieHoursVal(),
 			"discussReportFold":       int(s.DiscussReportFoldVal()),
-			"discussAcceptXp":         int(s.DiscussAcceptXpVal()),
 			"notifyRetentionDays":     s.NotifyRetentionDaysVal(),
 			"notifyBroadcastPerDay":   s.NotifyBroadcastPerDayVal(),
 			"userSeqStart":            s.UserSeqStartVal(),

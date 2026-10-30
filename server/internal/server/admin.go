@@ -307,7 +307,6 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"discuss_reply_interval_sec": s.DiscussReplyIntervalVal(),
 		"discuss_newbie_hours":       s.DiscussNewbieHoursVal(),
 		"discuss_report_fold":        int(s.DiscussReportFoldVal()),
-		"discuss_accept_xp":          int(s.DiscussAcceptXpVal()),
 		"notify_retention_days":      s.NotifyRetentionDaysVal(),
 		"notify_broadcast_per_day":   s.NotifyBroadcastPerDayVal(),
 		"user_seq_start":             s.UserSeqStartVal(),
@@ -386,7 +385,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		DiscussReplyIntervalSec *int  `json:"discuss_reply_interval_sec"`
 		DiscussNewbieHours      *int  `json:"discuss_newbie_hours"`
 		DiscussReportFold       *int  `json:"discuss_report_fold"`
-		DiscussAcceptXp         *int  `json:"discuss_accept_xp"`
 		NotifyRetentionDays     *int  `json:"notify_retention_days"`
 		NotifyBroadcastPerDay   *int  `json:"notify_broadcast_per_day"`
 		UserSeqStart            *int  `json:"user_seq_start"` // 注册取号起点（v0.24 小批）
@@ -572,13 +570,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.DiscussReportFold = req.DiscussReportFold
-	}
-	if req.DiscussAcceptXp != nil {
-		if *req.DiscussAcceptXp < 0 || *req.DiscussAcceptXp > 1000 {
-			fail(c, http.StatusBadRequest, "采纳经验奖励需在 0-1000 之间（0 为不奖励）")
-			return
-		}
-		s.DiscussAcceptXp = req.DiscussAcceptXp
 	}
 	if req.NotifyRetentionDays != nil {
 		if *req.NotifyRetentionDays < 7 || *req.NotifyRetentionDays > 365 {
