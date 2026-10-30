@@ -83,7 +83,8 @@ func (r *Repo) EnsureAiHint(ctx context.Context, p *Problem, level int, gen func
 	return h, nil
 }
 
-// RecordAiHintUnlock 记一次提示解锁（ref 编码 pid*10+level；价 0 = 免费群体）。
+// RecordAiHintUnlock 记一次提示解锁标记（免费群体——教师/满分学生的解锁态已有
+// solutionAllowed 覆盖，此标记供特殊场景落 0 元记录；付费学生的扣费流水即解锁记录）。
 func (r *Repo) RecordAiHintUnlock(ctx context.Context, uid, pid int64, level int, price int64) error {
 	return r.insertJadeLedger(ctx, uid, -price, JadeKindAiHint,
 		aiHintReason(level, pid), pid*10+int64(level))

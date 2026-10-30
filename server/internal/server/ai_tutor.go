@@ -88,9 +88,9 @@ func (h *Handlers) aiTutorGate(c *gin.Context, pid int64) (*repo.Problem, bool) 
 	return p, true
 }
 
-// aiCharge 计费守卫：教师/特权免费；学生查每日上限 → 扣玉（先扣后调、失败自动退由调用方）。
-// 返回 (price, ok)；ok=false 已写响应。豁免者返回 0。
-func (h *Handlers) aiCharge(c *gin.Context, uid int64, kind string, difficulty int) (int64, bool) {
+// aiCharge 计费守卫：教师/特权免费（返回 0，不落扣费流水）；学生查每日上限 → 先扣后调
+//（失败自动退由调用方）。扣费流水本身即解锁记录（hint: ref=pid*10+level；debug: ref=sid）。
+func (h *Handlers) aiCharge(c *gin.Context, uid int64, kind string, difficulty int, ref int64) (int64, bool) {
 	if hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn) {
 		return 0, true
 	}
@@ -112,8 +112,8 @@ func (h *Handlers) aiCharge(c *gin.Context, uid int64, kind string, difficulty i
 	}
 	price := s.AiPrice(kind, difficulty, level)
 	if price > 0 {
-		if err := h.repo.JadeSpend(c.Request.Context(), uid, price, repo.JadeKindAiHint,
-			aiKindReason(kind), 0); err != nil {
+		jadeKind, reason := aiJadeKind(kind, ref)
+		if err := h.repo.JadeSpend(c.Request.Context(), uid, price, jadeKind, reason, ref); err != nil {
 			if err == repo.ErrInsufficientJade {
 				fail(c, http.StatusBadRequest, "余额不足，先去做题攒玉吧")
 				return 0, false
@@ -125,16 +125,17 @@ func (h *Handlers) aiCharge(c *gin.Context, uid int64, kind string, difficulty i
 	return price, true
 }
 
-func aiKindReason(kind string) string {
+// aiJadeKind 调用类型 → 流水 kind 与 reason（hint 的 ref=pid*10+level，debug 的 ref=sid）。
+func aiJadeKind(kind string, ref int64) (string, string) {
 	switch kind {
 	case "hint1":
-		return "AI 助教 · 方向提示"
+		return repo.JadeKindAiHint, fmt.Sprintf("AI 助教 · 方向提示（题目 #%d）", ref/10)
 	case "hint2":
-		return "AI 助教 · 算法选型"
+		return repo.JadeKindAiHint, fmt.Sprintf("AI 助教 · 算法选型（题目 #%d）", ref/10)
 	case "hint3":
-		return "AI 助教 · 实现要点"
+		return repo.JadeKindAiHint, fmt.Sprintf("AI 助教 · 实现要点（题目 #%d）", ref/10)
 	default:
-		return "AI 助教 · 找 bug"
+		return repo.JadeKindAiDebug, fmt.Sprintf("AI 助教 · 找 bug（提交 #%d）", ref)
 	}
 }
 
@@ -229,6 +230,8 @@ func (h *Handlers) aiHintUnlocked(c *gin.Context, uid, pid int64, level int) boo
 }
 
 // BuyAiHint POST /api/problems/:id/ai/hint/:level —— 购买并（首购时）生成提示。
+// 流程：缓存已有 → 直接返回（解锁与否决定可见）；缓存缺失 → 生成（学生先扣费、
+// 扣费流水即解锁记录；教师/满分免费不落扣费）；生成失败全额自动退。
 func (h *Handlers) BuyAiHint(c *gin.Context) {
 	uid, _, _, _ := currentUser(c)
 	pid, okID := parseID(c, "id")
@@ -247,28 +250,32 @@ func (h *Handlers) BuyAiHint(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	// 已解锁直接返回
-	if h.aiHintUnlocked(c, uid, pid, level) {
-		hint, _ := h.repo.GetAiHint(ctx, pid, level)
-		ok(c, gin.H{"hint": hintJSON(hint, true), "charged": false})
+	// 素材要题面正文：gate 用的是瘦读（metaProjection 排除 statement），这里补全量读
+	full, err := h.repo.GetProblem(ctx, pid)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
 		return
 	}
-	price, okC := h.aiCharge(c, uid, fmt.Sprintf("hint%d", level), p.EffDifficulty())
+	unlocked := h.aiHintUnlocked(c, uid, pid, level)
+	ref := pid*10 + int64(level)
+	if hint, _ := h.repo.GetAiHint(ctx, pid, level); hint != nil {
+		ok(c, gin.H{"hint": hintJSON(hint, unlocked), "charged": false})
+		return
+	}
+	price, okC := h.aiCharge(c, uid, fmt.Sprintf("hint%d", level), p.EffDifficulty(), ref)
 	if !okC {
 		return
 	}
 	hint, err := h.repo.EnsureAiHint(ctx, p, level, func() (string, error) {
-		return h.generateHint(c, p, level)
+		return h.generateHint(c, full, level)
 	})
 	if err != nil {
 		if price > 0 {
-			_ = h.repo.JadeCredit(ctx, uid, price, repo.JadeKindBountyRefund, "AI 提示生成失败自动退回", pid)
+			_ = h.repo.JadeCredit(ctx, uid, price, repo.JadeKindAiHint, "AI 提示生成失败自动退回", ref)
 		}
 		fail(c, http.StatusInternalServerError, "AI 生成失败，已退回费用，请稍后再试")
 		return
 	}
-	// 解锁记录（购买流水 ref 编码 pid*10+level）
-	_ = h.repo.RecordAiHintUnlock(ctx, uid, pid, level, price)
 	h.recordAiCall(c, uid, pid, fmt.Sprintf("hint%d", level), price, hint.Tokens, true, "")
 	bal, _ := h.repo.JadeBalance(ctx, uid)
 	ok(c, gin.H{"hint": gin.H{"content": hint.Content, "unlocked": true, "at": hint.At.Format(time.RFC3339)},
@@ -312,12 +319,13 @@ func (h *Handlers) AiDebug(c *gin.Context) {
 	if _, okG := h.aiTutorGate(c, sub.ProblemID); !okG {
 		return
 	}
-	p, err := h.repo.GetProblemMeta(ctx, sub.ProblemID)
+	// 素材要题面正文：瘦读不含 statement，补全量读
+	p, err := h.repo.GetProblem(ctx, sub.ProblemID)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取题目失败")
 		return
 	}
-	price, okC := h.aiCharge(c, uid, "debug", p.EffDifficulty())
+	price, okC := h.aiCharge(c, uid, "debug", p.EffDifficulty(), sid)
 	if !okC {
 		return
 	}
@@ -329,7 +337,7 @@ func (h *Handlers) AiDebug(c *gin.Context) {
 	content, err := h.aiCall(c, aiDebugPrompt, user)
 	if err != nil {
 		if price > 0 {
-			_ = h.repo.JadeCredit(ctx, uid, price, repo.JadeKindBountyRefund, "AI 找 bug 失败自动退回", sub.ProblemID)
+			_ = h.repo.JadeCredit(ctx, uid, price, repo.JadeKindAiDebug, "AI 找 bug 失败自动退回", sid)
 		}
 		fail(c, http.StatusInternalServerError, "AI 分析失败，已退回费用："+err.Error())
 		return
