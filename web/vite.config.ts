@@ -38,12 +38,29 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // vendor 分包（v0.28）：注意不能用 manualChunks 硬分组 element-plus——
-        // 被手工指派 chunk 的模块不会被摇树（rollup 已知行为，实测 943KB 全量进包），
-        // 改由 rollup 自动分包；vditor/CM6 维持组件内动态 import 的既有异步链路。
-        // 碎片收敛（加载优化批）：题面页闭包曾 40+ 个 2-7KB 小 chunk，15KB 以下
-        // 尝试合并——h2 多路复用下省往返与解压开销；构建后核对首屏闭包无回退
+        // vendor 分层（v0.36）：高延迟链路（学生→VPS→隧道→家，~100ms/请求）下 vendor
+        // 与业务同 chunk 导致每次部署全员重下。manualChunks 分组纪律（v0.28 实测 +
+        // 本批复测 924KB 实锤）：手工指派会把按需引入挡在图外的组件整族拖回来
+        // （carousel/tour/watermark 全进包），**element-plus 一律留给自动分包**。
+        // 窄组只收「本就全量使用、无摇树可失」的稳定层：vue 全家 / pinia / axios /
+        // @element-plus/icons-vue——业务迭代不换哈希，部署后这层命中浏览器缓存。
+        // vditor/CM6 维持组件内动态 import 的既有异步链路；
+        // experimentalMinChunkSize 继续兜碎片（题面页闭包曾 40+ 个 2-7KB 小 chunk）。
         experimentalMinChunkSize: 15000,
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (
+            id.includes('/vue/') ||
+            id.includes('@vue/') ||
+            id.includes('vue-router') ||
+            id.includes('/pinia/') ||
+            id.includes('pinia/') ||
+            id.includes('/axios/') ||
+            id.includes('@element-plus/icons-vue')
+          ) {
+            return 'vendor-core'
+          }
+        },
       },
     },
   },

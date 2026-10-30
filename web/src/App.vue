@@ -19,13 +19,20 @@ function prefetchVditor() {
   void fetch(VDITOR_LUTE_URL, { cache: 'force-cache' }) // lute 引擎（版本路径，命中即零流量）
 }
 
+// 高频下一跳路由预取（v0.36「卡」根治批）：公网链路（学生→VPS→隧道→家）单请求
+// 固定 ~100ms 双跳往返，冷跳转的 chunk 拉取串在关键路径上——空闲期把做题主线
+// （题目详情）与登录者的提交记录页预热进缓存，点过去即零等待。游客只预热详情。
+function prefetchRoutes() {
+  const u = useUserStore()
+  void import('@/views/ProblemDetailView.vue')
+  if (u.token) void import('@/views/SubmissionListView.vue')
+}
+
 onMounted(() => {
   const w = window as Window & { requestIdleCallback?: (fn: () => void, opts?: { timeout: number }) => number }
-  if (w.requestIdleCallback) {
-    w.requestIdleCallback(prefetchVditor, { timeout: 5000 })
-  } else {
-    window.setTimeout(prefetchVditor, 3000)
-  }
+  const idle = (fn: () => void) => (w.requestIdleCallback ? w.requestIdleCallback(fn, { timeout: 5000 }) : window.setTimeout(fn, 3000))
+  idle(prefetchVditor)
+  idle(prefetchRoutes)
 })
 </script>
 

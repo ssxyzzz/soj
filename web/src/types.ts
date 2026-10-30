@@ -739,6 +739,7 @@ export interface BackupJobState {
   tier: string
   error: string | null
   file: string | null
+  file_size?: number // 成功产物体积（字节，v0.36）：面板据此决定在线下载 or 服务器取包
   started_at: string
   ended_at: string | null
 }
@@ -747,12 +748,19 @@ export interface BackupStatus {
   mode: 'uninitialized' | 'tier0' | 'tier1'
   last_backup_at: string | null
   last_backup_file: string | null
+  last_backup_size?: number // 字节（v0.36）
   last_db_at?: string | null // 分层备份（v0.15.1）：每日库备最近一次
   last_db_file?: string | null
+  last_db_size?: number
   last_media_at?: string | null // 每周数据卷备最近一次
   last_media_file?: string | null
+  last_media_size?: number
   job?: BackupJobState | null // 当前/最近一次备份任务（v0.26；null = 尚未跑过）
 }
+
+// 在线下载体积上限（与后端 SOJ_BACKUP_DOWNLOAD_LIMIT 默认值同源，仅用于 UI 预判；
+// 服务端 403 是最终裁决）
+export const BACKUP_DOWNLOAD_LIMIT_BYTES = 32 * 1024 * 1024
 
 // ---------- 角色与权限位（v0.4.7） ----------
 

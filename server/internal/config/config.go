@@ -17,6 +17,10 @@ type Config struct {
 	UploadsDir   string // 题面图片目录 /data/uploads
 	BackupDir    string // 备份密文归档目录（服务器留存） /data/backups
 	KeysDir      string // 备份密钥卷目录（与 testdata 卷分离） /data/keys
+	// 备份归档在线下载体积上限（字节）：media/all 档动辄数百 MB，走在线下载会
+	// 长时间占满站点唯一的公网管道（学生侧全站变卡，2026-10-30 事故根因）——
+	// 超限归档一律 403 并附服务器取包命令，db 档（KB 级）不受影响。
+	BackupDownloadLimit int64
 	SeedDir      string // 启动时自动导入的种子题目目录（可为空）
 	SandboxAddr  string // go-judge 沙箱地址
 	JWTSecret    string
@@ -39,6 +43,7 @@ func Load() *Config {
 		UploadsDir:         getEnv("SOJ_UPLOADS_DIR", "./data/uploads"),
 		BackupDir:          getEnv("SOJ_BACKUP_DIR", "./data/backups"),
 		KeysDir:            getEnv("SOJ_KEYS_DIR", "./data/keys"),
+		BackupDownloadLimit: getEnvInt64("SOJ_BACKUP_DOWNLOAD_LIMIT", 32<<20),
 		SeedDir:            getEnv("SOJ_SEED_DIR", ""),
 		SandboxAddr:        getEnv("SOJ_SANDBOX_ADDR", "http://127.0.0.1:5050"),
 		JWTSecret:          os.Getenv("SOJ_JWT_SECRET"), // 留空 = server.Run 从密钥卷载入或自动生成随机密钥（见 resolveJWTSecret）
@@ -82,6 +87,15 @@ func getEnv(key, def string) string {
 func getEnvInt(key string, def int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func getEnvInt64(key string, def int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
 	}

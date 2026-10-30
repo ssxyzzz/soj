@@ -31,6 +31,7 @@ type backupJob struct {
 	tier      string
 	errMsg    string
 	file      string // 成功产物文件名（服务器留存目录内，下载接口按名取）
+	fileSize  int64  // 成功产物体积（字节）：面板据此决定在线下载 or 服务器取包（v0.36）
 	startedAt time.Time
 	endedAt   time.Time
 	cancel    context.CancelFunc
@@ -41,6 +42,7 @@ func (j *backupJob) snapshot() gin.H {
 	defer j.mu.Unlock()
 	return gin.H{
 		"state": j.state, "tier": j.tier, "error": j.errMsg, "file": j.file,
+		"file_size": j.fileSize,
 		"started_at": j.startedAt, "ended_at": j.endedAt,
 	}
 }
@@ -51,14 +53,14 @@ func (j *backupJob) running() bool {
 	return j.state == "running"
 }
 
-// finish 终态落定（幂等：只有 running 可转终态）。
-func (j *backupJob) finish(state, errMsg, file string) {
+// finish 终态落定（幂等：只有 running 可转终态；size 仅 done 档有值）。
+func (j *backupJob) finish(state, errMsg, file string, size int64) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.state != "running" {
 		return
 	}
-	j.state, j.errMsg, j.file, j.endedAt = state, errMsg, file, time.Now()
+	j.state, j.errMsg, j.file, j.fileSize, j.endedAt = state, errMsg, file, size, time.Now()
 }
 
 func (h *Handlers) backupOptions() backup.Options {
@@ -88,14 +90,17 @@ func (h *Handlers) BackupStatus(c *gin.Context) {
 	}
 	h.backupMu.Unlock()
 	ok(c, gin.H{
-		"mode":             st.Mode,
-		"last_backup_at":   fmtTime(st.LastBackupAt),
-		"last_backup_file": st.LastBackupFile,
-		"last_db_at":       fmtTime(st.LastDBAt),
-		"last_db_file":     st.LastDBFile,
-		"last_media_at":    fmtTime(st.LastMediaAt),
-		"last_media_file":  st.LastMediaFile,
-		"job":              job,
+		"mode":              st.Mode,
+		"last_backup_at":    fmtTime(st.LastBackupAt),
+		"last_backup_file":  st.LastBackupFile,
+		"last_backup_size":  st.LastBackupSize,
+		"last_db_at":        fmtTime(st.LastDBAt),
+		"last_db_file":      st.LastDBFile,
+		"last_db_size":      st.LastDBSize,
+		"last_media_at":     fmtTime(st.LastMediaAt),
+		"last_media_file":   st.LastMediaFile,
+		"last_media_size":   st.LastMediaSize,
+		"job":               job,
 	})
 }
 
@@ -130,7 +135,7 @@ func (h *Handlers) BackupRun(c *gin.Context) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				job.finish("failed", fmt.Sprintf("备份任务异常: %v", r), "")
+				job.finish("failed", fmt.Sprintf("备份任务异常: %v", r), "", 0)
 			}
 		}()
 		opts := h.backupOptions()
@@ -138,13 +143,17 @@ func (h *Handlers) BackupRun(c *gin.Context) {
 		path, err := backup.Run(ctx, opts)
 		if err != nil {
 			if errors.Is(err, context.Canceled) || ctx.Err() != nil || strings.Contains(err.Error(), "已取消") {
-				job.finish("cancelled", "已取消", "")
+				job.finish("cancelled", "已取消", "", 0)
 				return
 			}
-			job.finish("failed", err.Error(), "")
+			job.finish("failed", err.Error(), "", 0)
 			return
 		}
-		job.finish("done", "", filepath.Base(path))
+		var size int64
+		if fi, statErr := os.Stat(path); statErr == nil {
+			size = fi.Size()
+		}
+		job.finish("done", "", filepath.Base(path), size)
 	}()
 	ok(c, gin.H{"started": true, "tier": tier})
 }
@@ -163,6 +172,10 @@ func (h *Handlers) BackupCancel(c *gin.Context) {
 
 // BackupDownload 下载服务器留存的备份归档（v0.26 任务化取包通道）：file 只接受
 // 备份目录内 soj-backup- 前缀的归档文件名（basename 校验防目录穿越）。
+// v0.36 体积硬禁：超过 BackupDownloadLimit（默认 32MB）的归档 403——media/all 档
+// 动辄数百 MB，在线下载会以独占方式占满站点唯一公网管道数分钟（学生侧全站变卡，
+// 2026-10-30 事故：219MB 下载 5m20s）。大档一律走服务器本机取包（响应附命令），
+// db 档（KB 级）不受影响。
 func (h *Handlers) BackupDownload(c *gin.Context) {
 	file := filepath.Base(c.Query("file"))
 	if !strings.HasPrefix(file, backup.ArchivePrefix()) || !strings.HasSuffix(file, ".tar.age") {
@@ -170,8 +183,15 @@ func (h *Handlers) BackupDownload(c *gin.Context) {
 		return
 	}
 	path := filepath.Join(h.cfg.BackupDir, file)
-	if _, err := os.Stat(path); err != nil {
+	fi, err := os.Stat(path)
+	if err != nil {
 		fail(c, http.StatusNotFound, "备份文件不存在")
+		return
+	}
+	if limit := h.cfg.BackupDownloadLimit; limit > 0 && fi.Size() > limit {
+		fail(c, http.StatusForbidden, fmt.Sprintf(
+			"归档 %s 体积 %.1fMB，超过在线下载上限 %dMB——大文件在线下载会长时间占满站点公网管道（全站变卡）。请在服务器上取包：docker cp soj-soj-1:/data/backups/%s ~/soj/backups/，或用 ./scripts/backup.sh --offsite 异地留存",
+			file, float64(fi.Size())/(1<<20), limit>>20, file))
 		return
 	}
 	c.Header("Cache-Control", "no-store")

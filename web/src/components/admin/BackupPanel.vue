@@ -12,7 +12,7 @@ import { adminApi } from '@/api'
 import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import { copyText } from '@/utils/clipboard'
-import { BACKUP_DOWNLOAD_URL } from '@/types'
+import { BACKUP_DOWNLOAD_LIMIT_BYTES, BACKUP_DOWNLOAD_URL } from '@/types'
 import type { BackupStatus } from '@/types'
 
 const userStore = useUserStore()
@@ -81,7 +81,7 @@ function startPoll() {
     if (st && st !== 'running') {
       stopPoll()
       if (st === 'done') {
-        ElMessage.success('备份完成，服务器已留存；点文件名下载到本机')
+        ElMessage.success('备份完成，服务器已留存；小档点文件名下载，大档用「服务器取包」命令')
       } else if (st === 'cancelled') {
         ElMessage.info('备份已取消')
       } else {
@@ -108,24 +108,66 @@ async function cancelBackup() {
   ElMessage.info('已请求取消')
 }
 
-// 下载服务器留存的归档（blob + 独立超时；鉴权头与全局同一身份源）
+// 体积格式化（KB/MB 一位小数，0 保底）
+function fmtSize(bytes?: number): string {
+  if (!bytes || bytes <= 0) return ''
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
+// 大档在线下载会独占站点公网管道数分钟（2026-10-30 事故），后端已 403 硬禁——
+// UI 按体积预判直接给服务器取包命令，不再发起下载（服务端 403 文案同口径兜底）
+function oversizeArchive(size?: number): boolean {
+  return typeof size === 'number' && size > BACKUP_DOWNLOAD_LIMIT_BYTES
+}
+
+const fetchCmdFile = ref('')
+const fetchCmdVisible = computed({
+  get: () => !!fetchCmdFile.value,
+  set: (v: boolean) => {
+    if (!v) fetchCmdFile.value = ''
+  },
+})
+const fetchCmd = computed(() =>
+  fetchCmdFile.value
+    ? `docker cp soj-soj-1:/data/backups/${fetchCmdFile.value} ~/soj/backups/`
+    : '',
+)
+
+function showFetchCmd(filename: string) {
+  fetchCmdFile.value = filename
+}
+
+// 下载服务器留存的归档（blob + 独立超时；鉴权头与全局同一身份源）。
+// 超限 403 时响应体是 JSON blob，读出文案弹取包命令（旧缓存页面/直连 URL 的兜底）
 async function downloadArchive(filename: string) {
   const token = userStore.token
-  const r = await axios({
-    method: 'get',
-    url: BACKUP_DOWNLOAD_URL,
-    params: { file: filename },
-    responseType: 'blob',
-    timeout: 0,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  })
-  const url = URL.createObjectURL(r.data as Blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-  ElMessage.success(`已下载：${filename}`)
+  try {
+    const r = await axios({
+      method: 'get',
+      url: BACKUP_DOWNLOAD_URL,
+      params: { file: filename },
+      responseType: 'blob',
+      timeout: 60_000,
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    const url = URL.createObjectURL(r.data as Blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success(`已下载：${filename}`)
+  } catch (e) {
+    const resp = (e as { response?: { status?: number; data?: Blob } }).response
+    if (resp?.status === 403) {
+      const text = await (resp.data instanceof Blob ? resp.data.text() : Promise.resolve(''))
+      ElMessage.error(text || '归档超过在线下载体积上限，请在服务器上取包')
+      showFetchCmd(filename)
+      return
+    }
+    throw e
+  }
 }
 
 onMounted(loadBackup)
@@ -195,7 +237,7 @@ onMounted(loadBackup)
         <template v-if="userStore.can('backup.run')">
           <el-button v-if="jobRunning" type="warning" plain @click="cancelBackup">取消备份</el-button>
           <el-button v-else type="primary" :loading="backingUp" @click="runBackup">
-            立即备份（服务器留存，完成后可下载）
+            立即备份（服务器留存）
           </el-button>
         </template>
       </div>
@@ -236,7 +278,13 @@ onMounted(loadBackup)
         </template>
         <template v-else-if="jobState.state === 'done' && jobState.file">
           <el-tag type="success" size="small">上次任务完成（{{ jobState.tier }}）</el-tag>
-          <el-button link type="primary" @click="downloadArchive(jobState.file!)">{{ jobState.file }}</el-button>
+          <template v-if="oversizeArchive(jobState.file_size)">
+            <span class="mono muted">{{ jobState.file }}（{{ fmtSize(jobState.file_size) }}）</span>
+            <el-button size="small" @click="showFetchCmd(jobState.file!)">服务器取包</el-button>
+          </template>
+          <el-button v-else link type="primary" @click="downloadArchive(jobState.file!)">
+            {{ jobState.file }}<template v-if="jobState.file_size">（{{ fmtSize(jobState.file_size) }}）</template>
+          </el-button>
         </template>
         <template v-else-if="jobState.state === 'cancelled'">
           <el-tag type="info" size="small">上次任务已取消</el-tag>
@@ -292,6 +340,23 @@ onMounted(loadBackup)
         </el-collapse-item>
       </el-collapse>
     </div>
+
+    <el-dialog v-model="fetchCmdVisible" title="服务器取包（大归档不走在线下载）" width="720">
+      <el-alert
+        type="warning"
+        :closable="false"
+        show-icon
+        title="数据备/全量备动辄数百 MB，在线下载会长时间占满站点公网管道（学生会全站变卡）——在服务器上执行下面的命令取包，秒级完成"
+      />
+      <div class="cmd-line" style="margin-top: 10px">
+        <code>{{ fetchCmd }}</code>
+        <el-button size="small" link type="primary" @click="copyText(fetchCmd)">复制</el-button>
+      </div>
+      <p class="cmd-note">
+        在服务器（docker 宿主机）上执行；取回后再从服务器下载或用
+        <code>./scripts/backup.sh --offsite</code> 异地留存。每日库备（KB 级）不受限，仍可直接在线下载。
+      </p>
+    </el-dialog>
 
     <el-dialog
       v-model="showOfflineKey"

@@ -114,10 +114,13 @@ type Status struct {
 	Mode           Mode
 	LastBackupAt   time.Time
 	LastBackupFile string
+	LastBackupSize int64 // 字节；面板据此决定「在线下载」还是「服务器取包」（v0.36）
 	LastDBAt       time.Time
 	LastDBFile     string
+	LastDBSize     int64
 	LastMediaAt    time.Time
 	LastMediaFile  string
+	LastMediaSize  int64
 }
 
 // Inspect 汇总密钥卷与备份目录的当前状态（分层各报各的最近一次）。
@@ -132,13 +135,13 @@ func Inspect(keysDir, backupDir string) Status {
 		base := filepath.Base(f)
 		switch {
 		case fi.ModTime().After(st.LastBackupAt):
-			st.LastBackupAt, st.LastBackupFile = fi.ModTime(), base
+			st.LastBackupAt, st.LastBackupFile, st.LastBackupSize = fi.ModTime(), base, fi.Size()
 		}
 		if strings.HasPrefix(base, archivePrefix+"db-") && fi.ModTime().After(st.LastDBAt) {
-			st.LastDBAt, st.LastDBFile = fi.ModTime(), base
+			st.LastDBAt, st.LastDBFile, st.LastDBSize = fi.ModTime(), base, fi.Size()
 		}
 		if strings.HasPrefix(base, archivePrefix+"media-") && fi.ModTime().After(st.LastMediaAt) {
-			st.LastMediaAt, st.LastMediaFile = fi.ModTime(), base
+			st.LastMediaAt, st.LastMediaFile, st.LastMediaSize = fi.ModTime(), base, fi.Size()
 		}
 	}
 	return st
