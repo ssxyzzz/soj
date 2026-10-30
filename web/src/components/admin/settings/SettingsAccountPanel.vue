@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // 系统设置 · 账号与通知页（2026-10-28 拆分）：注册取号起点 / 通知保留 / 全站广播频次。
-// v0.34 增：资料自改五开关（昵称/性别/年级/学校/地区）+ 年级自动晋级状态与手动晋级。
+// v0.34 增：资料自改五开关（昵称/性别/年级/学校/地区）+ 年级自动晋级状态（全自动，无手动触发）。
 import { computed, onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 
 import { adminApi } from '@/api'
 import type { GradePromotionInfo } from '@/types'
@@ -24,17 +24,12 @@ const profileFields = [
 // 年级晋级（v0.34）：状态展示 + 手动立即晋级（错时钟/提前晋级兜底）
 const promo = ref<GradePromotionInfo | null>(null)
 const promoLoading = ref(false)
-const promoting = ref(false)
 
 const saveSettings = ref(false)
 const saving = computed(() => saveSettings.value)
 
 const promoTotal = computed(() =>
   promo.value ? promo.value.grades.reduce((s, g) => s + g.count, 0) : 0,
-)
-/** 会被一次手动晋级推动的人数（1–12 档；高三→已毕业也算） */
-const promoAffected = computed(() =>
-  promo.value ? promo.value.grades.filter((g) => g.no >= 1 && g.no <= 12).reduce((s, g) => s + g.count, 0) : 0,
 )
 
 onMounted(async () => {
@@ -81,30 +76,6 @@ async function save() {
     ElMessage.success('账号与通知设置已保存')
   } finally {
     saveSettings.value = false
-  }
-}
-
-async function forcePromo() {
-  if (!promo.value) return
-  try {
-    await ElMessageBox.confirm(
-      `确认立即让全部年级晋级一次（${promoAffected.value} 名 1–12 档用户各 +1、高三 → 已毕业，未设置不动）？` +
-        '该操作不可撤销，请确认学期衔接无误。',
-      '手动年级晋级',
-      { type: 'warning', confirmButtonText: '立即晋级', cancelButtonText: '取消' },
-    )
-  } catch {
-    return
-  }
-  promoting.value = true
-  try {
-    const r = await adminApi.gradePromotionForce()
-    ElMessage.success(`年级晋级完成：影响 ${r.promoted} 名用户`)
-    await loadPromo()
-  } catch {
-    // 拦截器统一提示
-  } finally {
-    promoting.value = false
   }
 }
 
@@ -171,14 +142,6 @@ function fmtNext(at: string | undefined) {
           </span>
         </span>
         <span v-else class="dim">暂无设年级的用户</span>
-      </el-form-item>
-      <el-form-item label="手动晋级">
-        <el-button type="warning" :loading="promoting" :disabled="!promo" @click="forcePromo">
-          立即晋级一次
-        </el-button>
-        <span class="dim" style="margin-left: 8px">
-          兜底用（如服务器时钟异常 / 学期提前）：全体 1–12 档 +1、高三 → 已毕业；自动晋级不受影响
-        </span>
       </el-form-item>
 
       <el-divider content-position="left">站内通知（v0.24）</el-divider>

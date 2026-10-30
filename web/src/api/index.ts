@@ -471,9 +471,8 @@ export const adminApi = {
       '/admin/users/import-commit',
       { rows },
     ),
-  // 年级晋级（v0.34）：状态查询 + 手动立即晋级
+  // 年级晋级（v0.34）：状态查询（晋级全自动，无手动触发）
   gradePromotionInfo: () => get<GradePromotionInfo>('/admin/grade-promotion'),
-  gradePromotionForce: () => post<{ promoted: number }>('/admin/grade-promotion', {}),
   updateUser: (
     id: number,
     patchBody: {

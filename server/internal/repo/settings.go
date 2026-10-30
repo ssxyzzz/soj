@@ -95,7 +95,7 @@ type SystemSettings struct {
 	// 权限位。QQ/邮箱不锁（头像绑定与验证链路）。root 用户管理不受限（锁定后的修改口）。
 	ProfileEdit *ProfileEditConfig `bson:"profileEdit,omitempty"`
 	// 年级晋级标记（v0.34）：最近已执行的学年起始年（9/1 切换）；0/缺失 = 从未执行。
-	// 由晋级逻辑独占读写（EnsureGradePromotion / ForceGradePromotion），不经系统设置表单。
+	// 由晋级逻辑独占读写（EnsureGradePromotion，全自动），不经系统设置表单。
 	GradePromoYear int `bson:"gradePromoYear,omitempty"`
 }
 

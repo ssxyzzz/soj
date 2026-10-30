@@ -65,7 +65,6 @@ type RepoAPI interface {
 	CreateUserWithProfile(ctx context.Context, id int64, username, password, nickname, role string, p repo.UserProfile) (int64, error)
 	PeekUserSeq(ctx context.Context) (int64, error)
 	EnsureGradePromotion(ctx context.Context) (int64, error)
-	ForceGradePromotion(ctx context.Context) (int64, error)
 	GradePromotionInfo(ctx context.Context) (*repo.GradePromoInfo, error)
 	ExistingUserIDs(ctx context.Context, ids []int64) (map[int64]bool, error)
 	ExistingUsernames(ctx context.Context, names []string) (map[string]bool, error)

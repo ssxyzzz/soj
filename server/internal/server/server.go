@@ -350,9 +350,8 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.GET("/users/import-template", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportTemplate)
 				adminG.POST("/users/import-preview", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportPreview)
 				adminG.POST("/users/import-commit", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportCommit)
-				// 年级晋级状态与手动晋级（v0.34）：系统设置权限位（root 后台面板）
+				// 年级晋级状态（v0.34，全自动无手动触发）：系统设置权限位（root 后台面板）
 				adminG.GET("/grade-promotion", RequirePerm(repo.PermAdminSettings), h.AdminGradePromotionInfo)
-				adminG.POST("/grade-promotion", RequirePerm(repo.PermAdminSettings), h.AdminGradePromotionForce)
 				// 解绑邮箱（v0.16）：root 硬编码（学生换邮箱场景，不设权限位）
 				adminG.DELETE("/users/:id/email", RequireRoot(), h.AdminUnbindEmail)
 				adminG.GET("/settings", RequirePerm(repo.PermAdminSettings), h.GetSettings)

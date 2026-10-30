@@ -184,25 +184,12 @@ func (r *Repo) EnsureGradePromotion(ctx context.Context) (int64, error) {
 	if diff <= 0 {
 		return 0, nil
 	}
-	return r.promoteBy(ctx, int64(diff), false)
-}
-
-// ForceGradePromotion 手动「立即晋级」一次（后台按钮，错时钟/提前晋级兜底）：
-// 无论标记如何都执行 +1 并把标记对齐到当前学年（保持自动链路口径一致）。
-func (r *Repo) ForceGradePromotion(ctx context.Context) (int64, error) {
-	cur := SchoolYearStart(time.Now())
-	if _, err := r.db.Collection("settings").UpdateOne(ctx,
-		bson.M{"_id": "system"},
-		bson.M{"$set": bson.M{"gradePromoYear": cur}},
-		options.UpdateOne().SetUpsert(true)); err != nil {
-		return 0, err
-	}
-	return r.promoteBy(ctx, 1, true)
+	return r.promoteBy(ctx, int64(diff))
 }
 
 // promoteBy 年差晋级：1–12 档 $inc 年差（跨学年一次补齐），再钳 13（高三经年差
 // 越过毕业线归已毕业）；未设置（无 gradeNo 字段）不动。返回位移人数。
-func (r *Repo) promoteBy(ctx context.Context, diff int64, manual bool) (int64, error) {
+func (r *Repo) promoteBy(ctx context.Context, diff int64) (int64, error) {
 	res, err := r.users.UpdateMany(ctx,
 		bson.M{"gradeNo": bson.M{"$gte": 1, "$lte": 12}},
 		bson.M{"$inc": bson.M{"gradeNo": diff}})
@@ -215,11 +202,7 @@ func (r *Repo) promoteBy(ctx context.Context, diff int64, manual bool) (int64, e
 		return res.ModifiedCount, err
 	}
 	if res.ModifiedCount > 0 {
-		action := "学年自动晋级"
-		if manual {
-			action = "手动立即晋级"
-		}
-		slog.Info("年级晋级完成", "component", "boot", "action", action,
+		slog.Info("年级晋级完成", "component", "boot", "action", "学年自动晋级",
 			"years", diff, "promoted", res.ModifiedCount)
 	}
 	return res.ModifiedCount, nil
