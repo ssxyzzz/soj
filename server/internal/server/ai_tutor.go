@@ -122,7 +122,7 @@ func (h *Handlers) aiCharge(c *gin.Context, uid int64, kind string, difficulty i
 			fmt.Sprintf("今日 AI 助教使用已达上限（%d 次/天），明天再来", s.AiDailyLimitVal()))
 		return 0, false
 	}
-	price := s.AiPrice(kind, difficulty)
+	price := s.AiPrice(kind, difficulty, h.userLevelFresh(c, uid))
 	if price > 0 {
 		jadeKind, reason := aiJadeKind(kind, ref)
 		if err := h.repo.JadeSpend(c.Request.Context(), uid, price, jadeKind, reason, ref); err != nil {
@@ -544,7 +544,7 @@ func (h *Handlers) AiHintStatus(c *gin.Context) {
 		levels = append(levels, gin.H{
 			"level":       lv,
 			"unlocked":    unlocked,
-			"price":       s.AiPrice(fmt.Sprintf("hint%d", lv), p.EffDifficulty()),
+			"price":       s.AiPrice(fmt.Sprintf("hint%d", lv), p.EffDifficulty(), h.userLevelCached(c, uid)),
 			"has_content": perr == nil || (unlocked && hint != nil), // 个人档或（可看且共享缓存有）
 		})
 	}
@@ -553,7 +553,7 @@ func (h *Handlers) AiHintStatus(c *gin.Context) {
 		"free":        free,
 		"name":        s.AiTutorNameVal(),
 		"levels":      levels,
-		"debug_price": s.AiPrice("debug", p.EffDifficulty()),
+		"debug_price": s.AiPrice("debug", p.EffDifficulty(), h.userLevelCached(c, uid)),
 		"daily_left": func() int {
 			// 分层口径（2026-10-30）：root 不限次；特权层按后台「特权层每日上限」
 			//（0 = 不限）；学生按每日上限。-1 = 不限，前端据此显示/不禁用。

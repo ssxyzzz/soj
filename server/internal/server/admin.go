@@ -313,6 +313,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"problem_seq_start":          s.ProblemSeqStartVal(),
 		"currency_name":              s.CurrencyNameVal(),
 		"jade_award_rate_pct":        s.JadeAwardRatePctVal(),
+		"jade_discount":              normalizeJadeDiscountLocal(s.JadeDiscount),
 		// 资料自改开关（v0.34）：五字段逐个可锁
 		"profile_edit_nickname": s.OpenNickname(),
 		"profile_edit_gender":   s.OpenGender(),
@@ -320,6 +321,22 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"profile_edit_school":   s.OpenSchool(),
 		"profile_edit_region":   s.OpenRegion(),
 	})
+}
+
+// normalizeJadeDiscountLocal GET 回显归一（与 repo.normalizeJadeDiscount 同规则：夹取+单调）。
+func normalizeJadeDiscountLocal(d [6]int) [6]int {
+	def := [6]int{95, 90, 85, 80, 75, 70}
+	for i := range d {
+		if d[i] < 10 || d[i] > 100 {
+			d[i] = def[i]
+		}
+	}
+	for i := 4; i >= 0; i-- {
+		if d[i] < d[i+1] {
+			d[i] = d[i+1]
+		}
+	}
+	return d
 }
 
 // GetSiteInfo 站点公开信息（v0.13 收编原 /auth/register-open）：注册开关 + ICP 备案号，
@@ -391,6 +408,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		ProblemSeqStart         *int  `json:"problem_seq_start"` // 自动题号起点
 		CurrencyName            *string `json:"currency_name"` // 货币名（v0.33，1–6 字，默认「玉」）
 		JadeAwardRatePct        *int  `json:"jade_award_rate_pct"` // 比赛奖池获奖比例 %（v0.33）
+		JadeDiscount            *[6]int `json:"jade_discount"`    // 玉折扣六档 Lv5–10 %（v0.40）
 		JadeSolutionUnlockMult  *int  `json:"jade_solution_unlock_mult"` // 题解解锁价系数（v0.33-②）
 		JadeBountyMin           *int  `json:"jade_bounty_min"` // 悬赏额下限（v0.33-②）
 		JadeBountyMax           *int  `json:"jade_bounty_max"` // 悬赏额上限（v0.33-②）
@@ -613,6 +631,13 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.JadeAwardRatePct = req.JadeAwardRatePct
+	}
+	if req.JadeDiscount != nil {
+		if len(*req.JadeDiscount) != 6 {
+			fail(c, http.StatusBadRequest, "玉折扣需为 6 档（Lv5–10）")
+			return
+		}
+		s.JadeDiscount = *req.JadeDiscount
 	}
 	if req.JadeSolutionUnlockMult != nil {
 		if *req.JadeSolutionUnlockMult < 1 || *req.JadeSolutionUnlockMult > 100 {

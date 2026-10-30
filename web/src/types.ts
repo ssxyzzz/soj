@@ -1056,6 +1056,8 @@ export interface AdminSettings {
   jade_bounty_min: number
   jade_bounty_max: number
   jade_shop_enabled: boolean
+  /** 玉折扣阶梯（v0.40）：Lv5–10 六档百分比（95=九五折…70=七折） */
+  jade_discount: number[]
   /** 资料自改开关（v0.34）：false = 学生端锁定、仅 root 用户管理可改 */
   profile_edit_nickname: boolean
   profile_edit_gender: boolean
@@ -1092,6 +1094,8 @@ export interface UserImportRow {
 export interface JadeMine {
   balance: number
   currency: string
+  /** 升维祝福（v0.40）：进行中才有值，ISO 时间 */
+  bless_until?: string
 }
 
 /** 玉流水行（v0.33-①）：kind 中文映射见 kindText（JadeView）。 */

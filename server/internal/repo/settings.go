@@ -74,6 +74,10 @@ type SystemSettings struct {
 	JadeBountyMax *int `bson:"jadeBountyMax,omitempty"`
 	// 实物兑换（v0.33-②）：整模块默认关，仅 root 可开（目录 + 人工履约）。
 	JadeShopEnabled *bool `bson:"jadeShopEnabled,omitempty"`
+	// 玉折扣阶梯（v0.40）：Lv5–10 六档消费折扣百分比（95=九五折…70=七折）；
+	// 仅作用于题解解锁与 AI 两能（悬赏是玉流转、实物原价——防套利拍板）。
+	// 缺档/越界回默认，单调性由 normalize 保证（高等级不高于低等级）。
+	JadeDiscount [6]int `bson:"jadeDiscount,omitempty"`
 	// AI 计费（v0.33-③）：每日合计上限（默认 5 次，提示+找 bug 合计）；基准价
 	//（两级提示：理解题目 2 / 算法思路 6、找 bug 8）× 难度倍率 ⌈D/3⌉；等级折扣两档
 	//（Lv≥discount1Lv 九折 / Lv≥discount2Lv 八折，向上取整）。全部后台可调。
@@ -127,7 +131,7 @@ func (s *SystemSettings) OpenRegion() bool   { return s.ProfileEdit == nil || s.
 const (
 	DefaultRateLimitPerMinute   = 3
 	DefaultDataDownloadDayLimit = 5
-	DefaultAutocompleteMinLevel = 5
+	DefaultAutocompleteMinLevel = 4
 	DefaultAllowRegister        = true
 	DefaultBatchImportProblemMB = 100  // 单题数据 100MB
 	DefaultBatchImportZipMB     = 2048 // 整包 zip 2GB
@@ -424,6 +428,36 @@ func (s *SystemSettings) CurrencyNameVal() string {
 	return s.CurrencyName
 }
 
+// DefaultJadeDiscount 玉折扣阶梯默认（Lv5=九五折 → Lv10=七折，v0.40 拍板六档逐级）。
+var DefaultJadeDiscount = [6]int{95, 90, 85, 80, 75, 70}
+
+// normalizeJadeDiscount 折扣归一：逐档夹取 [10,100]，并保证高等级不高于低等级
+//（违者把高档提到低档值——折扣只能随等级加深）。
+func normalizeJadeDiscount(d [6]int) [6]int {
+	for i := range d {
+		if d[i] < 10 || d[i] > 100 {
+			d[i] = DefaultJadeDiscount[i]
+		}
+	}
+	for i := 4; i >= 0; i-- {
+		if d[i] < d[i+1] {
+			d[i] = d[i+1]
+		}
+	}
+	return d
+}
+
+// JadeDiscountPct 玉折扣单点收口（v0.40）：返回该等级的折扣百分比（100 = 不折）。
+// 消费面仅题解解锁与 AI 两能；调用方按 ceil(base*pct/100) 计折后价。教师等免费群体
+// 不经过此函数（0 价直通）。
+func (s *SystemSettings) JadeDiscountPct(level int) int {
+	if level < 5 || level > 10 {
+		return 100
+	}
+	d := normalizeJadeDiscount(s.JadeDiscount)
+	return d[level-5]
+}
+
 // JadeAwardRatePctVal 比赛奖池获奖比例（越界回默认 50）。
 func (s *SystemSettings) JadeAwardRatePctVal() int {
 	if s.JadeAwardRatePct == nil || *s.JadeAwardRatePct < 1 || *s.JadeAwardRatePct > 100 {
@@ -515,7 +549,7 @@ func (s *SystemSettings) AiTutorNameVal() string {
 //	两级提示合计 = S×70%（向下取整，保底 2 玉），理解:思路 = 1:2 拆分
 //	找 bug = S×90%（向下取整）
 //	任何单价下限 1 玉。
-func (s *SystemSettings) AiPrice(kind string, difficulty int) int64 {
+func (s *SystemSettings) AiPrice(kind string, difficulty, level int) int64 {
 	solution := int64(difficulty) * int64(s.JadeSolutionUnlockMultVal())
 	var price int64
 	switch kind {
@@ -535,6 +569,10 @@ func (s *SystemSettings) AiPrice(kind string, difficulty int) int64 {
 		}
 	default: // debug
 		price = solution * AiDebugPct / 100
+	}
+	// 玉折扣阶梯（v0.40）：Lv5–10 消费折扣（向上取整防折穿 1 玉；level<5 = 不折）
+	if pct := s.JadeDiscountPct(level); pct < 100 {
+		price = (price*int64(pct) + 99) / 100
 	}
 	if price < 1 {
 		price = 1
@@ -585,6 +623,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"jadeBountyMin":           s.JadeBountyMinVal(),
 			"jadeBountyMax":           s.JadeBountyMaxVal(),
 			"jadeShopEnabled":         s.JadeShopOpen(),
+			"jadeDiscount":            normalizeJadeDiscount(s.JadeDiscount),
 			"aiDailyLimit":            s.AiDailyLimitVal(),
 			"aiStaffDailyLimit":       s.AiStaffDailyLimitVal(), // 特权层每日上限（v0.33-④ 特权分层；曾漏登本清单导致保存不生效）
 			"aiHintPrice1":            s.AiHintPrice1Val(),

@@ -48,7 +48,11 @@ func (h *Handlers) UnlockSolution(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取设置失败")
 		return
 	}
+	// 玉折扣阶梯（v0.40）：学生按等级折后价（向上取整），教师等免费群体进不来此处
 	price := int64(p.EffDifficulty()) * int64(s.JadeSolutionUnlockMultVal())
+	if pct := s.JadeDiscountPct(h.userLevelFresh(c, uid)); pct < 100 {
+		price = (price*int64(pct) + 99) / 100
+	}
 	already, err := h.repo.UnlockSolutionWithJade(ctx, uid, pid, price, p.Title)
 	if err != nil {
 		if err == repo.ErrInsufficientJade {
@@ -83,7 +87,12 @@ func (h *Handlers) MyJade(c *gin.Context) {
 	if s != nil {
 		currency = s.CurrencyNameVal()
 	}
-	ok(c, gin.H{"balance": bal, "currency": currency})
+	blessUntil, _ := h.repo.UserBlessUntil(c.Request.Context(), uid)
+	resp := gin.H{"balance": bal, "currency": currency}
+	if !blessUntil.IsZero() && blessUntil.After(time.Now()) {
+		resp["bless_until"] = blessUntil.Format(time.RFC3339) // 升维祝福（v0.40）
+	}
+	ok(c, resp)
 }
 
 // MyJadeLedger GET /api/me/jade/ledger?page= —— 个人资料页流水明细（仅本人）。

@@ -7,6 +7,7 @@ package server
 // 字段 PATCH 拒收、前端只读；editable 五标志随 profile 下发（昵称 = 权限位 AND 开关）。
 
 import (
+	"log/slog"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -107,6 +108,12 @@ func (h *Handlers) GetMyProfile(c *gin.Context) {
 	// 等级（v0.11）：徽章/进度渲染；聚合失败降级省略，不阻塞个人设置
 	if lv := h.levelBadgeInfo(c, uid); lv != nil {
 		info["level"] = lv
+		// 升维祝福（v0.40）：xpAdjust 等非 AC 升级的兜底检测（AC 路径在判题回写）
+		if level, _ := lv["level"].(int); level >= 2 {
+			if err := h.repo.EnsureLevelBlessing(c.Request.Context(), uid, level); err != nil {
+				slog.Warn("升维祝福检测失败", "component", "profile", "uid", uid, "error", err)
+			}
+		}
 	}
 	ok(c, info)
 }

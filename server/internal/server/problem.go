@@ -241,10 +241,16 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		return
 	}
 
-	// 玉解锁（v0.33-②）：未达门槛的学生视角给解锁价与已解锁态（前端渲染「N 玉解锁」按钮）
+	// 玉解锁（v0.33-②）：未达门槛的学生视角给解锁价与已解锁态（前端渲染「N 玉解锁」按钮）；
+	// 折扣阶梯（v0.40）：登录学生按等级折后价（10min 缓存等级，热路径）——实付以解锁时为准
 	unlockPrice := int64(p.EffDifficulty()) * int64(repo.DefaultJadeSolutionUnlockMult)
 	if st, serr := h.repo.GetSystemSettings(ctx); serr == nil {
 		unlockPrice = int64(p.EffDifficulty()) * int64(st.JadeSolutionUnlockMultVal())
+		if logged && !hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn) {
+			if pct := st.JadeDiscountPct(h.userLevelCached(c, uid)); pct < 100 {
+				unlockPrice = (unlockPrice*int64(pct) + 99) / 100
+			}
+		}
 	}
 	solutionUnlocked := false
 	if logged && !hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn) {

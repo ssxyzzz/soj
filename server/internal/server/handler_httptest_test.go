@@ -164,6 +164,12 @@ func (f *fakeRepo) GetUsersByIDs(context.Context, []int64) (map[int64]*repo.User
 
 // ---- fake 玉账本（内存版，调玉端点测试用）----
 
+func (f *fakeRepo) UserBlessUntil(context.Context, int64) (time.Time, error) {
+	return time.Time{}, nil // fake：无祝福
+}
+
+func (f *fakeRepo) EnsureLevelBlessing(context.Context, int64, int) error { return nil }
+
 func (f *fakeRepo) JadeBalance(_ context.Context, uid int64) (int64, error) {
 	return f.jadeBal[uid], nil
 }

@@ -4,6 +4,9 @@ package server
 // 等级本身是读时聚合值（repo.LevelProgress），在这里统一算给 /me/profile 与排行榜。
 
 import (
+	"time"
+	"sync"
+	"fmt"
 	"context"
 	"net/http"
 
@@ -167,7 +170,70 @@ func (h *Handlers) levelBadgeInfo(c *gin.Context, uid int64) gin.H {
 	return info
 }
 
-// autocompleteAllowed 自动补全门槛：当前等级 ≥ 系统设置阈值（默认 Lv.5）。
+// levelStaff 教职工角色豁免等级权益闸（root/admin/teacher——门槛面向学生，
+// 老师要能演示全部功能）。
+func levelStaff(role string) bool {
+	return role == repo.RoleRoot || role == repo.RoleAdmin || role == "teacher"
+}
+
+// userLevelFresh 当前用户等级（实时聚合，闸门/计费等低频高正确性场景用）；
+// 聚合失败回 1（最低档——闸门从紧、折扣不打）。
+func (h *Handlers) userLevelFresh(c *gin.Context, uid int64) int {
+	cfg, counts, adjs, ok := levelAgg(c.Request.Context(), h.repo, []int64{uid})
+	if !ok {
+		return 1
+	}
+	lv, _, _, _, _ := repo.LevelProgress(cfg, counts[uid], adjs[uid])
+	return lv
+}
+
+// ---- 用户等级 10min 进程缓存（v0.40）：题目详情解锁价等热路径用——等级变化慢，
+// 折后价允许分钟级陈旧；闸门/计费用 userLevelFresh 不走缓存 ----
+type userLevelEntry struct {
+	lv  int
+	exp time.Time
+}
+
+var (
+	userLevelMu    sync.Mutex
+	userLevelCache = map[int64]userLevelEntry{}
+)
+
+const userLevelCacheTTL = 10 * time.Minute
+
+func (h *Handlers) userLevelCached(c *gin.Context, uid int64) int {
+	now := time.Now()
+	userLevelMu.Lock()
+	e, hit := userLevelCache[uid]
+	userLevelMu.Unlock()
+	if hit && now.Before(e.exp) {
+		return e.lv
+	}
+	lv := h.userLevelFresh(c, uid)
+	userLevelMu.Lock()
+	if len(userLevelCache) > 4096 { // 简单防胀：满则清（班级规模远达不到）
+		userLevelCache = map[int64]userLevelEntry{}
+	}
+	userLevelCache[uid] = userLevelEntry{lv: lv, exp: now.Add(userLevelCacheTTL)}
+	userLevelMu.Unlock()
+	return lv
+}
+
+// requireLevel 等级权益闸（v0.40）：不满足回 false 并已写 403；教职工豁免。
+func (h *Handlers) requireLevel(c *gin.Context, uid int64, min int, what string) bool {
+	if _, _, role, ok := currentUser(c); ok && levelStaff(role) {
+		return true
+	}
+	if lv := h.userLevelFresh(c, uid); lv >= min {
+		return true
+	}
+	fail(c, http.StatusForbidden,
+		fmt.Sprintf("Lv.%d 解锁%s——先去做题攒经验升级吧", min, what))
+	return false
+}
+
+// autocompleteAllowed 自动补全门槛：当前等级 ≥ 系统设置阈值（v0.40 起默认 Lv.4，
+// 与权益阶梯对齐）。
 func (h *Handlers) autocompleteAllowed(c *gin.Context, uid int64) bool {
 	// 老师角色（root/admin）不受限，门槛面向学生——与前端 autocompleteAvailable
 	// 同口径；漏掉豁免时低等级 admin 保存偏好会被 400 拦死（开关在前端可点开）。

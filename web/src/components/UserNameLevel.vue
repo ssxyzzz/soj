@@ -36,7 +36,7 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
     class="unl-root"
     :title="fullText"
   >
-    <span class="unl-name" :class="{ 'unl-me': me }">{{ name }}</span>
+    <span class="unl-name" :class="{ 'unl-me': me, 'unl-gold': tier >= 8, 'unl-extreme': tier >= 10 }">{{ name }}</span>
     <TierBadge v-if="level" :tier="tier" kind="level" size="sm" class="unl">{{ tierText }}</TierBadge>
   </component>
 </template>
@@ -51,6 +51,32 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
   min-width: 0;
   vertical-align: middle;
   text-decoration: none;
+}
+
+/* 等级荣誉（v0.40）：Lv8+ 金色昵称，Lv10 极境再叠流光（reduced-motion 静止） */
+.unl-name.unl-gold {
+  background: linear-gradient(135deg, #b45309, #f59e0b 45%, #fde68a);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.unl-name.unl-extreme {
+  background: linear-gradient(135deg, #b45309, #f59e0b 30%, #fef3c7 50%, #f59e0b 70%, #b45309);
+  background-size: 200% auto;
+  animation: unlFlow 3s linear infinite;
+}
+
+@keyframes unlFlow {
+  to {
+    background-position: 200% center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unl-name.unl-extreme {
+    animation: none;
+  }
 }
 
 a.unl-root {

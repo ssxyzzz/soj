@@ -162,11 +162,13 @@ const funcTemplate = computed(() => problem.value?.function?.template_code || ''
 const isInteractive = computed(() => problem.value?.type === 'interactive')
 
 // 挑战模式（v0.23）：题目资格（stdio 传统题）+ 有数据 + 非锁题；入口走独立全屏页
+// 等级权益闸（v0.40）：Lv.3 解锁挑战（教职工豁免，userStore.canChallenge）
 const challengeReady = computed(
   () =>
     !!problem.value?.challenge?.eligible &&
     problem.value?.has_cases !== false &&
-    !problem.value?.locked,
+    !problem.value?.locked &&
+    userStore.canChallenge,
 )
 
 function openChallenge() {
@@ -176,6 +178,10 @@ function openChallenge() {
     return
   }
   if (!challengeReady.value) {
+    if (userStore.token && !userStore.canChallenge) {
+      ElMessage.warning('Lv.3 解锁挑战模式——先去做题攒经验升级吧')
+      return
+    }
     ElMessage.warning(
       problem.value?.locked
         ? '该题处于比赛/考试锁定期，暂不可挑战'
@@ -431,8 +437,9 @@ onUnmounted(stopPolling)
           <template v-if="!isObjective">
             <div class="entry-actions">
               <el-button type="primary" :disabled="submitDisabled" @click="openRailSubmit">提交</el-button>
-              <el-button :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
+              <el-button v-if="userStore.canOnline" :disabled="submitDisabled" @click="openWorkbenchEntry">在线编程</el-button>
               <el-button
+                v-if="userStore.canChallenge"
                 class="btn-challenge"
                 :class="{ off: !challengeReady }"
                 @click="openChallenge"

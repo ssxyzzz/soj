@@ -21,6 +21,8 @@ const problemSeqStart = ref(1001)
 // 玉经济体（v0.33-①）：货币名（1–6 字，全站文案统一读此值）+ 比赛奖池获奖比例
 const currencyName = ref('玉')
 const jadeAwardRatePct = ref(50)
+// 玉折扣阶梯（v0.40）：Lv5–10 六档百分比（95 = 九五折…70 = 七折）；仅作用于题解解锁与 AI
+const jadeDiscount = ref<number[]>([95, 90, 85, 80, 75, 70])
 // 玉经济体（v0.33-②）：题解解锁系数 + 悬赏上下限 + 实物兑换开关
 const unlockMult = ref(5)
 const bountyMin = ref(5)
@@ -41,6 +43,7 @@ onMounted(async () => {
     problemSeqStart.value = s.problem_seq_start ?? 1001
     currencyName.value = s.currency_name || '玉'
     jadeAwardRatePct.value = s.jade_award_rate_pct ?? 50
+    jadeDiscount.value = s.jade_discount?.length === 6 ? [...s.jade_discount] : [95, 90, 85, 80, 75, 70]
     unlockMult.value = s.jade_solution_unlock_mult ?? 5
     bountyMin.value = s.jade_bounty_min ?? 5
     bountyMax.value = s.jade_bounty_max ?? 500
@@ -63,6 +66,7 @@ async function save() {
       problem_seq_start: problemSeqStart.value,
       currency_name: currencyName.value.trim(),
       jade_award_rate_pct: jadeAwardRatePct.value,
+      jade_discount: [...jadeDiscount.value],
       jade_solution_unlock_mult: unlockMult.value,
       jade_bounty_min: bountyMin.value,
       jade_bounty_max: bountyMax.value,
@@ -132,6 +136,18 @@ async function save() {
         <el-input-number v-model="jadeAwardRatePct" :min="1" :max="100" />
         <span class="dim" style="margin-left: 8px">
           真正参赛（得分 &gt; 0）人数 × 该比例 = 名次奖名额（向上取整，至少 1 人），名次奖按线性递减瓜分名次奖池
+        </span>
+      </el-form-item>
+      <el-form-item label="玉折扣阶梯（Lv5–10）">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+          <span v-for="(label, i) in ['Lv5', 'Lv6', 'Lv7', 'Lv8', 'Lv9', 'Lv10']" :key="label" style="display: inline-flex; align-items: center; gap: 4px">
+            {{ label }}
+            <el-input-number v-model="jadeDiscount[i]" :min="10" :max="100" size="small" style="width: 90px" />
+            %
+          </span>
+        </div>
+        <span class="dim" style="display: block; margin-top: 4px">
+          消费折扣只作用于题解解锁与 AI 助教（悬赏是玉流转、实物一律原价）；Lv5 起生效，越高越便宜，逐档不能高于上一档（保存时自动校正）
         </span>
       </el-form-item>
       <el-form-item label="题解解锁价系数">

@@ -64,6 +64,9 @@ type RepoAPI interface {
 	// v0.34 用户档案批：花名册建号 / 年级晋级 / 批量查重
 	CreateUserWithProfile(ctx context.Context, id int64, username, password, nickname, role string, p repo.UserProfile) (int64, error)
 	PeekUserSeq(ctx context.Context) (int64, error)
+	// v0.40 升维祝福：读路径兜底检测（判题路径走具体 repo 不经此缝）
+	EnsureLevelBlessing(ctx context.Context, uid int64, level int) error
+	UserBlessUntil(ctx context.Context, uid int64) (time.Time, error)
 	EnsureGradePromotion(ctx context.Context) (int64, error)
 	GradePromotionInfo(ctx context.Context) (*repo.GradePromoInfo, error)
 	ExistingUserIDs(ctx context.Context, ids []int64) (map[int64]bool, error)

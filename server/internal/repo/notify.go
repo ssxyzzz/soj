@@ -27,6 +27,7 @@ const (
 	NotifyContest    = "contest"    // 比赛发布/开赛
 	NotifyBroadcast  = "broadcast"  // 全站公告
 	NotifyWarn       = "warn"       // 管理处置告知（删帖/禁言/警告）
+	NotifyLevelUp    = "levelup"    // 升级通知（v0.40：升级大礼/升维祝福开启）
 )
 
 // NotifyMailCategories 邮件转发可开通的类型（1:1 互动类）。

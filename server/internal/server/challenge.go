@@ -66,6 +66,10 @@ func (h *Handlers) StartChallenge(c *gin.Context) {
 	if !okID {
 		return
 	}
+	// 等级权益闸（v0.40）：挑战模式 Lv.3 解锁（教职工豁免）
+	if !h.requireLevel(c, uid, repo.LevelGateChallenge, "挑战模式") {
+		return
+	}
 	ctx := c.Request.Context()
 	p, err := h.repo.GetProblem(ctx, pid)
 	if repo.IsNotFound(err) {
@@ -168,6 +172,7 @@ func (h *Handlers) QuitChallenge(c *gin.Context) {
 var selfTestGate = make(chan struct{}, selfRunConcurrency)
 
 // SelfTestRun 自测：编译 + 按用户输入单次运行。不走判题队列、不留提交记录。
+// 等级权益闸（v0.40）：在线编程/自测 Lv.2 解锁——Lv1 新手走本地 DevC++ + 提交按钮。
 func (h *Handlers) SelfTestRun(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
 	if !logged {
@@ -176,6 +181,9 @@ func (h *Handlers) SelfTestRun(c *gin.Context) {
 	}
 	pid, okID := parseID(c, "id")
 	if !okID {
+		return
+	}
+	if !h.requireLevel(c, uid, repo.LevelGateOnline, "在线编程与自测") {
 		return
 	}
 	var req struct {

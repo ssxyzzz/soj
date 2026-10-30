@@ -151,8 +151,13 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 	// 玉经济体（v0.33-①）：已公开提交首次 AC 发玉（同题幂等）；比赛期提交 published=false，
 	// 由成绩发布时的补发钩子结算。尽力而为，失败不污染判题结果。
 	if status == repo.StatusAccepted && sub.Published {
-		if _, _, err := j.Repo.MaybeAwardJade(ctx, sub.UID, sub.ProblemID); err != nil {
+		if awarded, _, err := j.Repo.MaybeAwardJade(ctx, sub.UID, sub.ProblemID); err != nil {
 			slog.Warn("首 AC 玉发放失败", "component", "jade", "sid", sub.ID, "error", err)
+		} else if awarded {
+			// 升维祝福（v0.40）：升级只可能发生在 AC 时刻——首 AC 后检测等级抬升
+			if berr := j.Repo.EnsureLevelBlessingForUser(ctx, sub.UID); berr != nil {
+				slog.Warn("升维祝福检测失败", "component", "jade", "sid", sub.ID, "error", berr)
+			}
 		}
 	}
 	// 挑战模式（v0.23）：AC 触发挑战终判（时长按提交创建时刻起算，判题排队耗时不惩罚选手；

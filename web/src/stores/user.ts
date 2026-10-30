@@ -27,6 +27,15 @@ export const useUserStore = defineStore('user', () => {
   // 学生等级（v0.11）：顶栏徽章与补全门槛提示；/me/profile 随偏好一并下发
   const level = ref<LevelBadgeInfo | null>(null)
 
+  // ---- 等级权益阶梯（v0.40）：功能解锁门槛（教职工豁免，与后端 requireLevel 同口径） ----
+  const isStaff = computed(() => ['root', 'admin', 'teacher'].includes(role.value))
+  const staffLevel = computed(() => {
+    if (isStaff.value) return 99
+    return level.value?.level ?? 0 // 未加载按 0 档（入口先隐藏，加载后弹出——闸门在后端兜底）
+  })
+  const canOnline = computed(() => staffLevel.value >= 2) // 在线编程 + 自测
+  const canChallenge = computed(() => staffLevel.value >= 3) // 挑战模式
+
   // 玉余额（v0.33-①）：顶栏展示（货币名后台可配）；登录后布局层经 /me/jade 拉取，
   // 消费/获取后各页调 jadeApi.mine() 自行刷新——不落 localStorage（服务端为准）
   const jadeBalance = ref(0)
@@ -106,5 +115,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('soj_avatar')
   }
 
-  return { token, uid, nickname, role, perms, prefs, level, avatarUrl, jadeBalance, jadeCurrency, canAdmin, can, setLogin, setPrefs, setLevel, setJade, setNickname, setAvatarUrl, logout }
+  return { token, uid, nickname, role, perms, prefs, level, isStaff, canOnline, canChallenge, avatarUrl, jadeBalance, jadeCurrency, canAdmin, can, setLogin, setPrefs, setLevel, setJade, setNickname, setAvatarUrl, logout }
 })

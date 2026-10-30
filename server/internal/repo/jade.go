@@ -54,6 +54,11 @@ func (r *Repo) EnsureJadeIndexes(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
+	if _, err := r.jadeBlessings.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "level", Value: 1}}, Options: options.Index().SetUnique(true)},
+	}); err != nil {
+		return err
+	}
 	_, err := r.jadeLedger.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "kind", Value: 1}, {Key: "ref", Value: 1}}},
@@ -359,6 +364,89 @@ func (r *Repo) problemACRateDB(ctx context.Context, pid int64) (rate float64, at
 // 唯一索引兜底（InsertOne 撞键 = 输了竞态，静默 no-op）。客观题首满分减半；掉落
 // p=1−AC率、成功额外掉难度值玉（AC 率无人做过按 0.3；金额按 AC 时点固化进 awards）。
 // 挂点：判题回写（published 提交）、客观题创建/重判（满分且 published）、比赛发布补发。
+// ---- 升维祝福（v0.40）：升级后 48h 做题玉收入 ×2，奖励量随所做题难度走 ----
+
+// userBlessed 用户是否处于祝福期（判题发玉路径用，投影点查）。
+func (r *Repo) userBlessed(ctx context.Context, uid int64) (bool, error) {
+	var u struct {
+		BlessUntil time.Time `bson:"blessUntil"`
+	}
+	err := r.users.FindOne(ctx, bson.M{"_id": uid},
+		options.FindOne().SetProjection(bson.M{"blessUntil": 1})).Decode(&u)
+	if err != nil {
+		return false, err
+	}
+	return time.Now().Before(u.BlessUntil), nil
+}
+
+// UserBlessUntil 祝福截止时刻（零值 = 无祝福；余额接口附带展示用）。
+func (r *Repo) UserBlessUntil(ctx context.Context, uid int64) (time.Time, error) {
+	var u struct {
+		BlessUntil time.Time `bson:"blessUntil"`
+	}
+	err := r.users.FindOne(ctx, bson.M{"_id": uid},
+		options.FindOne().SetProjection(bson.M{"blessUntil": 1})).Decode(&u)
+	if IsNotFound(err) {
+		return time.Time{}, nil
+	}
+	return u.BlessUntil, err
+}
+
+// EnsureLevelBlessing 检测升级并开启祝福：等级只涨不跌，当前等级 > 已祝福档即
+// CAS 更新 blessedLevel + blessUntil（48h）——CAS 保证每档只祝福一次（幂等）；
+// jadeBlessings 审计 {uid,level} 唯一兜底 + 站内通知。尽力而为：审计/通知失败
+// 不影响祝福生效。
+func (r *Repo) EnsureLevelBlessing(ctx context.Context, uid int64, level int) error {
+	if level < 2 {
+		return nil
+	}
+	// CAS：blessedLevel < level 或字段缺失（存量用户首次祝福——$lt 对缺失字段不匹配，
+	// 必须显式 $exists:false，与年级晋级标记同款坑）。无 upsert：用户文档在建号时必存，
+	// 已祝福到同级/更高 = 无事发生（重复插入会 E11000）
+	res, err := r.users.UpdateOne(ctx,
+		bson.M{"_id": uid, "$or": bson.A{
+			bson.M{"blessedLevel": bson.M{"$lt": level}},
+			bson.M{"blessedLevel": bson.M{"$exists": false}},
+		}},
+		bson.M{"$set": bson.M{"blessedLevel": level, "blessUntil": time.Now().Add(48 * time.Hour)}})
+	if err != nil || res.MatchedCount == 0 {
+		return err // 已祝福到同级或更高 = 无事发生
+	}
+	if id, serr := r.nextSeq(ctx, "jadeBlessing"); serr == nil {
+		_, _ = r.jadeBlessings.InsertOne(ctx, bson.M{
+			"_id": id, "uid": uid, "level": level, "at": time.Now()})
+	}
+	retention := DefaultNotifyRetentionDays
+	if s, serr := r.GetSystemSettings(ctx); serr == nil {
+		retention = s.NotifyRetentionDaysVal()
+	}
+	_ = r.NotifyUsers(ctx, []int64{uid}, NotifyInput{
+		Typ:   NotifyLevelUp,
+		Title: fmt.Sprintf("升到 Lv.%d", level),
+		Body:  "升维祝福已开启：48 小时内做题的玉收入翻倍，趁热打铁！",
+		Link:  "/problems",
+	}, retention)
+	return nil
+}
+
+// EnsureLevelBlessingForUser 判题路径入口：聚合当前等级再检测（仅首 AC 调用，频次低）。
+func (r *Repo) EnsureLevelBlessingForUser(ctx context.Context, uid int64) error {
+	cfg, err := r.GetLevelConfig(ctx)
+	if err != nil {
+		return err
+	}
+	counts, err := r.SolvedDifficultyCounts(ctx, []int64{uid})
+	if err != nil {
+		return err
+	}
+	adjs, err := r.SumXpAdjust(ctx, []int64{uid})
+	if err != nil {
+		return err
+	}
+	lv, _, _, _, _ := LevelProgress(cfg, counts[uid], adjs[uid])
+	return r.EnsureLevelBlessing(ctx, uid, lv)
+}
+
 func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool, total int64, err error) {
 	var exist struct {
 		ID int64 `bson:"_id"`
@@ -388,6 +476,14 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool
 	if rand.Float64() < 1-rate {
 		drop = d
 	}
+	// 升维祝福（v0.40）：升级后 48h 做题玉收入 ×2（基础与掉落同步翻倍，
+	// 发放记录即实付口径）；奖励量随所做题的难度与数量走，不产固定玉。
+	reasonExtra := ""
+	if blessed, berr := r.userBlessed(ctx, uid); berr == nil && blessed {
+		base *= 2
+		drop *= 2
+		reasonExtra = "，升维祝福 ×2"
+	}
 	total = int64(base + drop)
 	id, err := r.nextSeq(ctx, "jadeAward")
 	if err != nil {
@@ -404,7 +500,7 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool
 		return false, 0, err
 	}
 	if err := r.JadeCredit(ctx, uid, total, JadeKindAward,
-		fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d）", pid, p.Title, base, drop), pid); err != nil {
+		fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d%s）", pid, p.Title, base, drop, reasonExtra), pid); err != nil {
 		return false, 0, err
 	}
 	return true, total, nil

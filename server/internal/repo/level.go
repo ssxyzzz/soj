@@ -40,6 +40,13 @@ var DefaultDifficultyNotes = [10]string{
 	"NOI&IOI：综合构造/LCT/后缀自动机等",
 }
 
+// 等级权益闸门（v0.40）：功能解锁阶梯——Lv1 仅本地流程（题面页提交按钮），
+// 教职工（root/admin/teacher）豁免；闸门实现在 server 层 requireLevel。
+const (
+	LevelGateOnline    = 2 // 在线编程 workbench + 在线自测
+	LevelGateChallenge = 3 // 挑战模式
+)
+
 const (
 	DefaultDecay1 = 0.5
 	DefaultDecay2 = 0.2

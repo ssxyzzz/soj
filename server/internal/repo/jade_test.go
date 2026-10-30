@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // jadeTestProblem 建一道题并返回 pid。
@@ -150,6 +151,83 @@ func jadeSettleExam(t *testing.T, r *Repo, scores map[int64]int, pool, partPool 
 		jadeTestRoundSub(t, r, KindExam, ct.ID, uid, pid, score)
 	}
 	return ct
+}
+
+func TestMaybeAwardJadeBlessing(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+	pid := jadeTestProblem(t, r, false, 4) // 传统题 D4：基础 4、掉落 ∈{0,4}
+
+	// 未祝福：base=4
+	if _, _, err := r.MaybeAwardJade(ctx, 21, pid); err != nil {
+		t.Fatalf("未祝福发放: %v", err)
+	}
+	a, _ := r.GetJadeAward(ctx, 21, pid)
+	if a.Base != 4 {
+		t.Fatalf("未祝福 base = %d，期望 4", a.Base)
+	}
+
+	// 祝福期：blessUntil 未来 → base 与掉落同步 ×2（upsert 建用户文档）
+	if _, err := r.users.UpdateOne(ctx, bson.M{"_id": int64(22)},
+		bson.M{"$set": bson.M{"blessedLevel": 5, "blessUntil": time.Now().Add(time.Hour)}},
+		options.UpdateOne().SetUpsert(true)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.MaybeAwardJade(ctx, 22, pid); err != nil {
+		t.Fatalf("祝福发放: %v", err)
+	}
+	b, _ := r.GetJadeAward(ctx, 22, pid)
+	if b.Base != 8 || (b.Drop != 0 && b.Drop != 8) {
+		t.Fatalf("祝福发放 = base %d drop %d，期望 base8 drop∈{0,8}（×2）", b.Base, b.Drop)
+	}
+	if b.Total != b.Base+b.Drop {
+		t.Fatalf("祝福 total = %d ≠ base+drop", b.Total)
+	}
+
+	// EnsureLevelBlessing：CAS 幂等——同档二次不重开祝福
+	u := int64(23)
+	if _, err := r.users.UpdateOne(ctx, bson.M{"_id": u},
+		bson.M{"$set": bson.M{"uname": "blesstest"}}, options.UpdateOne().SetUpsert(true)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.EnsureLevelBlessing(ctx, u, 5); err != nil {
+		t.Fatalf("首次祝福: %v", err)
+	}
+	var doc1 struct {
+		BlessUntil time.Time `bson:"blessUntil"`
+	}
+	if err := r.users.FindOne(ctx, bson.M{"_id": u}).Decode(&doc1); err != nil {
+		t.Fatal(err)
+	}
+	if doc1.BlessUntil.Before(time.Now()) {
+		t.Fatal("首次祝福未生效")
+	}
+	time.Sleep(1100 * time.Millisecond) // 保证两次 blessUntil 时间戳可分
+	if err := r.EnsureLevelBlessing(ctx, u, 5); err != nil {
+		t.Fatalf("同档重复: %v", err)
+	}
+	var doc2 struct {
+		BlessUntil time.Time `bson:"blessUntil"`
+	}
+	if err := r.users.FindOne(ctx, bson.M{"_id": u}).Decode(&doc2); err != nil {
+		t.Fatal(err)
+	}
+	if !doc2.BlessUntil.Equal(doc1.BlessUntil) {
+		t.Fatal("同档重复祝福被重开（CAS 失效）")
+	}
+	// 更高档再开：允许
+	if err := r.EnsureLevelBlessing(ctx, u, 6); err != nil {
+		t.Fatalf("升档祝福: %v", err)
+	}
+	var doc3 struct {
+		BlessedLevel int `bson:"blessedLevel"`
+	}
+	if err := r.users.FindOne(ctx, bson.M{"_id": u}).Decode(&doc3); err != nil {
+		t.Fatal(err)
+	}
+	if doc3.BlessedLevel != 6 {
+		t.Fatalf("blessedLevel = %d，期望 6", doc3.BlessedLevel)
+	}
 }
 
 func TestSettleRoundJadePools(t *testing.T) {
