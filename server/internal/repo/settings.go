@@ -37,7 +37,7 @@ type SystemSettings struct {
 	PasswordResetEnabled *bool `bson:"passwordResetEnabled,omitempty"`
 	// 讨论区（v0.24）：三区总开关默认开；GlobalLocked = root 一键临时锁定导航栏讨论区
 	//（班级考试期间防考题外流，锁定只封导航栏区，题内/比赛讨论不受影响）。
-	DiscussGlobalEnabled *bool `bson:"discussGlobalEnabled,omitempty"`
+	DiscussGlobalEnabled  *bool `bson:"discussGlobalEnabled,omitempty"`
 	DiscussProblemEnabled *bool `bson:"discussProblemEnabled,omitempty"`
 	DiscussContestEnabled *bool `bson:"discussContestEnabled,omitempty"`
 	DiscussGlobalLocked   bool  `bson:"discussGlobalLocked,omitempty"`
@@ -45,7 +45,7 @@ type SystemSettings struct {
 	// 代码块；0 = 不隐藏。每题可覆盖（problems.discussCodeThreshold，0 = 跟随全局）。
 	DiscussCodeThreshold *int `bson:"discussCodeThreshold,omitempty"`
 	// 发帖限速：主楼每日上限 / 回复最小间隔秒；0 = 不限。
-	DiscussTopicDailyLimit *int `bson:"discussTopicDailyLimit,omitempty"`
+	DiscussTopicDailyLimit  *int `bson:"discussTopicDailyLimit,omitempty"`
 	DiscussReplyIntervalSec *int `bson:"discussReplyIntervalSec,omitempty"`
 	// 新号冷静期（小时）：注册未满 N 小时不能在导航栏讨论区发主楼（题内求助不受限）；0 = 不限。
 	DiscussNewbieHours *int `bson:"discussNewbieHours,omitempty"`
@@ -79,14 +79,17 @@ type SystemSettings struct {
 	// AI 计费（v0.33-③）：每日合计上限（默认 5 次，提示+找 bug 合计）；基准价
 	//（两级提示：理解题目 2 / 算法思路 6、找 bug 8）× 难度倍率 ⌈D/3⌉；等级折扣两档
 	//（Lv≥discount1Lv 九折 / Lv≥discount2Lv 八折，向上取整）。全部后台可调。
-	AiDailyLimit   *int   `bson:"aiDailyLimit,omitempty"`
-	AiHintPrice1   *int64 `bson:"aiHintPrice1,omitempty"`
-	AiHintPrice2   *int64 `bson:"aiHintPrice2,omitempty"`
-	AiDebugPrice   *int64 `bson:"aiDebugPrice,omitempty"`
-	AiDiscount1Lv  *int   `bson:"aiDiscount1Lv,omitempty"`
-	AiDiscount1Pct *int   `bson:"aiDiscount1Pct,omitempty"`
-	AiDiscount2Lv  *int   `bson:"aiDiscount2Lv,omitempty"`
-	AiDiscount2Pct *int   `bson:"aiDiscount2Pct,omitempty"`
+	// 特权层每日上限（2026-10-30）：教师/管理员免费但计次（默认 20，0 = 不限）；
+	// root 恒不限次。
+	AiDailyLimit      *int   `bson:"aiDailyLimit,omitempty"`
+	AiStaffDailyLimit *int   `bson:"aiStaffDailyLimit,omitempty"`
+	AiHintPrice1      *int64 `bson:"aiHintPrice1,omitempty"`
+	AiHintPrice2      *int64 `bson:"aiHintPrice2,omitempty"`
+	AiDebugPrice      *int64 `bson:"aiDebugPrice,omitempty"`
+	AiDiscount1Lv     *int   `bson:"aiDiscount1Lv,omitempty"`
+	AiDiscount1Pct    *int   `bson:"aiDiscount1Pct,omitempty"`
+	AiDiscount2Lv     *int   `bson:"aiDiscount2Lv,omitempty"`
+	AiDiscount2Pct    *int   `bson:"aiDiscount2Pct,omitempty"`
 	// AI 助教名字（v0.33-④ 验收调整：默认「小玉」，1–12 字，前端面板/按钮文案统一读）。
 	AiTutorName string `bson:"aiTutorName,omitempty"`
 }
@@ -121,10 +124,19 @@ const (
 	DefaultJadeBountyMin          = 5
 	DefaultJadeBountyMax          = 500
 	// AI 计费（v0.33-③）默认值。
-	DefaultAiDailyLimit   = 5
-	DefaultAiHintPrice1   = 2 // 两级提示：理解题目
-	DefaultAiHintPrice2   = 6 // 算法思路
-	DefaultAiDebugPrice   = 8
+	DefaultAiDailyLimit      = 5
+	DefaultAiStaffDailyLimit = 20 // 教师/管理员每日上限（0 = 不限；root 恒不限）
+
+	// AI 提示/找 bug 定价锚（2026-10-30 拍板写死）：跟随题解解锁价 S = D × 解锁系数。
+	// 两级提示合计 = S×70%（向下取整，保底 2 玉），理解:思路 = 1:2 拆分；找 bug = S×90%。
+	// 等级折扣照常相乘、同样向下取整；任何单价下限 1 玉。原 hint1/hint2/debug 基准价
+	// 设置字段退役（保留不读写，零迁移，同 hint3 先例）。
+	AiHintTotalPct = 70
+	AiDebugPct     = 90
+
+	DefaultAiHintPrice1   = 2 // 已退役（上表公式接管），字段保留不读写
+	DefaultAiHintPrice2   = 6 // 已退役
+	DefaultAiDebugPrice   = 8 // 已退役
 	DefaultAiDiscount1Lv  = 5 // Lv.5–7 九折
 	DefaultAiDiscount1Pct = 90
 	DefaultAiDiscount2Lv  = 8 // Lv.8+ 八折
@@ -133,8 +145,8 @@ const (
 )
 
 func downloadLimitPtr(v int) *int { return &v }
-func boolPtr(v bool) *bool       { return &v }
-func int64Ptr(v int64) *int64    { return &v }
+func boolPtr(v bool) *bool        { return &v }
+func int64Ptr(v int64) *int64     { return &v }
 
 // aiDiscountLvVal / aiDiscountPctVal 直接构造的 settings（未过 normalize）读侧兜底。
 func aiDiscountLvVal(v *int, def int) int {
@@ -265,6 +277,10 @@ func (s *SystemSettings) normalizeDiscuss() {
 	if s.AiDailyLimit == nil || *s.AiDailyLimit < 1 || *s.AiDailyLimit > 100 {
 		s.AiDailyLimit = intPtr(DefaultAiDailyLimit)
 	}
+	// 特权层（教师/管理员）：0 = 不限，上界放宽到 1000
+	if s.AiStaffDailyLimit == nil || *s.AiStaffDailyLimit < 0 || *s.AiStaffDailyLimit > 1000 {
+		s.AiStaffDailyLimit = intPtr(DefaultAiStaffDailyLimit)
+	}
 	if s.AiHintPrice1 == nil || *s.AiHintPrice1 < 0 {
 		s.AiHintPrice1 = int64Ptr(DefaultAiHintPrice1)
 	}
@@ -292,9 +308,15 @@ func (s *SystemSettings) normalizeDiscuss() {
 }
 
 // 讨论区开关取值（nil 已在读取时兜底，防御直接构造的零值结构体）。
-func (s *SystemSettings) DiscussGlobalOpen() bool  { return s.DiscussGlobalEnabled == nil || *s.DiscussGlobalEnabled }
-func (s *SystemSettings) DiscussProblemOpen() bool { return s.DiscussProblemEnabled == nil || *s.DiscussProblemEnabled }
-func (s *SystemSettings) DiscussContestOpen() bool { return s.DiscussContestEnabled == nil || *s.DiscussContestEnabled }
+func (s *SystemSettings) DiscussGlobalOpen() bool {
+	return s.DiscussGlobalEnabled == nil || *s.DiscussGlobalEnabled
+}
+func (s *SystemSettings) DiscussProblemOpen() bool {
+	return s.DiscussProblemEnabled == nil || *s.DiscussProblemEnabled
+}
+func (s *SystemSettings) DiscussContestOpen() bool {
+	return s.DiscussContestEnabled == nil || *s.DiscussContestEnabled
+}
 
 func (s *SystemSettings) DiscussCodeThresholdVal() int {
 	if s.DiscussCodeThreshold == nil || *s.DiscussCodeThreshold < 0 || *s.DiscussCodeThreshold > 100 {
@@ -424,6 +446,14 @@ func (s *SystemSettings) AiDailyLimitVal() int {
 	return *s.AiDailyLimit
 }
 
+// AiStaffDailyLimitVal 特权层（教师/管理员）每日上限；0 = 不限（读侧兜底同 normalize）。
+func (s *SystemSettings) AiStaffDailyLimitVal() int {
+	if s.AiStaffDailyLimit == nil || *s.AiStaffDailyLimit < 0 || *s.AiStaffDailyLimit > 1000 {
+		return DefaultAiStaffDailyLimit
+	}
+	return *s.AiStaffDailyLimit
+}
+
 func (s *SystemSettings) AiHintPrice1Val() int64 {
 	if s.AiHintPrice1 == nil || *s.AiHintPrice1 < 0 {
 		return DefaultAiHintPrice1
@@ -456,23 +486,33 @@ func (s *SystemSettings) AiTutorNameVal() string {
 	return s.AiTutorName
 }
 
-// AiPrice 单次调用价格：基准（hint1/hint2/debug 按类取）× 难度倍率 ⌈D/3⌉ × 等级折扣，向上取整。
-// level 为 0（取不到等级）时不打折；折扣取两档中满足的最高档。
+// AiPrice AI 单次定价（2026-10-30 拍板：写死锚定题解解锁价，全向下取整）。
+//
+//	题解解锁价 S = 难度 × 解锁系数（后台可调，默认 5）
+//	两级提示合计 = S×70%（向下取整，保底 2 玉），理解:思路 = 1:2 拆分
+//	找 bug = S×90%（向下取整）
+//	等级折扣（两档）相乘后同样向下取整；任何单价下限 1 玉。
 func (s *SystemSettings) AiPrice(kind string, difficulty, level int) int64 {
-	var base int64
+	solution := int64(difficulty) * int64(s.JadeSolutionUnlockMultVal())
+	var price int64
 	switch kind {
-	case "hint1":
-		base = s.AiHintPrice1Val()
-	case "hint2":
-		base = s.AiHintPrice2Val()
+	case "hint1", "hint2":
+		total := solution * AiHintTotalPct / 100
+		if total < 2 {
+			total = 2 // 保底两级各 ≥1 玉
+		}
+		p1 := total / 3
+		if p1 < 1 {
+			p1 = 1
+		}
+		if kind == "hint1" {
+			price = p1
+		} else {
+			price = total - p1
+		}
 	default: // debug
-		base = s.AiDebugPriceVal()
+		price = solution * AiDebugPct / 100
 	}
-	mult := (difficulty + 2) / 3 // ⌈D/3⌉：D1–3 ×1 / D4–6 ×2 / D7–10 ×3
-	if mult < 1 {
-		mult = 1
-	}
-	price := base * int64(mult)
 	if level > 0 {
 		pct := 100
 		lv2, pct2 := aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv), aiDiscountPctVal(s.AiDiscount2Pct, DefaultAiDiscount2Pct)
@@ -483,7 +523,7 @@ func (s *SystemSettings) AiPrice(kind string, difficulty, level int) int64 {
 			pct = pct1
 		}
 		if pct < 100 {
-			price = (price*int64(pct) + 99) / 100 // 向上取整
+			price = price * int64(pct) / 100 // 向下取整（2026-10-30 拍板）
 		}
 	}
 	if price < 1 {
@@ -504,47 +544,47 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 	_, err := col.UpdateOne(ctx,
 		bson.M{"_id": "system"},
 		bson.M{"$set": bson.M{
-			"rateLimitPerMinute":     s.RateLimitPerMinute,
-			"homeNotice":             s.HomeNotice,
-			"dataDownloadDailyLimit": s.DownloadDailyLimit(),
-			"autocompleteMinLevel":   s.MinAutocompleteLevel(),
-			"allowRegister":          s.RegistrationOpen(),
-			"icpNumber":              s.IcpNumber,
-			"batchImportProblemMB":   s.BatchImportProblemMBVal(),
-			"batchImportZipMB":       s.BatchImportZipMBVal(),
-			"mailChannel":            s.MailChannel,
-			"smtp":                   s.SMTP,
-			"registerVerifyMode":     s.RegisterVerifyMode,
-			"passwordResetEnabled":   s.PasswordResetOpen(),
-			"discussGlobalEnabled":   s.DiscussGlobalOpen(),
-			"discussProblemEnabled":  s.DiscussProblemOpen(),
-			"discussContestEnabled":  s.DiscussContestOpen(),
-			"discussGlobalLocked":    s.DiscussGlobalLocked,
-			"discussCodeThreshold":   s.DiscussCodeThresholdVal(),
-			"discussTopicDailyLimit": s.DiscussTopicDailyLimitVal(),
+			"rateLimitPerMinute":      s.RateLimitPerMinute,
+			"homeNotice":              s.HomeNotice,
+			"dataDownloadDailyLimit":  s.DownloadDailyLimit(),
+			"autocompleteMinLevel":    s.MinAutocompleteLevel(),
+			"allowRegister":           s.RegistrationOpen(),
+			"icpNumber":               s.IcpNumber,
+			"batchImportProblemMB":    s.BatchImportProblemMBVal(),
+			"batchImportZipMB":        s.BatchImportZipMBVal(),
+			"mailChannel":             s.MailChannel,
+			"smtp":                    s.SMTP,
+			"registerVerifyMode":      s.RegisterVerifyMode,
+			"passwordResetEnabled":    s.PasswordResetOpen(),
+			"discussGlobalEnabled":    s.DiscussGlobalOpen(),
+			"discussProblemEnabled":   s.DiscussProblemOpen(),
+			"discussContestEnabled":   s.DiscussContestOpen(),
+			"discussGlobalLocked":     s.DiscussGlobalLocked,
+			"discussCodeThreshold":    s.DiscussCodeThresholdVal(),
+			"discussTopicDailyLimit":  s.DiscussTopicDailyLimitVal(),
 			"discussReplyIntervalSec": s.DiscussReplyIntervalVal(),
-			"discussNewbieHours":     s.DiscussNewbieHoursVal(),
-			"discussReportFold":      int(s.DiscussReportFoldVal()),
-			"discussAcceptXp":        int(s.DiscussAcceptXpVal()),
-			"notifyRetentionDays":    s.NotifyRetentionDaysVal(),
-			"notifyBroadcastPerDay":  s.NotifyBroadcastPerDayVal(),
-			"userSeqStart":           s.UserSeqStartVal(),
-			"problemSeqStart":        s.ProblemSeqStartVal(),
-			"currencyName":           s.CurrencyNameVal(),
-			"jadeAwardRatePct":       s.JadeAwardRatePctVal(),
-			"jadeSolutionUnlockMult": s.JadeSolutionUnlockMultVal(),
-			"jadeBountyMin":          s.JadeBountyMinVal(),
-			"jadeBountyMax":          s.JadeBountyMaxVal(),
-			"jadeShopEnabled":        s.JadeShopOpen(),
-			"aiDailyLimit":           s.AiDailyLimitVal(),
-			"aiHintPrice1":           s.AiHintPrice1Val(),
-			"aiHintPrice2":           s.AiHintPrice2Val(),
-			"aiDebugPrice":           s.AiDebugPriceVal(),
-			"aiTutorName":            s.AiTutorNameVal(),
-			"aiDiscount1Lv":          aiDiscountLvVal(s.AiDiscount1Lv, DefaultAiDiscount1Lv),
-			"aiDiscount1Pct":         aiDiscountPctVal(s.AiDiscount1Pct, DefaultAiDiscount1Pct),
-			"aiDiscount2Lv":          aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv),
-			"aiDiscount2Pct":         aiDiscountPctVal(s.AiDiscount2Pct, DefaultAiDiscount2Pct),
+			"discussNewbieHours":      s.DiscussNewbieHoursVal(),
+			"discussReportFold":       int(s.DiscussReportFoldVal()),
+			"discussAcceptXp":         int(s.DiscussAcceptXpVal()),
+			"notifyRetentionDays":     s.NotifyRetentionDaysVal(),
+			"notifyBroadcastPerDay":   s.NotifyBroadcastPerDayVal(),
+			"userSeqStart":            s.UserSeqStartVal(),
+			"problemSeqStart":         s.ProblemSeqStartVal(),
+			"currencyName":            s.CurrencyNameVal(),
+			"jadeAwardRatePct":        s.JadeAwardRatePctVal(),
+			"jadeSolutionUnlockMult":  s.JadeSolutionUnlockMultVal(),
+			"jadeBountyMin":           s.JadeBountyMinVal(),
+			"jadeBountyMax":           s.JadeBountyMaxVal(),
+			"jadeShopEnabled":         s.JadeShopOpen(),
+			"aiDailyLimit":            s.AiDailyLimitVal(),
+			"aiHintPrice1":            s.AiHintPrice1Val(),
+			"aiHintPrice2":            s.AiHintPrice2Val(),
+			"aiDebugPrice":            s.AiDebugPriceVal(),
+			"aiTutorName":             s.AiTutorNameVal(),
+			"aiDiscount1Lv":           aiDiscountLvVal(s.AiDiscount1Lv, DefaultAiDiscount1Lv),
+			"aiDiscount1Pct":          aiDiscountPctVal(s.AiDiscount1Pct, DefaultAiDiscount1Pct),
+			"aiDiscount2Lv":           aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv),
+			"aiDiscount2Pct":          aiDiscountPctVal(s.AiDiscount2Pct, DefaultAiDiscount2Pct),
 		}},
 	)
 	return err

@@ -88,10 +88,27 @@ func (h *Handlers) aiTutorGate(c *gin.Context, pid int64) (*repo.Problem, bool) 
 	return p, true
 }
 
-// aiCharge 计费守卫：教师/特权免费（返回 0，不落扣费流水）；学生查每日上限 → 先扣后调
-//（失败自动退由调用方）。扣费流水本身即解锁记录（hint: ref=pid*10+level；debug: ref=sid）。
+// aiCharge 计费守卫（2026-10-30 分层）：root 不限次；教师/管理员免费但受后台
+// 「特权层每日上限」约束（默认 20，0 = 不限）；学生查每日上限 → 先扣后调
+// （失败自动退由调用方）。扣费流水本身即解锁记录（hint: ref=pid*10+level；debug: ref=sid）。
 func (h *Handlers) aiCharge(c *gin.Context, uid int64, kind string, difficulty int, ref int64) (int64, bool) {
+	if _, _, role, _ := currentUser(c); role == repo.RoleRoot {
+		return 0, true // root 不限次
+	}
 	if hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn) {
+		// 特权层免费但计次（管理员也能稳定可用：上限后台可配，默认 20）
+		s, err := h.repo.GetSystemSettings(c.Request.Context())
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取设置失败")
+			return 0, false
+		}
+		if limit := s.AiStaffDailyLimitVal(); limit > 0 {
+			if n, errN := h.repo.CountAiCallsToday(c.Request.Context(), uid); errN == nil && n >= int64(limit) {
+				fail(c, http.StatusTooManyRequests,
+					fmt.Sprintf("今日 AI 助教使用已达上限（%d 次/天），明天再来", limit))
+				return 0, false
+			}
+		}
 		return 0, true
 	}
 	s, err := h.repo.GetSystemSettings(c.Request.Context())
@@ -197,11 +214,22 @@ func (h *Handlers) GetAiHint(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "未登录")
 		return
 	}
+	// 个人档优先（方案二）：谁生成看谁的
+	if personal, err := h.repo.GetAiHintResult(c.Request.Context(), uid, pid, level); err == nil {
+		ok(c, gin.H{"hint": gin.H{"content": personal.Content, "unlocked": true, "at": personal.At.Format(time.RFC3339)}})
+		return
+	}
 	hint, err := h.repo.GetAiHint(c.Request.Context(), pid, level)
 	if respondRepoErr(c, err, "读取失败", "读取失败") {
 		return
 	}
 	unlocked := hint != nil && h.aiHintUnlocked(c, uid, pid, level)
+	// 兼容存量：升级前解锁的老用户 / 满分·教师查看——共享缓存兜底，并顺手落个人档
+	if unlocked && hint != nil {
+		_ = h.repo.SaveAiHintResult(c.Request.Context(), uid, pid, level, hint.Content)
+		ok(c, gin.H{"hint": gin.H{"content": hint.Content, "unlocked": true, "at": hint.At.Format(time.RFC3339)}})
+		return
+	}
 	ok(c, gin.H{"hint": hintJSON(hint, unlocked)})
 }
 
@@ -225,11 +253,12 @@ func (h *Handlers) aiHintUnlocked(c *gin.Context, uid, pid int64, level int) boo
 	return unlocked
 }
 
-// BuyAiHint POST /api/problems/:id/ai/hint/:level —— 购买并（首购时）生成提示。
-// 流程：缓存已有 → 直接返回（解锁与否决定可见）；缓存缺失 → 生成（学生先扣费、
-// 扣费流水即解锁记录；教师/满分免费不落扣费）；生成失败全额自动退。
+// BuyAiHint POST /api/problems/:id/ai/hint/:level —— 首次解锁生成 / 已解锁者重新生成。
+// 方案二（2026-10-30）：首份内容全班共享缓存复用（他人生成过则 0 外呼直取）；已解锁者
+// 再调本接口 = 重新生成，绕过共享缓存重算一份自己的（每次计费，免费层 0 扣费）。
+// 学生先扣费（扣费流水即解锁记录，重复记录无害）；生成失败全额自动退。结果落个人档。
 func (h *Handlers) BuyAiHint(c *gin.Context) {
-	uid, _, _, _ := currentUser(c)
+	uid, _, role, _ := currentUser(c)
 	pid, okID := parseID(c, "id")
 	if !okID {
 		return
@@ -249,38 +278,57 @@ func (h *Handlers) BuyAiHint(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取题目失败")
 		return
 	}
-	unlocked := h.aiHintUnlocked(c, uid, pid, level)
+	free := role == repo.RoleRoot || hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn)
 	ref := pid*10 + int64(level)
-	if hint, _ := h.repo.GetAiHint(ctx, pid, level); hint != nil {
-		ok(c, gin.H{"hint": hintJSON(hint, unlocked), "charged": false})
-		return
-	}
 	price, okC := h.aiCharge(c, uid, fmt.Sprintf("hint%d", level), p.EffDifficulty(), ref)
 	if !okC {
 		return
 	}
-	hint, err := h.repo.EnsureAiHint(ctx, p, level, func() (string, error) {
-		return h.generateHint(c, full, level)
-	})
-	if err != nil {
-		if price > 0 {
-			_ = h.repo.JadeCredit(ctx, uid, price, repo.JadeKindAiHint, "AI 提示生成失败自动退回", ref)
+	var content string
+	var tokens int
+	var chars int
+	if !free && h.aiHintUnlocked(c, uid, pid, level) {
+		// 重新生成（已解锁者）：绕过共享缓存，重算一份自己的
+		resp, err := h.generateHint(c, full, level)
+		if err != nil {
+			if price > 0 {
+				_ = h.repo.JadeCredit(ctx, uid, price, repo.JadeKindAiHint, "AI 提示生成失败自动退回", ref)
+			}
+			fail(c, http.StatusInternalServerError, "AI 生成失败，已退回费用，请稍后再试")
+			return
 		}
-		fail(c, http.StatusInternalServerError, "AI 生成失败，已退回费用，请稍后再试")
-		return
+		content = resp.Content
+		tokens = resp.TotalTokens
+		chars = resp.PromptChars
+	} else {
+		// 首次解锁：共享缓存复用（他人生成过则 0 外呼直取），缺失才真生成
+		hint, err := h.repo.EnsureAiHint(ctx, p, level, func() (*ai.Response, error) {
+			return h.generateHint(c, full, level)
+		})
+		if err != nil {
+			if price > 0 {
+				_ = h.repo.JadeCredit(ctx, uid, price, repo.JadeKindAiHint, "AI 提示生成失败自动退回", ref)
+			}
+			fail(c, http.StatusInternalServerError, "AI 生成失败，已退回费用，请稍后再试")
+			return
+		}
+		content = hint.Content
+		tokens = hint.Tokens
+		chars = hint.PromptChars
 	}
-	h.recordAiCall(c, uid, pid, fmt.Sprintf("hint%d", level), price, hint.Tokens, true, "")
+	_ = h.repo.SaveAiHintResult(ctx, uid, pid, level, content) // 个人档（方案二）
+	h.recordAiCall(c, uid, pid, fmt.Sprintf("hint%d", level), price, tokens, chars, true, "")
 	bal, _ := h.repo.JadeBalance(ctx, uid)
-	ok(c, gin.H{"hint": gin.H{"content": hint.Content, "unlocked": true, "at": hint.At.Format(time.RFC3339)},
+	ok(c, gin.H{"hint": gin.H{"content": content, "unlocked": true},
 		"charged": price > 0, "price": price, "balance": bal})
 }
 
 // generateHint 首次生成（读题解参考）。仅 EnsureAiHint 缓存缺失时调用。
-func (h *Handlers) generateHint(c *gin.Context, p *repo.Problem, level int) (string, error) {
+func (h *Handlers) generateHint(c *gin.Context, p *repo.Problem, level int) (*ai.Response, error) {
 	solutions, _, _ := h.repo.ListSolutions(c.Request.Context(), p.ID, 1, 3)
 	user, err := h.buildHintUser(c, p, level, solutions)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	return h.aiCall(c, aiHintPrompt, user)
 }
@@ -327,7 +375,7 @@ func (h *Handlers) AiDebug(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "组装素材失败")
 		return
 	}
-	content, err := h.aiCall(c, aiDebugPrompt, user)
+	resp, err := h.aiCall(c, aiDebugPrompt, user)
 	if err != nil {
 		if price > 0 {
 			_ = h.repo.JadeCredit(ctx, uid, price, repo.JadeKindAiDebug, "AI 找 bug 失败自动退回", sid)
@@ -335,10 +383,34 @@ func (h *Handlers) AiDebug(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "AI 分析失败，已退回费用："+err.Error())
 		return
 	}
-	h.recordAiCall(c, uid, sub.ProblemID, "debug", price, 0, true, "")
-	_ = h.repo.SaveAiDebugResult(ctx, uid, sid, sub.ProblemID, content)
+	h.recordAiCall(c, uid, sub.ProblemID, "debug", price, resp.TotalTokens, resp.PromptChars, true, "")
+	_ = h.repo.SaveAiDebugResult(ctx, uid, sid, sub.ProblemID, resp.Content)
 	bal, _ := h.repo.JadeBalance(ctx, uid)
-	ok(c, gin.H{"content": content, "price": price, "balance": bal})
+	ok(c, gin.H{"content": resp.Content, "price": price, "balance": bal})
+}
+
+// AiDebugResult 回看找 bug 结果（GET，2026-10-30 反馈：分析过的解释要常驻可回看）。
+// 结果按（分析者 uid, 提交 sid）落档，天然只读得到本人的分析，无需额外权限门槛。
+func (h *Handlers) AiDebugResult(c *gin.Context) {
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	sid, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	res, err := h.repo.GetAiDebugResult(c.Request.Context(), uid, sid)
+	if err != nil && !repo.IsNotFound(err) {
+		fail(c, http.StatusInternalServerError, "读取分析结果失败")
+		return
+	}
+	content := ""
+	if res != nil {
+		content = res.Content
+	}
+	ok(c, gin.H{"content": content})
 }
 
 // buildDebugUser 组装找 bug 素材（题面 + 样例 + 学生代码 + 判题结果 + 失败点数据）。
@@ -391,21 +463,21 @@ func (h *Handlers) buildDebugUser(c *gin.Context, p *repo.Problem, sub *repo.Sub
 }
 
 // aiCall 统一外呼（取启用档构造客户端；记录审计由调用方）。
-func (h *Handlers) aiCall(c *gin.Context, system, user string) (string, error) {
+func (h *Handlers) aiCall(c *gin.Context, system, user string) (*ai.Response, error) {
 	cfg, _ := h.repo.GetAIConfig(c.Request.Context())
 	p := cfg.ActiveProvider()
 	if p == nil {
-		return "", ai.ErrNoProvider
+		return nil, ai.ErrNoProvider
 	}
 	resp, err := ai.NewClient(p).Chat(c.Request.Context(), system, user)
 	if err != nil {
 		h.recordAiCallErr(c, p, err)
-		return "", err
+		return nil, err
 	}
-	return resp.Content, nil
+	return resp, nil
 }
 
-func (h *Handlers) recordAiCall(c *gin.Context, uid, pid int64, kind string, cost int64, tokens int, okCall bool, errMsg string) {
+func (h *Handlers) recordAiCall(c *gin.Context, uid, pid int64, kind string, cost int64, tokens, promptChars int, okCall bool, errMsg string) {
 	cfg, _ := h.repo.GetAIConfig(c.Request.Context())
 	p := cfg.ActiveProvider()
 	prov, model := "", ""
@@ -414,7 +486,7 @@ func (h *Handlers) recordAiCall(c *gin.Context, uid, pid int64, kind string, cos
 	}
 	h.repo.RecordAiCall(c.Request.Context(), &repo.AiCall{
 		UID: uid, PID: pid, Kind: kind, Cost: cost,
-		TokensTotal: tokens, Provider: prov, Model: model, OK: okCall, Err: errMsg,
+		TokensTotal: tokens, PromptChars: promptChars, Provider: prov, Model: model, OK: okCall, Err: errMsg,
 	})
 }
 
@@ -442,7 +514,7 @@ func truncateTail(s string, n int) string {
 
 // AiHintStatus GET /api/problems/:id/ai —— 三级解锁态 + 各级价格（前端面板渲染）。
 func (h *Handlers) AiHintStatus(c *gin.Context) {
-	uid, _, _, logged := currentUser(c)
+	uid, _, role, logged := currentUser(c)
 	if !logged {
 		fail(c, http.StatusUnauthorized, "未登录")
 		return
@@ -468,30 +540,48 @@ func (h *Handlers) AiHintStatus(c *gin.Context) {
 			level = lv
 		}
 	}
+	// 免费（root/特权层）默认视为已解锁（2026-10-30 反馈）：无锁态、点击即生成/展开，
+	// 免去「花 N 玉解锁」确认——后端对其本就 0 扣费。
+	free := role == repo.RoleRoot || hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn)
 	levels := make([]gin.H, 0, 2)
 	for lv := 1; lv <= 2; lv++ {
 		hint, _ := h.repo.GetAiHint(ctx, pid, lv)
+		unlocked := free || h.aiHintUnlocked(c, uid, pid, lv)
+		_, perr := h.repo.GetAiHintResult(ctx, uid, pid, lv)
 		levels = append(levels, gin.H{
 			"level":       lv,
-			"unlocked":    h.aiHintUnlocked(c, uid, pid, lv),
+			"unlocked":    unlocked,
 			"price":       s.AiPrice(fmt.Sprintf("hint%d", lv), p.EffDifficulty(), level),
-			"has_content": hint != nil,
+			"has_content": perr == nil || (unlocked && hint != nil), // 个人档或（可看且共享缓存有）
 		})
 	}
 	ok(c, gin.H{
 		"enabled":     true,
+		"free":        free,
 		"name":        s.AiTutorNameVal(),
 		"levels":      levels,
 		"debug_price": s.AiPrice("debug", p.EffDifficulty(), level),
 		"daily_left": func() int {
+			// 分层口径（2026-10-30）：root 不限次；特权层按后台「特权层每日上限」
+			//（0 = 不限）；学生按每日上限。-1 = 不限，前端据此显示/不禁用。
+			if role == repo.RoleRoot {
+				return -1
+			}
+			limit := s.AiDailyLimitVal()
+			if hasPermAny(c, repo.PermProblemEditAll, repo.PermProblemEditOwn) {
+				limit = s.AiStaffDailyLimitVal()
+			}
+			if limit <= 0 {
+				return -1
+			}
 			if n, err := h.repo.CountAiCallsToday(ctx, uid); err == nil {
-				left := int64(s.AiDailyLimitVal()) - n
+				left := int64(limit) - n
 				if left < 0 {
 					left = 0
 				}
 				return int(left)
 			}
-			return s.AiDailyLimitVal()
+			return limit
 		}(),
 	})
 }

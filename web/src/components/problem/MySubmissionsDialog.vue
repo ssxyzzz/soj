@@ -3,7 +3,7 @@
 // （代码/耗时/内存/错误信息/测试点明细）。父层提交后经 refresh() 刷新列表。
 // AI 找 bug（v0.33-④ 验收调整）：详情视图未 AC 提交可让 AI 分析（价格按题拉取、
 // 结果渲染在弹窗尾；服务端把关计费/每日上限/赛时封锁，失败自动退费）。
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { aiTutorApi, problemApi } from '@/api'
@@ -68,16 +68,35 @@ function openMineDetail(s: Submission) {
   if (!s.id) return // 补位的空白行不可点
   mineDetail.value = s
   mineView.value = 'detail'
-  aiDebugContent.value = ''
   loadAiPrice()
+  // 找 bug 结果常驻（2026-10-30 反馈）：按提交缓存；没拉过就向后端取历史分析
+  if (s.id && aiDebugMap.value[s.id] === undefined) {
+    aiTutorApi
+      .result(s.id)
+      .then((r) => {
+        if (r.content) aiDebugMap.value[s.id] = r.content
+      })
+      .catch(() => {})
+  }
 }
 
 // ---- AI 找 bug（v0.33-④）----
 const aiReady = ref(false)
+const aiFree = ref(false) // root/特权层：免确认直接分析（2026-10-30）
 const aiName = ref('小玉')
 const aiDebugPrice = ref(0)
 const aiDebugging = ref(false)
-const aiDebugContent = ref('')
+// 结果按提交 ID 常驻缓存（2026-10-30 反馈）：切详情/关弹窗不再丢，回看直接命中
+const aiDebugMap = ref<Record<number, string>>({})
+// 结果弹窗（2026-10-30 同一套拍板）：查看免费；重新生成每次扣玉、每点一次都重算
+const dbg = reactive({ show: false, content: '', loading: false })
+
+function openDebugDlg() {
+  const s = mineDetail.value
+  if (!s) return
+  dbg.content = aiDebugMap.value[s.id] ?? ''
+  dbg.show = true
+}
 
 async function loadAiPrice() {
   aiReady.value = false
@@ -85,6 +104,7 @@ async function loadAiPrice() {
   try {
     const r = await aiTutorApi.status(props.problemId)
     aiReady.value = r.enabled
+    aiFree.value = r.free ?? false
     aiName.value = r.name ?? '小玉'
     aiDebugPrice.value = r.debug_price ?? 0
   } catch {
@@ -100,27 +120,63 @@ const canAiDebug = computed(() => {
 async function onAiDebug() {
   const s = mineDetail.value
   if (!s) return
-  try {
-    await ElMessageBox.confirm(
-      `花 ${aiDebugPrice.value} 玉让 ${aiName.value} 分析这份代码的错误？（最小改动修复，不重写）`,
-      `${aiName.value} 找 bug`,
-      { confirmButtonText: `${aiDebugPrice.value} 玉分析`, cancelButtonText: '再想想', type: 'info' },
-    )
-  } catch {
+  // 已有结果：直接打开结果弹窗（查看免费，拍板 B 同一套）
+  if (aiDebugMap.value[s.id]) {
+    openDebugDlg()
     return
   }
+  // 首次分析：扣玉确认（免费层免确认，2026-10-30）
+  if (!aiFree.value) {
+    try {
+      await ElMessageBox.confirm(
+        `花 ${aiDebugPrice.value} 玉让 ${aiName.value} 分析这份代码的错误？（最小改动修复，不重写）`,
+        `${aiName.value} 找 bug`,
+        { confirmButtonText: `${aiDebugPrice.value} 玉分析`, cancelButtonText: '再想想', type: 'info' },
+      )
+    } catch {
+      return
+    }
+  }
+  dbg.content = ''
+  dbg.show = true
+  await runDebug(s.id)
+}
+
+// 调 AI 分析并落缓存；弹窗开着就原位替换内容
+async function runDebug(sid: number) {
   aiDebugging.value = true
-  aiDebugContent.value = ''
+  dbg.loading = true
   try {
-    const r = await aiTutorApi.debug(s.id)
-    aiDebugContent.value = r.content
+    const r = await aiTutorApi.debug(sid)
+    aiDebugMap.value[sid] = r.content
     userStore.setJade(r.balance, userStore.jadeCurrency || '玉')
+    if (dbg.show) dbg.content = r.content
     ElMessage.success('分析完成')
   } catch {
     // 拦截器统一提示（余额不足/每日上限/赛时封锁/生成失败已退费）
+    if (dbg.show && !aiDebugMap.value[sid]) dbg.show = false
   } finally {
     aiDebugging.value = false
+    dbg.loading = false
   }
+}
+
+// 弹窗内「重新生成」：学生每次扣玉确认，每点一次都重算（拍板 B）
+async function onDebugRegen() {
+  const s = mineDetail.value
+  if (!s || aiDebugging.value) return
+  if (!aiFree.value) {
+    try {
+      await ElMessageBox.confirm(
+        `花 ${aiDebugPrice.value} 玉重新生成分析？将替换当前内容。`,
+        `${aiName.value} 找 bug`,
+        { confirmButtonText: `${aiDebugPrice.value} 玉重新生成`, cancelButtonText: '再想想', type: 'info' },
+      )
+    } catch {
+      return
+    }
+  }
+  await runDebug(s.id)
 }
 
 defineExpose({ refresh: loadMine })
@@ -183,7 +239,20 @@ defineExpose({ refresh: loadMine })
       </div>
     </template>
     <template v-else-if="mineDetail">
-      <el-button class="mb8" @click="mineView = 'list'">← 返回列表</el-button>
+      <!-- 详情头行：返回列表居左，AI 找 bug 居右（2026-10-30 反馈：从状态格挪出） -->
+      <div class="detail-top">
+        <el-button @click="mineView = 'list'">← 返回列表</el-button>
+        <el-button
+          v-if="aiReady && canAiDebug"
+          link
+          type="warning"
+          size="small"
+          :loading="aiDebugging"
+          @click="onAiDebug"
+        >
+          ✦ {{ aiName }} 找 bug（{{ aiDebugPrice }} 玉）
+        </el-button>
+      </div>
       <el-descriptions :column="3" border class="detail-desc">
         <el-descriptions-item label="状态">
           <el-tooltip v-if="statusDesc(mineDetail.status)" placement="top" effect="light">
@@ -196,18 +265,6 @@ defineExpose({ refresh: loadMine })
             <SubStatus :status="mineDetail.status" :score="mineDetail.score" />
           </el-tooltip>
           <SubStatus v-else :status="mineDetail.status" :score="mineDetail.score" />
-          <!-- AI 找 bug（v0.33-④）：未 AC 且非队列态可分析 -->
-          <el-button
-            v-if="aiReady && canAiDebug"
-            link
-            type="warning"
-            size="small"
-            class="lk-btn"
-            :loading="aiDebugging"
-            @click="onAiDebug"
-          >
-            ✦ {{ aiName }} 找 bug（{{ aiDebugPrice }} 玉）
-          </el-button>
         </el-descriptions-item>
         <el-descriptions-item label="语言">{{ mineDetail.language }}</el-descriptions-item>
         <el-descriptions-item label="总耗时">{{ fmtSec(mineDetail.time_ms) }}</el-descriptions-item>
@@ -247,11 +304,54 @@ defineExpose({ refresh: loadMine })
         <div class="detail-sub">错误信息</div>
         <pre class="mono sub-code">{{ mineDetail.error_info }}</pre>
       </template>
-      <!-- AI 找 bug 结果（v0.33-④）：错误定位 → 原因 → 最小修复建议 -->
-      <template v-if="aiDebugContent">
-        <div class="detail-sub ai-debug-sub">✦ {{ aiName }} 找 bug</div>
-        <MdView :content="aiDebugContent" variant="compact" auto-height />
-      </template>
+      <!-- AI 找 bug 改弹窗交互（2026-10-30 拍板 B 同一套）：结果在结果弹窗查看，
+           不再铺在详情底部 -->
     </template>
+
+    <!-- AI 找 bug 结果弹窗：动作在右上角（重新生成 / 关闭，拍板 C）；
+         查看免费，重新生成每次扣玉、每点一次都重算 -->
+    <el-dialog v-model="dbg.show" :show-close="false" width="960" top="6vh" append-to-body>
+      <template #header>
+        <div class="dlg-head">
+          <span class="dlg-title">✦ {{ aiName }} · 找 bug</span>
+          <span class="dlg-acts">
+            <el-button size="small" type="warning" :loading="aiDebugging" @click="onDebugRegen">
+              {{ aiFree ? '重新生成' : `重新生成（${aiDebugPrice} 玉）` }}
+            </el-button>
+            <el-button size="small" @click="dbg.show = false">关闭</el-button>
+          </span>
+        </div>
+      </template>
+      <div v-loading="dbg.loading" class="dbg-body">
+        <MdView v-if="dbg.content" :content="dbg.content" variant="compact" />
+      </div>
+    </el-dialog>
   </el-dialog>
 </template>
+
+<style scoped>
+/* 找 bug 结果弹窗头：标题居左、动作居右上（拍板 C） */
+.dlg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dlg-title {
+  font-size: 16px;
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy, #0b1f45);
+}
+
+.dlg-acts {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.dbg-body {
+  min-height: 160px;
+  max-height: 64vh;
+  overflow: auto;
+}
+</style>

@@ -504,16 +504,16 @@ export const adminApi = {
       providers: { name: string; base_url: string; model: string; has_key: boolean }[]
       active: string
       daily_limit: number
+      staff_daily_limit: number
       tutor_name: string
-      prices: { hint1: number; hint2: number; debug: number }
       discount: { lv1: number; pct1: number; lv2: number; pct2: number }
     }>('/admin/ai/config'),
   aiSaveConfig: (body: {
     providers: { name: string; base_url: string; api_key: string; model: string }[]
     active: string
     daily_limit: number
+    staff_daily_limit: number
     tutor_name: string
-    prices: { hint1: number; hint2: number; debug: number }
     discount: { lv1: number; pct1: number; lv2: number; pct2: number }
   }) => post<{ saved: boolean }>('/admin/ai/config', body),
   aiCalls: (page = 1, uid?: number) =>
@@ -733,6 +733,7 @@ export const aiTutorApi = {
   status: (pid: number) =>
     get<{
       enabled: boolean
+      free?: boolean // root/特权层：默认已解锁、免确认（2026-10-30）
       name?: string
       levels?: AiHintLevel[]
       debug_price?: number
@@ -741,14 +742,25 @@ export const aiTutorApi = {
   getHint: (pid: number, level: number) =>
     get<{ hint: { content: string; unlocked: boolean; at?: string } }>(`/problems/${pid}/ai/hint/${level}`),
   buyHint: (pid: number, level: number) =>
-    post<{
-      hint: { content: string; unlocked: boolean }
-      charged: boolean
-      price?: number
-      balance?: number
-    }>(`/problems/${pid}/ai/hint/${level}`),
+    // 可能真生成（后端 AI 客户端上限 120s）：同 debug，放开到 130s 避免前端 20s 先断
+    client
+      .post<
+        ApiResponse<{
+          hint: { content: string; unlocked: boolean }
+          charged: boolean
+          price?: number
+          balance?: number
+        }>
+      >(`/problems/${pid}/ai/hint/${level}`, {}, { timeout: 130000 })
+      .then((r) => r.data.data),
   debug: (sid: number) =>
-    post<{ content: string; price: number; balance: number }>(`/submissions/${sid}/ai-debug`),
+    // 真生成常超 20s（后端 AI 客户端上限 120s）：全局 20s 超时会先断、后端却继续跑完
+    //（审计佐证：失败全为配置错误、无超时）——生成类请求放开到 130s 对齐后端
+    client
+      .post<ApiResponse<{ content: string; price: number; balance: number }>>(`/submissions/${sid}/ai-debug`, {}, { timeout: 130000 })
+      .then((r) => r.data.data),
+  // 回看本人对该提交的最近一次找 bug 结果（无记录 content 为空串）
+  result: (sid: number) => get<{ content: string }>(`/submissions/${sid}/ai-debug`),
 }
 
 export const notifyApi = {

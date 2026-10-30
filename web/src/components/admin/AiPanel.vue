@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // AI 助教配置 + 调用审计面板（v0.33-③/④，root）：供应商多档（GLM/DeepSeek 预设快捷
 // 填充 + 自定义 OpenAI 兼容）、key 只写不回显（留空 = 不改）、启用档切换、计费参数
-//（每日上限/基准价/难度倍率说明/等级折扣两档）、调用审计表（tokens/费用/成败）。
+//（每日上限/定价锚说明/等级折扣两档）、调用审计表（tokens/费用/成败）。
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
@@ -20,8 +20,8 @@ const saving = ref(false)
 const providers = ref<ProviderRow[]>([])
 const active = ref('')
 const dailyLimit = ref(5)
+const staffDailyLimit = ref(20) // 特权层（教师/管理员）每日上限，0 = 不限；root 恒不限
 const tutorName = ref('小玉')
-const prices = reactive({ hint1: 2, hint2: 6, debug: 8 })
 const discount = reactive({ lv1: 5, pct1: 90, lv2: 8, pct2: 80 })
 
 // 预设快捷填充（点击填入 BaseURL + 推荐模型；key 仍需手填）
@@ -53,8 +53,8 @@ async function load() {
     providers.value = (r.providers ?? []).map((p) => ({ ...p, api_key: '' }))
     active.value = r.active ?? ''
     dailyLimit.value = r.daily_limit ?? 5
+    staffDailyLimit.value = r.staff_daily_limit ?? 20
     tutorName.value = r.tutor_name ?? '小玉'
-    Object.assign(prices, r.prices ?? {})
     Object.assign(discount, r.discount ?? {})
   } finally {
     loading.value = false
@@ -74,8 +74,8 @@ async function save() {
       })),
       active: active.value,
       daily_limit: dailyLimit.value,
+      staff_daily_limit: staffDailyLimit.value,
       tutor_name: tutorName.value.trim(),
-      prices: { ...prices },
       discount: { ...discount },
     })
     ElMessage.success('AI 配置已保存')
@@ -170,17 +170,19 @@ onMounted(() => {
       </el-form-item>
       <el-form-item label="每日每人调用上限（次）">
         <el-input-number v-model="dailyLimit" :min="1" :max="100" />
-        <span class="dim" style="margin-left: 8px">提示 + 找 bug 合计；教师/root 不扣玉不计次</span>
+        <span class="dim" style="margin-left: 8px">提示 + 找 bug 合计；学生档（默认 5）</span>
       </el-form-item>
-      <el-form-item label="基准价（理解题目 / 算法思路 / 找 bug）">
-        <div class="price-row">
-          <el-input-number v-model="prices.hint1" :min="0" :max="1000" size="small" />
-          <el-input-number v-model="prices.hint2" :min="0" :max="1000" size="small" />
-          <el-input-number v-model="prices.debug" :min="0" :max="1000" size="small" />
-        </div>
+      <el-form-item label="特权层每日上限（次）">
+        <el-input-number v-model="staffDailyLimit" :min="0" :max="1000" />
+        <span class="dim" style="margin-left: 8px">
+          教师 / 管理员免费但计次（默认 20）；0 = 不限；root 恒不限次
+        </span>
       </el-form-item>
-      <el-form-item label="难度倍率">
-        <span class="dim">服务端固定：单价 = 基准 × ⌈难度/3⌉（D1–3 ×1 / D4–6 ×2 / D7–10 ×3）</span>
+      <el-form-item label="单价（写死锚定题解解锁价）">
+        <span class="dim">
+          两级提示合计 = 题解价 × 70%（理解:思路 = 1:2 拆分）；找 bug = 题解价 × 90%；均向下取整、最低 1 玉。
+          题解价 = 难度 × 解锁系数（玉经济设置）
+        </span>
       </el-form-item>
       <el-form-item label="等级折扣（两档）">
         <div class="price-row">

@@ -155,6 +155,7 @@ func Run(ctx context.Context, deps *Deps) {
 			api.GET("/problems/:id/ai/hint/:level", AuthRequired(h), h.GetAiHint)
 			api.POST("/problems/:id/ai/hint/:level", AuthRequired(h), h.BuyAiHint)
 			api.POST("/submissions/:id/ai-debug", AuthRequired(h), h.AiDebug)
+			api.GET("/submissions/:id/ai-debug", AuthRequired(h), h.AiDebugResult)
 
 		api.GET("/problems", AuthOptional(h), h.ListProblems)
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)

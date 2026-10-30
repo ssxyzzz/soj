@@ -35,12 +35,9 @@ func (h *Handlers) AdminGetAIConfig(c *gin.Context) {
 	s, _ := h.repo.GetSystemSettings(c.Request.Context())
 	ok(c, gin.H{
 		"providers": providers, "active": cfg.Active,
-		"daily_limit": s.AiDailyLimitVal(),
-		"prices": gin.H{
-			"hint1": s.AiHintPrice1Val(), "hint2": s.AiHintPrice2Val(),
-			"debug": s.AiDebugPriceVal(),
-		},
-		"tutor_name": s.AiTutorNameVal(),
+		"daily_limit":       s.AiDailyLimitVal(),
+		"staff_daily_limit": s.AiStaffDailyLimitVal(),
+		"tutor_name":        s.AiTutorNameVal(),
 		"discount": gin.H{
 			"lv1": *s.AiDiscount1Lv, "pct1": *s.AiDiscount1Pct,
 			"lv2": *s.AiDiscount2Lv, "pct2": *s.AiDiscount2Pct,
@@ -58,15 +55,11 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 			APIKey  string `json:"api_key"`
 			Model   string `json:"model"`
 		} `json:"providers"`
-		Active     string `json:"active"`
-		DailyLimit *int   `json:"daily_limit"`
-		TutorName  *string `json:"tutor_name"`
-		Prices     *struct {
-			Hint1 *int64 `json:"hint1"`
-			Hint2 *int64 `json:"hint2"`
-			Debug *int64 `json:"debug"`
-		} `json:"prices"`
-		Discount *struct {
+		Active          string  `json:"active"`
+		DailyLimit      *int    `json:"daily_limit"`
+		StaffDailyLimit *int    `json:"staff_daily_limit"` // 特权层（教师/管理员）每日上限，0 = 不限
+		TutorName       *string `json:"tutor_name"`
+		Discount        *struct {
 			Lv1  *int `json:"lv1"`
 			Pct1 *int `json:"pct1"`
 			Lv2  *int `json:"lv2"`
@@ -121,11 +114,18 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "保存失败")
 		return
 	}
-	// 计费参数走系统设置（同一表单一并保存）
-	if req.DailyLimit != nil || req.Prices != nil || req.Discount != nil || req.TutorName != nil {
+	// 计费参数走系统设置（同一表单一并保存）；提示/找bug 单价已写死推导（2026-10-30），不再可配
+	if req.DailyLimit != nil || req.StaffDailyLimit != nil || req.Discount != nil || req.TutorName != nil {
 		if s, err := h.repo.GetSystemSettings(ctx); err == nil {
 			if req.DailyLimit != nil {
 				s.AiDailyLimit = req.DailyLimit
+			}
+			if req.StaffDailyLimit != nil {
+				if v := *req.StaffDailyLimit; v < 0 || v > 1000 {
+					fail(c, http.StatusBadRequest, "特权层每日上限需在 0–1000（0 = 不限）")
+					return
+				}
+				s.AiStaffDailyLimit = req.StaffDailyLimit
 			}
 			if req.TutorName != nil {
 				name := strings.TrimSpace(*req.TutorName)
@@ -134,10 +134,6 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 					return
 				}
 				s.AiTutorName = name
-			}
-			if req.Prices != nil {
-				s.AiHintPrice1, s.AiHintPrice2, s.AiDebugPrice =
-					req.Prices.Hint1, req.Prices.Hint2, req.Prices.Debug
 			}
 			if req.Discount != nil {
 				s.AiDiscount1Lv, s.AiDiscount1Pct = req.Discount.Lv1, req.Discount.Pct1

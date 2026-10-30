@@ -1470,6 +1470,14 @@ samp {
   margin-bottom: 8px;
 }
 
+/* 提交详情头行（2026-10-30）：返回列表居左、AI 找 bug 居右 */
+.detail-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
 .detail-desc {
   margin-bottom: 4px;
 }

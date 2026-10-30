@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"soj/internal/ai"
+
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -15,28 +17,35 @@ import (
 
 // AiHint 一道题一个级别的生成缓存。
 type AiHint struct {
-	ID      int64     `bson:"_id"`
-	PID     int64     `bson:"pid"`
-	Level   int       `bson:"level"`
-	Content string    `bson:"content"`
-	Tokens  int       `bson:"tokens,omitempty"`
-	At      time.Time `bson:"at"`
+	ID          int64     `bson:"_id"`
+	PID         int64     `bson:"pid"`
+	Level       int       `bson:"level"`
+	Content     string    `bson:"content"`
+	Tokens      int       `bson:"tokens,omitempty"`
+	PromptChars int       `bson:"promptChars,omitempty"`
+	At          time.Time `bson:"at"`
 }
 
 // AiDebugResult 一次找 bug 分析的落档。
 type AiDebugResult struct {
-	ID          int64     `bson:"_id"`
-	UID         int64     `bson:"uid"`
-	SID         int64     `bson:"sid"`
-	PID         int64     `bson:"pid"`
-	Content     string    `bson:"content"`
-	CreatedAt   time.Time `bson:"createdAt"`
+	ID        int64     `bson:"_id"`
+	UID       int64     `bson:"uid"`
+	SID       int64     `bson:"sid"`
+	PID       int64     `bson:"pid"`
+	Content   string    `bson:"content"`
+	CreatedAt time.Time `bson:"createdAt"`
 }
 
 // EnsureAiHintIndexes（Bootstrap）：aiHints {pid, level} 唯一；debug 结果 {uid, _id}。
 func (r *Repo) EnsureAiHintIndexes(ctx context.Context) error {
 	if _, err := r.db.Collection("aiHints").Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "level", Value: 1}}, Options: options.Index().SetUnique(true)},
+	}); err != nil {
+		return err
+	}
+	// 个人提示结果：一人一级一份（方案二，2026-10-30）
+	if _, err := r.db.Collection("aiHintResults").Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "pid", Value: 1}, {Key: "level", Value: 1}}, Options: options.Index().SetUnique(true)},
 	}); err != nil {
 		return err
 	}
@@ -59,12 +68,13 @@ func (r *Repo) GetAiHint(ctx context.Context, pid int64, level int) (*AiHint, er
 	return &h, nil
 }
 
-// EnsureAiHint 缓存缺失则生成（gen 回调返回内容）并落库；并发/重复由唯一索引兜底。
-func (r *Repo) EnsureAiHint(ctx context.Context, p *Problem, level int, gen func() (string, error)) (*AiHint, error) {
+// EnsureAiHint 缓存缺失则生成（gen 回调返回完整响应：内容 + tokens/素材字符元数据）
+// 并落库；并发/重复由唯一索引兜底。
+func (r *Repo) EnsureAiHint(ctx context.Context, p *Problem, level int, gen func() (*ai.Response, error)) (*AiHint, error) {
 	if h, err := r.GetAiHint(ctx, p.ID, level); err != nil || h != nil {
 		return h, err
 	}
-	content, err := gen()
+	resp, err := gen()
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +82,7 @@ func (r *Repo) EnsureAiHint(ctx context.Context, p *Problem, level int, gen func
 	if err != nil {
 		return nil, err
 	}
-	h := &AiHint{ID: id, PID: p.ID, Level: level, Content: content, At: time.Now()}
+	h := &AiHint{ID: id, PID: p.ID, Level: level, Content: resp.Content, Tokens: resp.TotalTokens, PromptChars: resp.PromptChars, At: time.Now()}
 	_, err = r.db.Collection("aiHints").InsertOne(ctx, h)
 	if mongo.IsDuplicateKeyError(err) {
 		return r.GetAiHint(ctx, p.ID, level) // 并发赢家已生成
@@ -112,4 +122,51 @@ func (r *Repo) SaveAiDebugResult(ctx context.Context, uid, sid, pid int64, conte
 		ID: id, UID: uid, SID: sid, PID: pid, Content: content, CreatedAt: time.Now(),
 	})
 	return err
+}
+
+// AiHintResult 学生个人最新提示结果（方案二，2026-10-30）：谁生成存谁——重新生成
+// 每次另计费并覆盖自己这份；解锁记录（一次性买断查看权）不变。共享缓存 aiHints
+// 仍服务「首份内容的全班复用」，个人档是各自重算后的私人版本。
+type AiHintResult struct {
+	UID     int64     `bson:"uid"`
+	PID     int64     `bson:"pid"`
+	Level   int       `bson:"level"`
+	Content string    `bson:"content"`
+	At      time.Time `bson:"at"`
+}
+
+// SaveAiHintResult 覆盖保存本人该级最新结果（upsert；唯一索引 {uid,pid,level} 并发兜底）。
+func (r *Repo) SaveAiHintResult(ctx context.Context, uid, pid int64, level int, content string) error {
+	_, err := r.db.Collection("aiHintResults").UpdateOne(ctx,
+		bson.M{"uid": uid, "pid": pid, "level": level},
+		bson.M{"$set": bson.M{"content": content, "at": time.Now()}},
+		options.UpdateOne().SetUpsert(true),
+	)
+	return err
+}
+
+// GetAiHintResult 取本人该级最新结果；无记录返回 IsNotFound。
+func (r *Repo) GetAiHintResult(ctx context.Context, uid, pid int64, level int) (*AiHintResult, error) {
+	var res AiHintResult
+	err := r.db.Collection("aiHintResults").FindOne(ctx,
+		bson.M{"uid": uid, "pid": pid, "level": level},
+	).Decode(&res)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+// GetAiDebugResult 取本人某次提交最近一次找 bug 结果；无记录返回 IsNotFound。
+// 同一提交可重复分析，按 _id 降序取最新。
+func (r *Repo) GetAiDebugResult(ctx context.Context, uid, sid int64) (*AiDebugResult, error) {
+	var res AiDebugResult
+	err := r.db.Collection("aiDebugResults").FindOne(ctx,
+		bson.M{"uid": uid, "sid": sid},
+		options.FindOne().SetSort(bson.D{{Key: "_id", Value: -1}}),
+	).Decode(&res)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
 }

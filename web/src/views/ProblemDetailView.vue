@@ -443,26 +443,29 @@ onUnmounted(stopPolling)
         </RailCard>
 
         <!-- 答案解析（v0.23 验收调整）：视频讲解默认可看（不设 AC 门槛），文字题解满分∨老师门槛；
-             两钮同款白底黑字；比赛/考试锁定期整卡不显示。
              玉解锁（v0.33-②）：未达门槛的学生可花玉解锁文字题解（难度 × 系数定价，解锁永久）。
-             AI 助教（v0.33-④ 验收调整）：两级提示并入本卡、置于解析入口上方 -->
+             四按钮方案（2026-10-30 草案）：AI 启用时卡标题让位——小玉组带自有头行，
+             解析组以「答案解析」小节标题分组；四钮统一大胶囊 -->
         <RailCard
           v-if="!problem.locked && (problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions || aiEnabled)"
           ov="解析"
-          title="答案解析"
-          class="aside-card"
+          :title="aiEnabled ? undefined : '答案解析'"
+          :class="['aside-card', { 'ai-headless': aiEnabled }]"
         >
           <AiTutorPanel v-if="userStore.token" :pid="problem.id" class="ai-in-solution" @enabled="aiEnabled = $event" />
-          <div v-if="problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions" class="entry-actions">
-            <el-button v-if="problem.solution_video_url" @click="showVideo = true">视频讲解</el-button>
-            <el-button v-if="problem.can_view_solutions" @click="openSolutions">文字题解</el-button>
-            <el-button v-if="canUnlockSolutions" type="primary" plain :loading="unlocking" @click="unlockSolutions">
-              花 {{ problem.solution_unlock_price }} 玉解锁文字题解
-            </el-button>
-          </div>
-          <p v-if="canUnlockSolutions" class="hint">
-            首次通过后免费；解锁即时生效、永久可见本题全部文字题解。
-          </p>
+          <template v-if="problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions">
+            <div v-if="aiEnabled" class="sol-sec-h">答案解析</div>
+            <div class="entry-actions pill-btns">
+              <el-button v-if="problem.solution_video_url" @click="showVideo = true">视频讲解</el-button>
+              <el-button v-if="problem.can_view_solutions" @click="openSolutions">文字题解</el-button>
+              <el-button v-if="canUnlockSolutions" type="primary" plain :loading="unlocking" @click="unlockSolutions">
+                花 {{ problem.solution_unlock_price }} 玉解锁文字题解
+              </el-button>
+            </div>
+            <p v-if="canUnlockSolutions" class="hint">
+              首次通过后免费；解锁即时生效、永久可见本题全部文字题解。
+            </p>
+          </template>
         </RailCard>
 
         <!-- 讨论入口（v0.24）：题内思路讨论弹窗；赛时整题锁定（服务端闸门，弹窗内提示） -->
@@ -620,6 +623,42 @@ onUnmounted(stopPolling)
 
 /* AI 助教并入答案解析卡（v0.33-④ 验收调整）：面板与解析入口之间留间距 */
 .ai-in-solution {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
+}
+
+/* AI 让位卡标题时头部只剩 kicker：不再画卡头横线（线由小玉头行承担，2026-10-30 反馈） */
+.aside-card.ai-headless :deep(.el-card__header) {
+  border-bottom: none;
+}
+
+/* 答案解析小节标题（2026-10-30 草案）：横线画法对齐卡头——贴卡缘、EP 卡头同色；
+   线紧贴标题（对齐卡头标题距线间距，2026-10-30 反馈压高度） */
+.sol-sec-h {
+  font-size: 15px;
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
+  margin: 0 -20px 12px;
+  padding: 0 20px 4px;
+  border-bottom: 1px solid var(--el-card-border-color, var(--el-border-color-light));
+}
+
+/* 解析组胶囊钮（2026-10-30 草案）：整宽大胶囊，与上方小玉两钮同族 */
+.entry-actions.pill-btns {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.entry-actions.pill-btns .el-button {
+  width: 100%;
+  height: 46px;
+  margin: 0;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
+  --el-button-hover-text-color: var(--soj-navy);
+  --el-button-hover-bg-color: var(--el-fill-color-blank);
+  --el-button-hover-border-color: var(--soj-blue-line);
 }
 </style>
