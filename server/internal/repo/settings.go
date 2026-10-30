@@ -548,6 +548,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"jadeBountyMax":           s.JadeBountyMaxVal(),
 			"jadeShopEnabled":         s.JadeShopOpen(),
 			"aiDailyLimit":            s.AiDailyLimitVal(),
+			"aiStaffDailyLimit":       s.AiStaffDailyLimitVal(), // 特权层每日上限（v0.33-④ 特权分层；曾漏登本清单导致保存不生效）
 			"aiHintPrice1":            s.AiHintPrice1Val(),
 			"aiHintPrice2":            s.AiHintPrice2Val(),
 			"aiDebugPrice":            s.AiDebugPriceVal(),
