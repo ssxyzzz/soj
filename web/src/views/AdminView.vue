@@ -1,11 +1,13 @@
 <script setup lang="ts">
-// 管理后台（v0.5.4 ② 拆分后布局壳）：左列功能卡点选切换，主列渲染对应面板。
-// 面板用 v-if 切换（销毁重建、各自拉数据）——顺带解决「角色变更后用户列表刷新」
-// 的跨面板联动；面板实现见 components/admin/*，角色清单由 stores/adminRoles 共享。
+// 管理后台（v0.35-① 信息架构重组）：左列导航按 人员/内容/运营/系统 四组眉题分区，
+// 条目单行化（去副标题）+ 待办徽标（讨论区=待处理举报、兑换商店=待发货订单，
+// 进页拉一次、每次切分区后刷新——面板 v-if 销毁重建，处理结果即时反映到徽标）。
+// 面板仍 v-if 切换（各自拉数据），实现见 components/admin/*，角色清单由 stores/adminRoles 共享。
+// ?section= 深链：旧值（tags/sources/meta/duplicates/seed）映射进 problems 分区；
+// 切换分区回写 URL（仿设置页 ?tab= 模式，刷新/分享保持当前分区）。
 // 角色管理仅 root 可见（后端同样硬编码 root，增删改不可下放）。
-// ?section= 深链（v0.15）：题库页「导入题目」等入口直达对应分区。
-import { ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 
 import BackupPanel from '@/components/admin/BackupPanel.vue'
@@ -21,14 +23,16 @@ import ShopPanel from '@/components/admin/ShopPanel.vue'
 import AiPanel from '@/components/admin/AiPanel.vue'
 import TagsPanel from '@/components/admin/TagsPanel.vue'
 import UsersPanel from '@/components/admin/UsersPanel.vue'
+import { adminApi } from '@/api'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const route = useRoute()
+const router = useRouter()
 
 const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'discuss', 'shop', 'ai', 'settings', 'backup'] as const
 type Section = (typeof sections)[number]
-// 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描三面板同页 tab 切换（2026-10-25 双树）；
+// 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描 / 种子题四面板同页 tab 切换（2026-10-25 双树）；
 // tags/sources 旧深链值映射到 problems 的对应子页
 type SubTab = 'tags' | 'meta' | 'duplicates' | 'seed'
 const rawSection = (Array.isArray(route.query.section) ? route.query.section[0] : route.query.section) as string | undefined
@@ -55,6 +59,85 @@ const showDuplicatesTab = userStore.can('problem.edit.all')
 // 种子题管理（清除/重部署为部署级操作）：仅 root，端点同样 RequireRoot
 const showSeedTab = userStore.role === 'root'
 
+// ---- 分组导航（v0.35-①）----
+// 四组眉题 + 名词式命名统一（编辑用户→用户管理、公告编辑→公告发布、实物兑换→兑换商店…）；
+// key 与旧版一致，深链/权限口径不变
+type BadgeKind = 'reports' | 'orders'
+interface NavItem { key: Section; label: string; badge?: BadgeKind }
+interface NavGroup { title: string; items: NavItem[] }
+const NAV_GROUPS: NavGroup[] = [
+  {
+    title: '人员',
+    items: [
+      { key: 'users', label: '用户管理' },
+      { key: 'roles', label: '角色与权限' },
+    ],
+  },
+  {
+    title: '内容',
+    items: [
+      { key: 'problems', label: '题库维护' },
+      { key: 'notice', label: '公告发布' },
+      { key: 'discuss', label: '讨论区管理', badge: 'reports' },
+    ],
+  },
+  {
+    title: '运营',
+    items: [
+      { key: 'shop', label: '兑换商店', badge: 'orders' },
+      { key: 'ai', label: 'AI 助教' },
+    ],
+  },
+  {
+    title: '系统',
+    items: [
+      { key: 'levels', label: '等级与分档' },
+      { key: 'settings', label: '系统设置' },
+      { key: 'backup', label: '数据备份' },
+      { key: 'security', label: '安全日志' },
+    ],
+  },
+]
+
+// 条目可见性（与主列各面板渲染条件同口径）；整组不可见时连组一起收掉
+const visibleGroups = computed(() => {
+  const show: Record<Section, boolean> = {
+    users: true,
+    roles: userStore.role === 'root',
+    problems: canProblemManage,
+    notice: true,
+    discuss: userStore.can('discussion.manage'),
+    shop: userStore.role === 'root',
+    ai: userStore.role === 'root',
+    levels: userStore.role === 'root',
+    settings: true,
+    backup: userStore.can('backup.run') || userStore.can('backup.keys'),
+    security: userStore.role === 'root',
+  }
+  return NAV_GROUPS
+    .map(g => ({ ...g, items: g.items.filter(i => show[i.key]) }))
+    .filter(g => g.items.length > 0)
+})
+
+// 待办徽标：字段级权限——无 discussion.manage 的教师拿不到 discuss_reports、
+// 非 root 拿不到 shop_orders（后端省略字段），徽标自然不渲染
+const todo = ref<{ discuss_reports?: number; shop_orders?: number }>({})
+async function loadTodo() {
+  try {
+    todo.value = await adminApi.todoCounts()
+  } catch {
+    // 静默失败：徽标缺席即可，不打断后台使用
+  }
+}
+function badgeCount(kind?: BadgeKind): number {
+  if (kind === 'reports') return todo.value.discuss_reports ?? 0
+  if (kind === 'orders') return todo.value.shop_orders ?? 0
+  return 0
+}
+function badgeText(n: number): string {
+  return n > 99 ? '99+' : String(n)
+}
+
 // 标签树面板草稿的脏状态：切走分区/子页前拦截确认（面板 v-if 销毁，草稿随组件丢失）
 const tagsDirty = ref(false)
 
@@ -73,11 +156,14 @@ async function guardTagsDirty(): Promise<boolean> {
   return true
 }
 
-async function switchSection(target: typeof section.value) {
+async function switchSection(target: Section) {
   if (section.value === 'problems' && target !== 'problems') {
     if (!(await guardTagsDirty())) return
   }
   section.value = target
+  // URL 同步（不触发导航守卫；仿设置页 ?tab= 深链模式）
+  router.replace({ query: { ...route.query, section: target } })
+  loadTodo()
 }
 
 async function switchSubTab(target: SubTab) {
@@ -86,6 +172,8 @@ async function switchSubTab(target: SubTab) {
   }
   subTab.value = target
 }
+
+onMounted(loadTodo)
 </script>
 
 <template>
@@ -96,104 +184,20 @@ async function switchSubTab(target: SubTab) {
     </div>
     <div class="admin-layout">
     <aside class="admin-nav">
-      <div class="anav-eyebrow">面板</div>
-      <div
-        class="nav-item"
-        :class="{ active: section === 'users' }"
-        @click="switchSection('users')"
-      >
-        <span class="nav-title">编辑用户</span>
-        <span class="nav-sub">搜索 / 建号 / 角色 / 重置密码</span>
-      </div>
-      <div
-        v-if="userStore.role === 'root'"
-        class="nav-item"
-        :class="{ active: section === 'roles' }"
-        @click="switchSection('roles')"
-      >
-        <span class="nav-title">角色管理</span>
-        <span class="nav-sub">权限位 / 自定义角色</span>
-      </div>
-      <div
-        v-if="canProblemManage"
-        class="nav-item"
-        :class="{ active: section === 'problems' }"
-        @click="switchSection('problems')"
-      >
-        <span class="nav-title">题目管理</span>
-        <span class="nav-sub">知识树 / 标签树 / 重复扫描 / 种子题</span>
-      </div>
-      <div
-        v-if="userStore.role === 'root'"
-        class="nav-item"
-        :class="{ active: section === 'levels' }"
-        @click="switchSection('levels')"
-      >
-        <span class="nav-title">等级设置</span>
-        <span class="nav-sub">用户等级 / 难度等级</span>
-      </div>
-      <div
-        class="nav-item"
-        :class="{ active: section === 'notice' }"
-        @click="switchSection('notice')"
-      >
-        <span class="nav-title">公告编辑</span>
-        <span class="nav-sub">首页公告（Markdown）</span>
-      </div>
-      <div
-        v-if="userStore.can('discussion.manage')"
-        class="nav-item"
-        :class="{ active: section === 'discuss' }"
-        @click="switchSection('discuss')"
-      >
-        <span class="nav-title">讨论管理</span>
-        <span class="nav-sub">举报队列 / 禁言</span>
-      </div>
-      <!-- 实物兑换（v0.33-②，root）：目录 + 订单履约 -->
-      <div
-        v-if="userStore.role === 'root'"
-        class="nav-item"
-        :class="{ active: section === 'shop' }"
-        @click="switchSection('shop')"
-      >
-        <span class="nav-title">实物兑换</span>
-        <span class="nav-sub">物品目录 / 订单履约</span>
-      </div>
-      <!-- AI 助教（v0.33-③，root）：供应商配置 + 计费 + 审计 -->
-      <div
-        v-if="userStore.role === 'root'"
-        class="nav-item"
-        :class="{ active: section === 'ai' }"
-        @click="switchSection('ai')"
-      >
-        <span class="nav-title">AI 助教</span>
-        <span class="nav-sub">供应商 / 计费 / 审计</span>
-      </div>
-      <div
-        class="nav-item"
-        :class="{ active: section === 'settings' }"
-        @click="switchSection('settings')"
-      >
-        <span class="nav-title">系统设置</span>
-        <span class="nav-sub">基础 / 邮箱 / 讨论区 / 账号</span>
-      </div>
-      <div
-        v-if="userStore.can('backup.run') || userStore.can('backup.keys')"
-        class="nav-item"
-        :class="{ active: section === 'backup' }"
-        @click="switchSection('backup')"
-      >
-        <span class="nav-title">数据备份</span>
-        <span class="nav-sub">一键备份 / 恢复方法</span>
-      </div>
-      <div
-        v-if="userStore.role === 'root'"
-        class="nav-item"
-        :class="{ active: section === 'security' }"
-        @click="switchSection('security')"
-      >
-        <span class="nav-title">安全日志</span>
-        <span class="nav-sub">登录 / 锁定 / 改密 / 限流</span>
+      <div v-for="g in visibleGroups" :key="g.title" class="nav-group">
+        <div class="anav-eyebrow">{{ g.title }}</div>
+        <button
+          v-for="it in g.items"
+          :key="it.key"
+          type="button"
+          class="nav-item"
+          :class="{ active: section === it.key }"
+          :aria-current="section === it.key ? 'true' : undefined"
+          @click="switchSection(it.key)"
+        >
+          <span class="nav-title">{{ it.label }}</span>
+          <span v-if="badgeCount(it.badge) > 0" class="nav-badge">{{ badgeText(badgeCount(it.badge)) }}</span>
+        </button>
       </div>
     </aside>
 
@@ -226,7 +230,7 @@ async function switchSubTab(target: SubTab) {
 </template>
 
 <style scoped>
-/* v3 后台布局：页头（kicker + 大标题）+ 白卡导航列 + 主列，容器 1440 对齐全站（2026-10-25 回调） */
+/* v3 后台布局：页头（kicker + 大标题）+ 分组导航卡 + 主列，容器 1440 对齐全站（2026-10-25 回调） */
 .admin-wrap {
   max-width: 1440px;
   margin: 0 auto;
@@ -240,8 +244,8 @@ async function switchSubTab(target: SubTab) {
   align-items: stretch;
 }
 
-/* v3 导航列：整列一张白卡（圆角 16 + hairline + 柔影），条目胶囊态；
-   宽度对齐 PageShell 右列 320px（2026-10-28 反馈：252 偏窄） */
+/* v3 导航列：整列一张白卡（圆角 16 + hairline + 柔影）；
+   v0.35-① 改四组眉题 + 单行条目（原 11 项平铺双行字墙），宽度对齐 PageShell 右列 320px */
 .admin-nav {
   flex: 0 0 320px;
   width: 320px;
@@ -257,25 +261,39 @@ async function switchSubTab(target: SubTab) {
     0 12px 32px rgba(11, 31, 69, 0.06);
 }
 
-/* v3 .anav-t：11px 大写 eyebrow */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* v3 分组眉题：11px 大写（中文组名只吃字距），组间距靠后续组眉题的加高 padding */
 .anav-eyebrow {
   font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
   letter-spacing: 0.16em;
   color: var(--soj-ink-3);
   text-transform: uppercase;
-  padding: 8px 13px 6px;
+  padding: 4px 13px 2px;
+}
+
+.nav-group + .nav-group .anav-eyebrow {
+  padding-top: 12px;
 }
 
 .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid transparent;
   border-radius: 10px;
-  padding: 10px 13px;
+  padding: 8px 13px;
   cursor: pointer;
   transition: all 0.15s;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  background: none;
+  font: inherit;
+  width: 100%;
+  text-align: left;
 }
 
 .nav-item:hover {
@@ -290,20 +308,33 @@ async function switchSubTab(target: SubTab) {
   color: var(--soj-blue);
 }
 
-.nav-item.active .nav-sub {
-  color: var(--soj-blue);
-  opacity: 0.75;
+/* 键盘可达（v0.35-①）：条目由 div 改 button，焦点环走 soj-blue */
+.nav-item:focus-visible {
+  outline: 2px solid var(--soj-blue);
+  outline-offset: 2px;
 }
 
 .nav-title {
   font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
   font-size: 14px;
+  white-space: nowrap;
 }
 
-.nav-sub {
-  color: var(--el-text-color-secondary);
-  font-size: var(--soj-fs-small);
+/* 待办徽标：行尾红 pill（视觉同 MainLayout 铃铛角标），>99 封顶 */
+.nav-badge {
+  margin-left: auto;
+  flex: 0 0 auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--el-color-danger, #f56c6c);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
 }
 
 .admin-main {
@@ -338,16 +369,42 @@ async function switchSubTab(target: SubTab) {
     flex: 1 1 auto;
   }
 
+  /* 导航改单行横滚 chips（形制同 TagChips .tag-row）：组眉题隐藏，条目顺序即隐含分组；
+     替代原 11 张卡 flex-wrap 长龙 */
   .admin-nav {
     position: static;
     width: auto;
     flex: 1 1 auto;
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 8px;
   }
 
+  .admin-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .anav-eyebrow {
+    display: none;
+  }
+
+  .nav-group {
+    flex-direction: row;
+    gap: 6px;
+  }
+
+  /* 白卡上无边框的纯文字可点性弱，chips 形态补 hairline 描边 */
   .nav-item {
-    flex: 1 1 140px;
+    flex: 0 0 auto;
+    width: auto;
+    padding: 7px 14px;
+    border-radius: 999px;
+    border-color: var(--soj-line);
+    white-space: nowrap;
   }
 }
 </style>

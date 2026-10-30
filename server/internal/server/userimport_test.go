@@ -144,12 +144,12 @@ func TestUserImportParseRoster(t *testing.T) {
 		{"# 注释行"},
 		{"姓名", "id", "性别", "年级", "学校", "地区"}, // 列序无关（中文别名映射）
 		{"张三", "1001", "男", "初一", "市一中", "山东济南"},
-		{"李四", "1002", "女", "8年级", "", ""},       // 数字变体年级
-		{"王五", "abc", "", "大一", "", ""},           // id 非数字 + 年级不可识别
-		{"赵六", "1001", "", "", "", ""},              // 表内 id 重复
-		{"张三", "1001", "", "", "", ""},              // 表内用户名重复（拼音相同）
+		{"李四", "1002", "女", "8年级", "", ""}, // 数字变体年级 → 归一标准名「初二」
+		{"王五", "abc", "", "大一", "", ""},     // id 非数字 + 年级不可识别
+		{"赵六", "1001", "", "", "", ""},        // 表内 id 重复
+		{"张三", "1001", "", "", "", ""},        // 表内用户名重复（拼音相同）
 	}
-	rows, err := userImportParse(records)
+	rows, err := userImportParse(records, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,8 +162,8 @@ func TestUserImportParseRoster(t *testing.T) {
 	if rows[0].Password == "" || len(rows[0].Password) != 8 {
 		t.Errorf("初始密码应已生成（8 位）：%q", rows[0].Password)
 	}
-	if rows[1].Grade != "8年级" {
-		t.Errorf("年级保留原文显示：%+v", rows[1])
+	if rows[1].Grade != "初二" {
+		t.Errorf("年级别名应归一为标准名「初二」：%+v", rows[1])
 	}
 	// 问题行：王五（id + 年级）、赵六/张三重复行
 	for _, r := range rows[2:] {
@@ -178,20 +178,58 @@ func TestUserImportParseRoster(t *testing.T) {
 		t.Errorf("赵六行应有 id 重复：%v", rows[4].Problems)
 	}
 
-	// 表头缺列：无 id 且无姓名 → 报错
-	if _, err := userImportParse([][]string{{"姓名", "性别"}, {"张三", "男"}}); err == nil {
-		t.Error("缺 id 列应报错")
+	// 表头缺「姓名」列且无 username → 报错（id 列现在可整个不填）
+	if _, err := userImportParse([][]string{{"性别", "学校"}, {"男", "x"}}, 0); err == nil {
+		t.Error("缺姓名列应报错")
 	}
 	// 老英文模板路径：username 手填时 id 可留空
 	rows, err = userImportParse([][]string{
 		{"username", "password", "nickname", "role"},
 		{"lisi", "Passw0rd!", "李四", ""},
-	})
+	}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if rows[0].ID != 0 || rows[0].Username != "lisi" || len(rows[0].Problems) != 0 {
 		t.Errorf("老模板行解析异常：%+v", rows[0])
+	}
+}
+
+func TestUserImportParseAutoID(t *testing.T) {
+	// id 留空：按预读顺延号预分配（auto_id 标记），用户名 = 拼音 + 预分配号
+	records := [][]string{
+		{"姓名", "年级"},
+		{"张三", "初一"},
+		{"李四", ""},
+		{"", "高二"}, // 姓名空且无用户名来源 → 问题行
+	}
+	rows, err := userImportParse(records, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("识别行数 = %d，期望 3", len(rows))
+	}
+	if rows[0].ID != 500 || !rows[0].AutoID || rows[0].Username != "zhangsan500" {
+		t.Errorf("张三应预分配 500 并生成 zhangsan500：%+v", rows[0])
+	}
+	if rows[1].ID != 501 || !rows[1].AutoID || rows[1].Username != "lisi501" {
+		t.Errorf("李四应预分配 501：%+v", rows[1])
+	}
+	if len(rows[2].Problems) == 0 || !containsProblem(rows[2], "姓名必填") {
+		t.Errorf("空姓名行应报必填错：%+v", rows[2])
+	}
+	// 预分配号与表内显式 id 撞车：后出现的报「表内 id 重复」
+	rows, err = userImportParse([][]string{
+		{"姓名", "id"},
+		{"张三", ""},
+		{"李四", "500"},
+	}, 500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsProblem(rows[1], "表内 id 重复") {
+		t.Errorf("显式 500 与预分配 500 相撞应报重复：%+v", rows[1])
 	}
 }
 

@@ -54,12 +54,12 @@ var userImportCols = map[string]string{
 func (h *Handlers) AdminUserImportTemplate(c *gin.Context) {
 	rows := [][]string{
 		{"# SOJ 批量建号·中文花名册模板：每行一个账号，以 # 开头的行会被忽略"},
-		{"# 必填：id（即站内用户 ID）、姓名；选填：性别、年级（如：初一/高一/7/12年级）、学校、地区、角色（默认 default）"},
+		{"# 必填：姓名；id 即站内用户 ID，可留空（自动顺延分配，预览表可见可改）；选填：性别、年级（如：初一/高一/7/12年级，自动归一为标准名）、学校、地区、角色（默认 default）"},
 		{"# 用户名默认 = 姓名拼音小写 + id（张三 1001 → zhangsan1001），可在导入预览里逐行修改；初始密码每人随机生成，建号后导出表格发放"},
-		{"# 兼容老模板：username/password 列填了优先使用（此法 id 可留空自动分配）"},
+		{"# 兼容老模板：username/password 列填了优先使用"},
 		{"id", "姓名", "性别", "年级", "学校", "地区", "角色"},
 		{"1001", "张三", "男", "初一", "市第一中学", "山东济南", ""},
-		{"1002", "李四", "女", "高一", "市第一中学", "", "default"},
+		{"", "李四", "女", "高一", "市第一中学", "", "default"},
 	}
 	serveCSV(c, csvSafeName("SOJ批量建号模板.csv"), rows)
 }
@@ -133,10 +133,11 @@ func pinyinUsername(name string, id int64) string {
 // userImportRow 一行识别结果（预览下发 + 确认回传同构；id/username 预览可改）。
 type userImportRow struct {
 	Row      int      `json:"row"` // CSV 行号（含表头 1-based，与 Excel 一致）
-	ID       int64    `json:"id"`  // 0 = 自动分配（老模式）
+	ID       int64    `json:"id"`
+	AutoID   bool     `json:"auto_id,omitempty"` // id 留空由预览预分配顺延号（前端「自动」标）
 	Name     string   `json:"name"`
 	Gender   string   `json:"gender"`
-	Grade    string   `json:"grade"` // 显示名（空 = 未设置）
+	Grade    string   `json:"grade"` // 标准显示名（别名输入解析即归一；空 = 未设置）
 	School   string   `json:"school"`
 	Region   string   `json:"region"`
 	Role     string   `json:"role"`
@@ -146,8 +147,9 @@ type userImportRow struct {
 }
 
 // userImportParse 上传文件 → 识别行集合（两段共用）：表头定位 + 逐行解析生成与
-// 静态校验（格式/表内重复）；DB 占用查重由调用方批量补标。
-func userImportParse(records [][]string) (rows []userImportRow, err error) {
+// 静态校验（格式/表内重复）；DB 占用查重由调用方批量补标。autoIDStart > 0 时，
+// id 留空的行按其顺延预分配（0 = 无预分配来源，id 留空且未显式给用户名则报错）。
+func userImportParse(records [][]string, autoIDStart int64) (rows []userImportRow, err error) {
 	col := map[string]int{}
 	headerSeen := false
 	start := 0
@@ -164,12 +166,12 @@ func userImportParse(records [][]string) (rows []userImportRow, err error) {
 				col[key] = j
 			}
 		}
-		// 表头必填判定：中文花名册需 id+姓名；老英文模板有 username 列即可（id 可留空自动分配）
-		_, hasID := col["id"]
+		// 表头必填判定：花名册需「姓名」（id 列可整个不填，行内留空即预分配顺延号）；
+		// 老英文模板有 username 列即可
 		_, hasName := col["name"]
 		_, hasUsername := col["username"]
-		if !hasUsername && !(hasID && hasName) {
-			return nil, fmt.Errorf("表头缺少必填列（花名册需 id+姓名；老模板可用 username/password，详见下载的模板说明）")
+		if !hasName && !hasUsername {
+			return nil, fmt.Errorf("表头缺少必填列（花名册需「姓名」；老模板可用 username/password，详见下载的模板说明）")
 		}
 		headerSeen = true
 		start = i + 1
@@ -188,6 +190,7 @@ func userImportParse(records [][]string) (rows []userImportRow, err error) {
 
 	seenID := map[int64]bool{}
 	seenUname := map[string]bool{}
+	autoNext := autoIDStart
 	rowNo := start
 	for _, rec := range records[start:] {
 		rowNo++
@@ -210,7 +213,8 @@ func userImportParse(records [][]string) (rows []userImportRow, err error) {
 			continue // 全空行
 		}
 
-		// id：花名册必填（默认用户名要拼）；显式 username 的老模式行可留空自动分配
+		// id：留空 = 预分配顺延号（预览可见可改，建号即按此号）；填了校验正整数。
+		// 无预分配来源（autoIDStart=0）且未显式给用户名时才报必填错。
 		if idStr := get(rec, "id"); idStr != "" {
 			id, perr := strconv.ParseInt(idStr, 10, 64)
 			if perr != nil || id < 1 || id > 1_000_000_000 {
@@ -218,13 +222,22 @@ func userImportParse(records [][]string) (rows []userImportRow, err error) {
 			} else {
 				row.ID = id
 			}
+		} else if autoNext > 0 {
+			row.ID = autoNext
+			row.AutoID = true
+			autoNext++
 		} else if row.Username == "" {
 			row.Problems = append(row.Problems, "id 必填（拼音用户名由它拼接）")
 		}
 
-		// 年级：可空；非空必须能识别（防脏档位）
-		if row.Grade != "" && repo.ParseGrade(row.Grade) == 0 {
-			row.Problems = append(row.Problems, "年级无法识别（支持：一年级…高三 / 初一…初三 / 数字 1-12）")
+		// 年级：可空；非空必须能识别（防脏档位），解析即归一为标准显示名
+		//（填 7 / 七年级 → 预览与库内统一显示「初一」，三处入口同口径）
+		if row.Grade != "" {
+			if no := repo.ParseGrade(row.Grade); no > 0 {
+				row.Grade = repo.GradeName(no)
+			} else {
+				row.Problems = append(row.Problems, "年级无法识别（支持：一年级…高三 / 初一…初三 / 数字 1-12）")
+			}
 		}
 
 		// 用户名：显式列优先，否则拼音 + id
@@ -328,6 +341,8 @@ func readImportUploadFile(c *gin.Context) ([]byte, string, bool) {
 
 // AdminUserImportPreview POST /api/admin/users/import-preview —— 第一段：上传识别。
 // 返回逐行识别结果（含生成的用户名/密码与问题清单），前端预览表展示、可改后确认。
+// id 留空的行按计数器预读顺延预分配（PeekUserSeq 不消耗计数器；真正建号按预览号
+// 指定创建，计数器随 CreateUserWithProfile 的 $max 对齐）。
 func (h *Handlers) AdminUserImportPreview(c *gin.Context) {
 	raw, _, okFile := readImportUploadFile(c)
 	if !okFile {
@@ -338,7 +353,11 @@ func (h *Handlers) AdminUserImportPreview(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "CSV 解析失败："+err.Error())
 		return
 	}
-	rows, err := userImportParse(records)
+	autoStart, perr := h.repo.PeekUserSeq(c.Request.Context())
+	if perr != nil {
+		autoStart = 0 // 预读失败降级：id 留空且未显式给用户名的行按必填报错
+	}
+	rows, err := userImportParse(records, autoStart)
 	if err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return

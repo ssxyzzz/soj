@@ -708,3 +708,22 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"profile_edit_region":   s.OpenRegion(),
 	})
 }
+
+// AdminTodoCounts GET /api/admin/todo-counts —— 后台导航待办徽标（v0.35-①）：
+// 待处理举报数 + 待发货订单数。字段级权限：讨论数需 discussion.manage、
+// 订单数仅 root（与各自列表端点口径一致），未授权字段直接省略——前端徽标自然不渲染。
+// 徽标属提示性数据，单项计数失败仅省略该字段，不让整个导航角标 500。
+func (h *Handlers) AdminTodoCounts(c *gin.Context) {
+	out := gin.H{}
+	if hasPerm(c, repo.PermDiscussManage) {
+		if n, err := h.repo.CountOpenDiscussReports(c.Request.Context()); err == nil {
+			out["discuss_reports"] = n
+		}
+	}
+	if _, _, role, logged := currentUser(c); logged && role == repo.RoleRoot {
+		if n, err := h.repo.CountPendingShopOrders(c.Request.Context()); err == nil {
+			out["shop_orders"] = n
+		}
+	}
+	ok(c, out)
+}

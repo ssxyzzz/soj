@@ -525,7 +525,8 @@ defineExpose({ refresh: () => load() })
         />
         <p class="dim" style="margin: 0 0 10px">
           用户名默认 = 姓名拼音 + id（张三 1001 → zhangsan1001，多音字可在预览里改）；初始密码每人随机生成，
-          建号后导出表格发放；id 即站内用户 ID。支持 GBK/UTF-8 编码（Excel 直接另存的 CSV 可用）。
+          建号后导出表格发放；id 即站内用户 ID，可留空自动顺延分配（预览表可见可改，与已占用号冲突会标红提示）。
+          支持 GBK/UTF-8 编码（Excel 直接另存的 CSV 可用）。
         </p>
         <div class="import-actions">
           <el-button @click="downloadTemplate">⬇ 下载模板</el-button>
@@ -553,9 +554,10 @@ defineExpose({ refresh: () => load() })
         </p>
         <el-table :data="previewRows" size="small" max-height="380" :row-class-name="importRowClass">
           <el-table-column label="行号" prop="row" width="64" />
-          <el-table-column label="ID" width="120">
+          <el-table-column label="ID" width="130">
             <template #default="{ row }">
-              <el-input v-model.number="row.id" size="small" :disabled="!!row.problems?.length" />
+              <el-input v-model.number="row.id" size="small" :disabled="!!row.problems?.length" style="width: 78px" />
+              <el-tag v-if="row.auto_id" size="small" type="info" style="margin-left: 4px">自动</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="姓名" prop="name" width="90" show-overflow-tooltip />

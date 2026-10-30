@@ -512,6 +512,9 @@ export const adminApi = {
     post<{ balance: number }>(`/admin/users/${id}/jade-adjust`, { delta, reason }),
   // 实物兑换管理（v0.33-②，root）
   shopItems: () => get<{ list: ShopItem[] }>('/admin/shop/items'),
+  // 导航待办徽标（v0.35-①）：字段级权限——未授权的字段后端直接省略
+  todoCounts: () =>
+    get<{ discuss_reports?: number; shop_orders?: number }>('/admin/todo-counts'),
   shopUpsertItem: (body: Partial<ShopItem> & { name: string; price: number }) =>
     post<{ id: number }>('/admin/shop/items', body),
   shopDeleteItem: (id: number) => del<{ deleted: number }>(`/admin/shop/items/${id}`),

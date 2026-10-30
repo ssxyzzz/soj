@@ -155,6 +155,11 @@ function fmtNext(at: string | undefined) {
         </span>
         <span v-else class="dim">读取中…</span>
       </el-form-item>
+      <el-form-item label="晋级规则">
+        <span class="dim">
+          一年级 → 六年级 → 初一 → 初三 → 高一 → 高三 → 已毕业，每年 9/1 自动进一档；花名册/编辑里的年级别名（如 7 / 七年级）入库即归一为标准名（初一）
+        </span>
+      </el-form-item>
       <el-form-item label="各档位在册">
         <span v-if="promo && promoTotal" class="grade-counts">
           <span

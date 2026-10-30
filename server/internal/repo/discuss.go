@@ -509,6 +509,11 @@ func (r *Repo) ListDiscussReports(ctx context.Context, status string, page, page
 	return list, total, nil
 }
 
+// CountOpenDiscussReports 待处理举报数（后台导航徽标）。
+func (r *Repo) CountOpenDiscussReports(ctx context.Context) (int64, error) {
+	return r.discussReports.CountDocuments(ctx, bson.M{"status": "open"})
+}
+
 // ResolveDiscussReports 批量结案（action: dismiss|delete|warn|mute，处置由 handler 执行）。
 func (r *Repo) ResolveDiscussReports(ctx context.Context, ids []int64, action string, byUID int64) error {
 	_, err := r.discussReports.UpdateMany(ctx,

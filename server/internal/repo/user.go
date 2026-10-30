@@ -225,6 +225,33 @@ func (r *Repo) SeedUserCounter(ctx context.Context) error {
 	return err
 }
 
+// PeekUserSeq 预读下一个自动分配的用户 ID（v0.34 花名册预览：id 留空的行在预览阶段
+// 预分配顺延号展示，不消耗计数器——真正建号走 CreateUserWithProfile 指定该号）。
+// 口径与 nextUserSeq 一致：max(计数器, 注册取号起点-1) + 1；CreateUserWithID 建号
+// 会把计数器 $max 到该号，预读值恒 ≥ 已占用号，不与既有号冲突（并发注册的极小
+// 竞态由建号时唯一索引兜底，行失败原因如实展示）。
+func (r *Repo) PeekUserSeq(ctx context.Context) (int64, error) {
+	start := DefaultUserSeqStart
+	if s, err := r.GetSystemSettings(ctx); err == nil {
+		start = s.UserSeqStartVal()
+	}
+	var doc struct {
+		Seq int64 `bson:"seq"`
+	}
+	err := r.counters.FindOne(ctx, bson.M{"_id": "user"}).Decode(&doc)
+	if IsNotFound(err) {
+		return start, nil // 计数器未初始化：首号 = 起点
+	}
+	if err != nil {
+		return 0, err
+	}
+	next := doc.Seq + 1
+	if next < start {
+		next = start
+	}
+	return next, nil
+}
+
 // CreateUserWithID 管理端手动指定 ID 建号：落库后把 user 计数器 $max 到该 ID，
 // 保证后续自增取号不会撞上手动占用的号（$max 幂等只会前进）。
 func (r *Repo) CreateUserWithID(ctx context.Context, id int64, username, password, nickname, role string) (int64, error) {

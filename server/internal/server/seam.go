@@ -44,6 +44,8 @@ type RepoAPI interface {
 	ConsumeVerifyCode(ctx context.Context, id int64) error
 	CountAllUsers(ctx context.Context) (int64, error)
 	CountBroadcastsToday(ctx context.Context) (int64, error)
+	CountOpenDiscussReports(ctx context.Context) (int64, error)
+	CountPendingShopOrders(ctx context.Context) (int64, error)
 	CountSubmissionsSince(ctx context.Context, since time.Time) (int64, error)
 	CountUserAcceptedAnswers(ctx context.Context, uid int64) (int64, error)
 	CountUserDiscussTopicsToday(ctx context.Context, uid int64) (int64, error)
@@ -61,6 +63,7 @@ type RepoAPI interface {
 	CreateUserWithPassword(ctx context.Context, username, password, nickname, role string) (int64, error)
 	// v0.34 用户档案批：花名册建号 / 年级晋级 / 批量查重
 	CreateUserWithProfile(ctx context.Context, id int64, username, password, nickname, role string, p repo.UserProfile) (int64, error)
+	PeekUserSeq(ctx context.Context) (int64, error)
 	EnsureGradePromotion(ctx context.Context) (int64, error)
 	ForceGradePromotion(ctx context.Context) (int64, error)
 	GradePromotionInfo(ctx context.Context) (*repo.GradePromoInfo, error)

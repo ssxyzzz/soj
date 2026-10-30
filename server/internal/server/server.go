@@ -416,6 +416,8 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.GET("/ai/config", RequireRoot(), h.AdminGetAIConfig)
 				adminG.POST("/ai/config", RequireRoot(), h.AdminSaveAIConfig)
 				adminG.GET("/ai/calls", RequireRoot(), h.AdminAiCalls)
+				// 导航待办徽标（v0.35-①）：跨面板计数，字段级权限在 handler 内判（见 AdminTodoCounts）
+				adminG.GET("/todo-counts", h.AdminTodoCounts)
 			}
 		}
 	}

@@ -1069,6 +1069,7 @@ export interface GradePromotionInfo {
 export interface UserImportRow {
   row: number
   id: number
+  auto_id?: boolean // CSV 里 id 留空、由预览预分配的顺延号（「自动」标展示）
   name: string
   gender: string
   grade: string

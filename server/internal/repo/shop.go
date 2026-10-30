@@ -199,6 +199,11 @@ func (r *Repo) ListShopOrders(ctx context.Context, status string, page, pageSize
 	return list, total, cursor.All(ctx, &list)
 }
 
+// CountPendingShopOrders 待发货订单数（后台导航徽标）。
+func (r *Repo) CountPendingShopOrders(ctx context.Context) (int64, error) {
+	return r.db.Collection("shopOrders").CountDocuments(ctx, bson.M{"status": ShopOrderPending})
+}
+
 // MyShopOrders 本人订单。
 func (r *Repo) MyShopOrders(ctx context.Context, uid int64) ([]*ShopOrder, error) {
 	cursor, err := r.db.Collection("shopOrders").Find(ctx, bson.M{"uid": uid},
