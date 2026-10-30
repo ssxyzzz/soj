@@ -23,8 +23,8 @@ func TestGradeNameRoundTrip(t *testing.T) {
 	if GradeName(GradeGraduated) != "已毕业" {
 		t.Error("13 档应为已毕业")
 	}
-	if ParseGrade("已毕业") != 0 {
-		t.Error("已毕业是终态，不可作为输入档位解析（导入/编辑入口不收）")
+	if ParseGrade("已毕业") != GradeGraduated {
+		t.Error("已毕业应可显式选定（终态：晋级 $inc 不碰 13 档）")
 	}
 }
 

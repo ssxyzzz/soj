@@ -236,7 +236,7 @@ func userImportParse(records [][]string, autoIDStart int64) (rows []userImportRo
 			if no := repo.ParseGrade(row.Grade); no > 0 {
 				row.Grade = repo.GradeName(no)
 			} else {
-				row.Problems = append(row.Problems, "年级无法识别（支持：一年级…高三 / 初一…初三 / 数字 1-12）")
+				row.Problems = append(row.Problems, "年级无法识别（支持：一年级…高三 / 初一…初三 / 已毕业 / 数字 1-12）")
 			}
 		}
 

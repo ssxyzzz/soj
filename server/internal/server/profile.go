@@ -187,7 +187,7 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 		if no := repo.ParseGrade(g); no > 0 || g == "" {
 			patch.GradeNo = &no
 		} else {
-			fail(c, http.StatusBadRequest, "年级无法识别（支持：一年级…高三 / 初一…初三 / 数字 1-12）")
+			fail(c, http.StatusBadRequest, "年级无法识别（支持：一年级…高三 / 初一…初三 / 已毕业 / 数字 1-12）")
 			return
 		}
 	}

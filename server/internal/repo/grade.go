@@ -48,6 +48,7 @@ var gradeAliases = func() map[string]int {
 		"十年级": 10, "十一年级": 11, "十二年级": 12,
 		"小一": 1, "小二": 2, "小三": 3, "小四": 4, "小五": 5, "小六": 6,
 		"初一新生": 7, "高一新生": 10,
+		"已毕业": GradeGraduated, // 终态可显式选定（2026-10-30 验收调整：下拉可选而解析拒绝的自相矛盾修复）
 	}
 	for k, v := range extra {
 		m[k] = v
@@ -59,7 +60,8 @@ var gradeAliases = func() map[string]int {
 	return m
 }()
 
-// ParseGrade 年级文本 → 档位：中文别名 → 数字 1–12 → 空串/未知返回 0（未设置）。
+// ParseGrade 年级文本 → 档位：中文别名（含「已毕业」终态——下拉可选、root 可显式
+// 标记离校学生；晋级 $inc 只碰 1–12 档，13 落上不动）→ 数字 1–12 → 空串/未知返回 0。
 func ParseGrade(s string) int {
 	t := strings.TrimSpace(s)
 	if t == "" {
