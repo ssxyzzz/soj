@@ -128,6 +128,8 @@ const canUnlockSolutions = computed(
     (problem.value.solution_unlock_price ?? 0) > 0,
 )
 const unlocking = ref(false)
+// AI 助教是否启用（AiTutorPanel 拉状态后回报；决定「答案解析」卡是否为 AI 单独出现）
+const aiEnabled = ref(false)
 async function unlockSolutions() {
   const p = problem.value
   if (!p) return
@@ -440,21 +442,18 @@ onUnmounted(stopPolling)
           <p v-else class="hint">还没有提交过本题。</p>
         </RailCard>
 
-        <!-- AI 助教（v0.33-④）：三级提示 + 找 bug 指引；AI 未配置整体隐藏、赛时封锁服务端把关 -->
-        <RailCard v-if="userStore.token && !problem.locked" ov="助教" title="AI 助教" class="aside-card">
-          <AiTutorPanel :pid="problem.id" />
-        </RailCard>
-
         <!-- 答案解析（v0.23 验收调整）：视频讲解默认可看（不设 AC 门槛），文字题解满分∨老师门槛；
              两钮同款白底黑字；比赛/考试锁定期整卡不显示。
-             玉解锁（v0.33-②）：未达门槛的学生可花玉解锁文字题解（难度 × 系数定价，解锁永久） -->
+             玉解锁（v0.33-②）：未达门槛的学生可花玉解锁文字题解（难度 × 系数定价，解锁永久）。
+             AI 助教（v0.33-④ 验收调整）：两级提示并入本卡、置于解析入口上方 -->
         <RailCard
-          v-if="!problem.locked && (problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions)"
+          v-if="!problem.locked && (problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions || aiEnabled)"
           ov="解析"
           title="答案解析"
           class="aside-card"
         >
-          <div class="entry-actions">
+          <AiTutorPanel v-if="userStore.token" :pid="problem.id" class="ai-in-solution" @enabled="aiEnabled = $event" />
+          <div v-if="problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions" class="entry-actions">
             <el-button v-if="problem.solution_video_url" @click="showVideo = true">视频讲解</el-button>
             <el-button v-if="problem.can_view_solutions" @click="openSolutions">文字题解</el-button>
             <el-button v-if="canUnlockSolutions" type="primary" plain :loading="unlocking" @click="unlockSolutions">
@@ -617,5 +616,10 @@ onUnmounted(stopPolling)
 
 .soj-mini-li {
   cursor: pointer;
+}
+
+/* AI 助教并入答案解析卡（v0.33-④ 验收调整）：面板与解析入口之间留间距 */
+.ai-in-solution {
+  margin-bottom: 14px;
 }
 </style>

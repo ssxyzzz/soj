@@ -38,8 +38,9 @@ func (h *Handlers) AdminGetAIConfig(c *gin.Context) {
 		"daily_limit": s.AiDailyLimitVal(),
 		"prices": gin.H{
 			"hint1": s.AiHintPrice1Val(), "hint2": s.AiHintPrice2Val(),
-			"hint3": s.AiHintPrice3Val(), "debug": s.AiDebugPriceVal(),
+			"debug": s.AiDebugPriceVal(),
 		},
+		"tutor_name": s.AiTutorNameVal(),
 		"discount": gin.H{
 			"lv1": *s.AiDiscount1Lv, "pct1": *s.AiDiscount1Pct,
 			"lv2": *s.AiDiscount2Lv, "pct2": *s.AiDiscount2Pct,
@@ -59,10 +60,10 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 		} `json:"providers"`
 		Active     string `json:"active"`
 		DailyLimit *int   `json:"daily_limit"`
+		TutorName  *string `json:"tutor_name"`
 		Prices     *struct {
 			Hint1 *int64 `json:"hint1"`
 			Hint2 *int64 `json:"hint2"`
-			Hint3 *int64 `json:"hint3"`
 			Debug *int64 `json:"debug"`
 		} `json:"prices"`
 		Discount *struct {
@@ -121,14 +122,22 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 		return
 	}
 	// 计费参数走系统设置（同一表单一并保存）
-	if req.DailyLimit != nil || req.Prices != nil || req.Discount != nil {
+	if req.DailyLimit != nil || req.Prices != nil || req.Discount != nil || req.TutorName != nil {
 		if s, err := h.repo.GetSystemSettings(ctx); err == nil {
 			if req.DailyLimit != nil {
 				s.AiDailyLimit = req.DailyLimit
 			}
+			if req.TutorName != nil {
+				name := strings.TrimSpace(*req.TutorName)
+				if n := len([]rune(name)); n < 1 || n > 12 {
+					fail(c, http.StatusBadRequest, "AI 名字需为 1–12 个字（默认：小玉）")
+					return
+				}
+				s.AiTutorName = name
+			}
 			if req.Prices != nil {
-				s.AiHintPrice1, s.AiHintPrice2, s.AiHintPrice3, s.AiDebugPrice =
-					req.Prices.Hint1, req.Prices.Hint2, req.Prices.Hint3, req.Prices.Debug
+				s.AiHintPrice1, s.AiHintPrice2, s.AiDebugPrice =
+					req.Prices.Hint1, req.Prices.Hint2, req.Prices.Debug
 			}
 			if req.Discount != nil {
 				s.AiDiscount1Lv, s.AiDiscount1Pct = req.Discount.Lv1, req.Discount.Pct1

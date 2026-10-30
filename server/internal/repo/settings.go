@@ -77,17 +77,18 @@ type SystemSettings struct {
 	// 实物兑换（v0.33-②）：整模块默认关，仅 root 可开（目录 + 人工履约）。
 	JadeShopEnabled *bool `bson:"jadeShopEnabled,omitempty"`
 	// AI 计费（v0.33-③）：每日合计上限（默认 5 次，提示+找 bug 合计）；基准价
-	//（提示三级 2/4/6、找 bug 8）× 难度倍率 ⌈D/3⌉；等级折扣两档（Lv≥discount1Lv 九折 /
-	// Lv≥discount2Lv 八折，向上取整）。全部后台可调。
+	//（两级提示：理解题目 2 / 算法思路 6、找 bug 8）× 难度倍率 ⌈D/3⌉；等级折扣两档
+	//（Lv≥discount1Lv 九折 / Lv≥discount2Lv 八折，向上取整）。全部后台可调。
 	AiDailyLimit   *int   `bson:"aiDailyLimit,omitempty"`
 	AiHintPrice1   *int64 `bson:"aiHintPrice1,omitempty"`
 	AiHintPrice2   *int64 `bson:"aiHintPrice2,omitempty"`
-	AiHintPrice3   *int64 `bson:"aiHintPrice3,omitempty"`
 	AiDebugPrice   *int64 `bson:"aiDebugPrice,omitempty"`
 	AiDiscount1Lv  *int   `bson:"aiDiscount1Lv,omitempty"`
 	AiDiscount1Pct *int   `bson:"aiDiscount1Pct,omitempty"`
 	AiDiscount2Lv  *int   `bson:"aiDiscount2Lv,omitempty"`
 	AiDiscount2Pct *int   `bson:"aiDiscount2Pct,omitempty"`
+	// AI 助教名字（v0.33-④ 验收调整：默认「小玉」，1–12 字，前端面板/按钮文案统一读）。
+	AiTutorName string `bson:"aiTutorName,omitempty"`
 }
 
 const (
@@ -121,14 +122,14 @@ const (
 	DefaultJadeBountyMax          = 500
 	// AI 计费（v0.33-③）默认值。
 	DefaultAiDailyLimit   = 5
-	DefaultAiHintPrice1   = 2
-	DefaultAiHintPrice2   = 4
-	DefaultAiHintPrice3   = 6
+	DefaultAiHintPrice1   = 2 // 两级提示：理解题目
+	DefaultAiHintPrice2   = 6 // 算法思路
 	DefaultAiDebugPrice   = 8
 	DefaultAiDiscount1Lv  = 5 // Lv.5–7 九折
 	DefaultAiDiscount1Pct = 90
 	DefaultAiDiscount2Lv  = 8 // Lv.8+ 八折
 	DefaultAiDiscount2Pct = 80
+	DefaultAiTutorName    = "小玉"
 )
 
 func downloadLimitPtr(v int) *int { return &v }
@@ -269,9 +270,6 @@ func (s *SystemSettings) normalizeDiscuss() {
 	}
 	if s.AiHintPrice2 == nil || *s.AiHintPrice2 < 0 {
 		s.AiHintPrice2 = int64Ptr(DefaultAiHintPrice2)
-	}
-	if s.AiHintPrice3 == nil || *s.AiHintPrice3 < 0 {
-		s.AiHintPrice3 = int64Ptr(DefaultAiHintPrice3)
 	}
 	if s.AiDebugPrice == nil || *s.AiDebugPrice < 0 {
 		s.AiDebugPrice = int64Ptr(DefaultAiDebugPrice)
@@ -440,13 +438,6 @@ func (s *SystemSettings) AiHintPrice2Val() int64 {
 	return *s.AiHintPrice2
 }
 
-func (s *SystemSettings) AiHintPrice3Val() int64 {
-	if s.AiHintPrice3 == nil || *s.AiHintPrice3 < 0 {
-		return DefaultAiHintPrice3
-	}
-	return *s.AiHintPrice3
-}
-
 func (s *SystemSettings) AiDebugPriceVal() int64 {
 	if s.AiDebugPrice == nil || *s.AiDebugPrice < 0 {
 		return DefaultAiDebugPrice
@@ -454,7 +445,18 @@ func (s *SystemSettings) AiDebugPriceVal() int64 {
 	return *s.AiDebugPrice
 }
 
-// AiPrice 单次调用价格：基准（hint1~3 / debug 按类取）× 难度倍率 ⌈D/3⌉ × 等级折扣，向上取整。
+// AiTutorNameVal AI 助教名字（空/超长回默认「小玉」）。
+func (s *SystemSettings) AiTutorNameVal() string {
+	if s.AiTutorName == "" {
+		return DefaultAiTutorName
+	}
+	if runes := []rune(s.AiTutorName); len(runes) > 12 {
+		return DefaultAiTutorName
+	}
+	return s.AiTutorName
+}
+
+// AiPrice 单次调用价格：基准（hint1/hint2/debug 按类取）× 难度倍率 ⌈D/3⌉ × 等级折扣，向上取整。
 // level 为 0（取不到等级）时不打折；折扣取两档中满足的最高档。
 func (s *SystemSettings) AiPrice(kind string, difficulty, level int) int64 {
 	var base int64
@@ -463,8 +465,6 @@ func (s *SystemSettings) AiPrice(kind string, difficulty, level int) int64 {
 		base = s.AiHintPrice1Val()
 	case "hint2":
 		base = s.AiHintPrice2Val()
-	case "hint3":
-		base = s.AiHintPrice3Val()
 	default: // debug
 		base = s.AiDebugPriceVal()
 	}
@@ -539,8 +539,8 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"aiDailyLimit":           s.AiDailyLimitVal(),
 			"aiHintPrice1":           s.AiHintPrice1Val(),
 			"aiHintPrice2":           s.AiHintPrice2Val(),
-			"aiHintPrice3":           s.AiHintPrice3Val(),
 			"aiDebugPrice":           s.AiDebugPriceVal(),
+			"aiTutorName":            s.AiTutorNameVal(),
 			"aiDiscount1Lv":          aiDiscountLvVal(s.AiDiscount1Lv, DefaultAiDiscount1Lv),
 			"aiDiscount1Pct":         aiDiscountPctVal(s.AiDiscount1Pct, DefaultAiDiscount1Pct),
 			"aiDiscount2Lv":          aiDiscountLvVal(s.AiDiscount2Lv, DefaultAiDiscount2Lv),

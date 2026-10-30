@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { fmtSec } from '@/utils/format'
 // 我的提交弹窗（v0.5.4 ② 拆分自 ProblemDetailView）：列表点行 → 同弹窗切详情
 // （代码/耗时/内存/错误信息/测试点明细）。父层提交后经 refresh() 刷新列表。
+// AI 找 bug（v0.33-④ 验收调整）：详情视图未 AC 提交可让 AI 分析（价格按题拉取、
+// 结果渲染在弹窗尾；服务端把关计费/每日上限/赛时封锁，失败自动退费）。
 import { computed, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { problemApi } from '@/api'
+import { aiTutorApi, problemApi } from '@/api'
 import CodePane from '@/components/CodePane.vue'
+import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, fmtRel, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDesc } from '@/utils/format'
+import { useUserStore } from '@/stores/user'
 import type { Submission } from '@/types'
 
 const props = defineProps<{
@@ -15,6 +19,8 @@ const props = defineProps<{
   problemId: number
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
+
+const userStore = useUserStore()
 
 const PAGE_SIZE = 10
 const mySubs = ref<Submission[]>([])
@@ -62,6 +68,59 @@ function openMineDetail(s: Submission) {
   if (!s.id) return // 补位的空白行不可点
   mineDetail.value = s
   mineView.value = 'detail'
+  aiDebugContent.value = ''
+  loadAiPrice()
+}
+
+// ---- AI 找 bug（v0.33-④）----
+const aiReady = ref(false)
+const aiName = ref('小玉')
+const aiDebugPrice = ref(0)
+const aiDebugging = ref(false)
+const aiDebugContent = ref('')
+
+async function loadAiPrice() {
+  aiReady.value = false
+  if (!userStore.token || !props.problemId) return
+  try {
+    const r = await aiTutorApi.status(props.problemId)
+    aiReady.value = r.enabled
+    aiName.value = r.name ?? '小玉'
+    aiDebugPrice.value = r.debug_price ?? 0
+  } catch {
+    aiReady.value = false
+  }
+}
+
+const canAiDebug = computed(() => {
+  const s = mineDetail.value
+  return !!s && s.status !== 'Accepted' && !isQueueStatus(s.status)
+})
+
+async function onAiDebug() {
+  const s = mineDetail.value
+  if (!s) return
+  try {
+    await ElMessageBox.confirm(
+      `花 ${aiDebugPrice.value} 玉让 ${aiName.value} 分析这份代码的错误？（最小改动修复，不重写）`,
+      `${aiName.value} 找 bug`,
+      { confirmButtonText: `${aiDebugPrice.value} 玉分析`, cancelButtonText: '再想想', type: 'info' },
+    )
+  } catch {
+    return
+  }
+  aiDebugging.value = true
+  aiDebugContent.value = ''
+  try {
+    const r = await aiTutorApi.debug(s.id)
+    aiDebugContent.value = r.content
+    userStore.setJade(r.balance, userStore.jadeCurrency || '玉')
+    ElMessage.success('分析完成')
+  } catch {
+    // 拦截器统一提示（余额不足/每日上限/赛时封锁/生成失败已退费）
+  } finally {
+    aiDebugging.value = false
+  }
 }
 
 defineExpose({ refresh: loadMine })
@@ -137,6 +196,18 @@ defineExpose({ refresh: loadMine })
             <SubStatus :status="mineDetail.status" :score="mineDetail.score" />
           </el-tooltip>
           <SubStatus v-else :status="mineDetail.status" :score="mineDetail.score" />
+          <!-- AI 找 bug（v0.33-④）：未 AC 且非队列态可分析 -->
+          <el-button
+            v-if="aiReady && canAiDebug"
+            link
+            type="warning"
+            size="small"
+            class="lk-btn"
+            :loading="aiDebugging"
+            @click="onAiDebug"
+          >
+            ✦ {{ aiName }} 找 bug（{{ aiDebugPrice }} 玉）
+          </el-button>
         </el-descriptions-item>
         <el-descriptions-item label="语言">{{ mineDetail.language }}</el-descriptions-item>
         <el-descriptions-item label="总耗时">{{ fmtSec(mineDetail.time_ms) }}</el-descriptions-item>
@@ -175,6 +246,11 @@ defineExpose({ refresh: loadMine })
       <template v-else-if="mineDetail.error_info">
         <div class="detail-sub">错误信息</div>
         <pre class="mono sub-code">{{ mineDetail.error_info }}</pre>
+      </template>
+      <!-- AI 找 bug 结果（v0.33-④）：错误定位 → 原因 → 最小修复建议 -->
+      <template v-if="aiDebugContent">
+        <div class="detail-sub ai-debug-sub">✦ {{ aiName }} 找 bug</div>
+        <MdView :content="aiDebugContent" variant="compact" auto-height />
       </template>
     </template>
   </el-dialog>

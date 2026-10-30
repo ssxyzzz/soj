@@ -20,7 +20,8 @@ const saving = ref(false)
 const providers = ref<ProviderRow[]>([])
 const active = ref('')
 const dailyLimit = ref(5)
-const prices = reactive({ hint1: 2, hint2: 4, hint3: 6, debug: 8 })
+const tutorName = ref('小玉')
+const prices = reactive({ hint1: 2, hint2: 6, debug: 8 })
 const discount = reactive({ lv1: 5, pct1: 90, lv2: 8, pct2: 80 })
 
 // 预设快捷填充（点击填入 BaseURL + 推荐模型；key 仍需手填）
@@ -52,6 +53,7 @@ async function load() {
     providers.value = (r.providers ?? []).map((p) => ({ ...p, api_key: '' }))
     active.value = r.active ?? ''
     dailyLimit.value = r.daily_limit ?? 5
+    tutorName.value = r.tutor_name ?? '小玉'
     Object.assign(prices, r.prices ?? {})
     Object.assign(discount, r.discount ?? {})
   } finally {
@@ -72,6 +74,7 @@ async function save() {
       })),
       active: active.value,
       daily_limit: dailyLimit.value,
+      tutor_name: tutorName.value.trim(),
       prices: { ...prices },
       discount: { ...discount },
     })
@@ -159,15 +162,20 @@ onMounted(() => {
 
     <el-divider content-position="left">计费</el-divider>
     <el-form label-position="left" label-width="190px" style="max-width: 720px">
+      <el-form-item label="AI 名字">
+        <el-input v-model="tutorName" maxlength="12" style="width: 180px" />
+        <span class="dim" style="margin-left: 8px">
+          学生端 AI 助教的称呼（1–12 字，默认「小玉」；面板、找 bug 按钮等文案统一显示）
+        </span>
+      </el-form-item>
       <el-form-item label="每日每人调用上限（次）">
         <el-input-number v-model="dailyLimit" :min="1" :max="100" />
         <span class="dim" style="margin-left: 8px">提示 + 找 bug 合计；教师/root 不扣玉不计次</span>
       </el-form-item>
-      <el-form-item label="基准价（提示①/②/③、找 bug）">
+      <el-form-item label="基准价（理解题目 / 算法思路 / 找 bug）">
         <div class="price-row">
           <el-input-number v-model="prices.hint1" :min="0" :max="1000" size="small" />
           <el-input-number v-model="prices.hint2" :min="0" :max="1000" size="small" />
-          <el-input-number v-model="prices.hint3" :min="0" :max="1000" size="small" />
           <el-input-number v-model="prices.debug" :min="0" :max="1000" size="small" />
         </div>
       </el-form-item>

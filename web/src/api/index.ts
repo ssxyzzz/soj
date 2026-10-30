@@ -504,14 +504,16 @@ export const adminApi = {
       providers: { name: string; base_url: string; model: string; has_key: boolean }[]
       active: string
       daily_limit: number
-      prices: { hint1: number; hint2: number; hint3: number; debug: number }
+      tutor_name: string
+      prices: { hint1: number; hint2: number; debug: number }
       discount: { lv1: number; pct1: number; lv2: number; pct2: number }
     }>('/admin/ai/config'),
   aiSaveConfig: (body: {
     providers: { name: string; base_url: string; api_key: string; model: string }[]
     active: string
     daily_limit: number
-    prices: { hint1: number; hint2: number; hint3: number; debug: number }
+    tutor_name: string
+    prices: { hint1: number; hint2: number; debug: number }
     discount: { lv1: number; pct1: number; lv2: number; pct2: number }
   }) => post<{ saved: boolean }>('/admin/ai/config', body),
   aiCalls: (page = 1, uid?: number) =>
@@ -731,6 +733,7 @@ export const aiTutorApi = {
   status: (pid: number) =>
     get<{
       enabled: boolean
+      name?: string
       levels?: AiHintLevel[]
       debug_price?: number
       daily_left?: number

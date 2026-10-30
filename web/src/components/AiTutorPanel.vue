@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// AI 助教面板（v0.33-④）：三级提示（可跳级直购、解锁永久）+ 找 bug 入口提示。
-// 挂在题目页右列与在线编程 workbench 侧栏；AI 未配置时整体隐藏（status.enabled=false）。
-// 赛时封锁由服务端把关（403 带指引文案，拦截器 toast）。
+// AI 助教面板（v0.33-④，验收调整后两级）：①理解题目 ②算法思路（可跳级直购、解锁
+// 永久）。挂在题目页「答案解析」卡内（视频/文字题解入口上方）；AI 未配置整体隐藏，
+// 赛时封锁由服务端把关（403 带指引文案，拦截器 toast）。名字后台可配（默认「小玉」）。
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -11,8 +11,11 @@ import MdView from '@/components/MdView.vue'
 
 const props = defineProps<{ pid: number }>()
 
+const emit = defineEmits<{ (e: 'enabled', v: boolean): void }>()
+
 const userStore = useUserStore()
 const enabled = ref(false)
+const tutorName = ref('小玉')
 const levels = ref<AiHintLevel[]>([])
 const debugPrice = ref(0)
 const dailyLeft = ref(0)
@@ -21,9 +24,8 @@ const buying = ref(0)
 const loading = ref(false)
 
 const levelMeta = [
-  { n: 1, label: '方向提示', desc: '考察什么、往哪想' },
-  { n: 2, label: '算法选型', desc: '具体算法与关键性质' },
-  { n: 3, label: '实现要点', desc: '步骤级拆解（不含代码）' },
+  { n: 1, label: '理解题目', desc: '输入输出、约束与易忽略细节' },
+  { n: 2, label: '算法思路', desc: '算法选型、关键步骤与易错点' },
 ]
 
 async function load() {
@@ -32,6 +34,8 @@ async function load() {
   try {
     const r = await aiTutorApi.status(props.pid)
     enabled.value = r.enabled
+    emit('enabled', r.enabled)
+    tutorName.value = r.name ?? '小玉'
     levels.value = r.levels ?? []
     debugPrice.value = r.debug_price ?? 0
     dailyLeft.value = r.daily_left ?? 0
@@ -46,6 +50,7 @@ async function load() {
     }
   } catch {
     enabled.value = false
+    emit('enabled', false)
   } finally {
     loading.value = false
   }
@@ -56,8 +61,8 @@ async function buy(lv: AiHintLevel) {
     await ElMessageBox.confirm(
       lv.has_content
         ? `花 ${lv.price} 玉解锁「${levelMeta[lv.level - 1].label}」？解锁永久可见。`
-        : `花 ${lv.price} 玉生成并解锁「${levelMeta[lv.level - 1].label}」？首购触发 AI 生成（稍等片刻），解锁永久可见。`,
-      'AI 助教',
+        : `花 ${lv.price} 玉让 ${tutorName.value} 生成「${levelMeta[lv.level - 1].label}」？解锁永久可见。`,
+      tutorName.value,
       { confirmButtonText: `${lv.price} 玉解锁`, cancelButtonText: '再想想', type: 'info' },
     )
   } catch {
@@ -91,7 +96,7 @@ defineExpose({ refresh: load })
 <template>
   <div v-if="enabled" class="ai-tutor" v-loading="loading">
     <div class="ai-head">
-      <span class="ai-badge">✦ AI 助教</span>
+      <span class="ai-badge">✦ {{ tutorName }}（AI 助教）</span>
       <span class="dim ai-daily">今日剩余 {{ dailyLeft }} 次</span>
     </div>
     <div v-for="meta in levelMeta" :key="meta.n" class="ai-level">
@@ -114,7 +119,7 @@ defineExpose({ refresh: load })
       <MdView v-if="hintContent[meta.n]" :content="hintContent[meta.n]" variant="compact" auto-height class="ai-hint-body" />
     </div>
     <p class="dim ai-foot">
-      找 bug（{{ debugPrice }} 玉起，按难度计价）：在「我的提交」未通过记录上点「AI 找 bug」。
+      找 bug（{{ debugPrice }} 玉起，按难度计价）：在「我的提交」里点开未通过的提交，用「{{ tutorName }} 找 bug」。
     </p>
   </div>
 </template>
