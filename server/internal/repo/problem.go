@@ -256,8 +256,11 @@ func (r *Repo) GetProblemMetas(ctx context.Context, ids []int64) (map[int64]*Pro
 // 过滤与分页都在 DB 侧完成——原「全量 cursor.All 后内存过滤切片」在万题规模
 // 每请求传输几十 MB；下推后每请求只回当前页（≤100 条）。
 type ProblemListFilter struct {
-	ExcludeIDs []int64 // 反向排除（隐藏题 ∪ 非运行期锁题），由 handler 按视角算好（特权视角不排除）
-	Q          string  // 标题子串（不分大小写）∨ 题号精确匹配
+	ExcludeIDs []int64 // 反向排除（非运行期锁题），由 handler 按视角算好（特权视角不排除）
+	// 正向排除隐藏题（v0.38）：hidden:{$ne:true} 走 hidden 索引——替代「隐藏题全量
+	// 拉 ID 后 $nin」，备题/下架题多时 $nin 集合线性膨胀且 $nin 本身不可走索引
+	ExcludeHidden bool
+	Q             string // 标题子串（不分大小写）∨ 题号精确匹配
 	// 搜索命中的知识点/来源标签（v0.26.1：搜索词命中树节点名 → 子树展开），与 Q 并集；
 	// 与下方 Tags/MetaTags 显式筛选（AND）正交——搜索从宽、筛选从严
 	SearchTags     []int64
@@ -272,6 +275,9 @@ func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, 
 	query := bson.M{}
 	if len(f.ExcludeIDs) > 0 {
 		query["_id"] = bson.M{"$nin": f.ExcludeIDs}
+	}
+	if f.ExcludeHidden {
+		query["hidden"] = bson.M{"$ne": true}
 	}
 	// 搜索条件组（v0.26.1）：标题/题号/知识点/来源标签命中取并集，与其余过滤条件 AND
 	var searchOr bson.A

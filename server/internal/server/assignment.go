@@ -616,10 +616,12 @@ func (h *Handlers) AssignmentExport(c *gin.Context) {
 	}
 	// 展示名统一用昵称（空则回退用户名），不再读取真实姓名
 	header := []string{"排名", "昵称"}
+	// v0.38 批量摘要取标题（原逐题 GetProblem 全量读，N+1）
+	titles, _ := h.repo.ProblemSummariesByIDs(ctx, a.Problems)
 	for _, pid := range a.Problems {
 		title := ""
-		if p, err := h.repo.GetProblem(ctx, pid); err == nil {
-			title = p.Title
+		if s := titles[pid]; s != nil {
+			title = s.Title
 		}
 		if title != "" {
 			header = append(header, fmt.Sprintf("P%d %s", pid, title))

@@ -57,6 +57,18 @@ type Repo struct {
 	setMu    sync.RWMutex
 	setCache *SystemSettings
 	setAt    time.Time
+
+	// 题目 AC 率小缓存（v0.38）：掉落概率输入的 10 分钟缓存——判题回写路径的
+	// MaybeAwardJade 不再每次首 AC 都对全题提交做聚合；概率口径允许陈旧
+	//（掉落额本就按 AC 时点固化进 awards）。
+	acMu    sync.Mutex
+	acRates map[int64]acRateEntry
+}
+
+type acRateEntry struct {
+	rate      float64
+	attempted bool
+	at        time.Time
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -112,6 +124,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		jadeAwards:    db.Collection("jadeAwards"),
 		jadeLedger:    db.Collection("jadeLedger"),
 		jadeBalances:  db.Collection("jadeBalances"),
+		acRates:       map[int64]acRateEntry{},
 	}, nil
 }
 
@@ -136,6 +149,14 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		// v0.25 万题体检：考试侧提交查询（榜单/整场/单人明细）与 contestId 同构，
 		// 缺了它 examId 查询全表扫描，考试进行中每次刷提交都扫全库
 		{Keys: bson.D{{Key: "examId", Value: 1}, {Key: "_id", Value: -1}}},
+		// v0.38 万题库预留：首页统计按时间窗计数/均值（CountSubmissionsSince /
+		// AvgJudgeMSRecent 原为 createdAt 全表扫 + 内存排序）
+		{Keys: bson.D{{Key: "createdAt", Value: -1}}},
+		// v0.38：榜单/做题状态/题单统计类聚合的公共前导过滤（RankBoard/RankMe/
+		// UserBestStatuses/ListProblemStats 全部先 status/published 大过滤再分 uid/pid）
+		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "published", Value: 1}, {Key: "uid", Value: 1}, {Key: "pid", Value: 1}}},
+		// v0.38：效率榜按题取 AC 最快（原内存排序该题全部提交）
+		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "status", Value: 1}, {Key: "timeMs", Value: 1}}},
 	})
 	if err != nil {
 		return err

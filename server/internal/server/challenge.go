@@ -204,7 +204,7 @@ func (h *Handlers) SelfTestRun(c *gin.Context) {
 		fail(c, http.StatusTooManyRequests, "自测过于频繁：每分钟最多 10 次")
 		return
 	}
-	p, err := h.repo.GetProblem(c.Request.Context(), pid)
+	p, err := h.repo.GetProblemMeta(c.Request.Context(), pid) // v0.38 瘦读：判题元数据够用，省题面双份 512KB
 	if repo.IsNotFound(err) {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return

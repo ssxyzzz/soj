@@ -86,9 +86,13 @@ func (f *fakeRepo) ListProblemsPage(_ context.Context, flt repo.ProblemListFilte
 	}
 	var out []*repo.Problem
 	for _, p := range f.problems {
-		if !excluded[p.ID] {
-			out = append(out, p)
+		if excluded[p.ID] {
+			continue
 		}
+		if flt.ExcludeHidden && p.Hidden {
+			continue // v0.38：隐藏题由正向条件排除（与真库 hidden:{$ne:true} 同语义）
+		}
+		out = append(out, p)
 	}
 	return out, int64(len(out)), nil
 }
@@ -114,6 +118,11 @@ func (f *fakeRepo) GetProblem(_ context.Context, id int64) (*repo.Problem, error
 		return p, nil
 	}
 	return nil, mongo.ErrNoDocuments
+}
+
+// GetProblemMeta 瘦读：fake 全量同款（v0.38 提交/自测链路改走瘦读后测试需要）
+func (f *fakeRepo) GetProblemMeta(ctx context.Context, id int64) (*repo.Problem, error) {
+	return f.GetProblem(ctx, id)
 }
 
 func (f *fakeRepo) CreateSubmission(context.Context, int64, string, *repo.Problem, string, string, *repo.Contest, *repo.Contest, int64) (int64, error) {
@@ -337,12 +346,20 @@ func TestListProblemsThreeViews(t *testing.T) {
 		if got[1002] || !got[1001] || got[1003] != tc.seeExamPb {
 			t.Fatalf("%s 视角可见集 = %v（期望 1003 可见=%v）", tc.role, got, tc.seeExamPb)
 		}
+		// v0.38 契约：隐藏题由 ExcludeHidden 正向排除（走 hidden 索引），
+		// ExcludeIDs 只装非运行期锁题；特权视角两者全空
 		excl := map[int64]bool{}
 		for _, id := range f.lastFilter.ExcludeIDs {
 			excl[id] = true
 		}
-		if !excl[1002] || excl[1003] != tc.exclExam {
-			t.Fatalf("%s 视角过滤契约 = %v（期望含 1002、1003 排除=%v）", tc.role, excl, tc.exclExam)
+		if !f.lastFilter.ExcludeHidden {
+			t.Fatalf("%s 视角过滤契约：期望 ExcludeHidden=true", tc.role)
+		}
+		if excl[1002] {
+			t.Fatalf("%s 视角过滤契约：隐藏题不应再进 ExcludeIDs（%v）", tc.role, excl)
+		}
+		if excl[1003] != tc.exclExam {
+			t.Fatalf("%s 视角过滤契约 = %v（期望 1003 排除=%v）", tc.role, excl, tc.exclExam)
 		}
 	}
 

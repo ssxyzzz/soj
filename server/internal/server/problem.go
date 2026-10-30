@@ -112,12 +112,9 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		filter.Difficulty = append(filter.Difficulty, d)
 	}
 	if !privileged {
-		hidden, err := h.repo.HiddenProblemIDs(ctx)
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "读取题库失败")
-			return
-		}
-		filter.ExcludeIDs = append(filter.ExcludeIDs, hidden...)
+		// v0.38：隐藏题改正向 hidden:{$ne:true}（repo 走 hidden 索引），省掉每请求
+		// 一次隐藏题全量拉取 + 大 $nin；ExcludeIDs 只装非运行期锁题（小集合）
+		filter.ExcludeHidden = true
 		for pid, lk := range lockMap {
 			if lk.Phase != "running" {
 				filter.ExcludeIDs = append(filter.ExcludeIDs, pid)

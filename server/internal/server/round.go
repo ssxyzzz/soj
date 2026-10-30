@@ -107,12 +107,12 @@ func (h *Handlers) collectRoundProblems(c *gin.Context, s roundScope, ids []int6
 		if seen[pid] {
 			continue
 		}
-		seen[pid] = true
-		if _, err := h.repo.GetProblem(ctx, pid); err != nil {
-			fail(c, http.StatusNotFound, "题目不存在: "+strconv.FormatInt(pid, 10))
-			return nil, false
-		}
-		problems = append(problems, repo.ContestProblem{PID: pid, Score: 100})
+			seen[pid] = true
+			if _, err := h.repo.GetProblemMeta(ctx, pid); err != nil { // v0.38 瘦读（存在性检查不带题面）
+				fail(c, http.StatusNotFound, "题目不存在: "+strconv.FormatInt(pid, 10))
+				return nil, false
+			}
+			problems = append(problems, repo.ContestProblem{PID: pid, Score: 100})
 	}
 	return problems, true
 }
@@ -541,7 +541,7 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 				continue
 			}
 			seen[pid] = true
-			if _, err := h.repo.GetProblem(ctx, pid); err != nil {
+			if _, err := h.repo.GetProblemMeta(ctx, pid); err != nil { // v0.38 瘦读（存在性检查不带题面）
 				fail(c, http.StatusNotFound, "题目不存在: "+strconv.FormatInt(pid, 10))
 				return
 			}
@@ -1105,10 +1105,16 @@ func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
 	}
 	// 展示名统一用昵称（空则回退用户名），不再读取真实姓名
 	header := []string{"排名", "昵称"}
+	// v0.38 批量摘要取标题（原逐题 GetProblem 全量读，N+1）
+	ctPids := make([]int64, 0, len(ct.Problems))
+	for _, cp := range ct.Problems {
+		ctPids = append(ctPids, cp.PID)
+	}
+	titles, _ := h.repo.ProblemSummariesByIDs(ctx, ctPids)
 	for _, cp := range ct.Problems {
 		title := ""
-		if p, err := h.repo.GetProblem(ctx, cp.PID); err == nil {
-			title = p.Title
+		if s := titles[cp.PID]; s != nil {
+			title = s.Title
 		}
 		if title == "" {
 			title = fmt.Sprintf("P%d", cp.PID) // 题目已删除时以题号兜底

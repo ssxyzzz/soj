@@ -307,7 +307,25 @@ func (r *Repo) UnlockSolutionWithJade(ctx context.Context, uid, pid int64, amoun
 
 // problemACRate 该题 AC 率（去重用户口径，与难度迁移启发式同源）：
 // 做过 = 有非取消提交的不同用户，满分 = 其中该题最高分 ≥ 100 的用户。
+// v0.38 加 10 分钟缓存：聚合挂在判题回写路径（MaybeAwardJade），掉落概率是
+// 唯一消费面——陈旧无害（掉落额本就按 AC 时点固化进 awards）。
 func (r *Repo) problemACRate(ctx context.Context, pid int64) (rate float64, attempted bool, err error) {
+	r.acMu.Lock()
+	if e, ok := r.acRates[pid]; ok && time.Since(e.at) < 10*time.Minute {
+		r.acMu.Unlock()
+		return e.rate, e.attempted, nil
+	}
+	r.acMu.Unlock()
+	rate, attempted, err = r.problemACRateDB(ctx, pid)
+	if err == nil {
+		r.acMu.Lock()
+		r.acRates[pid] = acRateEntry{rate: rate, attempted: attempted, at: time.Now()}
+		r.acMu.Unlock()
+	}
+	return rate, attempted, err
+}
+
+func (r *Repo) problemACRateDB(ctx context.Context, pid int64) (rate float64, attempted bool, err error) {
 	cursor, err := r.submissions.Aggregate(ctx, []bson.M{
 		{"$match": bson.M{"pid": pid, "status": bson.M{"$ne": StatusCancelled}}},
 		{"$group": bson.M{"_id": "$uid", "best": bson.M{"$max": "$score"}}},

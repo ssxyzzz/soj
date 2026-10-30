@@ -46,7 +46,7 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	p, err := h.repo.GetProblem(ctx, req.ProblemID)
+	p, err := h.repo.GetProblemMeta(ctx, req.ProblemID) // v0.38 瘦读：判题元数据够用，省题面双份 512KB
 	if repo.IsNotFound(err) {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return

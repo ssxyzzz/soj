@@ -154,6 +154,22 @@ func (h *Handlers) GetLists(c *gin.Context) {
 	preps := make([]cardPrep, 0, len(all))
 	uniqAll := map[int64]bool{}
 	var allPIDs []int64
+	// 摘要一次批量取（v0.38）：原每张卡单独 ProblemSummariesByIDs——N 张卡 = N 次往返，
+	// 高延迟链路上题单页首载线性变慢；下面 UserBestStatuses/ListParticipantPairs 本就
+	// 全量收集 allPIDs 一次查，摘要同口径（隐藏题单的题不进可见面，随卡跳过）
+	flatOfAll := make([]int64, 0, len(all)*8)
+	for _, l := range all {
+		manage := logged && (role == repo.RoleRoot || uid == l.CreatedBy)
+		if l.Hidden && !manage {
+			continue
+		}
+		flatOfAll = append(flatOfAll, repo.FlattenPIDs(l.Chapters)...)
+	}
+	sumsAll, err := h.repo.ProblemSummariesByIDs(c.Request.Context(), flatOfAll)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题单失败")
+		return
+	}
 	for _, l := range all {
 		manage := logged && (role == repo.RoleRoot || uid == l.CreatedBy)
 		if l.Hidden && !manage {
@@ -162,14 +178,9 @@ func (h *Handlers) GetLists(c *gin.Context) {
 		p := cardPrep{l: l, manage: manage, diffs: make([]int, 10)}
 		// 卡片题数按观察者可见口径：全量可见位或创建者看全量，否则剔隐藏题
 		seeHidden := manage || seeAll
-		sums, err := h.repo.ProblemSummariesByIDs(c.Request.Context(), repo.FlattenPIDs(l.Chapters))
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "读取题单失败")
-			return
-		}
 		uniq := map[int64]bool{}
 		for _, pid := range repo.FlattenPIDs(l.Chapters) {
-			s := sums[pid]
+			s := sumsAll[pid]
 			if s == nil || (s.Hidden && !seeHidden) {
 				continue
 			}
