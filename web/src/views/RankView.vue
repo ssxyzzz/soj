@@ -26,12 +26,39 @@ const { list, total, page, pageSize, loading, load } = usePagedList<RankItem>(as
 // URL 即状态（v0.39）：页码进 query，返回不丢页（仅页码，榜单无筛选）
 const lq = useListQuery()
 
-// v3-full 排名页：前三名领奖台卡（渐变大数字 + 首字头像）；仅第一页展示
-const podium = computed(() => (page.value === 1 ? list.value.slice(0, 3) : []))
+// v3-full 排名页：前三名领奖台卡（渐变大数字 + 首字头像）；仅第一页展示；
+// 连击/坚持榜用 gameRows 前三（行形状对齐 rank/solved 字段供模板复用）
+const podium = computed<Record<string, unknown>[]>(() => {
+  if (board.value === 'combo' || board.value === 'streak') {
+    return gameRows.value.slice(0, 3).map((r) => ({
+      rank: r.rank, user_id: r.user_id, username: r.username,
+      nickname: r.nickname, value: r.value, solved: r.value, best: r.best,
+    })) as unknown as Record<string, unknown>[]
+  }
+  return page.value === 1 ? (list.value as unknown as Record<string, unknown>[]).slice(0, 3) : []
+})
 // 领奖台展示顺序：2 - 1 - 3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
-const podiumOrder = computed(() => [podium.value[1], podium.value[0], podium.value[2]].filter(Boolean))
+const podiumOrder = computed(() =>
+  (podium.value as Record<string, number | string>[])
+    .slice(0, 3)
+    .map((r) => r as never)
+    .filter(Boolean) as { rank: number; user_id: number; username: string; nickname: string; solved: number; level?: number; value?: number; best?: number }[],
+)
 // 表格：自己的条目置顶（含榜外名次），后面跟当前页榜单——方便查看自己
 const tableRows = computed(() => (me.value ? [me.value, ...list.value] : list.value))
+
+// 页头标题/副标题随榜切换（v0.41 多榜）
+const pageTitle = computed(() =>
+  ({ level: '等级排名', solve: '解题排名', combo: '连击排名', streak: '坚持排名' })[board.value],
+)
+const pageSub = computed(() =>
+  ({
+    level: '按等级与经验排序 · 每页 100 名',
+    solve: '按通过题数排序 · 每页 100 名',
+    combo: '连续 AC 不失误，同题重交不涨 · 当前连击',
+    streak: '每天至少 AC 一题，断更清零 · 当前天数',
+  })[board.value],
+)
 
 // ---- 多榜制（v0.41）：等级/刷题共用 /api/rank 数据（客户端重排），连击/坚持走 game-rank ----
 const board = ref<'level' | 'solve' | 'combo' | 'streak'>('level')
@@ -97,11 +124,11 @@ onMounted(() => {
   <div class="page">
     <div class="page-head">
       <div class="kicker">LEADERBOARD</div>
-      <h1 class="page-title">解题排名<small>按通过题数排序 · 每页 100 名</small></h1>
+      <h1 class="page-title">{{ pageTitle }}<small>{{ pageSub }}</small></h1>
     </div>
 
     <!-- 领奖台（前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3）；整卡可点进公开主页 -->
-    <div v-if="podium.length" class="podium" v-loading="loading">
+    <div v-if="podium.length" class="podium" v-loading="loading || gameLoading">
       <div
         v-for="p in podiumOrder"
         :key="p.rank"
@@ -116,7 +143,9 @@ onMounted(() => {
         </div>
         <div class="pname">{{ p.nickname || p.username }}</div>
         <TierBadge v-if="p.level" :tier="p.level" kind="level" size="md" />
-        <div class="psolved">解题 <b>{{ p.solved }}</b></div>
+        <div v-if="board === 'combo'" class="psolved">连击 <b>{{ p.value ?? p.solved }}</b></div>
+        <div v-else-if="board === 'streak'" class="psolved">坚持 <b>{{ p.value ?? p.solved }}</b> 天</div>
+        <div v-else class="psolved">解题 <b>{{ p.solved }}</b></div>
       </div>
     </div>
 
