@@ -163,48 +163,54 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 每日一句 + 坚持火焰（v0.41） -->
-    <div class="daily-quote">
-      <span class="dq-text">「{{ dailyQuote }}」</span>
-      <span v-if="streakDays > 0" class="streak-flame" title="连续有 AC 的天数">🔥 连续 {{ streakDays }} 天</span>
-    </div>
-
-    <!-- 今日挑战（v0.41 /api/daily：确定性选题，当日首 AC 掉落 ×2） -->
-    <div v-if="daily" class="dotd">
-      <div>
-        <span class="dotd-cap">今日挑战 · {{ today }}<el-tag v-if="!daily.done" size="small" type="warning" class="ml8">首 AC 掉落 ×2</el-tag><el-tag v-else size="small" type="success" class="ml8">已完成 ✓</el-tag></span>
-        <div class="dotd-title">{{ daily.pid }} {{ daily.title }}</div>
-        <div class="dotd-meta">
-          <TierBadge :tier="daily.difficulty || 3" kind="difficulty" size="sm" />
-          <span v-if="daily.solved_today != null">今日 {{ daily.solved_today }} 人已通过</span>
-        </div>
+    <!-- 今日游戏区（v0.41）：每日一句 / 今日挑战 / 复仇之战 —— 统一卡片语言 -->
+    <div class="game-sec">
+      <div class="gq-row">
+        <span class="gq-text">「{{ dailyQuote }}」</span>
+        <span v-if="streakDays > 0" class="gq-flame" title="连续有 AC 的天数">🔥 连续 {{ streakDays }} 天</span>
       </div>
-      <el-button type="primary" style="margin-left: auto" @click="router.push(`/problems/${daily.pid}`)">
-        {{ daily.done ? '再做一遍' : '接受挑战' }}
-      </el-button>
-    </div>
-    <div v-else-if="stats?.featured" class="dotd">
-      <div>
-        <span class="dotd-cap">今日一题 · {{ today }}</span>
-        <div class="dotd-title">{{ stats.featured.id }} {{ stats.featured.title }}</div>
-        <div class="dotd-meta">
-          <TierBadge :tier="stats.featured.difficulty || 3" kind="difficulty" size="sm" />
-          <span v-if="stats.featured.accept_rate > 0">通过率 {{ stats.featured.accept_rate.toFixed(0) }}%</span>
-        </div>
-      </div>
-      <el-button type="primary" style="margin-left: auto" @click="router.push(`/problems/${stats.featured.id}`)">
-        去做这道题
-      </el-button>
-    </div>
 
-    <!-- 复仇之战（v0.41：错题重战，成功掉落 ×1.5） -->
-    <div v-if="revenge.length" class="dotd revenge">
-      <div>
-        <span class="dotd-cap">⚔️ 复仇之战<small>曾错过的题，掉落 ×1.5</small></span>
-        <div class="rev-list">
-          <button v-for="r in revenge" :key="r.pid" class="rev-row" @click="router.push(`/problems/${r.pid}`)">
-            <b>{{ r.pid }} {{ r.title }}</b>
-            <span class="rev-meta">上次 {{ r.best_score }} 分</span>
+      <div v-if="daily" class="gcard" @click="router.push(`/problems/${daily.pid}`)">
+        <div class="gc-main">
+          <div class="gc-cap">
+            <span class="gc-title">🎯 今日挑战</span>
+            <span class="gc-date">{{ today }}</span>
+            <el-tag v-if="!daily.done" size="small" type="warning" effect="plain">首 AC 掉落 ×2</el-tag>
+            <el-tag v-else size="small" type="success" effect="plain">已完成 ✓</el-tag>
+          </div>
+          <div class="gc-name">{{ daily.pid }} {{ daily.title }}</div>
+          <div class="gc-meta">
+            <TierBadge :tier="daily.difficulty || 3" kind="difficulty" size="sm" />
+            <span v-if="daily.solved_today != null">今日 {{ daily.solved_today }} 人已通过</span>
+          </div>
+        </div>
+        <el-button type="primary">{{ daily.done ? '再做一遍' : '接受挑战' }}</el-button>
+      </div>
+      <div v-else-if="stats?.featured" class="gcard" @click="router.push(`/problems/${stats.featured.id}`)">
+        <div class="gc-main">
+          <div class="gc-cap">
+            <span class="gc-title">📖 今日一题</span>
+            <span class="gc-date">{{ today }}</span>
+          </div>
+          <div class="gc-name">{{ stats.featured.id }} {{ stats.featured.title }}</div>
+          <div class="gc-meta">
+            <TierBadge :tier="stats.featured.difficulty || 3" kind="difficulty" size="sm" />
+            <span v-if="stats.featured.accept_rate > 0">通过率 {{ stats.featured.accept_rate.toFixed(0) }}%</span>
+          </div>
+        </div>
+        <el-button type="primary">去做这道题</el-button>
+      </div>
+
+      <div v-if="revenge.length" class="gcard gc-block">
+        <div class="gc-cap">
+          <span class="gc-title">⚔️ 复仇之战</span>
+          <span class="gc-date">曾错过的题 · 复仇成功掉落 ×1.5</span>
+        </div>
+        <div class="gc-list">
+          <button v-for="r in revenge" :key="r.pid" class="gc-row" @click.stop="router.push(`/problems/${r.pid}`)">
+            <b class="gc-row-name">{{ r.pid }} {{ r.title }}</b>
+            <span class="gc-row-meta">上次 {{ r.best_score }} 分</span>
+            <span class="gc-row-go">去复仇 →</span>
           </button>
         </div>
       </div>
@@ -459,42 +465,164 @@ onMounted(async () => {
   color: var(--soj-ink-3);
 }
 
-/* ---- 今日一题卡：横条（左信息右按钮）---- */
-.dotd {
+/* ---- 今日游戏区（v0.41）：统一卡片语言（每日一句 / 今日挑战 / 复仇之战）---- */
+.game-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 26px 0 6px;
+}
+
+/* 每日一句横条：与卡片同宽同半径，弱一级（蓝软底） */
+.gq-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 18px;
+  border-radius: 14px;
+  background: var(--soj-blue-soft);
+}
+
+.gq-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--soj-blue);
+}
+
+.gq-flame {
+  font-size: 13px;
+  font-weight: 800;
+  color: #b45309;
+  white-space: nowrap;
+}
+
+/* 游戏卡：与 .card 同族（白底 + soj-line + 双层影），横条布局 */
+.gcard {
   display: flex;
   align-items: center;
   gap: 20px;
-  padding: 20px 26px;
-  margin: 26px 0 6px;
-  border-radius: 20px;
+  padding: 16px 22px;
+  border-radius: 16px;
   border: 1px solid rgba(11, 31, 69, 0.07);
-  background: linear-gradient(105deg, var(--el-bg-color) 48%, #eff5fe 90%);
+  background: var(--el-bg-color);
   box-shadow:
     0 1px 2px rgba(11, 31, 69, 0.04),
-    0 14px 36px rgba(11, 31, 69, 0.07);
+    0 10px 28px rgba(11, 31, 69, 0.06);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.dotd-cap {
-  font-size: 11px;
-  font-weight: var(--soj-fw-bold);
-  letter-spacing: 0.16em;
-  color: var(--soj-teal);
+.gcard:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 4px rgba(11, 31, 69, 0.05),
+    0 16px 36px rgba(11, 31, 69, 0.09);
 }
 
-.dotd-title {
-  font-size: 19px;
-  font-weight: var(--soj-fw-heavy);
+.gc-block {
+  display: block;
+  cursor: default;
+}
+
+.gc-cap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gc-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--soj-navy);
+}
+
+.gc-date {
+  font-size: 12px;
+  color: var(--soj-ink-3);
+}
+
+.gc-name {
+  font-size: 18px;
+  font-weight: 800;
   letter-spacing: -0.3px;
   color: var(--soj-navy);
-  margin: 4px 0 6px;
+  margin: 5px 0 4px;
 }
 
-.dotd-meta {
+.gc-meta {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--soj-ink-3);
+}
+
+.gcard :deep(.el-button) {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* 复仇行 */
+.gc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.gc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--el-fill-color-lighter);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.gc-row:hover {
+  background: var(--soj-blue-soft);
+}
+
+.gc-row-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--soj-navy);
+}
+
+.gc-row-meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--soj-ink-3);
+}
+
+.gc-row-go {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--soj-blue);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.gc-row:hover .gc-row-go {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gcard,
+  .gc-row,
+  .gc-row-go {
+    transition: none;
+  }
+  .gcard:hover {
+    transform: none;
+  }
 }
 
 /* ---- 首页分区（最近赛事 / 我的班级）：区块头 + 三列卡 ---- */
@@ -668,79 +796,13 @@ onMounted(async () => {
     display: none;
   }
 
-  .dotd {
+  .gcard {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .dotd :deep(.el-button) {
+  .gcard :deep(.el-button) {
     margin-left: 0 !important;
   }
-}
-</style>
-
-<style scoped>
-/* 每日一句 + 火焰（v0.41） */
-.daily-quote {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: 10px 0 0;
-  padding: 10px 16px;
-  border-radius: 12px;
-  background: var(--soj-blue-soft);
-  font-size: 14px;
-}
-
-.dq-text {
-  color: var(--soj-blue);
-  font-weight: 600;
-}
-
-.streak-flame {
-  font-weight: 800;
-  color: #b45309;
-  white-space: nowrap;
-}
-
-/* 复仇卡 */
-.revenge {
-  border-left: 3px solid #dc2626;
-}
-
-.dotd-cap small {
-  margin-left: 8px;
-  color: var(--el-text-color-secondary);
-  font-weight: 400;
-}
-
-.rev-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 6px;
-}
-
-.rev-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border: none;
-  background: transparent;
-  padding: 6px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  text-align: left;
-}
-
-.rev-row:hover {
-  background: var(--soj-blue-soft);
-}
-
-.rev-meta {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
 }
 </style>
