@@ -257,6 +257,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                       <template v-else>
                         <router-link class="ptitle" :to="`/problems/${row.pid}`"><b>{{ row.title }}</b></router-link>
                         <el-tag v-if="row.hidden" size="small" type="danger" effect="plain" class="ml8">隐藏</el-tag>
+                        <el-tag v-if="row.duplicate" size="small" type="info" effect="plain" class="ml8">重复</el-tag>
                       </template>
                     </template>
                   </el-table-column>
@@ -313,6 +314,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                           <template v-else>
                             <router-link class="ptitle" :to="`/problems/${row.pid}`"><b>{{ row.title }}</b></router-link>
                             <el-tag v-if="row.hidden" size="small" type="danger" effect="plain" class="ml8">隐藏</el-tag>
+                            <el-tag v-if="row.duplicate" size="small" type="info" effect="plain" class="ml8">重复</el-tag>
                           </template>
                         </template>
                       </el-table-column>

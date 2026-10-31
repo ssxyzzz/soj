@@ -89,7 +89,7 @@ function mergeFromList(items: { id: number; title: string }[], skippedHidden: nu
       added++
     }
   }
-  ElMessage.success(`已复制 ${added} 题${skippedHidden ? `，跳过隐藏 ${skippedHidden} 题` : ''}`)
+  ElMessage.success(`已复制 ${added} 题${skippedHidden ? `，跳过隐藏/重复 ${skippedHidden} 题` : ''}`)
 }
 
 // 发起考试

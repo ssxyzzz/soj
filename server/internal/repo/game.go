@@ -156,7 +156,7 @@ func (r *Repo) EnsureDailyProblem(ctx context.Context) (*DailyProblem, error) {
 	seed := bt.YearDay()
 	for d := seed%10 + 1; d >= 1; d-- {
 		filter := bson.M{
-			"difficulty": d, "hidden": bson.M{"$ne": true},
+			"difficulty": d, "hidden": bson.M{"$ne": true}, "duplicate": bson.M{"$ne": true},
 			"visibility": "public", "cases.0": bson.M{"$exists": true},
 			"$or": bson.A{bson.M{"type": bson.M{"$exists": false}}, bson.M{"type": ""}},
 		}

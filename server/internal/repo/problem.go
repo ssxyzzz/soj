@@ -53,6 +53,7 @@ type Problem struct {
 	MemoryLimitKB        int                 `bson:"memoryLimitKb"`
 	Visibility           string              `bson:"visibility"`
 	Hidden               bool                `bson:"hidden"`              // 题目隐藏：无「题库全量可见」权限的视角看不到也不可交（备题用）
+	Duplicate            bool                `bson:"duplicate"`           // 题目重复（v0.47）：与 hidden 同构的门禁语义（学生端全场景不可见），扫描面板一键标记用
 	CreatedBy            int64               `bson:"createdBy"`           // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
 	Tags                 []int64             `bson:"tags"`                // 知识树节点 ID（v0.5.5，2026-10-25 更名），名字与层级由 tags 集合知识树实时解析
 	MetaTags             []int64             `bson:"meta_tags,omitempty"` // 来源标签树节点 ID（2026-10-25 双树：地区/赛事/题库/年份/其他），名字由来源树实时解析
@@ -263,6 +264,11 @@ type ProblemListFilter struct {
 	// 正向排除隐藏题（v0.38）：hidden:{$ne:true} 走 hidden 索引——替代「隐藏题全量
 	// 拉 ID 后 $nin」，备题/下架题多时 $nin 集合线性膨胀且 $nin 本身不可走索引
 	ExcludeHidden bool
+	// 正向排除重复题（v0.47）：与 ExcludeHidden 同构，duplicate:{$ne:true} 走 duplicate 索引
+	ExcludeDuplicate bool
+	// 状态精确过滤（v0.47）：仅特权（problem.view.all）视角由 handler 下发——
+	// "hidden" / "duplicate"，空 = 不过滤（与排除项互斥：特权视角本就不排除）
+	State string
 	Q             string // 标题子串（不分大小写）∨ 题号精确匹配
 	// 搜索命中的知识点/来源标签（v0.26.1：搜索词命中树节点名 → 子树展开），与 Q 并集；
 	// 与下方 Tags/MetaTags 显式筛选（AND）正交——搜索从宽、筛选从严
@@ -281,6 +287,15 @@ func (r *Repo) ListProblemsPage(ctx context.Context, f ProblemListFilter, page, 
 	}
 	if f.ExcludeHidden {
 		query["hidden"] = bson.M{"$ne": true}
+	}
+	if f.ExcludeDuplicate {
+		query["duplicate"] = bson.M{"$ne": true}
+	}
+	switch f.State {
+	case "hidden":
+		query["hidden"] = true
+	case "duplicate":
+		query["duplicate"] = true
 	}
 	// 搜索条件组（v0.26.1）：标题/题号/知识点/来源标签命中取并集，与其余过滤条件 AND
 	var searchOr bson.A
@@ -385,6 +400,19 @@ func intIn(xs []int, x int) bool {
 func (r *Repo) SetProblemHidden(ctx context.Context, pid int64, hidden bool) error {
 	res, err := r.problems.UpdateOne(ctx,
 		bson.M{"_id": pid}, bson.M{"$set": bson.M{"hidden": hidden}})
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
+// SetProblemDuplicate 设置主题库重复标记（v0.47，权限由调用方校验；语义同隐藏标记）。
+func (r *Repo) SetProblemDuplicate(ctx context.Context, pid int64, duplicate bool) error {
+	res, err := r.problems.UpdateOne(ctx,
+		bson.M{"_id": pid}, bson.M{"$set": bson.M{"duplicate": duplicate}})
 	if err != nil {
 		return err
 	}

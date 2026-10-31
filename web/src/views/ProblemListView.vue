@@ -60,6 +60,21 @@ const tagOpen = ref(false)
 const diffOpen = ref(false)
 const metaSel = ref<number[]>([])
 const activeAdvCount = computed(() => metaSel.value.length)
+// 状态筛选（v0.47）：重复题/隐藏题精确过滤，仅「题库全量可见」视角可见（学生端这两类本就不可见）
+const canStateFilter = computed(() => userStore.can('problem.view.all'))
+const stateOpen = ref(false)
+const stateSel = ref<'' | 'duplicate' | 'hidden'>('')
+const stateOpts = [
+  { v: 'duplicate', label: '重复题' },
+  { v: 'hidden', label: '隐藏题' },
+] as const
+
+function onStateChange(s: 'duplicate' | 'hidden') {
+  stateSel.value = stateSel.value === s ? '' : s // 点同值取消 = 全部
+  page.value = 1
+  qsync()
+  loadDebounced()
+}
 
 // ---- 多题打包导出（v0.18.1）：problem.data.download 权限者可见 ----
 // 勾选跨翻页/跨筛选保留（存 id 集合）；表格翻页后当前页勾选态由 selectableRows 同步回显
@@ -106,6 +121,7 @@ async function load() {
       tagSel.value,
       diffSel.value.length ? diffSel.value : undefined,
       metaSel.value.length ? metaSel.value : undefined,
+      stateSel.value || undefined,
     )
     if (my !== loadSeq) return // 已有更新的筛选请求在途，丢弃旧响应（v0.37 竞态保护）
     list.value = r.list
@@ -137,6 +153,7 @@ function resetSearch() {
   tagSel.value = []
   diffSel.value = []
   metaSel.value = []
+  stateSel.value = ''
   page.value = 1
   qsync()
   load()
@@ -246,6 +263,7 @@ function qsync() {
     tag: tagSel.value.length ? tagSel.value.join(',') : undefined,
     diff: diffSel.value.length ? diffSel.value.join(',') : undefined,
     meta: metaSel.value.length ? metaSel.value.join(',') : undefined,
+    state: stateSel.value || undefined,
   })
 }
 
@@ -255,6 +273,8 @@ onMounted(() => {
   tagSel.value = lq.ids('tag')
   diffSel.value = lq.ids('diff')
   metaSel.value = lq.ids('meta')
+  const st = lq.str('state')
+  stateSel.value = st === 'duplicate' || st === 'hidden' ? st : ''
   load()
   loadMyStats()
   tagStore.ensure() // 标签树异步就绪后筛选区自动出现（v-if 响应 store）
@@ -306,6 +326,31 @@ onMounted(() => {
           标签<template v-if="activeAdvCount"> · {{ activeAdvCount }}</template>
           <el-icon class="sel-arrow" :class="{ open: advOpen }"><ArrowDown /></el-icon>
         </button>
+        <!-- 状态筛选（v0.47）：重复题/隐藏题精确过滤，仅题库全量可见视角 -->
+        <button
+          v-if="canStateFilter"
+          class="soj-sel"
+          :class="{ on: stateOpen || stateSel }"
+          @click="stateOpen = !stateOpen"
+        >
+          状态<template v-if="stateSel"> · {{ stateSel === 'duplicate' ? '重复题' : '隐藏题' }}</template>
+          <el-icon class="sel-arrow" :class="{ open: stateOpen }"><ArrowDown /></el-icon>
+        </button>
+      </div>
+
+      <!-- 状态面板：重复题（灰）/ 隐藏题（红）胶囊单选，点同值取消 -->
+      <div v-if="stateOpen && canStateFilter" class="panel-row state-panel">
+        <el-tag
+          v-for="s in stateOpts"
+          :key="s.v"
+          class="state-chip"
+          :type="s.v === 'duplicate' ? 'info' : 'danger'"
+          :effect="stateSel === s.v ? 'dark' : 'plain'"
+          @click="onStateChange(s.v)"
+        >
+          {{ s.label }}
+        </el-tag>
+        <el-button v-if="stateSel" link type="primary" class="adv-clear" @click="onStateChange(stateSel)">清空</el-button>
       </div>
 
       <!-- 难度面板：十档胶囊一字排开（即题表「难度」列同款 TierBadge，色随档位），点击多选 -->
@@ -370,6 +415,7 @@ onMounted(() => {
                 {{ typeBadge(row) }}
               </el-tag>
               <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏题</el-tag>
+              <el-tag v-if="row.duplicate" size="small" type="info" class="ml8">重复题</el-tag>
               <!-- 客观题没有测试数据是正常形态，不提示「无数据」 -->
               <el-tag v-if="row.has_cases === false && row.type !== 'objective'" size="small" type="warning" class="ml8">无数据</el-tag>
               <el-tag v-if="row.locked" size="small" type="success" class="ml8">
@@ -658,6 +704,17 @@ onMounted(() => {
   background: color-mix(in srgb, var(--dc) 20%, #ffffff);
   border-color: var(--dc);
   box-shadow: inset 0 0 0 1px var(--dc);
+}
+
+/* 状态面板（v0.47）：重复题/隐藏题胶囊单选，同难度面板的点击手感 */
+.state-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.state-chip {
+  cursor: pointer;
 }
 
 /* 标签面板一字排开：标签等宽、控件统一宽；窄屏自然折行 */

@@ -32,6 +32,7 @@ type listEntryJSON struct {
 	Title      string  `json:"title"`
 	Difficulty int     `json:"difficulty"`
 	Hidden     bool    `json:"hidden,omitempty"`
+	Duplicate  bool    `json:"duplicate,omitempty"` // v0.47：重复题标记（特权视角展示用）
 	Locked     bool    `json:"locked,omitempty"`
 	LockKind   string  `json:"lock_kind,omitempty"`
 	Status     *string `json:"status,omitempty"`
@@ -85,10 +86,10 @@ func (h *Handlers) buildListScope(c *gin.Context, l *repo.ProblemList) ([]listCh
 		if p == nil {
 			return listEntryJSON{}, false // 已删除的题：条目剔除，计数不含
 		}
-		if p.Hidden && !seeAllHidden {
-			return listEntryJSON{}, false // 隐藏题：无权限视角整条剔除（分母同步缩减）
+		if (p.Hidden || p.Duplicate) && !seeAllHidden {
+			return listEntryJSON{}, false // 隐藏题/重复题：无权限视角整条剔除（分母同步缩减）
 		}
-		e := listEntryJSON{PID: p.ID, Title: p.Title, Difficulty: p.Difficulty, Hidden: p.Hidden, Tags: p.Tags}
+		e := listEntryJSON{PID: p.ID, Title: p.Title, Difficulty: p.Difficulty, Hidden: p.Hidden, Duplicate: p.Duplicate, Tags: p.Tags}
 		if lk := lockMap[p.ID]; lk != nil {
 			e.Locked = true
 			e.LockKind = lk.Kind
@@ -577,7 +578,8 @@ func (h *Handlers) GetListFlat(c *gin.Context) {
 		if p == nil {
 			continue
 		}
-		if p.Hidden {
+		if p.Hidden || p.Duplicate {
+			// 隐藏题/重复题（v0.47）都不进打印卷面；skipped_hidden 沿用字段名计数两者
 			skippedHidden++
 			continue
 		}

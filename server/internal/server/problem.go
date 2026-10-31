@@ -98,6 +98,11 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 	}
 
 	filter := repo.ProblemListFilter{Q: q, Tags: tagSel, MetaTags: metaSel}
+	// 状态精确过滤（v0.47）：hidden / duplicate，仅特权视角生效（学生端这两类本就不可见，
+	// 传参忽略——UI 也不下发该筛选）
+	if s := c.Query("state"); privileged && (s == "hidden" || s == "duplicate") {
+		filter.State = s
+	}
 	// 搜索词命中知识点/标签名（v0.26.1）：名字包含搜索词的节点，子树全部计入，与标题/题号并集。
 	// 搜索从宽（含子孙）、显式标签筛选从严（AND）正交；读树失败退化为纯标题/题号搜索（尽力增强不阻塞）
 	if q != "" {
@@ -115,6 +120,8 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		// v0.38：隐藏题改正向 hidden:{$ne:true}（repo 走 hidden 索引），省掉每请求
 		// 一次隐藏题全量拉取 + 大 $nin；ExcludeIDs 只装非运行期锁题（小集合）
 		filter.ExcludeHidden = true
+		// v0.47：重复题同构排除（学生端看不到被标重复的题）
+		filter.ExcludeDuplicate = true
 		for pid, lk := range lockMap {
 			if lk.Phase != "running" {
 				filter.ExcludeIDs = append(filter.ExcludeIDs, pid)
@@ -129,7 +136,7 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 
 	items := make([]gin.H, 0, len(probs))
 	for _, p := range probs {
-		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "tags": orEmptyInt64(p.Tags), "meta_tags": orEmptyInt64(p.MetaTags), "has_cases": len(p.Cases) > 0, "difficulty": p.EffDifficulty()}
+		item := gin.H{"id": p.ID, "title": p.Title, "hidden": p.Hidden, "duplicate": p.Duplicate, "tags": orEmptyInt64(p.Tags), "meta_tags": orEmptyInt64(p.MetaTags), "has_cases": len(p.Cases) > 0, "difficulty": p.EffDifficulty()}
 		// 题型徽章（v0.9）：客观题另带小类；函数/交互题只给 type（空 = 传统题不返回）
 		if p.Type != "" {
 			item["type"] = p.Type
@@ -223,8 +230,8 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	}
 	vk := viewMap[p.ID]
 
-	// 隐藏题：对无「题库全量可见」的任何视角一律隐藏（比赛/考试中也不可见）
-	if p.Hidden && !privileged {
+	// 隐藏题/重复题：对无「题库全量可见」的任何视角一律隐藏（比赛/考试中也不可见）
+	if (p.Hidden || p.Duplicate) && !privileged {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}
@@ -273,7 +280,9 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		"has_cases":          len(p.Cases) > 0, // 无测试数据空壳题（v0.6.1 验收反馈）：前端禁提交+详情提示
 		"has_subtasks":       len(p.Subtasks) > 0,
 		"hidden":             p.Hidden,
+		"duplicate":          p.Duplicate,
 		"can_set_hidden":     h.problemEditable(c, p),
+		"can_set_duplicate":  h.problemEditable(c, p),
 		"can_edit_statement": h.problemEditable(c, p),
 		"can_view_others":    canViewOthers,    // 满分解锁后可在本页查看他人代码
 		"can_view_solutions": canViewSolutions, // 满分 ∨ 老师群体 ∨ 玉解锁：题解弹窗入口提示用
@@ -417,6 +426,37 @@ func (h *Handlers) SetProblemHidden(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"id": id, "hidden": *req.Hidden})
+}
+
+// SetProblemDuplicate 设置主题库重复标记（v0.47；root 任意题；admin 仅自己导入的题，同隐藏口径）。
+func (h *Handlers) SetProblemDuplicate(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		Duplicate *bool `json:"duplicate" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "参数错误")
+		return
+	}
+	_, _, _, _ = currentUser(c)
+	ctx := c.Request.Context()
+	p, err := h.repo.GetProblem(ctx, id)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "题目不存在")
+		return
+	}
+	if !h.problemEditable(c, p) {
+		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
+		return
+	}
+	if err := h.repo.SetProblemDuplicate(ctx, id, *req.Duplicate); err != nil {
+		fail(c, http.StatusInternalServerError, "设置失败")
+		return
+	}
+	ok(c, gin.H{"id": id, "duplicate": *req.Duplicate})
 }
 
 // problemEditable 题目编辑判定：edit.all 任意题；edit.own 仅题目导入者。

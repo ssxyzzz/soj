@@ -50,7 +50,7 @@ func (h *Handlers) ServeProblemAsset(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	// 瘦读：资产判定只要 hidden 标记（GetProblemMeta 已排除题面两大字段）
+	// 瘦读：资产判定只要 hidden/duplicate 标记（GetProblemMeta 已排除题面两大字段）
 	p, err := h.repo.GetProblemMeta(ctx, id)
 	if repo.IsNotFound(err) {
 		c.String(http.StatusNotFound, "题目不存在")
@@ -67,7 +67,7 @@ func (h *Handlers) ServeProblemAsset(c *gin.Context) {
 		c.String(http.StatusInternalServerError, "读取比赛状态失败")
 		return
 	}
-	if assetViewDenied(p.Hidden, privileged, lockMap[id]) {
+	if assetViewDenied(p.Hidden || p.Duplicate, privileged, lockMap[id]) {
 		c.String(http.StatusNotFound, "题目不存在")
 		return
 	}

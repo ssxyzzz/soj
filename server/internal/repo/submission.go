@@ -524,10 +524,11 @@ func (r *Repo) MyProblemStats(ctx context.Context, uid int64, includeHidden bool
 	st := &MyProblemStats{Recent7: make([]int64, 7)}
 
 	// 可见题总数（2026-10-27 起按观看者视角：root/老师含隐藏题，与题库列表页头口径一致；
-	// 学生不含隐藏题——隐藏题对其不存在）
+	// 学生不含隐藏题/重复题——这两类对其不存在，v0.47 并入重复题）
 	totalFilter := bson.M{}
 	if !includeHidden {
 		totalFilter["hidden"] = bson.M{"$ne": true}
+		totalFilter["duplicate"] = bson.M{"$ne": true}
 	}
 	total, err := r.problems.CountDocuments(ctx, totalFilter)
 	if err != nil {

@@ -63,8 +63,8 @@ func (h *Handlers) CreateSubmission(c *gin.Context) {
 	}
 	lk := lockMap[p.ID]
 	privileged := hasPerm(c, repo.PermProblemViewAll)
-	// 主题库隐藏题对非特权视角一律隐藏：看不到也不可提交（备题用）
-	if p.Hidden && !privileged {
+	// 主题库隐藏题/重复题对非特权视角一律隐藏：看不到也不可提交
+	if (p.Hidden || p.Duplicate) && !privileged {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return
 	}

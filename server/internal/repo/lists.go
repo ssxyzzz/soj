@@ -213,10 +213,11 @@ type ProblemSummary struct {
 	Title      string  `bson:"title" json:"title"`
 	Difficulty int     `bson:"difficulty" json:"difficulty"`
 	Hidden     bool    `bson:"hidden" json:"hidden"`
+	Duplicate  bool    `bson:"duplicate" json:"duplicate"`
 	Tags       []int64 `bson:"tags,omitempty" json:"tags,omitempty"`
 }
 
-// ProblemSummariesByIDs 批量取题目摘要（title/difficulty/hidden）；返回 map，缺项 = 题已删除。
+// ProblemSummariesByIDs 批量取题目摘要（title/difficulty/hidden/duplicate）；返回 map，缺项 = 题已删除。
 func (r *Repo) ProblemSummariesByIDs(ctx context.Context, pids []int64) (map[int64]*ProblemSummary, error) {
 	out := make(map[int64]*ProblemSummary, len(pids))
 	if len(pids) == 0 {
@@ -224,7 +225,7 @@ func (r *Repo) ProblemSummariesByIDs(ctx context.Context, pids []int64) (map[int
 	}
 	cursor, err := r.problems.Find(ctx,
 		bson.M{"_id": bson.M{"$in": pids}},
-		options.Find().SetProjection(bson.M{"title": 1, "difficulty": 1, "hidden": 1, "tags": 1}))
+		options.Find().SetProjection(bson.M{"title": 1, "difficulty": 1, "hidden": 1, "duplicate": 1, "tags": 1}))
 	if err != nil {
 		return nil, err
 	}

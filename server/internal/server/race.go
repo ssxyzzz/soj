@@ -60,8 +60,8 @@ func (h *Handlers) CreateRace(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取题目失败")
 		return
 	}
-	if p.Hidden {
-		fail(c, http.StatusBadRequest, "隐藏题不能用于课堂 PK（会向全班露出题面）")
+	if p.Hidden || p.Duplicate {
+		fail(c, http.StatusBadRequest, "隐藏题/重复题不能用于课堂 PK（会向全班露出题面）")
 		return
 	}
 	if !p.ChallengeEligible() {

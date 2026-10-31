@@ -51,7 +51,7 @@ function mergeFromList(items: { id: number; title: string }[], skippedHidden: nu
       added++
     }
   }
-  ElMessage.success(`已复制 ${added} 题${skippedHidden ? `，跳过隐藏 ${skippedHidden} 题` : ''}`)
+  ElMessage.success(`已复制 ${added} 题${skippedHidden ? `，跳过隐藏/重复 ${skippedHidden} 题` : ''}`)
 }
 
 // 编辑作业（v0.7.4：名称 + 说明 + 删作业收进同一弹窗，「编辑说明」入口取消）

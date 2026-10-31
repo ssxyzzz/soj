@@ -13,9 +13,10 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// visibleProblemFilter 可见题池（hidden ≠ true）；difficulty > 0 时限同难度档。
+// visibleProblemFilter 可见题池（hidden/duplicate ≠ true，v0.47 并入重复题）；
+// difficulty > 0 时限同难度档。
 func visibleProblemFilter(difficulty int) bson.M {
-	q := bson.M{"hidden": bson.M{"$ne": true}}
+	q := bson.M{"hidden": bson.M{"$ne": true}, "duplicate": bson.M{"$ne": true}}
 	if difficulty > 0 {
 		q["difficulty"] = difficulty
 	}

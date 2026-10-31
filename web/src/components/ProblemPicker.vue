@@ -25,8 +25,8 @@ async function search() {
   loading.value = true
   try {
     const r = await problemApi.list(1, 100, q.value.trim() || undefined, tags.value)
-    // 排除隐藏题（admin/root 视角列表会带 hidden 题，选题一律不可选）
-    candidates.value = r.list.filter((p) => !p.hidden)
+    // 排除隐藏题/重复题（v0.47 并入重复题；admin/root 视角列表会带上，选题一律不可选）
+    candidates.value = r.list.filter((p) => !p.hidden && !p.duplicate)
   } catch {
     candidates.value = []
   } finally {
@@ -121,6 +121,7 @@ onMounted(search)
             <span class="adjust-order">T{{ i + 1 }}</span>
             <span class="adjust-title">#{{ p.id }} {{ p.title }}</span>
             <el-tag v-if="p.hidden" size="small" type="danger">隐藏题</el-tag>
+            <el-tag v-if="p.duplicate" size="small" type="info">重复题</el-tag>
             <el-button size="small" type="danger" link @click="removeAt(i)">删除</el-button>
           </div>
           <el-empty v-if="!modelValue.length" description="还没有题目，从左侧候选添加" :image-size="40" />

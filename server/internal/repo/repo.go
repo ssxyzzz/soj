@@ -189,6 +189,8 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		{Keys: bson.D{{Key: "tags", Value: 1}}},
 		{Keys: bson.D{{Key: "meta_tags", Value: 1}}},
 		{Keys: bson.D{{Key: "hidden", Value: 1}}},
+		// duplicate 支撑非特权题库列表正向下推与状态筛选（v0.47，同 hidden 口径）
+		{Keys: bson.D{{Key: "duplicate", Value: 1}}},
 	}); err != nil {
 		return err
 	}

@@ -65,6 +65,7 @@ function roundProblemRoute(p: { locked?: boolean; lock_kind?: string; contest_id
 }
 
 const canSetHidden = computed(() => !!problem.value?.can_set_hidden)
+const canSetDuplicate = computed(() => !!problem.value?.can_set_duplicate)
 const submitDisabled = computed(
   () =>
     !userStore.token ||
@@ -384,6 +385,15 @@ async function toggleHidden() {
   ElMessage.success(target ? '题目已隐藏，无权限的用户看不到本题' : '已取消隐藏')
 }
 
+// 重复标记开关（v0.47，仅题面编辑者可见；设置后按钮置灰，学生端立即不可见）
+async function toggleDuplicate() {
+  if (!problem.value) return
+  const target = !problem.value.duplicate
+  await problemApi.setDuplicate(problem.value.id, target)
+  problem.value.duplicate = target
+  ElMessage.success(target ? '已标记重复题，无权限的用户看不到本题' : '已取消重复标记')
+}
+
 onMounted(async () => {
   await load()
   loadRecentMine()
@@ -411,6 +421,14 @@ onUnmounted(stopPolling)
               @click="toggleHidden"
             >
               {{ problem.hidden ? '已隐藏' : '隐藏' }}
+            </el-button>
+            <el-button
+              v-if="canSetDuplicate"
+              size="small"
+              :type="problem.duplicate ? 'info' : 'default'"
+              @click="toggleDuplicate"
+            >
+              {{ problem.duplicate ? '已标重复' : '标重复' }}
             </el-button>
           </template>
         </ProblemStatement>

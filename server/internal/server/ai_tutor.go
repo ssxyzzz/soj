@@ -62,7 +62,7 @@ func (h *Handlers) aiTutorGate(c *gin.Context, pid int64) (*repo.Problem, bool) 
 	}
 	privileged := hasPerm(c, repo.PermProblemViewAll)
 	canManage := h.problemEditable(c, p)
-	if p.Hidden && !privileged && !canManage {
+	if (p.Hidden || p.Duplicate) && !privileged && !canManage {
 		fail(c, http.StatusNotFound, "题目不存在")
 		return nil, false
 	}
