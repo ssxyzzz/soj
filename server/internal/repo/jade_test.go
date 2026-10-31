@@ -6,6 +6,7 @@ package repo
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -185,6 +186,16 @@ func TestMaybeAwardJadeBlessing(t *testing.T) {
 	}
 	if b.Total != (b.Base+b.Drop)*2 {
 		t.Fatalf("祝福 total = %d ≠ (base+drop)×2 = %d", b.Total, (b.Base+b.Drop)*2)
+	}
+	// 流水说明取 max 语义（2026-10-31 验收期修复）：单一来源 × 单一倍率，
+	// 不得出现「×2 ×2」连乘假象；无加成流水不带倍率段
+	entries, _, _ := r.JadeLedgerPage(ctx, 22, 1, 5)
+	if len(entries) == 0 {
+		t.Fatal("祝福发放未落流水")
+	}
+	reason := entries[0].Reason
+	if !strings.Contains(reason, "升维祝福 ×2") || strings.Contains(reason, "×2 ×2") {
+		t.Fatalf("祝福流水说明 = %q，期望含「升维祝福 ×2」且无连乘", reason)
 	}
 
 	// EnsureLevelBlessing：CAS 幂等——同档二次不重开祝福

@@ -506,18 +506,18 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64, raceRankPct, 
 	}
 	blessed, berr := r.userBlessed(ctx, uid)
 	if berr == nil && blessed {
-		claim(200, "升维祝福 ×2")
+		claim(200, "升维祝福") // 倍率值由 multText 统一拼（2026-10-31 验收期修复：来源名自带 ×2 会渲染成「×2 ×2」连乘假象）
 	}
 	if cp := set.JadeComboBonusPct(combo); cp > 100 {
 		claim(cp, "连击加成")
 	}
 	daily := r.IsTodayDaily(ctx, pid)
 	if daily {
-		claim(200, "每日一题 ×2")
+		claim(200, "每日一题")
 	}
 	revengeEligible, revengeUsedToday := r.revengeState(ctx, uid, pid)
 	if revengeEligible && !revengeUsedToday {
-		claim(150, "一血偿还 ×1.5")
+		claim(150, "一血偿还")
 	}
 	if raceRankPct > 100 {
 		claim(raceRankPct, "课堂 PK 名次")
@@ -546,18 +546,20 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64, raceRankPct, 
 	if err != nil {
 		return false, 0, err
 	}
-	if err := r.JadeCredit(ctx, uid, total, JadeKindAward,
-		fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d × %s）", pid, p.Title, base, drop, multText(multPct, multFrom)), pid); err != nil {
+	// 流水说明：有加成才带倍率段（取 max 语义：单一来源 × 单一倍率，不连乘）；
+	// 无加成与旧版口径一致不显示倍率段
+	reason := fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d）", pid, p.Title, base, drop)
+	if multPct > 100 {
+		reason = fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d × %s）", pid, p.Title, base, drop, multText(multPct, multFrom))
+	}
+	if err := r.JadeCredit(ctx, uid, total, JadeKindAward, reason, pid); err != nil {
 		return false, 0, err
 	}
 	return true, total, nil
 }
 
-// multText 倍率文案（100 = 原倍，无来源）。
+// multText 倍率文案（pct>100 时调用）：「来源 ×N」或无来源兜底「×N」。
 func multText(pct int, from string) string {
-	if pct <= 100 {
-		return "无加成"
-	}
 	if from == "" {
 		return fmt.Sprintf("×%s", trimMult(float64(pct) / 100))
 	}
