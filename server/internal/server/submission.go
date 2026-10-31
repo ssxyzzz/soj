@@ -283,6 +283,8 @@ func (h *Handlers) GetSubmission(c *gin.Context) {
 			game["jade_total"] = s.JadeTotal
 			game["jade_daily"] = s.JadeDaily
 			game["jade_revenge"] = s.JadeRevenge
+			game["jade_mult_pct"] = s.JadeMultPct
+			game["jade_mult_from"] = s.JadeMultFrom
 		}
 		if st, err := h.repo.GetGameStats(c.Request.Context(), uid); err == nil {
 			game["combo_cur"] = st.ComboCur

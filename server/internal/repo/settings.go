@@ -78,6 +78,14 @@ type SystemSettings struct {
 	// 仅作用于题解解锁与 AI 两能（悬赏是玉流转、实物原价——防套利拍板）。
 	// 缺档/越界回默认，单调性由 normalize 保证（高等级不高于低等级）。
 	JadeDiscount [6]int `bson:"jadeDiscount,omitempty"`
+	// 连击玉加成（v0.45）：每满 step 连击掉落加成 pct%（10 连击 +10% 形态），
+	// 加成封顶 capPct%（默认 100 = 峰值 ×2.0）；倍率总则中与祝福/每日事件平级取最高。
+	JadeComboStep   *int `bson:"jadeComboStep,omitempty"`
+	JadeComboPct    *int `bson:"jadeComboPct,omitempty"`
+	JadeComboCapPct *int `bson:"jadeComboCapPct,omitempty"`
+	// 每日复仇窗口（v0.45）：最早一次非取消未 AC 提交距今满 N 小时才可复仇（默认 24，
+	// 当日顺路做对无加成——防「先 WA 再 AC」刷倍率，配每日 1 名额结构性免疫）。
+	JadeRevengeHours *int `bson:"jadeRevengeHours,omitempty"`
 	// AI 计费（v0.33-③）：每日合计上限（默认 5 次，提示+找 bug 合计）；基准价
 	//（两级提示：理解题目 2 / 算法思路 6、找 bug 8）× 难度倍率 ⌈D/3⌉；等级折扣两档
 	//（Lv≥discount1Lv 九折 / Lv≥discount2Lv 八折，向上取整）。全部后台可调。
@@ -156,6 +164,11 @@ const (
 	DefaultJadeSolutionUnlockMult = 5
 	DefaultJadeBountyMin          = 5
 	DefaultJadeBountyMax          = 500
+	// 连击玉加成/复仇窗口（v0.45）默认值。
+	DefaultJadeComboStep    = 10  // 每满 10 连击一档
+	DefaultJadeComboPct     = 10  // 每档 +10%
+	DefaultJadeComboCapPct  = 100 // 加成封顶 +100%（×2.0）
+	DefaultJadeRevengeHours = 24  // 复仇需最早错误距今 ≥24h
 	// AI 计费（v0.33-③）默认值。
 	DefaultAiDailyLimit      = 5
 	DefaultAiStaffDailyLimit = 20 // 教师/管理员每日上限（0 = 不限；root 恒不限）
@@ -323,6 +336,18 @@ func (s *SystemSettings) normalizeDiscuss() {
 	if s.JadeShopEnabled == nil {
 		s.JadeShopEnabled = boolPtr(false)
 	}
+	if s.JadeComboStep == nil || *s.JadeComboStep < 1 || *s.JadeComboStep > 1000 {
+		s.JadeComboStep = intPtr(DefaultJadeComboStep)
+	}
+	if s.JadeComboPct == nil || *s.JadeComboPct < 1 || *s.JadeComboPct > 100 {
+		s.JadeComboPct = intPtr(DefaultJadeComboPct)
+	}
+	if s.JadeComboCapPct == nil || *s.JadeComboCapPct < 0 || *s.JadeComboCapPct > 900 {
+		s.JadeComboCapPct = intPtr(DefaultJadeComboCapPct)
+	}
+	if s.JadeRevengeHours == nil || *s.JadeRevengeHours < 1 || *s.JadeRevengeHours > 24*30 {
+		s.JadeRevengeHours = intPtr(DefaultJadeRevengeHours)
+	}
 	if s.AiDailyLimit == nil || *s.AiDailyLimit < 1 || *s.AiDailyLimit > 100 {
 		s.AiDailyLimit = intPtr(DefaultAiDailyLimit)
 	}
@@ -466,6 +491,47 @@ func (s *SystemSettings) JadeAwardRatePctVal() int {
 	return *s.JadeAwardRatePct
 }
 
+// JadeComboCfg 连击玉加成三参（step/pct/capPct，越界回默认）。
+func (s *SystemSettings) JadeComboCfg() (step, pct, capPct int) {
+	if s.JadeComboStep == nil || *s.JadeComboStep < 1 || *s.JadeComboStep > 1000 {
+		step = DefaultJadeComboStep
+	} else {
+		step = *s.JadeComboStep
+	}
+	if s.JadeComboPct == nil || *s.JadeComboPct < 1 || *s.JadeComboPct > 100 {
+		pct = DefaultJadeComboPct
+	} else {
+		pct = *s.JadeComboPct
+	}
+	if s.JadeComboCapPct == nil || *s.JadeComboCapPct < 0 || *s.JadeComboCapPct > 900 {
+		capPct = DefaultJadeComboCapPct
+	} else {
+		capPct = *s.JadeComboCapPct
+	}
+	return
+}
+
+// JadeComboBonusPct 连击 N 对应的倍率百分比（100 = 无加成；不足一档无加成）。
+func (s *SystemSettings) JadeComboBonusPct(combo int) int {
+	step, pct, capPct := s.JadeComboCfg()
+	if combo < step {
+		return 100
+	}
+	add := (combo / step) * pct
+	if add > capPct {
+		add = capPct
+	}
+	return 100 + add
+}
+
+// JadeRevengeHoursVal 每日复仇窗口小时（默认 24）。
+func (s *SystemSettings) JadeRevengeHoursVal() int {
+	if s.JadeRevengeHours == nil || *s.JadeRevengeHours < 1 || *s.JadeRevengeHours > 24*30 {
+		return DefaultJadeRevengeHours
+	}
+	return *s.JadeRevengeHours
+}
+
 // JadeSolutionUnlockMultVal 题解解锁价系数（难度 × 系数；越界回默认 5）。
 func (s *SystemSettings) JadeSolutionUnlockMultVal() int {
 	if s.JadeSolutionUnlockMult == nil || *s.JadeSolutionUnlockMult < 1 || *s.JadeSolutionUnlockMult > 100 {
@@ -589,6 +655,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 	if _, err := col.InsertOne(ctx, bson.M{"_id": "system"}); err != nil && !mongo.IsDuplicateKeyError(err) {
 		return err
 	}
+	comboStep, comboPct, comboCap := s.JadeComboCfg()
 	_, err := col.UpdateOne(ctx,
 		bson.M{"_id": "system"},
 		bson.M{"$set": bson.M{
@@ -624,6 +691,10 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"jadeBountyMax":           s.JadeBountyMaxVal(),
 			"jadeShopEnabled":         s.JadeShopOpen(),
 			"jadeDiscount":            normalizeJadeDiscount(s.JadeDiscount),
+			"jadeComboStep":           comboStep,
+			"jadeComboPct":            comboPct,
+			"jadeComboCapPct":         comboCap,
+			"jadeRevengeHours":        s.JadeRevengeHoursVal(),
 			"aiDailyLimit":            s.AiDailyLimitVal(),
 			"aiStaffDailyLimit":       s.AiStaffDailyLimitVal(), // 特权层每日上限（v0.33-④ 特权分层；曾漏登本清单导致保存不生效）
 			"aiHintPrice1":            s.AiHintPrice1Val(),

@@ -299,6 +299,13 @@ func Run(ctx context.Context, deps *Deps) {
 			}
 			authed.POST("/classes/:id/members/:uid/role", h.SetMemberRole)
 
+			// 课堂 PK（v0.42）：发起/取消走 manageable 闸（handler 内校验），
+			// 查看与榜单班级成员可读；/races/:id 供挑战页按 id 读场次
+			authed.GET("/classes/:id/race", h.GetClassRace)
+			authed.POST("/classes/:id/race", h.CreateRace)
+			authed.DELETE("/classes/:id/race", h.CancelRace)
+			authed.GET("/races/:id", h.GetRaceByID)
+
 			// 作业：班级内题目清单，即时出分、不锁外班
 			authed.POST("/classes/:id/assignments", h.CreateAssignment)
 			authed.DELETE("/assignments/:id", h.DeleteAssignment)

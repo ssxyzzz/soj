@@ -28,6 +28,11 @@ const unlockMult = ref(5)
 const bountyMin = ref(5)
 const bountyMax = ref(500)
 const shopEnabled = ref(false)
+// 倍率总则批（v0.45）：连击加成三参（每满 step 连击 +pct%、封顶 capPct%）+ 复仇窗口
+const jadeComboStep = ref(10)
+const jadeComboPct = ref(10)
+const jadeComboCapPct = ref(100)
+const jadeRevengeHours = ref(24)
 
 const saving = ref(false)
 
@@ -48,6 +53,10 @@ onMounted(async () => {
     bountyMin.value = s.jade_bounty_min ?? 5
     bountyMax.value = s.jade_bounty_max ?? 500
     shopEnabled.value = !!s.jade_shop_enabled
+    jadeComboStep.value = s.jade_combo_step ?? 10
+    jadeComboPct.value = s.jade_combo_pct ?? 10
+    jadeComboCapPct.value = s.jade_combo_cap_pct ?? 100
+    jadeRevengeHours.value = s.jade_revenge_hours ?? 24
   } catch {
     // 加载失败保留默认值展示
   }
@@ -71,6 +80,10 @@ async function save() {
       jade_bounty_min: bountyMin.value,
       jade_bounty_max: bountyMax.value,
       jade_shop_enabled: shopEnabled.value,
+      jade_combo_step: jadeComboStep.value,
+      jade_combo_pct: jadeComboPct.value,
+      jade_combo_cap_pct: jadeComboCapPct.value,
+      jade_revenge_hours: jadeRevengeHours.value,
     })
     ElMessage.success('基础设置已保存')
     // ICP 改了页脚要即时跟随：重置站点公开状态缓存
@@ -166,6 +179,24 @@ async function save() {
         <el-switch v-model="shopEnabled" />
         <span class="dim" style="margin-left: 8px">
           开启后在「玉」页面右列显示实物兑换区（物品目录与学生订单）</span>
+      </el-form-item>
+      <el-form-item label="连击玉加成">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+          每满
+          <el-input-number v-model="jadeComboStep" :min="1" :max="1000" size="small" style="width: 90px" />
+          连击 +<el-input-number v-model="jadeComboPct" :min="1" :max="100" size="small" style="width: 80px" />
+          %，封顶 +<el-input-number v-model="jadeComboCapPct" :min="0" :max="900" size="small" style="width: 90px" />%
+        </div>
+        <span class="dim" style="display: block; margin-top: 4px">
+          连续 AC 跨日累计（WA/断更清零、同题重交不涨）；默认每 10 连击 +10%、100 连击 ×2.0 封顶。
+          与升维祝福/每日一题/复仇/PK 名次同为倍率，发放时只取最高一项，不连乘（峰值 ×2）
+        </span>
+      </el-form-item>
+      <el-form-item label="每日复仇窗口（小时）">
+        <el-input-number v-model="jadeRevengeHours" :min="1" :max="720" />
+        <span class="dim" style="margin-left: 8px">
+          最早一次错误提交距今满该时长才可复仇（默认 24 = 隔夜订正；当日顺路做对无加成）；每日仅 1 个复仇名额
+        </span>
       </el-form-item>
       <el-form-item label="ICP 备案号">
         <el-input

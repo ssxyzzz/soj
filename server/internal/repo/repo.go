@@ -54,6 +54,7 @@ type Repo struct {
 	jadeBlessings  *mongo.Collection // 升维祝福审计（v0.40，{uid,level} 唯一幂等）
 	achievements   *mongo.Collection // 成就解锁记录（v0.41，{uid,code} 唯一幂等）
 	dailyProblems  *mongo.Collection // 每日一题（v0.41，_id = 日期串）
+	classroomRaces *mongo.Collection // 课堂 PK（v0.42，班级同题手速赛）
 
 	// 系统设置进程缓存（v0.37）：热路径单文档点查 5s 缓存，UpdateSystemSettings
 	// 写穿失效。缓存存归一化后的值，外发 clone（调用方拿到独立副本，防误改缓存）。
@@ -130,6 +131,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		jadeBlessings: db.Collection("jadeBlessings"),
 		achievements:  db.Collection("achievements"),
 		dailyProblems: db.Collection("dailyProblems"),
+		classroomRaces: db.Collection("classroomRaces"),
 		acRates:       map[int64]acRateEntry{},
 	}, nil
 }
@@ -229,6 +231,10 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}
 	// 挑战模式（v0.23）：会话查询 + 题内榜聚合
 	if err := r.ensureChallengeIndexes(ctx); err != nil {
+		return err
+	}
+	// 课堂 PK（v0.42）：班级活动查 + 题维度反查
+	if err := r.ensureRaceIndexes(ctx); err != nil {
 		return err
 	}
 	// 讨论区 + 通知中心（v0.24）：三区通用索引 + purgeAt TTL

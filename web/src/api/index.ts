@@ -10,6 +10,7 @@ import type {
   AssignmentListItem,
   ClassCard,
   ClassDetail,
+  ClassRaceView,
   ContestDetail,
   ContestListItem,
   ContestMySubmission,
@@ -157,7 +158,7 @@ export const gameApi = {
       done?: boolean
       solved_today?: number
     }>('/daily'),
-  revenge: () => get<{ list: RevengeRow[] }>('/me/revenge'),
+  revenge: () => get<{ list: RevengeRow[]; used: boolean }>('/me/revenge'),
   wrongbook: (page = 1) => get<{ list: RevengeRow[] }>('/me/wrongbook', { page }),
   achievements: () =>
     get<{
@@ -169,10 +170,10 @@ export const gameApi = {
   ),
   heralds: () =>
     get<{ list: { uid: number; level: number; nickname: string; at: string }[] }>('/heralds'),
-  gameRank: (type: 'combo' | 'streak') =>
-    get<{ list: { rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]; my_rank?: number; my_value?: number }>(
+  gameRank: (type: 'combo' | 'streak', by: 'best' | 'cur' = 'best') =>
+    get<{ list: { rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]; my_rank?: number; my_value?: number; by?: string }>(
       '/game-rank',
-      { type },
+      { type, by },
     ),
 }
 
@@ -478,6 +479,16 @@ export const classApi = {
     post<{ updated: number; role: string }>(`/classes/${id}/members/${uid}/role`, { role }),
   listAssignments: (id: number) =>
     get<{ visible: boolean; list: AssignmentListItem[] }>(`/classes/${id}/assignments`),
+  // 课堂 PK（v0.42）：发起/取消走 manageable，查看与榜单班级成员可读
+  race: (id: number) => get<{ race?: ClassRaceView; last?: ClassRaceView }>(`/classes/${id}/race`),
+  createRace: (id: number, body: { pid: number; bonus: boolean; countdown?: number }) =>
+    post<ClassRaceView>(`/classes/${id}/race`, body),
+  cancelRace: (id: number) => del<{ cancelled: boolean }>(`/classes/${id}/race`),
+}
+
+// 课堂 PK 按场次读（挑战页 ?race= 参数）：班级成员或管理员可读
+export const raceApi = {
+  byID: (id: number) => get<ClassRaceView>(`/races/${id}`),
 }
 
 // ---------- 作业（v0.4.x） ----------

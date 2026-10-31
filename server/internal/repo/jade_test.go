@@ -101,7 +101,7 @@ func TestMaybeAwardJade(t *testing.T) {
 	objPID := jadeTestProblem(t, r, true, 5)  // 客观题 D5：基础 max(1,⌊5/2⌋)=2
 	trdPID := jadeTestProblem(t, r, false, 5) // 传统题 D5：基础 5、掉落 ∈{0,5}
 
-	awarded, _, err := r.MaybeAwardJade(ctx, 7, objPID)
+	awarded, _, err := r.MaybeAwardJade(ctx, 7, objPID, 0, 0)
 	if err != nil || !awarded {
 		t.Fatalf("客观题首满分: awarded=%v err=%v", awarded, err)
 	}
@@ -110,7 +110,7 @@ func TestMaybeAwardJade(t *testing.T) {
 		t.Fatalf("客观题发放 = base %d drop %d total %d，期望 base2 drop∈{0,5}", a.Base, a.Drop, a.Total)
 	}
 	// 幂等：同题第二次（重交/挑战/再比赛）不再发
-	awarded2, total2, err := r.MaybeAwardJade(ctx, 7, objPID)
+	awarded2, total2, err := r.MaybeAwardJade(ctx, 7, objPID, 0, 0)
 	if err != nil || awarded2 || total2 != 0 {
 		t.Fatalf("重复发放: awarded=%v total=%d err=%v，期望 no-op", awarded2, total2, err)
 	}
@@ -118,7 +118,7 @@ func TestMaybeAwardJade(t *testing.T) {
 		t.Fatalf("重复后余额 = %d，期望 %d 不变", bal, a.Total)
 	}
 	// 传统题另一用户：基础 5
-	if _, _, err := r.MaybeAwardJade(ctx, 8, trdPID); err != nil {
+	if _, _, err := r.MaybeAwardJade(ctx, 8, trdPID, 0, 0); err != nil {
 		t.Fatalf("传统题发放: %v", err)
 	}
 	b, _ := r.GetJadeAward(ctx, 8, trdPID)
@@ -127,7 +127,7 @@ func TestMaybeAwardJade(t *testing.T) {
 	}
 	// D1 客观题：⌊1/2⌋=0 → max(1,0)=1
 	d1 := jadeTestProblem(t, r, true, 1)
-	if _, _, err := r.MaybeAwardJade(ctx, 9, d1); err != nil {
+	if _, _, err := r.MaybeAwardJade(ctx, 9, d1, 0, 0); err != nil {
 		t.Fatalf("D1 客观题: %v", err)
 	}
 	c, _ := r.GetJadeAward(ctx, 9, d1)
@@ -158,30 +158,33 @@ func TestMaybeAwardJadeBlessing(t *testing.T) {
 	ctx := context.Background()
 	pid := jadeTestProblem(t, r, false, 4) // 传统题 D4：基础 4、掉落 ∈{0,4}
 
-	// 未祝福：base=4
-	if _, _, err := r.MaybeAwardJade(ctx, 21, pid); err != nil {
+	// 未祝福：base=4、倍率 100（无加成）
+	if _, _, err := r.MaybeAwardJade(ctx, 21, pid, 0, 0); err != nil {
 		t.Fatalf("未祝福发放: %v", err)
 	}
 	a, _ := r.GetJadeAward(ctx, 21, pid)
-	if a.Base != 4 {
-		t.Fatalf("未祝福 base = %d，期望 4", a.Base)
+	if a.Base != 4 || a.MultPct != 100 {
+		t.Fatalf("未祝福 base = %d multPct = %d，期望 base4 multPct100", a.Base, a.MultPct)
 	}
 
-	// 祝福期：blessUntil 未来 → base 与掉落同步 ×2（upsert 建用户文档）
+	// 祝福期：blessUntil 未来 → 记录 base/drop 保持原值，Total = (base+drop)×2（upsert 建用户文档）
 	if _, err := r.users.UpdateOne(ctx, bson.M{"_id": int64(22)},
 		bson.M{"$set": bson.M{"blessedLevel": 5, "blessUntil": time.Now().Add(time.Hour)}},
 		options.UpdateOne().SetUpsert(true)); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := r.MaybeAwardJade(ctx, 22, pid); err != nil {
+	if _, _, err := r.MaybeAwardJade(ctx, 22, pid, 0, 0); err != nil {
 		t.Fatalf("祝福发放: %v", err)
 	}
 	b, _ := r.GetJadeAward(ctx, 22, pid)
-	if b.Base != 8 || (b.Drop != 0 && b.Drop != 8) {
-		t.Fatalf("祝福发放 = base %d drop %d，期望 base8 drop∈{0,8}（×2）", b.Base, b.Drop)
+	if b.Base != 4 || (b.Drop != 0 && b.Drop != 4) {
+		t.Fatalf("祝福发放 = base %d drop %d，期望 base4 drop∈{0,4}（记录不放大）", b.Base, b.Drop)
 	}
-	if b.Total != b.Base+b.Drop {
-		t.Fatalf("祝福 total = %d ≠ base+drop", b.Total)
+	if b.MultPct != 200 || b.MultFrom == "" {
+		t.Fatalf("祝福 multPct = %d from = %q，期望 200/升维祝福", b.MultPct, b.MultFrom)
+	}
+	if b.Total != (b.Base+b.Drop)*2 {
+		t.Fatalf("祝福 total = %d ≠ (base+drop)×2 = %d", b.Total, (b.Base+b.Drop)*2)
 	}
 
 	// EnsureLevelBlessing：CAS 幂等——同档二次不重开祝福
@@ -326,5 +329,109 @@ func TestPublishDueRoundsJadeIntegration(t *testing.T) {
 	}
 	if bal := jadeBal(t, r, 1); bal != a.Total+100 {
 		t.Fatalf("二次发布后 u1 = %d，期望不变", bal)
+	}
+}
+
+// TestJadeMultRule 倍率总则（v0.45）：全部倍率平级取最高不连乘（峰值 ×2）；
+// 复仇倍率被更高倍率压制时名额顺延不扣、被采用时消耗且当日第二次复仇无加成。
+func TestJadeMultRule(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+
+	// ① 祝福 + 每日一题并列 → ×2 不 ×4
+	pid1 := jadeTestProblem(t, r, false, 4) // base 4、drop∈{0,4}
+	if _, err := r.db.Collection("dailyProblems").InsertOne(ctx, bson.M{
+		"_id": beijingDay(time.Now()), "pid": pid1, "difficulty": 4}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.users.UpdateOne(ctx, bson.M{"_id": int64(31)},
+		bson.M{"$set": bson.M{"blessedLevel": 5, "blessUntil": time.Now().Add(time.Hour)}},
+		options.UpdateOne().SetUpsert(true)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := r.MaybeAwardJade(ctx, 31, pid1, 0, 0); err != nil {
+		t.Fatalf("祝福+每日: %v", err)
+	}
+	a, _ := r.GetJadeAward(ctx, 31, pid1)
+	if a.MultPct != 200 || a.Total != (a.Base+a.Drop)*2 {
+		t.Fatalf("祝福+每日一题应取 max ×2 不连乘：multPct=%d total=%d base=%d drop=%d",
+			a.MultPct, a.Total, a.Base, a.Drop)
+	}
+
+	// ② 复仇被祝福压制 → 顺延：revenge 旗标不记、名额不扣
+	pid2 := jadeTestProblem(t, r, false, 2)
+	jadeTestSeedWrong(t, r, 31, pid2) // 25h 前的 WA（满 24h 窗口）
+	if _, _, err := r.MaybeAwardJade(ctx, 31, pid2, 0, 0); err != nil {
+		t.Fatalf("复仇被压制: %v", err)
+	}
+	b, _ := r.GetJadeAward(ctx, 31, pid2)
+	if b.Revenge {
+		t.Fatal("复仇倍率被祝福压制时 revenge 旗标不应记（顺延）")
+	}
+	if r.RevengeSlotUsed(ctx, 31) {
+		t.Fatal("复仇名额不应被消耗")
+	}
+
+	// ③ 无祝福：复仇 ×1.5 生效 + 名额消耗 + 当日第二次复仇无加成
+	pid3 := jadeTestProblem(t, r, false, 4)
+	jadeTestSeedWrong(t, r, 32, pid3)
+	if _, _, err := r.MaybeAwardJade(ctx, 32, pid3, 0, 0); err != nil {
+		t.Fatalf("复仇独立: %v", err)
+	}
+	c, _ := r.GetJadeAward(ctx, 32, pid3)
+	if !c.Revenge || c.MultPct != 150 {
+		t.Fatalf("复仇应 ×1.5：revenge=%v multPct=%d", c.Revenge, c.MultPct)
+	}
+	if want := ((c.Base+c.Drop)*3 + 1) / 2; c.Total != want {
+		t.Fatalf("复仇 total = %d ≠ ceil((base+drop)×1.5) = %d", c.Total, want)
+	}
+	if !r.RevengeSlotUsed(ctx, 32) {
+		t.Fatal("复仇名额应已消耗")
+	}
+	pid4 := jadeTestProblem(t, r, false, 4)
+	jadeTestSeedWrong(t, r, 32, pid4)
+	if _, _, err := r.MaybeAwardJade(ctx, 32, pid4, 0, 0); err != nil {
+		t.Fatalf("二次复仇: %v", err)
+	}
+	d, _ := r.GetJadeAward(ctx, 32, pid4)
+	if d.Revenge || d.MultPct != 100 {
+		t.Fatalf("当日第二次复仇应无加成：revenge=%v multPct=%d", d.Revenge, d.MultPct)
+	}
+
+	// ④ 连击 50（×1.5）撞祝福 ×2 → 取 ×2
+	pid5 := jadeTestProblem(t, r, false, 4)
+	if _, _, err := r.MaybeAwardJade(ctx, 31, pid5, 0, 50); err != nil {
+		t.Fatalf("连击+祝福: %v", err)
+	}
+	e, _ := r.GetJadeAward(ctx, 31, pid5)
+	if e.MultPct != 200 {
+		t.Fatalf("连击 50 撞祝福 ×2 应取 ×2，multPct = %d", e.MultPct)
+	}
+	// ⑤ race 第 1 名 ×2 与祝福并列 → ×2；无倍率 → 100
+	pid6 := jadeTestProblem(t, r, false, 4)
+	if _, _, err := r.MaybeAwardJade(ctx, 32, pid6, 200, 0); err != nil {
+		t.Fatalf("PK 加成: %v", err)
+	}
+	f, _ := r.GetJadeAward(ctx, 32, pid6)
+	if f.MultPct != 200 {
+		t.Fatalf("PK 第 1 名 ×2 应参与 max，multPct = %d", f.MultPct)
+	}
+}
+
+// jadeTestSeedWrong 直插一条 25h 前的未 AC 提交（复仇资格输入面，非取消）。
+func jadeTestSeedWrong(t *testing.T, r *Repo, uid, pid int64) {
+	t.Helper()
+	sid, err := r.nextSeq(context.Background(), "submission")
+	if err != nil {
+		t.Fatalf("nextSeq: %v", err)
+	}
+	doc := bson.M{
+		"_id": sid, "uid": uid, "uname": "u", "pid": pid, "ptitle": "T",
+		"lang": "cpp", "code": "", "status": StatusWrongAnswer, "score": 0,
+		"published": true, "priority": PriorityHigh,
+		"createdAt": time.Now().Add(-25 * time.Hour), "judgedAt": time.Now().Add(-25 * time.Hour),
+	}
+	if _, err := r.submissions.InsertOne(context.Background(), doc); err != nil {
+		t.Fatalf("insert wrong sub: %v", err)
 	}
 }

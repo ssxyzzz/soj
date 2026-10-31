@@ -323,7 +323,7 @@ function openDetail(id: number) {
         <div v-if="isOwnProfile && wrongbook.length" class="card wb-card">
           <div class="done-head">
             <h3>错题本</h3>
-            <span class="dim">复仇成功掉落 ×1.5</span>
+            <span class="dim">每日 1 次复仇 · 24h 前错过的题 ×1.5</span>
           </div>
           <div class="wb-list">
             <router-link v-for="w in wrongbook" :key="w.pid" class="wb-row" :to="`/problems/${w.pid}`">

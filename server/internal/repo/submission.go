@@ -80,10 +80,17 @@ type Submission struct {
 	HeartbeatAt *time.Time    `bson:"heartbeatAt,omitempty"` // 租约心跳（v0.7.1）：判题中周期刷新，超时由回收者重排队
 	Priority    int           `bson:"priority"`              // 队列优先级：领取按其降序（v0.7.1）
 	ChallengeID int64         `bson:"challengeId,omitempty"` // 挑战模式会话 ID（v0.23；0 = 普通提交）
+	// 课堂 PK（v0.42）：挑战提交创建时自动反查生效 race 挂载；AC 回写由 judge 管道
+	// 补写 raceMs（挑战终判用时，上榜与名次加成依据）
+	RaceID int64 `bson:"raceId,omitempty"`
+	RaceMS int64 `bson:"raceMs,omitempty"`
 	// 游戏感批（v0.41）：首 AC 发玉回填（开箱 payload——判题路径写，本人提交详情下发）
 	JadeTotal   int64         `bson:"jadeTotal,omitempty"`
 	JadeDaily   bool          `bson:"jadeDaily,omitempty"`
 	JadeRevenge bool          `bson:"jadeRevenge,omitempty"`
+	// 倍率总则（v0.45）：本笔发放采用的倍率与来源（开箱 mini-tag 展示）
+	JadeMultPct  int    `bson:"jadeMultPct,omitempty"`
+	JadeMultFrom string `bson:"jadeMultFrom,omitempty"`
 	CreatedAt   time.Time     `bson:"createdAt"`
 	JudgedAt    *time.Time    `bson:"judgedAt,omitempty"`
 }
@@ -103,6 +110,13 @@ func (r *Repo) CreateSubmission(ctx context.Context, uid int64, uname string, p 
 	}
 	if challengeID != 0 {
 		doc["challengeId"] = challengeID
+		// 课堂 PK（v0.42）：race 窗口内的挑战提交自动挂 raceId（练习与 PK 同链路，
+		// 无需前端区分；普通提交/比赛/考试提交不查 race）
+		if rc, rerr := r.ActiveRaceForUser(ctx, uid, p.ID); rerr == nil && rc != nil {
+			doc["raceId"] = rc.ID
+		} else if rerr != nil {
+			slog.Warn("race 自动挂载反查失败", "component", "race", "uid", uid, "pid", p.ID, "error", rerr)
+		}
 	}
 	switch {
 	case contest != nil:
@@ -163,7 +177,7 @@ func (r *Repo) CreateObjectiveSubmission(ctx context.Context, uid int64, uname s
 		go func() {
 			cctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			if _, _, err := r.MaybeAwardJade(cctx, uid, p.ID); err != nil {
+			if _, _, err := r.MaybeAwardJade(cctx, uid, p.ID, 0, 0); err != nil {
 				slog.Warn("客观题首满分玉发放失败", "component", "jade", "pid", p.ID, "uid", uid, "error", err)
 			}
 		}()
@@ -188,7 +202,7 @@ func (r *Repo) RegradeObjective(ctx context.Context, id int64) error {
 	}})
 	if err == nil && score >= 100 && s.Published {
 		// 玉经济体（v0.33-①）：重判翻盘成满分同样触发首 AC 发玉（幂等）
-		if _, _, aerr := r.MaybeAwardJade(ctx, s.UID, s.ProblemID); aerr != nil {
+		if _, _, aerr := r.MaybeAwardJade(ctx, s.UID, s.ProblemID, 0, 0); aerr != nil {
 			slog.Warn("客观题重判玉发放失败", "component", "jade", "sid", id, "error", aerr)
 		}
 	}
@@ -414,14 +428,15 @@ func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64,
 }
 
 // SetSubmissionJade 首 AC 发玉结果回填提交文档（开箱 payload，尽力而为）：
-// 从 jadeAwards 取本发放记录的 total/daily/revenge 标记写回提交。
+// 从 jadeAwards 取本发放记录的 total/daily/revenge 标记与倍率来源写回提交。
 func (r *Repo) SetSubmissionJade(ctx context.Context, uid, pid, sid int64) error {
 	var a JadeAward
 	if err := r.jadeAwards.FindOne(ctx, bson.M{"uid": uid, "pid": pid}).Decode(&a); err != nil {
 		return err
 	}
 	_, err := r.submissions.UpdateOne(ctx, bson.M{"_id": sid},
-		bson.M{"$set": bson.M{"jadeTotal": a.Total, "jadeDaily": a.Daily, "jadeRevenge": a.Revenge}})
+		bson.M{"$set": bson.M{"jadeTotal": a.Total, "jadeDaily": a.Daily, "jadeRevenge": a.Revenge,
+			"jadeMultPct": a.MultPct, "jadeMultFrom": a.MultFrom}})
 	return err
 }
 

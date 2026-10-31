@@ -12,8 +12,7 @@ export const useGameFeastStore = defineStore('gameFeast', () => {
   const visible = ref(false)
   const rarity = ref<FeastRarity>('plain')
   const jade = ref(0) // 本次首 AC 发玉（0 = 非FirstAC 小 AC 章样式）
-  const jadeDaily = ref(false)
-  const jadeRevenge = ref(false)
+  const jadeMultFrom = ref('') // 采用倍率来源（v0.45 总则：「升维祝福 ×2」等，空 = 无加成）
   const combo = ref(0)
   const score = ref(0)
   const title = ref('')
@@ -22,8 +21,7 @@ export const useGameFeastStore = defineStore('gameFeast', () => {
     score.value = acScore
     title.value = problemTitle
     jade.value = game?.jade_total ?? 0
-    jadeDaily.value = !!game?.jade_daily
-    jadeRevenge.value = !!game?.jade_revenge
+    jadeMultFrom.value = game?.jade_mult_from ?? ''
     combo.value = game?.combo_cur ?? 0
     if (jade.value > 0) {
       // 开箱稀有度：60/30/9/1（SSR 极境时刻）
@@ -39,5 +37,5 @@ export const useGameFeastStore = defineStore('gameFeast', () => {
     visible.value = false
   }
 
-  return { visible, rarity, jade, jadeDaily, jadeRevenge, combo, score, title, feast, close }
+  return { visible, rarity, jade, jadeMultFrom, combo, score, title, feast, close }
 })

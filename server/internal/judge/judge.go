@@ -148,10 +148,33 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 		return
 	}
 	slog.Info("判题完成", "component", "judge", "sid", sub.ID, "status", status, "ms", timeMS, "mem_kb", memKB, "score", score)
-	// 玉经济体（v0.33-①）：已公开提交首次 AC 发玉（同题幂等）；比赛期提交 published=false，
-	// 由成绩发布时的补发钩子结算。尽力而为，失败不污染判题结果。
+	// 挑战模式（v0.23）：AC 触发挑战终判（时长按提交创建时刻起算，判题排队耗时不惩罚选手；
+	// 已终态的会话重复触发为 no-op，重测幂等）。先行——race 名次倍数依赖已终判的挑战会话。
+	if status == repo.StatusAccepted && sub.ChallengeID != 0 {
+		j.Repo.FinalizeChallengeOnAC(ctx, sub.UID, sub.ProblemID, sub.ID, len(sub.Code))
+	}
+	// 游戏感批（v0.41）：连击/坚持计数器（仅 published——比赛期提交不动计数；
+	// Cancelled 主动放弃不清零）。先行于发玉：连击玉加成按 AC 后连击数取档（v0.45）。
+	combo := 0
+	if sub.Published {
+		if stats, terr := j.Repo.TrackJudgeOutcome(ctx, sub.UID, sub.ProblemID,
+			status == repo.StatusAccepted, status == repo.StatusCancelled); terr != nil {
+			slog.Warn("连击/坚持计数失败", "component", "game", "sid", sub.ID, "error", terr)
+		} else if stats != nil {
+			combo = stats.ComboCur
+		}
+	}
+	// 课堂 PK（v0.42→v0.45）：race 名次倍数解析（raceMs 回写 + 即时名次 + CAS 抢坑），
+	// 倍率并入下方发玉总则取最高，不再独立补差。
+	racePct := 0
+	if status == repo.StatusAccepted && sub.ChallengeID != 0 && sub.RaceID != 0 {
+		racePct = j.Repo.ResolveRaceBonusMult(ctx, sub)
+	}
+	// 玉经济体（v0.33-①→v0.45 总则）：已公开提交首次 AC 发玉（同题幂等）——
+	// 最终玉 = (基础+掉落) × max(祝福/连击/每日一题/复仇/PK名次)，平级不连乘。
+	// 比赛期提交 published=false，由成绩发布时的补发钩子结算（racePct/combo 传 0）。
 	if status == repo.StatusAccepted && sub.Published {
-		if awarded, _, err := j.Repo.MaybeAwardJade(ctx, sub.UID, sub.ProblemID); err != nil {
+		if awarded, _, err := j.Repo.MaybeAwardJade(ctx, sub.UID, sub.ProblemID, racePct, combo); err != nil {
 			slog.Warn("首 AC 玉发放失败", "component", "jade", "sid", sub.ID, "error", err)
 		} else if awarded {
 			_ = j.Repo.SetSubmissionJade(ctx, sub.UID, sub.ProblemID, sub.ID) // 开箱 payload 回填（尽力而为）
@@ -161,28 +184,17 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 			}
 		}
 	}
-	// 挑战模式（v0.23）：AC 触发挑战终判（时长按提交创建时刻起算，判题排队耗时不惩罚选手；
-	// 已终态的会话重复触发为 no-op，重测幂等）
-	if status == repo.StatusAccepted && sub.ChallengeID != 0 {
-		j.Repo.FinalizeChallengeOnAC(ctx, sub.UID, sub.ProblemID, sub.ID, len(sub.Code))
-	}
-	// 游戏感批（v0.41）：连击/坚持计数器（仅 published——比赛期提交不动计数，
-	// Cancelled 主动放弃不清零）+ AC 成就判定。尽力而为不污染判题结果。
-	if sub.Published {
-		if _, terr := j.Repo.TrackJudgeOutcome(ctx, sub.UID, sub.ProblemID, status == repo.StatusAccepted); terr != nil {
-			slog.Warn("连击/坚持计数失败", "component", "game", "sid", sub.ID, "error", terr)
+	// AC 成就判定（连击等计数器已先行写入）。尽力而为不污染判题结果。
+	if sub.Published && status == repo.StatusAccepted {
+		perfect := score == 100
+		if perfect {
+			if n, cerr := j.Repo.CountOtherSubmissions(ctx, sub.UID, sub.ProblemID, sub.ID); cerr == nil && n > 0 {
+				perfect = false // 此前已有提交 = 非首发
+			}
 		}
-		if status == repo.StatusAccepted {
-			perfect := score == 100
-			if perfect {
-				if n, cerr := j.Repo.CountOtherSubmissions(ctx, sub.UID, sub.ProblemID, sub.ID); cerr == nil && n > 0 {
-					perfect = false // 此前已有提交 = 非首发
-				}
-			}
-			if _, aerr := j.Repo.EvaluateAchievements(ctx, sub.UID, sub.ID, sub.ProblemID,
-				score, time.Now(), perfect, sub.ChallengeID != 0); aerr != nil {
-				slog.Warn("成就判定失败", "component", "game", "sid", sub.ID, "error", aerr)
-			}
+		if _, aerr := j.Repo.EvaluateAchievements(ctx, sub.UID, sub.ID, sub.ProblemID,
+			score, time.Now(), perfect, sub.ChallengeID != 0); aerr != nil {
+			slog.Warn("成就判定失败", "component", "game", "sid", sub.ID, "error", aerr)
 		}
 	}
 }

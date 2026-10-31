@@ -18,6 +18,7 @@ const userStore = useUserStore()
 // 游戏感批（v0.41）：每日钩子
 const daily = ref<{ enabled: boolean; pid?: number; title?: string; difficulty?: number; done?: boolean; solved_today?: number } | null>(null)
 const revenge = ref<{ pid: number; title: string; difficulty: number; best_score: number }[]>([])
+const revengeUsed = ref(false)
 const streakDays = ref(0)
 const dailyQuote = pickDailyQuote()
 const classes = ref<ClassCard[]>([])
@@ -82,6 +83,7 @@ onMounted(async () => {
         .revenge()
         .then((r) => {
           revenge.value = r.list
+          revengeUsed.value = r.used
         })
         .catch(() => {
           revenge.value = []
@@ -204,13 +206,13 @@ onMounted(async () => {
       <div v-if="revenge.length" class="gcard gc-block">
         <div class="gc-cap">
           <span class="gc-title">⚔️ 复仇之战</span>
-          <span class="gc-date">曾错过的题 · 复仇成功掉落 ×1.5</span>
+          <span class="gc-date">{{ revengeUsed ? '今日复仇已完成 · 明天再来' : '每日一题 ×1.5 · 24 小时前错过的题' }}</span>
         </div>
         <div class="gc-list">
-          <button v-for="r in revenge" :key="r.pid" class="gc-row" @click.stop="router.push(`/problems/${r.pid}`)">
+          <button v-for="r in revenge" :key="r.pid" class="gc-row" :disabled="revengeUsed" @click.stop="router.push(`/problems/${r.pid}`)">
             <b class="gc-row-name">{{ r.pid }} {{ r.title }}</b>
             <span class="gc-row-meta">上次 {{ r.best_score }} 分</span>
-            <span class="gc-row-go">去复仇 →</span>
+            <span class="gc-row-go">{{ revengeUsed ? '已复仇 ✓' : '去复仇 →' }}</span>
           </button>
         </div>
       </div>

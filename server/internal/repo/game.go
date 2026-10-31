@@ -39,10 +39,11 @@ type GameStats struct {
 }
 
 // TrackJudgeOutcome 判题回写后的连击/坚持维护（仅 published 提交调用——比赛期
-// 提交不动计数，与玉/XP 口径一致）。AC：同题重复 AC 不涨不清（防重交刷连击），
-// 异题 +1；任何未 AC 的正式提交清零（Cancelled 主动放弃不清——手滑保护）。
-// 坚持按北京时间自然日：当天已有 AC 不变，跨一天 +1，断更重置为 1。
-func (r *Repo) TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted bool) (*GameStats, error) {
+// 提交不动计数，与玉/XP 口径一致）。连击（v0.45 跨日口径）：连续异题 AC 累计，
+// 同题重复 AC 不涨（防重交刷连击）；WA 等未 AC 正式提交清零（Cancelled 主动放弃
+// 不清——手滑保护）；断更日（上次 AC 在前天或更早）清零——与火焰/坚持榜「连续」
+// 语义统一。坚持按北京时间自然日：当天已有 AC 不变，跨一天 +1，断更重置为 1。
+func (r *Repo) TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted, cancelled bool) (*GameStats, error) {
 	var u struct {
 		ComboCur   int    `bson:"comboCur"`
 		ComboBest  int    `bson:"comboBest"`
@@ -62,19 +63,28 @@ func (r *Repo) TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted b
 			return nil, err
 		}
 	}
+	today := beijingDay(time.Now())
+	yesterday := beijingDay(time.Now().AddDate(0, 0, -1))
+	// 断更判定：上次 AC 在前天或更早（今天/昨天有 AC 均算连续）——首提交（空串）不算断
+	broke := u.LastAcDay != "" && u.LastAcDay != today && u.LastAcDay != yesterday
 	set := bson.M{}
 	if accepted {
 		if pid != u.LastAcPID {
-			set["comboCur"] = u.ComboCur + 1
-			if u.ComboCur+1 > u.ComboBest {
-				set["comboBest"] = u.ComboCur + 1
+			combo := u.ComboCur
+			if broke {
+				combo = 0 // 断更：连击从本次重新起算
+			}
+			set["comboCur"] = combo + 1
+			if combo+1 > u.ComboBest {
+				set["comboBest"] = combo + 1
 			}
 			set["lastAcPid"] = pid
+		} else if broke {
+			// 同题重交不涨连击，但断更本身要清——连续性度量不残留旧值
+			set["comboCur"] = 0
 		}
-		today := beijingDay(time.Now())
 		if today != u.LastAcDay {
 			streak := 1
-			yesterday := beijingDay(time.Now().AddDate(0, 0, -1))
 			if u.LastAcDay == yesterday {
 				streak = u.StreakDays + 1
 			}
@@ -84,7 +94,7 @@ func (r *Repo) TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted b
 				set["streakBest"] = streak
 			}
 		}
-	} else {
+	} else if !cancelled {
 		// 未 AC：连击清零（Cancelled 不清——主动放弃不算失误）；坚持不受影响
 		set["comboCur"] = 0
 		set["lastAcPid"] = 0
@@ -203,24 +213,34 @@ type RevengeRow struct {
 	LastAt     time.Time `json:"last_at"`
 }
 
-// Wrongbook 错题集：有非 AC 提交且从未 AC 的题（jadeAwards 无记录 = 未 AC 过），
-// 聚合每题最好成绩与最近一战时间，按最近一战倒序。
-func (r *Repo) Wrongbook(ctx context.Context, uid int64, limit int) ([]RevengeRow, error) {
+// Wrongbook 错题集：有非取消未 AC 提交且从未 AC 的题（jadeAwards 无记录 = 未 AC 过），
+// 聚合每题最好成绩、最近一战时间与最早错误时间；按最久未战优先（lastAt 升序，v0.45 改）。
+// minAge > 0 时只保留最早错误距今满 minAge 的题（复仇窗口：当日顺路做对的不进推荐）；
+// 错题本全量传 0 不过滤。
+func (r *Repo) Wrongbook(ctx context.Context, uid int64, limit int, minAge time.Duration) ([]RevengeRow, error) {
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"uid": uid, "status": bson.M{"$ne": StatusAccepted}, "published": true}}},
+		{{Key: "$match", Value: bson.M{"uid": uid, "status": bson.M{"$nin": bson.A{StatusAccepted, StatusCancelled}}, "published": true}}},
 		{{Key: "$group", Value: bson.M{
 			"_id":     "$pid",
 			"best":    bson.M{"$max": "$score"},
 			"lastAt":  bson.M{"$max": "$createdAt"},
+			"firstAt": bson.M{"$min": "$createdAt"},
 		}}},
-		{{Key: "$sort", Value: bson.D{{Key: "lastAt", Value: -1}}}},
-		{{Key: "$limit", Value: limit}},
-		{{Key: "$lookup", Value: bson.M{
+	}
+	if minAge > 0 {
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.M{
+			"firstAt": bson.M{"$lte": time.Now().Add(-minAge)},
+		}}})
+	}
+	pipeline = append(pipeline,
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "lastAt", Value: 1}}}},
+		bson.D{{Key: "$limit", Value: limit}},
+		bson.D{{Key: "$lookup", Value: bson.M{
 			"from": "problems", "localField": "_id", "foreignField": "_id", "as": "p",
 			"pipeline": bson.A{bson.M{"$project": bson.M{"title": 1, "difficulty": 1}}},
 		}}},
-		{{Key: "$unwind", Value: bson.M{"path": "$p", "preserveNullAndEmptyArrays": true}}},
-	}
+		bson.D{{Key: "$unwind", Value: bson.M{"path": "$p", "preserveNullAndEmptyArrays": true}}},
+	)
 	cur, err := r.submissions.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
@@ -250,12 +270,19 @@ func (r *Repo) Wrongbook(ctx context.Context, uid int64, limit int) ([]RevengeRo
 	return rows, cur.Err()
 }
 
-// isRevenge 该题是否在用户错题集（有非 AC 提交）——首 AC 发玉时的「一血偿还」判定。
-func (r *Repo) isRevenge(ctx context.Context, uid, pid int64) bool {
-	n, err := r.submissions.CountDocuments(ctx,
-		bson.M{"uid": uid, "pid": pid, "status": bson.M{"$ne": StatusAccepted}},
-		options.Count().SetLimit(1))
-	return err == nil && n > 0
+// （isRevenge 已于 v0.45 由 jade.go revengeState 取代：24h 窗口 + 当日名额 +
+// 排除 Cancelled，原「有非 AC 提交即算」口径退役不留。）
+
+// RevengeSlotUsed 今日复仇名额是否已用（v0.45：每日 1 名额，推荐卡完成态展示）。
+func (r *Repo) RevengeSlotUsed(ctx context.Context, uid int64) bool {
+	var u struct {
+		RevengeDay string `bson:"revengeDay"`
+	}
+	if err := r.users.FindOne(ctx, bson.M{"_id": uid},
+		options.FindOne().SetProjection(bson.M{"revengeDay": 1})).Decode(&u); err != nil {
+		return false
+	}
+	return u.RevengeDay == beijingDay(time.Now())
 }
 
 // ---- 成就（定义表 + 判定）----
@@ -581,20 +608,24 @@ type GameRankRow struct {
 	Best      int    `json:"best"`
 }
 
-// GameBoard 连击榜（comboCur 倒序）/ 坚持榜（streakDays 倒序）；users 集合字段直查。
-func (r *Repo) GameBoard(ctx context.Context, kind string, limit int) ([]GameRankRow, error) {
-	field, best := "comboCur", "comboBest"
+// GameBoard 连击榜（v0.45 双排序：默认按历史 comboBest 倒序——退坑玩家的历史成绩
+// 仍在榜；by="cur" 切当前 comboCur）/ 坚持榜（streakDays 倒序）；users 集合字段直查。
+// 行 Value = 排序维度值，Best = 另一维度（连击榜两维互为对照）。
+func (r *Repo) GameBoard(ctx context.Context, kind, by string, limit int) ([]GameRankRow, error) {
+	sortField, curF, bestF := "comboBest", "comboCur", "comboBest"
 	if kind == "streak" {
-		field, best = "streakDays", "streakBest"
+		sortField, curF, bestF = "streakDays", "streakDays", "streakBest"
+	} else if by == "cur" {
+		sortField = "comboCur"
 	}
-	filter := bson.M{field: bson.M{"$gt": 0}}
+	filter := bson.M{sortField: bson.M{"$gt": 0}}
 	total, err := r.users.CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
 	cur, err := r.users.Find(ctx, filter,
-		options.Find().SetProjection(bson.M{"uname": 1, "nickname": 1, field: 1, best: 1}).
-			SetSort(bson.D{{Key: field, Value: -1}, {Key: "_id", Value: 1}}).
+		options.Find().SetProjection(bson.M{"uname": 1, "nickname": 1, curF: 1, bestF: 1}).
+			SetSort(bson.D{{Key: sortField, Value: -1}, {Key: "_id", Value: 1}}).
 			SetLimit(int64(limit)))
 	if err != nil {
 		return nil, err
@@ -617,10 +648,13 @@ func (r *Repo) GameBoard(ctx context.Context, kind string, limit int) ([]GameRan
 		}
 		i++
 		gr := GameRankRow{Rank: i, UID: row.ID, Username: row.Uname, Nickname: row.Nickname}
-		if kind == "combo" {
-			gr.Value, gr.Best = row.Val, row.Best
-		} else {
+		switch {
+		case kind == "streak":
 			gr.Value, gr.Best = row.Streak, row.SBest
+		case by == "cur":
+			gr.Value, gr.Best = row.Val, row.Best
+		default:
+			gr.Value, gr.Best = row.Best, row.Val
 		}
 		if gr.Nickname == "" {
 			gr.Nickname = gr.Username
@@ -631,23 +665,28 @@ func (r *Repo) GameBoard(ctx context.Context, kind string, limit int) ([]GameRan
 	return rows, cur.Err()
 }
 
-// GameBoardRank 榜外观察者名次（比我高的人数 +1）；0 = 不在榜。
-func (r *Repo) GameBoardRank(ctx context.Context, kind string, uid int64) (int, int) {
-	field := "comboCur"
+// GameBoardRank 榜外观察者名次（比我高的人数 +1）；0 = 不在榜。by 口径同 GameBoard。
+func (r *Repo) GameBoardRank(ctx context.Context, kind, by string, uid int64) (int, int) {
+	field := "comboBest"
 	if kind == "streak" {
 		field = "streakDays"
+	} else if by == "cur" {
+		field = "comboCur"
 	}
 	var u struct {
 		Val int `bson:"comboCur"`
 		St  int `bson:"streakDays"`
+		Bst int `bson:"comboBest"`
 	}
 	if err := r.users.FindOne(ctx, bson.M{"_id": uid},
-		options.FindOne().SetProjection(bson.M{"comboCur": 1, "streakDays": 1})).Decode(&u); err != nil {
+		options.FindOne().SetProjection(bson.M{"comboCur": 1, "streakDays": 1, "comboBest": 1})).Decode(&u); err != nil {
 		return 0, 0
 	}
-	val := u.Val
+	val := u.Bst
 	if kind == "streak" {
 		val = u.St
+	} else if by == "cur" {
+		val = u.Val
 	}
 	if val <= 0 {
 		return 0, val

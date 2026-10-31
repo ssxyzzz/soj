@@ -13,10 +13,10 @@ import { playPerfect } from '@/utils/gameSounds'
 import CodeEditor from '@/components/CodeEditor.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SelfTestPanel from '@/components/SelfTestPanel.vue'
-import { challengeApi, problemApi, submissionApi } from '@/api'
+import { challengeApi, problemApi, raceApi, submissionApi } from '@/api'
 import { isQueueStatus } from '@/utils/format'
 import { parseIOSamples } from '@/utils/md'
-import type { ProblemDetail } from '@/types'
+import type { ClassRaceView, ProblemDetail } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -46,6 +46,60 @@ let pollTimer: number | null = null
 const selfTestOpen = ref(false)
 // 一键填充样例的数据源：题面 ```inputN/```outputN 围栏解析（utils/md）
 const ioSamples = computed(() => parseIOSamples(problem.value?.description ?? ''))
+
+// ---------- 课堂 PK（v0.42）：?race= 场次横幅——上榜线（race 截止）+ 即时名次 ----------
+// 参赛链路与普通挑战完全同构（提交自动挂 raceId），这里只做展示层：名次 5s 轮询，
+// 剩余时间锚在服务端下发的 remaining_ms 上（与主倒计时的时钟偏移处理同款）。
+const raceInfo = ref<ClassRaceView | null>(null)
+let raceAnchorAt = 0
+let raceTimer: number | null = null
+
+const raceRemainMs = computed(() => {
+  const r = raceInfo.value
+  if (!r || r.status !== 'running') return 0
+  const base = r.remaining_ms ?? Math.max(0, r.deadline_at - Date.now())
+  // nowTick 每 250ms 同步 Date.now()（真实时钟），与 raceAnchorAt 同基可直减
+  return raceAnchorAt ? Math.max(0, base - (nowTick.value - raceAnchorAt)) : base
+})
+const raceRemainText = computed(() => {
+  const total = Math.ceil(raceRemainMs.value / 1000)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+})
+
+async function loadRace() {
+  const rid = Number(route.query.race)
+  if (!rid) return
+  try {
+    raceInfo.value = await raceApi.byID(rid)
+    raceAnchorAt = Date.now()
+    startRacePoll()
+  } catch {
+    /* 非成员/场次不存在：横幅不显示，挑战照常 */
+  }
+}
+
+function startRacePoll() {
+  if (raceTimer != null) return
+  raceTimer = window.setInterval(async () => {
+    if (!raceInfo.value || raceInfo.value.status !== 'running') {
+      stopRacePoll()
+      return
+    }
+    try {
+      raceInfo.value = await raceApi.byID(raceInfo.value.id)
+      raceAnchorAt = Date.now()
+    } catch {
+      /* 网络抖动保旧值 */
+    }
+  }, 5000)
+}
+
+function stopRacePoll() {
+  if (raceTimer != null) {
+    window.clearInterval(raceTimer)
+    raceTimer = null
+  }
+}
 
 const LANGS = [
   { value: 'cpp', label: 'C++ 14' },
@@ -146,7 +200,7 @@ function clearDraft() {
 // ---------- 流程 ----------
 onMounted(async () => {
   try {
-    const [p, st] = await Promise.all([problemApi.detail(pid), challengeApi.status(pid)])
+    const [p, st] = await Promise.all([problemApi.detail(pid), challengeApi.status(pid), loadRace()])
     problem.value = p
     challengeSec.value = p.challenge?.sec ?? 0
     const active = st.active as { id?: number; remaining_ms?: number; deadline_at?: number }
@@ -183,6 +237,7 @@ onBeforeUnmount(() => {
   alive = false
   stopTick()
   stopSnapshots()
+  stopRacePoll()
   if (pollTimer != null) window.clearTimeout(pollTimer)
   if (saveTimer != null) window.clearTimeout(saveTimer)
   if (cdTimer != null) {
@@ -419,6 +474,20 @@ function swallow(e: Event) {
         <span class="ghost-you" :style="{ left: `min(${ghostPct}%, calc(100% - 34px))` }">你</span>
       </div>
       <span class="ghost-pct mono">{{ ghostPct }}%</span>
+    </div>
+    <!-- 课堂 PK 横幅（v0.42）：上榜线（race 截止）+ 即时名次，与主倒计时并行展示 -->
+    <div v-if="raceInfo" class="race-banner" :class="{ done: raceInfo.status !== 'running' }">
+      <span class="race-tag">⚔️ 课堂 PK</span>
+      <template v-if="raceInfo.status === 'running'">
+        <span v-if="raceInfo.my_rank > 0" class="race-rank">
+          当前 #{{ raceInfo.my_rank }}<template v-if="raceInfo.board.length"> / {{ raceInfo.board.length }} 人完赛</template>
+        </span>
+        <span v-else class="race-rank">AC 即上榜</span>
+        <span class="race-clock mono">上榜截止 {{ raceRemainText }}</span>
+      </template>
+      <span v-else class="race-rank">
+        {{ raceInfo.status === 'settled' ? (raceInfo.my_rank > 0 ? `已结算 · 第 ${raceInfo.my_rank} 名` : '已结算') : '本场已取消' }}
+      </span>
     </div>
     <!-- 主体：左题面右编辑器 -->
     <div class="chal-body" v-if="problem">
@@ -804,6 +873,46 @@ function swallow(e: Event) {
   border-radius: 12px;
   background: var(--soj-blue-soft);
   font-size: 13px;
+}
+
+/* 课堂 PK 横幅（v0.42）：与幽灵条同族蓝软底，未截止时琥珀描边提「上榜线」 */
+.race-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  margin: 0 20px 8px;
+  border-radius: 12px;
+  background: var(--soj-blue-soft);
+  font-size: 13px;
+}
+
+.race-tag {
+  font-weight: 800;
+  color: var(--soj-navy, #0b1f45);
+}
+
+.race-rank {
+  font-weight: 700;
+  color: var(--soj-blue, #2563eb);
+}
+
+.race-clock {
+  margin-left: auto;
+  color: #92400e;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.race-banner.done .race-rank {
+  color: var(--soj-dim, #64748b);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-banner,
+  .ghost-bar {
+    transition: none;
+  }
 }
 
 .ghost-label {

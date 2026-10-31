@@ -279,6 +279,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取设置失败")
 		return
 	}
+	comboStep, comboPct, comboCap := s.JadeComboCfg()
 	ok(c, gin.H{
 		"rate_limit_per_minute":     s.RateLimitPerMinute,
 		"home_notice":               s.HomeNotice,
@@ -311,9 +312,13 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"notify_broadcast_per_day":   s.NotifyBroadcastPerDayVal(),
 		"user_seq_start":             s.UserSeqStartVal(),
 		"problem_seq_start":          s.ProblemSeqStartVal(),
-		"currency_name":              s.CurrencyNameVal(),
-		"jade_award_rate_pct":        s.JadeAwardRatePctVal(),
-		"jade_discount":              normalizeJadeDiscountLocal(s.JadeDiscount),
+		"currency_name":           s.CurrencyNameVal(),
+		"jade_award_rate_pct":     s.JadeAwardRatePctVal(),
+		"jade_discount":           normalizeJadeDiscountLocal(s.JadeDiscount),
+		"jade_combo_step":         comboStep,
+		"jade_combo_pct":          comboPct,
+		"jade_combo_cap_pct":      comboCap,
+		"jade_revenge_hours":      s.JadeRevengeHoursVal(),
 		// 资料自改开关（v0.34）：五字段逐个可锁
 		"profile_edit_nickname": s.OpenNickname(),
 		"profile_edit_gender":   s.OpenGender(),
@@ -408,6 +413,10 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		ProblemSeqStart         *int  `json:"problem_seq_start"` // 自动题号起点
 		CurrencyName            *string `json:"currency_name"` // 货币名（v0.33，1–6 字，默认「玉」）
 		JadeAwardRatePct        *int  `json:"jade_award_rate_pct"` // 比赛奖池获奖比例 %（v0.33）
+		JadeComboStep           *int  `json:"jade_combo_step"`     // 连击加成步长（每满 N 连击一档，v0.45）
+		JadeComboPct            *int  `json:"jade_combo_pct"`      // 每档加成 %（v0.45）
+		JadeComboCapPct         *int  `json:"jade_combo_cap_pct"`  // 加成封顶 %（v0.45，100=峰值×2）
+		JadeRevengeHours        *int  `json:"jade_revenge_hours"`  // 复仇窗口小时（v0.45）
 		JadeDiscount            *[6]int `json:"jade_discount"`    // 玉折扣六档 Lv5–10 %（v0.40）
 		JadeSolutionUnlockMult  *int  `json:"jade_solution_unlock_mult"` // 题解解锁价系数（v0.33-②）
 		JadeBountyMin           *int  `json:"jade_bounty_min"` // 悬赏额下限（v0.33-②）
@@ -666,6 +675,35 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	}
 	if req.JadeShopEnabled != nil {
 		s.JadeShopEnabled = req.JadeShopEnabled
+	}
+	// 连击加成/复仇窗口（v0.45）：范围校验后落字段（normalize 兜底双保险）
+	if req.JadeComboStep != nil {
+		if *req.JadeComboStep < 1 || *req.JadeComboStep > 1000 {
+			fail(c, http.StatusBadRequest, "连击步长需在 1–1000 之间")
+			return
+		}
+		s.JadeComboStep = req.JadeComboStep
+	}
+	if req.JadeComboPct != nil {
+		if *req.JadeComboPct < 1 || *req.JadeComboPct > 100 {
+			fail(c, http.StatusBadRequest, "连击每档加成需在 1–100% 之间")
+			return
+		}
+		s.JadeComboPct = req.JadeComboPct
+	}
+	if req.JadeComboCapPct != nil {
+		if *req.JadeComboCapPct < 0 || *req.JadeComboCapPct > 900 {
+			fail(c, http.StatusBadRequest, "连击加成封顶需在 0–900% 之间")
+			return
+		}
+		s.JadeComboCapPct = req.JadeComboCapPct
+	}
+	if req.JadeRevengeHours != nil {
+		if *req.JadeRevengeHours < 1 || *req.JadeRevengeHours > 24*30 {
+			fail(c, http.StatusBadRequest, "复仇窗口需在 1–720 小时之间")
+			return
+		}
+		s.JadeRevengeHours = req.JadeRevengeHours
 	}
 	// 资料自改开关（v0.34）：先归一到当前生效配置再覆盖出现项（未出现的保持原值）
 	if req.ProfileEditNickname != nil || req.ProfileEditGender != nil || req.ProfileEditGrade != nil ||

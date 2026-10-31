@@ -19,9 +19,7 @@
           <div v-if="isPerfect" class="stamp-sub">一次过 · 满分</div>
           <div v-if="feast.jade > 0" class="stamp-jade">
             +{{ feast.jade }} {{ currency }}
-            <span v-if="feast.jadeDaily" class="mini-tag">每日 ×2</span>
-            <span v-if="feast.jadeRevenge" class="mini-tag">一血偿还 ×1.5</span>
-            <span v-if="blessed" class="mini-tag bless">祝福 ×2</span>
+            <span v-if="feast.jadeMultFrom" class="mini-tag">{{ feast.jadeMultFrom }}</span>
           </div>
           <div v-if="feast.combo >= 2" class="stamp-combo">连击 ×{{ feast.combo }}</div>
         </div>
@@ -45,7 +43,6 @@ import { playAC, playCoin, playPerfect, playSSR } from '@/utils/gameSounds'
 
 const feast = useGameFeastStore()
 const currency = ref('玉')
-const blessed = ref(false)
 
 const isPerfect = computed(() => feast.jade > 0 && feast.score === 100)
 
@@ -67,7 +64,6 @@ watch(
         .then((r) => r.json())
         .then((d) => {
           currency.value = d.data?.currency ?? '玉'
-          blessed.value = !!d.data?.bless_until
         })
       setTimeout(() => playCoin(), 900)
     }

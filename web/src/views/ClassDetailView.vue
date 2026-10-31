@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -13,10 +13,12 @@ import ProblemPicker from '@/components/ProblemPicker.vue'
 import CopyFromListButton from '@/components/CopyFromListButton.vue'
 import UserSuggestTextarea from '@/components/UserSuggestTextarea.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
-import { fmtDate, fmtDay } from '@/utils/format'
+import { fmtDate, fmtDay, fmtSec } from '@/utils/format'
+import { playAchievement, playSSR } from '@/utils/gameSounds'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import { useUserStore } from '@/stores/user'
-import type { AssignmentListItem, ClassDetail, ClassMember, PickedProblem } from '@/types'
+import { usePolling } from '@/composables/usePolling'
+import type { AssignmentListItem, ClassDetail, ClassMember, ClassRaceView, PickedProblem } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -156,8 +158,9 @@ async function load() {
   loading.value = true
   try {
     cl.value = await classApi.detail(Number(route.params.id))
-    // v0.37 作业/考试并行拉（原串行两连，高延迟链路省一跳 ~100ms；两者互不依赖）
-    await Promise.allSettled([loadAssignments(), loadExams()])
+    // v0.37 作业/考试并行拉（原串行两连，高延迟链路省一跳 ~100ms；两者互不依赖）；
+    // v0.42 课堂 PK 现状一并拉（running 时经 watch 带起轮询与秒针）
+    await Promise.allSettled([loadAssignments(), loadExams(), loadRace()])
   } catch {
     router.replace('/classes')
   } finally {
@@ -175,6 +178,165 @@ async function loadAssignments() {
     assignments.value = []
   }
 }
+
+// ---------- 课堂 PK（v0.42）：全班同题手速挑战 ----------
+// 教师发起（manageable），学生从挑战链路参赛（StartChallenge 的 Lv3 闸 + staff
+// 豁免自动生效）；榜单 3s 轮询，倒计时秒针本地走字、绝对时限锚在服务端下发值上。
+const raceState = ref<{ race?: ClassRaceView; last?: ClassRaceView }>({})
+const race = computed(() => raceState.value.race)
+const lastRace = computed(() => raceState.value.last)
+const raceView = computed(() => race.value ?? lastRace.value)
+const raceCardVisible = computed(() => !!raceView.value || !!cl.value?.manageable)
+
+const showRace = ref(false)
+const creatingRace = ref(false)
+const cancellingRace = ref(false)
+const raceForm = reactive({ picked: [] as PickedProblem[], bonus: true, countdown: 0 })
+
+function openRaceDialog() {
+  raceForm.picked = []
+  raceForm.bonus = true
+  raceForm.countdown = 0
+  showRace.value = true
+}
+
+async function createRace() {
+  if (!cl.value) return
+  if (raceForm.picked.length !== 1) {
+    ElMessage.warning('请选择恰好一道 PK 题目')
+    return
+  }
+  creatingRace.value = true
+  try {
+    await classApi.createRace(cl.value.id, {
+      pid: raceForm.picked[0].id,
+      bonus: raceForm.bonus,
+      countdown: raceForm.countdown,
+    })
+    ElMessage.success('课堂 PK 已发起，参赛入口已通知全班')
+    showRace.value = false
+    raceForm.picked = []
+    await loadRace()
+  } finally {
+    creatingRace.value = false
+  }
+}
+
+async function cancelRace() {
+  if (!cl.value) return
+  try {
+    await ElMessageBox.confirm('取消后本场 PK 作废（已 AC 记录保留，不再计名次加成）？', '取消课堂 PK', {
+      type: 'warning',
+      confirmButtonText: '取消 PK',
+      cancelButtonText: '继续比赛',
+    })
+  } catch {
+    return
+  }
+  cancellingRace.value = true
+  try {
+    await classApi.cancelRace(cl.value.id)
+    ElMessage.success('已取消本场课堂 PK')
+    await loadRace()
+  } finally {
+    cancellingRace.value = false
+  }
+}
+
+function joinRace() {
+  const r = race.value
+  if (!r) return
+  router.push(`/problems/${r.pid}/challenge?race=${r.id}`)
+}
+
+// 本地秒针：倒计时锚在服务端下发的剩余值上（客户端时钟偏移不影响走字）
+const nowTick = ref(Date.now())
+const raceAnchor = ref<{ at: number; remain: number; cd: number } | null>(null)
+let tickTimer: ReturnType<typeof setInterval> | null = null
+function ensureTick() {
+  if (!tickTimer) tickTimer = setInterval(() => (nowTick.value = Date.now()), 1000)
+}
+function stopTick() {
+  if (tickTimer) {
+    clearInterval(tickTimer)
+    tickTimer = null
+  }
+}
+onUnmounted(stopTick)
+
+const raceRemainMs = computed(() =>
+  raceAnchor.value ? Math.max(0, raceAnchor.value.remain - (nowTick.value - raceAnchor.value.at)) : 0,
+)
+const raceCdMs = computed(() =>
+  raceAnchor.value ? Math.max(0, raceAnchor.value.cd - (nowTick.value - raceAnchor.value.at)) : 0,
+)
+
+function fmtClock(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000))
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+// 结算庆祝（running→settled 轮询撞见）：我在榜内 → 评级音效 + 卡片闪光
+const raceCelebrate = ref(false)
+let celebrateTimer: ReturnType<typeof setTimeout> | null = null
+
+async function loadRace() {
+  if (!cl.value || (!cl.value.joined && !cl.value.manageable)) return
+  try {
+    const r = await classApi.race(cl.value.id)
+    const prev = raceState.value.race
+    raceState.value = r
+    // 锚定 nowTick 自身时钟（非 Date.now()）：nowTick 从 setup 起表，比请求返回
+    // 时刻早一个时延 δ——锚 Date.now() 会让 nowTick−at 恒为 −δ，cd=0 的场次被
+    // 撑出「开赛 00:01」的幽灵倒计时（实弹抓过）
+    raceAnchor.value = r.race
+      ? { at: nowTick.value, remain: r.race.remaining_ms ?? 0, cd: r.race.countdown_ms ?? 0 }
+      : null
+    const next = r.race ?? r.last
+    if (
+      prev?.status === 'running' &&
+      next &&
+      next.id === prev.id &&
+      next.status === 'settled' &&
+      next.my_rank > 0 &&
+      !raceCelebrate.value
+    ) {
+      raceCelebrate.value = true
+      if (next.my_rank === 1) playSSR()
+      else playAchievement()
+      if (celebrateTimer) clearTimeout(celebrateTimer)
+      celebrateTimer = setTimeout(() => (raceCelebrate.value = false), 4000)
+    }
+  } catch {
+    raceState.value = {}
+    raceAnchor.value = null
+  }
+}
+
+// 实时榜 3s 轮询：race 消失（结算/取消）即自动停轮；秒针随 race 存在起停
+const racePoller = usePolling(async () => {
+  await loadRace()
+  return !!raceState.value.race
+}, 3000)
+watch(
+  () => !!raceState.value.race,
+  (on) => {
+    if (on) {
+      ensureTick()
+      racePoller.restart()
+    } else {
+      stopTick()
+    }
+  },
+)
+
+// 榜行：前 5 名 + 榜外自己的名次行
+const raceRows = computed(() => (raceView.value?.board ?? []).slice(0, 5))
+const myOutsideRow = computed(() => {
+  const r = raceView.value
+  if (!r || r.my_rank <= 0 || r.my_rank <= raceRows.value.length) return null
+  return { rank: r.my_rank, uid: -1, username: '我', duration_ms: r.my_ms, at: 0 }
+})
 
 async function join() {
   if (!cl.value) return
@@ -402,6 +564,81 @@ onMounted(load)
             :closable="false"
           />
           <template v-else>
+            <!-- 课堂 PK（v0.42）：全班同题手速挑战——教师发起、学生从挑战链路参赛 -->
+            <div v-if="raceCardVisible" class="card pk-card" :class="{ celebrating: raceCelebrate }">
+              <div class="pk-top">
+                <span class="pk-badge">⚔️ 课堂 PK</span>
+                <span
+                  class="pk-state"
+                  :class="race ? (raceCdMs > 0 ? 'soon' : 'live') : lastRace?.status === 'settled' ? 'done' : 'off'"
+                >
+                  {{ race ? (raceCdMs > 0 ? '即将开始' : '进行中') : lastRace?.status === 'settled' ? '已结算' : '已取消' }}
+                </span>
+                <span v-if="race && raceCdMs > 0" class="pk-clock mono">开赛 {{ fmtClock(raceCdMs) }}</span>
+                <span v-else-if="race" class="pk-clock mono">{{ fmtClock(raceRemainMs) }}</span>
+                <span class="pk-grow"></span>
+                <el-button v-if="cl?.manageable && !race" size="small" type="primary" plain @click="openRaceDialog">
+                  发起 PK
+                </el-button>
+                <el-button
+                  v-if="cl?.manageable && race"
+                  size="small"
+                  type="danger"
+                  plain
+                  :loading="cancellingRace"
+                  @click="cancelRace"
+                >
+                  取消
+                </el-button>
+              </div>
+
+              <template v-if="raceView">
+                <div class="pk-body">
+                  <RouterLink class="pk-title" :to="`/problems/${raceView.pid}`">{{ raceView.ptitle }}</RouterLink>
+                  <span class="pk-meta">
+                    {{ raceView.host_name }} 发起 ·
+                    {{ Math.max(1, Math.round((raceView.deadline_at - raceView.started_at) / 60000)) }} 分钟
+                    {{ raceView.bonus ? '· 前 3 名掉落加成' : '· 纯娱乐局' }}
+                  </span>
+                </div>
+                <div v-if="raceView.board.length" class="pk-board">
+                  <div
+                    v-for="row in raceRows"
+                    :key="row.uid"
+                    class="pk-row"
+                    :class="{ me: row.uid === userStore.uid }"
+                  >
+                    <span class="pk-medal">{{ ['🥇', '🥈', '🥉'][row.rank - 1] ?? `#${row.rank}` }}</span>
+                    <span class="pk-name">{{ row.username }}</span>
+                    <span class="pk-ms mono">{{ fmtSec(row.duration_ms) }}</span>
+                  </div>
+                  <div v-if="myOutsideRow" class="pk-row me">
+                    <span class="pk-medal">#{{ myOutsideRow.rank }}</span>
+                    <span class="pk-name">我</span>
+                    <span class="pk-ms mono">{{ fmtSec(myOutsideRow.duration_ms) }}</span>
+                  </div>
+                </div>
+                <div v-else class="pk-hint">
+                  {{ race && raceCdMs > 0 ? '倒计时结束后开赛，AC 即上榜' : '还没有人 AC——第一个交的就是榜首' }}
+                </div>
+
+                <div class="pk-actions">
+                  <template v-if="race">
+                    <el-button v-if="userStore.canChallenge" type="primary" :disabled="raceCdMs > 0" @click="joinRace">
+                      {{ raceCdMs > 0 ? '即将开始…' : raceView.my_rank > 0 ? `继续挑战（当前 #${raceView.my_rank}）` : '参赛' }}
+                    </el-button>
+                    <el-tooltip v-else content="Lv.3 解锁挑战模式后可参赛（教职工豁免）" placement="top">
+                      <el-button disabled>Lv.3 解锁后可参赛</el-button>
+                    </el-tooltip>
+                  </template>
+                  <span v-else-if="raceView.status === 'settled'" class="pk-winner">
+                    {{ raceView.winner_name ? `🏆 冠军：${raceView.winner_name}` : '本场无人 AC' }}
+                  </span>
+                </div>
+              </template>
+              <div v-else class="pk-hint">没有进行中的课堂 PK——老师发起后全班同题限时开战</div>
+            </div>
+
             <!-- 作业长条卡直接落在页面上（2026-10-26 拍板：去外层大卡）；
                  左侧日期色块（年月日），管理员可从六点手柄拖动排序（最新默认在最上） -->
             <div v-if="assignments.length" class="strip-list">
@@ -636,6 +873,33 @@ onMounted(load)
       </template>
     </el-dialog>
 
+    <!-- 发起课堂 PK（v0.42）：全班同题限时手速挑战，时长取题目挑战时长 -->
+    <el-dialog v-model="showRace" title="发起课堂 PK" width="960" top="5vh">
+      <el-form label-position="top">
+        <el-form-item label="PK 题目（公开、支持挑战且已有测试数据；时长取该题挑战时长）" required>
+          <ProblemPicker v-model="raceForm.picked" />
+        </el-form-item>
+        <el-form-item label="发起时机">
+          <el-radio-group v-model="raceForm.countdown">
+            <el-radio-button :value="0">立即开始</el-radio-button>
+            <el-radio-button :value="30">30 秒后</el-radio-button>
+            <el-radio-button :value="60">1 分钟后</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item>
+          <SwitchRow
+            v-model="raceForm.bonus"
+            label="前 3 名掉落加成（×2 / ×1.5 / ×1.2）"
+            tip="该题首 AC 玉与掉落照常发放，前三名 AC 时刻的即时名次额外加成；关闭则为纯娱乐局"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showRace = false">取消</el-button>
+        <el-button type="primary" :loading="creatingRace" @click="createRace">发起 PK</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showEditClass" title="编辑班级" width="960" top="5vh">
       <el-form label-position="top">
         <el-form-item label="班级名称" required>
@@ -798,6 +1062,180 @@ onMounted(load)
 /* 文本域吃满剩余宽、导入成员钮钉右侧末行——联想弹层向下展开不再盖钮 */
 .import-input {
   flex: 1;
+}
+
+/* ---- 课堂 PK 卡（v0.42）：与作业长条卡同族白底卡（soj-line + 双层影）---- */
+.pk-card {
+  padding: 12px 20px;
+  margin-bottom: 12px;
+}
+
+.pk-card.celebrating {
+  animation: pk-flash 0.9s ease-in-out 4;
+}
+
+@keyframes pk-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+  40% {
+    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.35);
+  }
+}
+
+.pk-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pk-badge {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--soj-navy, #0b1f45);
+  white-space: nowrap;
+}
+
+.pk-state {
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pk-state.live {
+  color: #067a55;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.pk-state.soon {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.pk-state.done {
+  color: var(--soj-dim, #64748b);
+  background: rgba(100, 116, 139, 0.1);
+}
+
+.pk-state.off {
+  color: var(--soj-dim, #64748b);
+  background: rgba(100, 116, 139, 0.06);
+}
+
+.pk-clock {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--soj-navy, #0b1f45);
+  font-variant-numeric: tabular-nums;
+}
+
+.pk-grow {
+  flex: 1;
+}
+
+.pk-body {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.pk-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--soj-navy, #0b1f45);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.pk-title:hover {
+  color: var(--soj-blue, #2563eb);
+}
+
+.pk-meta {
+  font-size: 12px;
+  color: var(--soj-dim, #64748b);
+  white-space: nowrap;
+}
+
+.pk-board {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.pk-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.pk-row.me {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.pk-medal {
+  width: 34px;
+  flex: none;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--soj-dim, #64748b);
+}
+
+.pk-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--soj-ink, #1e293b);
+}
+
+.pk-ms {
+  flex: none;
+  font-size: 13px;
+  color: var(--soj-dim, #64748b);
+  font-variant-numeric: tabular-nums;
+}
+
+.pk-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--soj-dim, #64748b);
+}
+
+.pk-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pk-winner {
+  font-size: 14px;
+  font-weight: 700;
+  color: #92400e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk-card.celebrating {
+    animation: none;
+  }
 }
 
 /* ---- 作业/考试长条卡（2026-10-26 拍板：替代表格，对齐题单页横条卡范式）---- */

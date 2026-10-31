@@ -179,12 +179,14 @@ func (r *Repo) JadeLedgerPage(ctx context.Context, uid int64, page, pageSize int
 
 // JadeAward 首 AC 发放记录（base/drop 按 AC 时点固化；测试与后续调试面读出）。
 type JadeAward struct {
-	Base    int64     `bson:"base"`
-	Drop    int64     `bson:"drop"`
-	Total   int64     `bson:"total"`
-	Daily   bool      `bson:"daily,omitempty"`   // 每日一题 ×2（v0.41）
-	Revenge bool      `bson:"revenge,omitempty"` // 一血偿还 ×1.5（v0.41）
-	At      time.Time `bson:"at"`
+	Base     int64     `bson:"base"`
+	Drop     int64     `bson:"drop"`
+	Total    int64     `bson:"total"`
+	MultPct  int       `bson:"multPct,omitempty"`  // 采用倍率百分比（100=无加成；v0.45 总则）
+	MultFrom string    `bson:"multFrom,omitempty"` // 采用倍率来源文案（并列取首个更高者）
+	Daily    bool      `bson:"daily,omitempty"`    // 每日一题（v0.41；v0.45 起并列达标即记）
+	Revenge  bool      `bson:"revenge,omitempty"`  // 一血偿还（v0.41；v0.45 起倍率被采用才记=名额消耗）
+	At       time.Time `bson:"at"`
 }
 
 // GetJadeAward 某用户某题的首 AC 发放记录（无则 nil, nil）。
@@ -370,8 +372,9 @@ func (r *Repo) problemACRateDB(ctx context.Context, pid int64) (rate float64, at
 // MaybeAwardJade 首次 AC 发玉（全局幂等）：已发过直接返回；并发窗口由 {uid,pid}
 // 唯一索引兜底（InsertOne 撞键 = 输了竞态，静默 no-op）。客观题首满分减半；掉落
 // p=1−AC率、成功额外掉难度值玉（AC 率无人做过按 0.3；金额按 AC 时点固化进 awards）。
-// 挂点：判题回写（published 提交）、客观题创建/重判（满分且 published）、比赛发布补发。
-// ---- 升维祝福（v0.40）：升级后 48h 做题玉收入 ×2，奖励量随所做题难度走 ----
+// 挂点：判题回写（published 提交，racePct/combo 由 judge 管道先行解析回传）、
+// 客观题创建/重判（满分且 published，racePct/combo 传 0）、比赛发布补发（传 0）。
+// ---- 倍率总则（v0.45）：最终玉 = (基础+掉落) × max(祝福/连击/每日/复仇/PK名次) ----
 
 // userBlessed 用户是否处于祝福期（判题发玉路径用，投影点查）。
 func (r *Repo) userBlessed(ctx context.Context, uid int64) (bool, error) {
@@ -454,7 +457,14 @@ func (r *Repo) EnsureLevelBlessingForUser(ctx context.Context, uid int64) error 
 	return r.EnsureLevelBlessing(ctx, uid, lv)
 }
 
-func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool, total int64, err error) {
+// MaybeAwardJade 首次 AC 发玉（同题幂等）。倍率总则（v0.45，2026-10-31 拍板）：
+// 最终玉 = (基础 + 掉落) × max(全部倍率)——升维祝福 ×2 / 连击加成（每满 step +pct%，
+// 封顶 capPct）/ 每日一题 ×2 / 一血偿还 ×1.5 / 课堂 PK 名次（raceRankPct，0=无）
+// 全部平级取最高不连乘，峰值 ×2；客观题半额已先于本段作用于 base。
+// combo = 本次 AC 生效后的连击数（judge 路径由 TrackJudgeOutcome 先行回传；
+// 客观题/比赛补发路径传 0 = 无连击加成）。每日复仇名额仅在倍率被采用时消耗
+//（被更高倍率压制 → 顺延不扣）。
+func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64, raceRankPct, combo int) (awarded bool, total int64, err error) {
 	var exist struct {
 		ID int64 `bson:"_id"`
 	}
@@ -483,25 +493,43 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool
 	if rand.Float64() < 1-rate {
 		drop = d
 	}
-	// 升维祝福（v0.40）：升级后 48h 做题玉收入 ×2（基础与掉落同步翻倍，
-	// 发放记录即实付口径）；奖励量随所做题的难度与数量走，不产固定玉。
-	reasonExtra := ""
-	if blessed, berr := r.userBlessed(ctx, uid); berr == nil && blessed {
-		base *= 2
-		drop *= 2
-		reasonExtra = "，升维祝福 ×2"
+	// 倍率候选收集（百分比整数，100 = 无加成；取最高不叠乘）。
+	set := &SystemSettings{}
+	if ss, serr := r.GetSystemSettings(ctx); serr == nil && ss != nil {
+		set = ss
 	}
-	// 每日一题（v0.41）：当日题掉落 ×2；复仇（v0.41）：错题重战掉落 ×1.5（向上取整）
-	daily, revenge := r.IsTodayDaily(ctx, pid), r.isRevenge(ctx, uid, pid)
+	multPct, multFrom := 100, ""
+	claim := func(pct int, from string) {
+		if pct > multPct {
+			multPct, multFrom = pct, from
+		}
+	}
+	blessed, berr := r.userBlessed(ctx, uid)
+	if berr == nil && blessed {
+		claim(200, "升维祝福 ×2")
+	}
+	if cp := set.JadeComboBonusPct(combo); cp > 100 {
+		claim(cp, "连击加成")
+	}
+	daily := r.IsTodayDaily(ctx, pid)
 	if daily {
-		drop *= 2
-		reasonExtra += "，每日一题 ×2"
+		claim(200, "每日一题 ×2")
 	}
-	if revenge && drop > 0 {
-		drop = (drop*3 + 1) / 2
-		reasonExtra += "，一血偿还 ×1.5"
+	revengeEligible, revengeUsedToday := r.revengeState(ctx, uid, pid)
+	if revengeEligible && !revengeUsedToday {
+		claim(150, "一血偿还 ×1.5")
 	}
-	total = int64(base + drop)
+	if raceRankPct > 100 {
+		claim(raceRankPct, "课堂 PK 名次")
+	}
+	// 名额消耗：仅复仇倍率被采用（150 ≥ multPct，即并列最高）时扣当日名额；
+	// 被祝福/连击/每日/PK 压制则顺延不扣。
+	revengeWon := revengeEligible && !revengeUsedToday && 150 >= multPct
+	if revengeWon {
+		r.consumeRevengeSlot(ctx, uid)
+	}
+	baseAmt := int64(base) + int64(drop)
+	total = (baseAmt*int64(multPct) + 99) / 100 // 向上取整
 	id, err := r.nextSeq(ctx, "jadeAward")
 	if err != nil {
 		return false, 0, err
@@ -509,7 +537,8 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool
 	_, err = r.jadeAwards.InsertOne(ctx, bson.M{
 		"_id": id, "uid": uid, "pid": pid,
 		"base": base, "drop": drop, "total": total,
-		"daily": daily, "revenge": revenge, "at": time.Now(),
+		"multPct": multPct, "multFrom": multFrom,
+		"daily": daily, "revenge": revengeWon, "at": time.Now(),
 	})
 	if mongo.IsDuplicateKeyError(err) {
 		return false, 0, nil
@@ -518,10 +547,59 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64) (awarded bool
 		return false, 0, err
 	}
 	if err := r.JadeCredit(ctx, uid, total, JadeKindAward,
-		fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d%s）", pid, p.Title, base, drop, reasonExtra), pid); err != nil {
+		fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d × %s）", pid, p.Title, base, drop, multText(multPct, multFrom)), pid); err != nil {
 		return false, 0, err
 	}
 	return true, total, nil
+}
+
+// multText 倍率文案（100 = 原倍，无来源）。
+func multText(pct int, from string) string {
+	if pct <= 100 {
+		return "无加成"
+	}
+	if from == "" {
+		return fmt.Sprintf("×%s", trimMult(float64(pct) / 100))
+	}
+	return fmt.Sprintf("%s ×%s", from, trimMult(float64(pct)/100))
+}
+
+// revengeState 每日复仇资格两元组：该题最早一次非取消未 AC 提交距今是否满窗口
+//（v0.45：当日顺路做对无加成——防「先 WA 再 AC」人为制造触发条件）、当日名额是否已用。
+func (r *Repo) revengeState(ctx context.Context, uid, pid int64) (eligible, usedToday bool) {
+	var row struct {
+		CreatedAt time.Time `bson:"createdAt"`
+	}
+	hours := 24
+	if set, serr := r.GetSystemSettings(ctx); serr == nil && set != nil {
+		hours = set.JadeRevengeHoursVal()
+	}
+	cutoff := time.Now().Add(-time.Duration(hours) * time.Hour)
+	err := r.submissions.FindOne(ctx,
+		bson.M{"uid": uid, "pid": pid,
+			"status":     bson.M{"$nin": bson.A{StatusAccepted, StatusCancelled}},
+			"createdAt":  bson.M{"$lte": cutoff}},
+		options.FindOne().SetSort(bson.D{{Key: "createdAt", Value: 1}}).
+			SetProjection(bson.M{"createdAt": 1})).Decode(&row)
+	eligible = err == nil
+	// 当日名额（user 文档 revengeDay = 北京日；非今日 = 未用）
+	var u struct {
+		RevengeDay string `bson:"revengeDay"`
+	}
+	if uerr := r.users.FindOne(ctx, bson.M{"_id": uid},
+		options.FindOne().SetProjection(bson.M{"revengeDay": 1})).Decode(&u); uerr == nil {
+		usedToday = u.RevengeDay == beijingDay(time.Now())
+	}
+	return
+}
+
+// consumeRevengeSlot 记当日复仇名额已用（北京日；$ne 今日防并发双扣；upsert 兜底
+// 无文档用户——真实路径 user 文档恒存在，测试直灌场景防落空）。
+func (r *Repo) consumeRevengeSlot(ctx context.Context, uid int64) {
+	_, _ = r.users.UpdateOne(ctx,
+		bson.M{"_id": uid, "revengeDay": bson.M{"$ne": beijingDay(time.Now())}},
+		bson.M{"$set": bson.M{"revengeDay": beijingDay(time.Now())}},
+		options.UpdateOne().SetUpsert(true))
 }
 
 // contestFullScores 场内各题满分（server 侧 roundFullScores 同口径）。
@@ -561,7 +639,7 @@ func (r *Repo) publishRoundJade(ctx context.Context, kind string, c *Contest) {
 			slog.Warn("比赛发布玉补发解码失败", "component", "jade", "round", c.ID, "error", err)
 			continue
 		}
-		if _, _, err := r.MaybeAwardJade(ctx, row.ID.UID, row.ID.PID); err != nil {
+		if _, _, err := r.MaybeAwardJade(ctx, row.ID.UID, row.ID.PID, 0, 0); err != nil {
 			slog.Warn("比赛发布玉补发失败", "component", "jade", "round", c.ID,
 				"uid", row.ID.UID, "pid", row.ID.PID, "error", err)
 		}

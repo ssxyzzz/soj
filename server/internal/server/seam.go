@@ -71,8 +71,8 @@ type RepoAPI interface {
 	AchievementsForSubmit(ctx context.Context, uid, sid int64) ([]string, error)
 	EnsureDailyProblem(ctx context.Context) (*repo.DailyProblem, error)
 	EvaluateAchievements(ctx context.Context, uid, sid, pid int64, score int, judgedAt time.Time, perfectOneShot, isChallenge bool) ([]string, error)
-	GameBoard(ctx context.Context, kind string, limit int) ([]repo.GameRankRow, error)
-	GameBoardRank(ctx context.Context, kind string, uid int64) (int, int)
+	GameBoard(ctx context.Context, kind, by string, limit int) ([]repo.GameRankRow, error)
+	GameBoardRank(ctx context.Context, kind, by string, uid int64) (int, int)
 	GetDailyProblemMeta(ctx context.Context) (*repo.DailyProblem, *repo.Problem, error)
 	GetGameStats(ctx context.Context, uid int64) (*repo.GameStats, error)
 	IsTodayDaily(ctx context.Context, pid int64) bool
@@ -81,8 +81,9 @@ type RepoAPI interface {
 	CountDailySolved(ctx context.Context, pid int64, dayStart time.Time) int64
 	GetJadeAward(ctx context.Context, uid, pid int64) (*repo.JadeAward, error)
 	RawAchievements(ctx context.Context, uid int64) ([]repo.Achievement, error)
-	TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted bool) (*repo.GameStats, error)
-	Wrongbook(ctx context.Context, uid int64, limit int) ([]repo.RevengeRow, error)
+	TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted, cancelled bool) (*repo.GameStats, error)
+	Wrongbook(ctx context.Context, uid int64, limit int, minAge time.Duration) ([]repo.RevengeRow, error)
+	RevengeSlotUsed(ctx context.Context, uid int64) bool
 	EnsureGradePromotion(ctx context.Context) (int64, error)
 	GradePromotionInfo(ctx context.Context) (*repo.GradePromoInfo, error)
 	ExistingUserIDs(ctx context.Context, ids []int64) (map[int64]bool, error)
@@ -108,6 +109,13 @@ type RepoAPI interface {
 	GetProblemMetas(ctx context.Context, ids []int64) (map[int64]*repo.Problem, error)
 	GetRole(ctx context.Context, id string) (*repo.Role, error)
 	GetRound(ctx context.Context, kind string, id int64) (*repo.Contest, error)
+	// 课堂 PK（v0.42）：发起/取消/现状/按 id 读 + 榜单（实时榜与结算名次同源）
+	GetClassroomRace(ctx context.Context, id int64) (*repo.ClassroomRace, error)
+	LatestClassroomRace(ctx context.Context, classID int64) (*repo.ClassroomRace, error)
+	ActiveClassroomRace(ctx context.Context, classID int64) (*repo.ClassroomRace, error)
+	CreateClassroomRace(ctx context.Context, hostUID int64, hostName string, classID, pid int64, ptitle string, effSec, countdownSec int, bonus bool) (*repo.ClassroomRace, error)
+	CancelClassroomRace(ctx context.Context, classID, raceID int64) (bool, error)
+	RaceBoard(ctx context.Context, raceID int64, limit int) ([]repo.RaceRankRow, error)
 	GetSolution(ctx context.Context, sid int64) (*repo.Solution, error)
 	GetSubmission(ctx context.Context, id int64) (*repo.Submission, error)
 	GetSystemSettings(ctx context.Context) (*repo.SystemSettings, error)

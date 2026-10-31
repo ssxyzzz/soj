@@ -442,6 +442,36 @@ export interface AssignmentListItem {
   solved: number // 当前用户满分通过题数（班级作业卡进度条）
 }
 
+// 课堂 PK（v0.42）：班级同题手速挑战赛（发起/榜单/结算同构视图）
+export interface ClassRaceRow {
+  rank: number
+  uid: number
+  username: string
+  duration_ms: number
+  at: number
+}
+
+export interface ClassRaceView {
+  id: number
+  class_id: number
+  pid: number
+  ptitle: string
+  host_uid: number
+  host_name: string
+  bonus: boolean
+  status: 'running' | 'settled' | 'cancelled'
+  started_at: number // 毫秒（发起倒计时期间 > now）
+  deadline_at: number
+  remaining_ms?: number // running 且未截止
+  countdown_ms?: number // 发起倒计时期间
+  winner_uid?: number
+  winner_name?: string
+  settled_at?: number
+  board: ClassRaceRow[]
+  my_rank: number // 榜外 0
+  my_ms: number
+}
+
 export interface AssignmentProblem {
   id: number
   title: string
@@ -1060,6 +1090,11 @@ export interface AdminSettings {
   jade_shop_enabled: boolean
   /** 玉折扣阶梯（v0.40）：Lv5–10 六档百分比（95=九五折…70=七折） */
   jade_discount: number[]
+  /** 倍率总则批（v0.45）：连击加成三参（每满 step +pct%、封顶 capPct%）+ 复仇窗口小时 */
+  jade_combo_step: number
+  jade_combo_pct: number
+  jade_combo_cap_pct: number
+  jade_revenge_hours: number
   /** 资料自改开关（v0.34）：false = 学生端锁定、仅 root 用户管理可改 */
   profile_edit_nickname: boolean
   profile_edit_gender: boolean
@@ -1101,11 +1136,13 @@ export interface RevengeRow {
   last_at: string
 }
 
-/** 提交结果开箱数据（v0.41，本人 AC/终态可见）。 */
+/** 提交结果开箱数据（v0.41，本人 AC/终态可见；v0.45 增倍率来源）。 */
 export interface SubmissionGame {
   jade_total?: number
   jade_daily?: boolean
   jade_revenge?: boolean
+  jade_mult_pct?: number // 采用倍率百分比（200 = ×2；v0.45 总则）
+  jade_mult_from?: string // 采用倍率来源文案（「升维祝福 ×2」「连击加成」等）
   combo_cur?: number
   combo_best?: number
   streak_days?: number

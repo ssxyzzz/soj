@@ -45,22 +45,28 @@ func (h *Handlers) GetDaily(c *gin.Context) {
 	ok(c, resp)
 }
 
-// MyRevenge GET /api/me/revenge —— 每日复仇推荐（错题 ≤3 道，最近未战优先）。
+// MyRevenge GET /api/me/revenge —— 每日复仇推荐（v0.45：每日 1 道候选，最久未战
+// 优先、最早错误满复仇窗口；used = 当日名额已用，前端展示完成态。入口纯引流——
+// 推荐题外自行订正同规则触发 ×1.5）。
 func (h *Handlers) MyRevenge(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
 	if !logged {
 		fail(c, http.StatusUnauthorized, "未登录")
 		return
 	}
-	rows, err := h.repo.Wrongbook(c.Request.Context(), uid, 3)
+	hours := 24
+	if set, err := h.repo.GetSystemSettings(c.Request.Context()); err == nil && set != nil {
+		hours = set.JadeRevengeHoursVal()
+	}
+	rows, err := h.repo.Wrongbook(c.Request.Context(), uid, 1, time.Duration(hours)*time.Hour)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取错题失败")
 		return
 	}
-	ok(c, gin.H{"list": rows})
+	ok(c, gin.H{"list": rows, "used": h.repo.RevengeSlotUsed(c.Request.Context(), uid)})
 }
 
-// MyWrongbook GET /api/me/wrongbook?page= —— 错题本全量（个人中心）。
+// MyWrongbook GET /api/me/wrongbook?page= —— 错题本全量（个人中心；不过滤复仇窗口）。
 func (h *Handlers) MyWrongbook(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
 	if !logged {
@@ -71,7 +77,7 @@ func (h *Handlers) MyWrongbook(c *gin.Context) {
 	if page < 1 {
 		page = 1
 	}
-	rows, err := h.repo.Wrongbook(c.Request.Context(), uid, page*20)
+	rows, err := h.repo.Wrongbook(c.Request.Context(), uid, page*20, 0)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取错题本失败")
 		return
@@ -147,21 +153,26 @@ func (h *Handlers) GetHeralds(c *gin.Context) {
 	ok(c, gin.H{"list": rows})
 }
 
-// GameRank GET /api/game-rank?type=combo|streak —— 连击/坚持双榜（等级/刷题榜走 /api/rank）。
+// GameRank GET /api/game-rank?type=combo|streak&by=best|cur —— 连击/坚持双榜
+//（等级/刷题榜走 /api/rank）；连击榜 by 切排序维度（默认 best 历史连击，cur = 当前）。
 func (h *Handlers) GameRank(c *gin.Context) {
 	kind := c.Query("type")
 	if kind != "combo" && kind != "streak" {
 		fail(c, http.StatusBadRequest, "榜单类型仅支持 combo / streak")
 		return
 	}
-	rows, err := h.repo.GameBoard(c.Request.Context(), kind, 20)
+	by := c.Query("by")
+	if by != "best" && by != "cur" {
+		by = "best"
+	}
+	rows, err := h.repo.GameBoard(c.Request.Context(), kind, by, 20)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取榜单失败")
 		return
 	}
-	resp := gin.H{"list": rows}
+	resp := gin.H{"list": rows, "by": by}
 	if uid, _, _, logged := currentUser(c); logged {
-		resp["my_rank"], resp["my_value"] = h.repo.GameBoardRank(c.Request.Context(), kind, uid)
+		resp["my_rank"], resp["my_value"] = h.repo.GameBoardRank(c.Request.Context(), kind, by, uid)
 	}
 	ok(c, resp)
 }
