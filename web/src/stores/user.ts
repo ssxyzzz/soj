@@ -11,11 +11,34 @@ import type { LevelBadgeInfo, UserPrefs } from '@/types'
 // 请求 token 与路由守卫统一走这里（每标签页一份），避免多标签页登录互相覆盖共享
 // localStorage 造成的身份串号。
 export const useUserStore = defineStore('user', () => {
-  const token = ref(localStorage.getItem('soj_token') ?? '')
-  const uid = ref(Number(localStorage.getItem('soj_uid') ?? 0) || 0)
-  const nickname = ref(localStorage.getItem('soj_nickname') ?? '')
-  const role = ref(localStorage.getItem('soj_role') ?? '')
-  const perms = ref<string[]>(JSON.parse(localStorage.getItem('soj_perms') ?? '[]'))
+  // localStorage 读取容错（v0.41 验收实弹）：存储值损坏（如手改/异常写入 "undefined"）
+  // 时 JSON.parse 会抛错导致 store setup 失败 → 整站白屏——损坏一律回退默认并清掉坏键
+  function lsGet(key: string): string {
+    try {
+      const v = localStorage.getItem(key)
+      return v === null || v === 'undefined' ? '' : v
+    } catch {
+      return ''
+    }
+  }
+
+  function lsGetJSON(key: string, fallback: string[]): string[] {
+    try {
+      const v = localStorage.getItem(key)
+      if (v === null || v === 'undefined') return fallback
+      const parsed = JSON.parse(v)
+      return Array.isArray(parsed) ? parsed.map(String) : fallback
+    } catch {
+      localStorage.removeItem(key) // 坏键清掉，下次登录写回干净值
+      return fallback
+    }
+  }
+
+  const token = ref(lsGet('soj_token'))
+  const uid = ref(Number(lsGet('soj_uid') || 0))
+  const nickname = ref(lsGet('soj_nickname'))
+  const role = ref(lsGet('soj_role'))
+  const perms = ref<string[]>(lsGetJSON('soj_perms', []))
   // QQ 头像直链（v0.23）：顶栏头像用；localStorage 持久化保证首帧就有图，
   // /me/profile 返回后刷新（开关关闭/未绑定为空串回退首字头像）
   const avatarUrl = ref(localStorage.getItem('soj_avatar') ?? '')
