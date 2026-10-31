@@ -4,7 +4,7 @@
 // 轮询范式（失败计数超限复位按钮，v0.37）。冲突题置顶 + 默认不勾 + 可改判是本面板灵魂：
 // AI 档与通过率档并列展示由 root 拍板（plan 2026-10-31 三拍板）。
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
 import type { TidyKind, TidySuggestion, TidyStatus } from '@/types'
@@ -197,6 +197,28 @@ async function applySelected() {
   }
 }
 
+// 回到发起卡（2026-10-31 验收期修复：终态结果此前霸屏、发起入口被吞——
+// 结果属于「当次任务当次处置」，root 主动弃置后才回发起区；未应用的条数给确认）
+async function discardResults() {
+  const pending = selected.value.size
+  if (pending > 0) {
+    try {
+      await ElMessageBox.confirm(
+        `还有 ${pending} 条勾选的建议未应用，弃置后需要重新整理才能找回。确定回到发起页？`,
+        '弃置本次结果',
+        { type: 'warning', confirmButtonText: '弃置并回发起页', cancelButtonText: '留在此页' },
+      )
+    } catch {
+      return
+    }
+  }
+  status.value = null
+  selected.value = new Set()
+  appliedPids.value = new Set()
+  finalDiff.value = new Map()
+  onlyConflict.value = false
+}
+
 onMounted(async () => {
   // 进页恢复任务态（刷新后仍在跑/刚完成的任务照常可续）
   try {
@@ -216,10 +238,11 @@ onUnmounted(stopPoll)
       <div class="head">
         <span>题库一键整理</span>
         <el-button v-if="running" type="warning" plain @click="cancelTidy">取消整理</el-button>
+        <el-button v-else-if="done" type="primary" plain @click="discardResults">发起新整理</el-button>
       </div>
     </template>
 
-    <!-- 发起区：三类任务卡（任务进行中或已有结果待处置时收起） -->
+    <!-- 发起区：三类任务卡（任务进行中或已有结果待处置时收起，弃置结果后回到这里） -->
     <template v-if="!running && (!status || status.state === 'idle')">
       <div class="kind-cards">
         <div
