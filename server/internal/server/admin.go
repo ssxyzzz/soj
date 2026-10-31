@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -126,6 +127,11 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 		}
 		fail(c, http.StatusInternalServerError, "创建用户失败")
 		return
+	}
+	// 首登改密提醒：无 ID 分支走 CreateUserWithPassword（注册/种子同源）不带标志，
+	// 建号后补置位——初始密码由管理员发放，下次登录提醒改密（可跳过）。best-effort 不阻断建号。
+	if err := h.repo.SetPwdRemind(c.Request.Context(), uid, true); err != nil {
+		slog.Warn("首登改密提醒置位失败", "component", "admin", "uid", uid, "error", err)
 	}
 	ok(c, gin.H{"id": uid, "username": req.Username, "role": role})
 }
@@ -254,6 +260,10 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		if err := h.repo.BumpPwdVer(c.Request.Context(), id); err != nil {
 			fail(c, http.StatusInternalServerError, "密码已重置，但登录态失效标记写入失败，请查看日志")
 			return
+		}
+		// 首登改密提醒：重置产生的新初始密码由管理员发放，下次登录提醒改密（可跳过）。best-effort。
+		if err := h.repo.SetPwdRemind(c.Request.Context(), id, true); err != nil {
+			slog.Warn("首登改密提醒置位失败", "component", "admin", "uid", id, "error", err)
 		}
 		h.securityLog(c, repo.SecPwdResetAdmin, id, pwdResetUname, "管理员重置密码，该账号全部登录态已下线")
 		// v0.16：改密通知原邮箱（防盗号无感知；依赖 smtp 通道，log 模式跳过）

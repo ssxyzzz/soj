@@ -105,6 +105,8 @@ func (h *Handlers) GetMyProfile(c *gin.Context) {
 		return
 	}
 	info := profileJSON(u, h.profileEditable(c))
+	// 首登改密提醒：随 profile 下发——布局层每次挂载/登录后都会拉 profile，前端免增请求
+	info["pwdRemind"] = u.PwdRemind
 	// 等级（v0.11）：徽章/进度渲染；聚合失败降级省略，不阻塞个人设置
 	if lv := h.levelBadgeInfo(c, uid); lv != nil {
 		info["level"] = lv
@@ -123,6 +125,21 @@ func (h *Handlers) GetMyProfile(c *gin.Context) {
 		}
 	}
 	ok(c, info)
+}
+
+// SkipPwdRemind 首登改密提醒·跳过（用户拍板：提醒可跳过，跳过=不再提醒）。
+// 关弹窗（未做选择）不清标志，下次登录仍会提醒；改密路径走 UpdatePassword 自动清除。
+func (h *Handlers) SkipPwdRemind(c *gin.Context) {
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	if err := h.repo.SetPwdRemind(c.Request.Context(), uid, false); err != nil {
+		fail(c, http.StatusInternalServerError, "操作失败")
+		return
+	}
+	ok(c, gin.H{"skipped": true})
 }
 
 // UpdateMyProfile 更新本人自助字段与偏好（指针语义：出现才改，显式空串=清空）。

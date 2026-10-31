@@ -64,6 +64,10 @@ export const useUserStore = defineStore('user', () => {
   const jadeBalance = ref(0)
   const jadeCurrency = ref('')
 
+  // 首登改密提醒：登录响应与 /me/profile 各刷一次（登录后布局层挂载即拉 profile）。
+  // 不落 localStorage——刷新后由 profile 恢复；跳过/改密由服务端清标志，弹窗宿主写本态关弹窗
+  const pwdRemind = ref(false)
+
   // 管理后台入口：root 或持有任一后台能力（角色管理面板仅 root 可见，面板内部再判）
   const canAdmin = computed(
     () =>
@@ -130,6 +134,7 @@ export const useUserStore = defineStore('user', () => {
     avatarUrl.value = ''
     jadeBalance.value = 0
     jadeCurrency.value = ''
+    pwdRemind.value = false
     localStorage.removeItem('soj_token')
     localStorage.removeItem('soj_uid')
     localStorage.removeItem('soj_nickname')
@@ -138,5 +143,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('soj_avatar')
   }
 
-  return { token, uid, nickname, role, perms, prefs, level, isStaff, canOnline, canChallenge, avatarUrl, jadeBalance, jadeCurrency, canAdmin, can, setLogin, setPrefs, setLevel, setJade, setNickname, setAvatarUrl, logout }
+  return { token, uid, nickname, role, perms, prefs, level, isStaff, canOnline, canChallenge, avatarUrl, jadeBalance, jadeCurrency, pwdRemind, canAdmin, can, setLogin, setPrefs, setLevel, setJade, setNickname, setAvatarUrl, logout }
 })

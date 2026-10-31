@@ -11,6 +11,7 @@ export interface User {
   nickname: string
   role: string
   perms?: string[] // 生效权限位（root 展开为全目录）；仅登录态接口返回
+  pwdRemind?: boolean // 首登改密提醒（批量建号/管理员建号/重置密码置位；改密或跳过清除）
 }
 
 export interface LoginResult {
@@ -18,18 +19,20 @@ export interface LoginResult {
   user: User
 }
 
-// 统一选题器（v0.7.3 ProblemPicker）的已选条目：带标题保序，hidden 为组织者视角
-// edit_problems 里保留的隐藏题标记（候选列表一律排除隐藏题）
+// 统一选题器（v0.7.3 ProblemPicker）的已选条目：带标题保序，hidden/duplicate 为组织者视角
+// edit_problems 里保留的标记（候选列表一律排除隐藏题与重复题）
 export interface PickedProblem {
   id: number
   title: string
   hidden?: boolean
+  duplicate?: boolean
 }
 
 export interface ProblemListItem {
   id: number
   title: string
   hidden?: boolean
+  duplicate?: boolean // 重复题标记（v0.47）：学生端不可见，特权视角灰 tag 展示
   has_cases?: boolean // 无测试数据空壳题（v0.6.1 验收反馈）：题库列表「无数据」小提示
   difficulty?: number // 难度 1–10（v0.11；缺省展示按 D3）
   locked?: boolean
@@ -184,7 +187,9 @@ export interface ProblemDetail {
   has_cases?: boolean // 无测试数据空壳题（v0.6.1 验收反馈）：详情提示 + 禁提交
   has_subtasks?: boolean
   hidden?: boolean
+  duplicate?: boolean // 重复题标记（v0.47）：学生端不可见
   can_set_hidden?: boolean
+  can_set_duplicate?: boolean
   can_edit_statement?: boolean
   can_view_others?: boolean
   can_view_solutions?: boolean
@@ -568,15 +573,18 @@ export interface SecurityLogItem {
   detail: string
 }
 
-// 重复题扫描（v0.18.1）：同「标题+题面」的疑似重复组，只列出不自动删
+// 重复题扫描（v0.18.1 立项；v0.47 相似度判重）：标题+题面归一化相似度 ≥80% 的
+// 疑似重复组，只列出不自动删（面板内一键标重复）
 export interface DuplicateGroup {
   title: string
   preview: string // 题面前 80 字
+  similarity: number // 组内最低相似度 0–1（v0.47）
   problems: {
     id: number
     title: string
     type: string
     hidden: boolean
+    duplicate: boolean
     created_by: number
     created_at: string
   }[]
@@ -655,6 +663,7 @@ export interface ListProblemEntry {
   title: string
   difficulty: number
   hidden?: boolean
+  duplicate?: boolean // 重复题标记（v0.47）：特权视角展示
   locked?: boolean
   lock_kind?: string
   status?: string
@@ -744,6 +753,7 @@ export interface UserProfile {
   prefs: UserPrefs
   level?: LevelBadgeInfo // 学生等级（v0.11；顶栏徽章与补全门槛提示用）
   game?: { combo_cur: number; combo_best: number; streak_days: number; streak_best: number } // v0.41
+  pwdRemind?: boolean // 首登改密提醒（随 profile 下发：布局层挂载/登录后各拉一次）
 }
 
 // ---------- 题解（v0.5.2-1） ----------
@@ -835,6 +845,8 @@ export interface TidyStatus {
   total?: number
   done?: number
   excluded?: number // 水位排除数（已整理/已设难度；redo=false 时）
+  from?: number // 题号范围下界（含；0/缺席 = 不限）
+  to?: number // 题号范围上界（含；0/缺席 = 不限）
   suggestions?: TidySuggestion[]
   error?: string
   by?: string

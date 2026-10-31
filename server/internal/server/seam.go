@@ -251,8 +251,10 @@ type RepoAPI interface {
 	SetClassPrivate(ctx context.Context, classID int64, private bool) error
 	SetDiscussReplyAccepted(ctx context.Context, rid int64, accepted bool) error
 	SetDiscussTopicFlags(ctx context.Context, tid int64, pinned, featured, locked, private *bool) error
+	SetProblemDuplicate(ctx context.Context, pid int64, duplicate bool) error
 	SetProblemHidden(ctx context.Context, pid int64, hidden bool) error
 	SetProblemStatement(ctx context.Context, pid int64, statement string) error
+	SetPwdRemind(ctx context.Context, uid int64, pending bool) error
 	SetRoundFileIO(ctx context.Context, kind string, id int64, enabled bool) error
 	SetSolutionPinned(ctx context.Context, sid int64, pinned bool) error
 	SetUserEmail(ctx context.Context, uid int64, email string) error

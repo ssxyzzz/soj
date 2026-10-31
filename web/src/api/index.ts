@@ -197,6 +197,8 @@ export const authApi = {
   // 成功后前端主动登出跳登录页；新密码二次确认在 UI 层做
   changePassword: (oldPassword: string, newPassword: string) =>
     post<{ changed: boolean }>('/auth/password', { old_password: oldPassword, new_password: newPassword }),
+  // 首登改密提醒·跳过（跳过=不再提醒；「去修改密码」不调此接口，未改密下次登录仍提醒）
+  skipPwdRemind: () => post<{ skipped: boolean }>('/me/pwd-remind-skip'),
   // 个人设置（v0.4.8）：本人自助字段 + 偏好；昵称额外受 user.nickname.edit 权限位约束
   getProfile: () => get<UserProfile>('/me/profile'),
   updateProfile: (body: {
@@ -262,6 +264,7 @@ export const problemApi = {
     tags?: number[],
     difficulty?: number[],
     meta?: number[],
+    state?: string, // 状态精确过滤（v0.47）：'hidden' | 'duplicate'，仅题库全量可见视角
   ) =>
     get<ProblemListResult>('/problems', {
       page,
@@ -270,6 +273,7 @@ export const problemApi = {
       ...(tags && tags.length ? { tags: tags.join(',') } : {}),
       ...(difficulty && difficulty.length ? { difficulty: difficulty.join(',') } : {}),
       ...(meta && meta.length ? { meta: meta.join(',') } : {}),
+      ...(state ? { state } : {}),
     }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
   paper: (id: number) => get<PaperData>(`/problems/${id}/paper`),
@@ -314,6 +318,9 @@ export const problemApi = {
     patch<{ pinned: boolean }>(`/problems/${id}/solutions/${sid}/pinned`, { pinned }),
   setHidden: (id: number, hidden: boolean) =>
     patch<{ id: number; hidden: boolean }>(`/problems/${id}/hidden`, { hidden }),
+  // 重复标记（v0.47）：语义同隐藏，学生端立即不可见
+  setDuplicate: (id: number, duplicate: boolean) =>
+    patch<{ id: number; duplicate: boolean }>(`/problems/${id}/duplicate`, { duplicate }),
   // 整包替换测试数据（编辑题目）：旧测试点全部删除，按新 zip 重建（v0.37 附上传进度）
   replaceTestdata: (id: number, form: FormData, onProgress?: (pct: number) => void) =>
     client
@@ -649,9 +656,10 @@ export const adminApi = {
   backupOfflineKey: () => post<{ private_key: string }>('/admin/backup/offline-key'),
   // 题库一键整理（v0.43 两段式）：run/status/cancel = 任务段，apply = root 确认后写库段。
   // run/apply 走 client.post 放宽超时（AI 批量 5min / 批量写库 2min），默认 20s 会先断
-  tidyRun: (kind: TidyKind, redo = false) =>
+  tidyRun: (kind: TidyKind, redo = false, from?: number, to?: number) =>
     client
-      .post<ApiResponse<{ started: boolean; kind: TidyKind }>>('/admin/tidy/run', { kind, redo }, { timeout: 300_000 })
+      .post<ApiResponse<{ started: boolean; kind: TidyKind }>>(
+        '/admin/tidy/run', { kind, redo, from, to }, { timeout: 300_000 })
       .then((r) => r.data.data),
   tidyStatus: () => get<TidyStatus>('/admin/tidy/status'),
   tidyCancel: () => post<{ cancel_requested: boolean }>('/admin/tidy/cancel'),

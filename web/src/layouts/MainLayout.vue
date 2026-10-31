@@ -80,6 +80,33 @@ async function refreshJade() {
 
 const blessActive = computed(() => !!blessUntil.value && new Date(blessUntil.value) > new Date())
 
+// ---- 首登改密提醒（批量建号/管理员建号/重置密码的账号） ----
+// 标志在 user store（登录响应与 /me/profile 各刷一次）；弹窗开关是本地视图态——
+// 关闭仅隐藏，服务端标志只有「跳过」清除，未改密下次登录仍提醒
+const showPwdRemind = computed({
+  get: () => userStore.pwdRemind,
+  set: (v: boolean) => {
+    userStore.pwdRemind = v
+  },
+})
+const skippingPwdRemind = ref(false)
+async function skipPwdRemind() {
+  skippingPwdRemind.value = true
+  try {
+    await authApi.skipPwdRemind()
+    userStore.pwdRemind = false
+    ElMessage.success('已跳过，下次不再提醒')
+  } catch {
+    ElMessage.error('操作失败，请重试')
+  } finally {
+    skippingPwdRemind.value = false
+  }
+}
+function goChangePassword() {
+  userStore.pwdRemind = false // 只关弹窗：未真改密下次登录仍提醒（改密成功走服务端清除）
+  router.push('/settings')
+}
+
 // ---- 游戏感批（v0.41）----
 const soundOff = ref(isMuted())
 function toggleMute() {
@@ -193,6 +220,7 @@ onMounted(() => {
       userStore.setPrefs(p.prefs ?? {})
       userStore.setLevel(p.level ?? null)
       userStore.setAvatarUrl(p.avatar_url ?? '') // QQ 头像（v0.23）：顶栏同步
+      userStore.pwdRemind = !!p.pwdRemind // 首登改密提醒（刷新后由此恢复）
     })
     .catch(() => {})
   refreshBadge() // 通知角标首刷（v0.24）
@@ -365,6 +393,24 @@ function onCommand(command: string) {
         rel="noopener noreferrer"
       >{{ site.icpNumber }}</a>
     </el-footer>
+    <!-- 首登改密提醒（批量建号/管理员建号/重置密码的账号）：登录后与刷新后各弹一次。
+         仅「跳过」清除服务端标志（不再提醒）；「去修改密码」只关弹窗不落库——未真改密
+         下次登录仍提醒。X/ESC/点遮罩关闭同理不清标志。 -->
+    <el-dialog
+      v-model="showPwdRemind"
+      title="修改密码提醒"
+      width="420"
+      align-center
+    >
+      <p style="margin: 0 0 8px">你的账号正在使用初始密码，建议尽快修改，以保证账号安全。</p>
+      <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px">
+        修改密码后本次提醒自动解除；你也可以选择跳过。
+      </p>
+      <template #footer>
+        <el-button @click="skipPwdRemind" :loading="skippingPwdRemind">跳过</el-button>
+        <el-button type="primary" @click="goChangePassword">去修改密码</el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 

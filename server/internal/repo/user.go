@@ -60,6 +60,10 @@ type User struct {
 	// 密码版本（v0.14）：改密/重置 +1，JWT claims 携带签发时的版本，不一致即 401——
 	// 改密后所有旧 token 立即失效（全端下线）。存量文档缺字段按 0。
 	PwdVer int `bson:"pwdVer,omitempty"`
+	// 首登改密提醒：批量建号/管理员建号/管理员重置密码置位（初始密码由他人发放）；
+	// 本人改密或主动跳过清除。存量文档缺字段按 false（不提醒）。登录响应与 /me/profile
+	// 随载荷下发，前端登录后/刷新后各弹一次，跳过=不再提醒。
+	PwdRemind bool `bson:"pwdRemind,omitempty"`
 	// 登录失败锁定（v0.14）：连续失败达到阈值锁 lockedUntil；落库重启不丢、管理端可见。
 	FailedCount int       `bson:"failedCount,omitempty"`
 	LockedUntil time.Time `bson:"lockedUntil,omitempty"`
@@ -102,8 +106,9 @@ func (u *User) EffProfileVis() ProfileVis {
 // UpdatePassword 修改密码：写新哈希并 pwdVer+1（原子），所有旧 token 随即失效。
 func (r *Repo) UpdatePassword(ctx context.Context, uid int64, passwordHash string) error {
 	res, err := r.users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{
-		"$set": bson.M{"pwdHash": passwordHash},
-		"$inc": bson.M{"pwdVer": 1},
+		"$set":   bson.M{"pwdHash": passwordHash},
+		"$inc":   bson.M{"pwdVer": 1},
+		"$unset": bson.M{"pwdRemind": ""}, // 本人已改密：首登提醒自然解除
 	})
 	if err != nil {
 		return err
@@ -118,6 +123,23 @@ func (r *Repo) UpdatePassword(ctx context.Context, uid int64, passwordHash strin
 func (r *Repo) BumpPwdVer(ctx context.Context, uid int64) error {
 	_, err := r.users.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$inc": bson.M{"pwdVer": 1}})
 	return err
+}
+
+// SetPwdRemind 首登改密提醒开关：pending=true 置位（管理员重置密码后，新初始密码
+// 由管理员发放、下次登录该提醒），false 清除（用户主动跳过）。
+func (r *Repo) SetPwdRemind(ctx context.Context, uid int64, pending bool) error {
+	up := bson.M{"$unset": bson.M{"pwdRemind": ""}}
+	if pending {
+		up = bson.M{"$set": bson.M{"pwdRemind": true}}
+	}
+	res, err := r.users.UpdateOne(ctx, bson.M{"_id": uid}, up)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
 }
 
 // RecordLoginFailure 记一次登录失败（原子聚合更新）：failedCount+1；达到 maxFail 时
@@ -262,6 +284,7 @@ func (r *Repo) CreateUserWithID(ctx context.Context, id int64, username, passwor
 	_, err = r.users.InsertOne(ctx, bson.M{
 		"_id": id, "uname": username, "pwdHash": hash,
 		"nickname": nickname, "role": role, "createdAt": time.Now(),
+		"pwdRemind": true, // 管理员建号：初始密码由管理员发放，首登提醒改密（可跳过）
 	})
 	if err != nil {
 		return 0, err
@@ -303,6 +326,7 @@ func (r *Repo) CreateUserWithProfile(ctx context.Context, id int64, username, pa
 	doc := bson.M{
 		"_id": id, "uname": username, "pwdHash": hash,
 		"nickname": nickname, "role": role, "createdAt": time.Now(),
+		"pwdRemind": true, // 批量建号：初始密码（随机/花名册列）由教师发放，首登提醒改密（可跳过）
 	}
 	if p.Gender != "" {
 		doc["gender"] = p.Gender

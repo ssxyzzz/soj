@@ -52,7 +52,7 @@ func passwordProblem(pwd string) string {
 }
 
 func userJSON(u *repo.User) gin.H {
-	return gin.H{"id": u.ID, "username": u.Username, "nickname": u.Nickname, "role": u.Role, "email": u.Email}
+	return gin.H{"id": u.ID, "username": u.Username, "nickname": u.Nickname, "role": u.Role, "email": u.Email, "pwdRemind": u.PwdRemind}
 }
 
 // userWithPermsJSON 登录态响应用：附生效权限位（root 展开为全目录，前端据此显隐入口）。

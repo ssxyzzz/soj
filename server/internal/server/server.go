@@ -225,6 +225,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/me/problem-stats", h.GetMyProblemStats)
 			authed.GET("/me/profile", h.GetMyProfile)
 			authed.PATCH("/me/profile", h.UpdateMyProfile)
+			authed.POST("/me/pwd-remind-skip", h.SkipPwdRemind) // 首登改密提醒·跳过（跳过=不再提醒）
 			// 题面图片上传（v0.5.1）：能打开编辑器的人群（题面编辑/系统设置权限位）
 			authed.POST("/uploads", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn, repo.PermAdminSettings), h.UploadImages)
 
@@ -349,6 +350,7 @@ func Run(ctx context.Context, deps *Deps) {
 
 			// 题目编辑：edit.all 或 edit.own（属主校验在 handler 内）
 			authed.PATCH("/problems/:id/hidden", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemHidden)
+			authed.PATCH("/problems/:id/duplicate", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemDuplicate)
 			authed.PATCH("/problems/:id/statement", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemStatement)
 			// v0.10：客观题小题 YAML 双向 + 单题/整卷学生版试卷打印
 			authed.GET("/problems/:id/objective/questions.yaml", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ExportObjectiveYAML)
