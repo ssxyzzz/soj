@@ -26,6 +26,8 @@ const KIND_META: Record<TidyKind, { label: string; desc: string }> = {
 
 const kind = ref<TidyKind>('difficulty')
 const redo = ref(false) // 重新整理已整理过的题（默认只整理未整理的，断点续整）
+const rangeFrom = ref<number | undefined>() // 题号范围下界（含；空 = 全库）
+const rangeTo = ref<number | undefined>() // 题号范围上界（含；空 = 全库）
 const starting = ref(false)
 const status = ref<TidyStatus | null>(null)
 const applying = ref(false)
@@ -42,6 +44,14 @@ const done = computed(() => ['done', 'cancelled', 'failed'].includes(status.valu
 const suggestions = computed<TidySuggestion[]>(() => status.value?.suggestions ?? [])
 const conflictCount = computed(() => suggestions.value.filter((s) => s.conflict).length)
 const jobKind = computed<TidyKind | null>(() => status.value?.kind ?? null)
+
+// 任务题号范围（快照带出）：单边留空显示开口；全空 = 全库不显示
+const rangeLabel = computed(() => {
+  const f = status.value?.from ?? 0
+  const t = status.value?.to ?? 0
+  if (!f && !t) return ''
+  return `题号 ${f || '起'}~${t || '止'}`
+})
 
 // 预览表数据（难度表按「只看冲突」过滤；其余全量）
 const tableRows = computed<TidySuggestion[]>(() => {
@@ -133,7 +143,15 @@ function startPoll() {
     if (status.value?.state && status.value.state !== 'running') {
       stopPoll()
       if (status.value.state === 'done') {
-        ElMessage.success('整理完成，请核对差异表后勾选应用')
+        // 全被水位排除是断点续整的正常终态（v0.45 验收期用户反馈「像跳过了扫描」）：
+        // 有建议才请核对差异表；零建议带排除数时明说原因，别让 root 误判成异常
+        if (suggestions.value.length) {
+          ElMessage.success('整理完成，请核对差异表后勾选应用')
+        } else if (status.value.excluded) {
+          ElMessage.info(`整理完成：${status.value.excluded} 题均已整理过，默认排除、无新建议`)
+        } else {
+          ElMessage.success('整理完成，本次没有产出建议')
+        }
       } else if (status.value.state === 'cancelled') {
         ElMessage.info('整理已取消（已完成部分照常可勾选应用）')
       } else {
@@ -145,16 +163,26 @@ function startPoll() {
 }
 
 async function runTidy() {
+  const f = rangeFrom.value
+  const t = rangeTo.value
+  if ((f != null && f < 1) || (t != null && t < 1) || (f != null && t != null && f > t)) {
+    ElMessage.warning('题号范围不合法：需 起始 ≤ 结束（≥1），留空 = 全库')
+    return
+  }
   starting.value = true
   appliedPids.value = new Set()
   onlyConflict.value = false
   try {
-    await adminApi.tidyRun(kind.value, redo.value)
+    await adminApi.tidyRun(kind.value, redo.value, f, t)
     status.value = { state: 'running', kind: kind.value, total: 0, done: 0, suggestions: [] }
     startPoll()
     ElMessage.info(redo.value ? '整理任务已启动（全量重跑）' : '整理任务已启动（只整理未整理过的题）')
   } catch {
-    starting.value = false // 拦截器已提示（409 已有任务 / AI 未配置）
+    // 拦截器已提示（409 已有任务 / AI 未配置）
+  } finally {
+    // 成功也要复位（v0.45 验收期实弹抓出）：否则弃置结果回到发起卡后按钮永久
+    // 停在 loading/disabled，二次发起只能靠刷新页面——starting 只表达本次点击在途
+    starting.value = false
   }
 }
 
@@ -265,7 +293,14 @@ onUnmounted(stopPoll)
           开始整理（{{ KIND_META[kind].label }}）
         </el-button>
         <el-checkbox v-model="redo">重新整理已整理过的题</el-checkbox>
-        <span class="muted">默认只整理未整理过的（已应用的自动排除，从后继续）；只产建议不写库，勾选确认后才应用。</span>
+        <span class="range-box">
+          <span class="muted">题号</span>
+          <el-input-number v-model="rangeFrom" :min="1" :controls="false" placeholder="起始" class="range-input" />
+          <span class="muted">~</span>
+          <el-input-number v-model="rangeTo" :min="1" :controls="false" placeholder="结束" class="range-input" />
+          <span class="muted">留空 = 全库</span>
+        </span>
+        <span class="muted">默认只整理未整理过的（已应用的自动排除，从后继续）；可指定题号范围只扫部分题；只产建议不写库，勾选确认后才应用。</span>
       </div>
     </template>
 
@@ -279,7 +314,7 @@ onUnmounted(stopPoll)
         class="prog"
       />
       <span class="muted">
-        {{ status?.done ?? 0 }} / {{ status?.total ?? '…' }} 题<template v-if="status?.excluded">（已排除 {{ status.excluded }} 题整理过的）</template>
+        {{ status?.done ?? 0 }} / {{ status?.total ?? '…' }} 题<template v-if="status?.excluded">（已排除 {{ status.excluded }} 题整理过的）</template><template v-if="rangeLabel"> · {{ rangeLabel }}</template>
       </span>
     </div>
 
@@ -311,6 +346,7 @@ onUnmounted(stopPoll)
           已勾选 <b>{{ selectedCount }}</b> / {{ tableRows.length }} 题
           <template v-if="status?.excluded"> · 已排除 {{ status.excluded }} 题整理过的</template>
           <template v-if="appliedPids.size"> · 已应用 {{ appliedPids.size }} 题</template>
+          <template v-if="rangeLabel"> · {{ rangeLabel }}</template>
         </span>
         <span class="spacer" />
         <el-button size="small" @click="selectAllVisible">全选可见</el-button>
@@ -435,9 +471,22 @@ onUnmounted(stopPoll)
       </el-table>
     </template>
 
-    <!-- 完成但零结果（如全部取消于第一题前） -->
+    <!-- 完成但零结果：全被水位排除（断点续整的正常终态，v0.45 验收期用户反馈曾误读为跳过扫描） -->
+    <el-alert
+      v-else-if="done && !suggestions.length && status?.excluded"
+      type="info"
+      :closable="false"
+      show-icon
+      :title="`${status.excluded} 题全部已整理过，默认排除——本次没有新建议`"
+      class="state-alert"
+    >
+      <span class="muted">
+        {{ jobKind === 'difficulty' ? '这些题难度已设置或已应用过整理' : '这些题已应用过整理' }}，默认不再进任务。
+        如需全量重跑：点右上角「发起新整理」→ 勾选「重新整理已整理过的题」→ 重新开始。
+      </span>
+    </el-alert>
     <div v-else-if="done && !suggestions.length" class="muted" style="padding: 12px 0">
-      本次任务没有产出任何建议（{{ status?.error || '可能在第一题完成前被取消' }}）。
+      本次任务没有产出任何建议（{{ status?.error || (rangeLabel ? `${rangeLabel} 内没有待整理的题` : '题库为空，或在产出第一条建议前被取消') }}）。
     </div>
   </el-card>
 </template>
@@ -485,6 +534,16 @@ onUnmounted(stopPoll)
   gap: 14px;
   margin-top: 14px;
   flex-wrap: wrap;
+}
+
+.range-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.range-input {
+  width: 88px;
 }
 
 .progress-row {

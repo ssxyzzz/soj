@@ -75,7 +75,8 @@ type tidyJob struct {
 	Kind        string
 	Total       int
 	Done        int
-	Excluded    int // 水位排除数（已整理/已设难度；redo=false 时），快照带出让 root 有感知
+	Excluded    int   // 水位排除数（已整理/已设难度；redo=false 时），快照带出让 root 有感知
+	From, To    int64 // 题号范围（0 = 不限），快照带出让 root 记得本次任务边界
 	Suggestions []TidySuggestion
 	Err         string
 	ByName      string
@@ -117,7 +118,7 @@ func (j *tidyJob) snapshot() gin.H {
 	})
 	return gin.H{
 		"state": j.State, "kind": j.Kind, "total": j.Total, "done": j.Done,
-		"excluded": j.Excluded,
+		"excluded": j.Excluded, "from": j.From, "to": j.To,
 		"suggestions": out, "error": j.Err, "by": j.ByName,
 		"started_at": j.StartedAt, "ended_at": j.EndedAt,
 	}
@@ -125,16 +126,25 @@ func (j *tidyJob) snapshot() gin.H {
 
 // ---- 路由（root 专属） ----
 
-// TidyRun POST /api/admin/tidy/run {kind, redo?}：启动整理任务（全站单任务，进行中 409）。
+// TidyRun POST /api/admin/tidy/run {kind, redo?, from?, to?}：启动整理任务（全站单任务，进行中 409）。
 // redo=false（默认）排除已整理过的题（tidiedAt.<kind> 水位 + 难度类含已设难度）——
 // 断点续整：上次应用过的不再跑，剩未整理的按题号从后继续；redo=true 全量重跑。
+// from/to（含边界，v0.45 验收期增强）：圈定题号范围只扫部分库，与水位排除叠加——
+// 先按范围圈题，圈内再走水位排除；范围外不进任务也不计 excluded。
 func (h *Handlers) TidyRun(c *gin.Context) {
 	var req struct {
 		Kind string `json:"kind"`
 		Redo bool   `json:"redo"`
+		From *int64 `json:"from"` // 题号下界（含）；nil = 不限
+		To   *int64 `json:"to"`   // 题号上界（含）；nil = 不限
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || !tidyKinds[req.Kind] {
 		fail(c, http.StatusBadRequest, "kind 需为 difficulty / knowledge / meta")
+		return
+	}
+	if (req.From != nil && *req.From < 1) || (req.To != nil && *req.To < 1) ||
+		(req.From != nil && req.To != nil && *req.From > *req.To) {
+		fail(c, http.StatusBadRequest, "题号范围不合法：需 1 ≤ 起始 ≤ 结束，留空表示全库")
 		return
 	}
 	// AI 类任务前置校验供应商（meta 纯规则不需要）
@@ -147,6 +157,14 @@ func (h *Handlers) TidyRun(c *gin.Context) {
 	}
 	uid, name, _, _ := currentUser(c)
 
+	var from, to int64
+	if req.From != nil {
+		from = *req.From
+	}
+	if req.To != nil {
+		to = *req.To
+	}
+
 	h.tidyMu.Lock()
 	if h.tidyTask != nil && h.tidyTask.State == "running" {
 		h.tidyMu.Unlock()
@@ -154,7 +172,7 @@ func (h *Handlers) TidyRun(c *gin.Context) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	job := &tidyJob{State: "running", Kind: req.Kind, ByName: name, StartedAt: time.Now(), cancel: cancel}
+	job := &tidyJob{State: "running", Kind: req.Kind, From: from, To: to, ByName: name, StartedAt: time.Now(), cancel: cancel}
 	h.tidyTask = job
 	h.tidyMu.Unlock()
 
@@ -310,6 +328,7 @@ func (h *Handlers) runTidyDifficulty(ctx context.Context, job *tidyJob, uid int6
 	if err != nil {
 		return err
 	}
+	probs = filterRange(probs, job.From, job.To)
 	// 水位排除（redo=false）：已整理过（tidiedAt.difficulty）与已显式设难度的题
 	// 都不进本轮——后者照常出建议只烧 token（apply 后才有水位），直接不跑
 	if !redo {
@@ -400,6 +419,7 @@ func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64
 	if err != nil {
 		return err
 	}
+	probs = filterRange(probs, job.From, job.To)
 	if !redo {
 		probs = excludeTidied(probs, "knowledge", job)
 	}
@@ -500,6 +520,7 @@ func (h *Handlers) runTidyMeta(ctx context.Context, job *tidyJob, redo bool) err
 	if err != nil {
 		return err
 	}
+	probs = filterRange(probs, job.From, job.To)
 	if !redo {
 		probs = excludeTidied(probs, "meta", job)
 	}
@@ -729,6 +750,22 @@ func tidyKnowledgeUser(candidates string, curNames []string, p *repo.Problem) st
 	fmt.Fprintf(&b, "\n标题：%s\n题面：\n%s\n\n请输出知识点 JSON。",
 		p.Title, truncateTail(p.Statement, tidyStatementMaxRunes))
 	return b.String()
+}
+
+// filterRange 题号范围过滤（from/to 0 = 不限）。范围外的题不计入 excluded——
+// excluded 只表达「水位/已设难度排除」，范围是 root 主动圈定的任务边界本身。
+func filterRange(probs []*repo.Problem, from, to int64) []*repo.Problem {
+	if from <= 0 && to <= 0 {
+		return probs
+	}
+	kept := probs[:0]
+	for _, p := range probs {
+		if (from > 0 && p.ID < from) || (to > 0 && p.ID > to) {
+			continue
+		}
+		kept = append(kept, p)
+	}
+	return kept
 }
 
 // excludeTidied 水位过滤（redo=false 共用）：tidiedAt.<kind> 已打点的题跳过并计数。

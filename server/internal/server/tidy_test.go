@@ -254,6 +254,53 @@ func TestTidyRunMetaFlow(t *testing.T) {
 	}
 }
 
+func TestTidyRunRangeFilter(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
+	f.metaTreeNodes = []repo.TagNode{{ID: 500, Name: "洛谷"}}
+	f.problems[3201] = &repo.Problem{ID: 3201, Title: "[洛谷] 范围外有线索"}                          // 范围外：不进任务、不计 excluded
+	f.problems[3202] = &repo.Problem{ID: 3202, Title: "[洛谷] 范围内已整理", TidiedAt: map[string]time.Time{"meta": time.Now()}} // 范围内：水位排除计数
+	f.problems[3203] = &repo.Problem{ID: 3203, Title: "[洛谷] 范围内正常"}                          // 范围内：正常出建议
+	h := newTestHandlers(f)
+	r := testEngine(h)
+	r.POST("/api/admin/tidy/run", AuthRequired(h), RequireRoot(), h.TidyRun)
+	r.GET("/api/admin/tidy/status", AuthRequired(h), RequireRoot(), h.TidyStatus)
+	tok := f.addUser(h, 1, "root", repo.RoleRoot, 0)
+
+	// 非法范围：起 > 止
+	if code, _ := doJSON(r, "POST", "/api/admin/tidy/run", tok, `{"kind":"meta","from":9,"to":3}`); code != 400 {
+		t.Fatalf("from>to 应 400，得 %d", code)
+	}
+
+	code, body := doJSON(r, "POST", "/api/admin/tidy/run", tok, `{"kind":"meta","from":3202,"to":3203}`)
+	if code != 200 {
+		t.Fatalf("tidy/run = %d %v", code, body)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	var snap map[string]any
+	for time.Now().Before(deadline) {
+		_, body := doJSON(r, "GET", "/api/admin/tidy/status", tok, "")
+		snap = body["data"].(map[string]any)
+		if snap["state"] != "running" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if snap["state"] != "done" {
+		t.Fatalf("终态 = %v（error=%v），期望 done", snap["state"], snap["error"])
+	}
+	sugs := asAnySlice(snap["suggestions"])
+	if len(sugs) != 1 || int64(sugs[0].(map[string]any)["pid"].(float64)) != 3203 {
+		t.Fatalf("范围过滤失败，建议集 = %v，期望仅 3203", sugs)
+	}
+	if n, _ := snap["excluded"].(float64); n != 1 {
+		t.Fatalf("excluded = %v，期望 1（3202；范围外 3201 不计）", n)
+	}
+	if got, _ := snap["from"].(float64); got != 3202 {
+		t.Fatalf("快照 from = %v，期望 3202", got)
+	}
+}
+
 // asAnySlice 断言助手：nil / 缺席字段 → nil，数组 → []any
 func asAnySlice(v any) []any {
 	if v == nil {
