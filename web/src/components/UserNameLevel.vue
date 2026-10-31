@@ -62,7 +62,10 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
 }
 
 .unl-name.unl-extreme {
-  background: linear-gradient(135deg, #b45309, #f59e0b 30%, #fef3c7 50%, #f59e0b 70%, #b45309);
+  /* 流光只换渐变图——必须用 background-image 长写：background 简写会把
+     .unl-gold 已设的 background-clip:text 重置回 border-box，渐变铺满整盒、
+     color:transparent 仍在 → 名字变纯色块（2026-10-31 榜单 Lv10 实锤） */
+  background-image: linear-gradient(135deg, #b45309, #f59e0b 30%, #fef3c7 50%, #f59e0b 70%, #b45309);
   background-size: 200% auto;
   animation: unlFlow 3s linear infinite;
 }
