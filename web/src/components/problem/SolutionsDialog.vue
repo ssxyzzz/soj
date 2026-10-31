@@ -43,6 +43,10 @@ watch(
   (open) => {
     if (open) loadSolutions(1)
   },
+  // 宿主用 v-if="showSolutions" 与 v-model 绑同一变量：组件挂载时 modelValue 已为
+  // true，非立即 watch 观察不到变化 → 打开弹窗永不加载列表（2026-10-31 #2153 实锤：
+  // 题解已入库但弹窗显示 0 篇、再发被唯一约束挡）。immediate 首次执行即加载。
+  { immediate: true },
 )
 
 function openWriteSolution() {
