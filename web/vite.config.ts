@@ -38,12 +38,17 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // vendor 分层（v0.36）：高延迟链路（学生→VPS→隧道→家，~100ms/请求）下 vendor
-        // 与业务同 chunk 导致每次部署全员重下。manualChunks 分组纪律（v0.28 实测 +
-        // 本批复测 924KB 实锤）：手工指派会把按需引入挡在图外的组件整族拖回来
-        // （carousel/tour/watermark 全进包），**element-plus 一律留给自动分包**。
-        // 窄组只收「本就全量使用、无摇树可失」的稳定层：vue 全家 / pinia / axios /
-        // @element-plus/icons-vue——业务迭代不换哈希，部署后这层命中浏览器缓存。
+        // vendor 分层（v0.36；2026-10-31 复盘修订注释）：高延迟链路（学生→VPS→隧道
+        // →家，~100ms/请求）下 vendor 与业务同 chunk 导致每次部署全员重下。manualChunks
+        // 分组纪律（v0.28 实测 + v0.36 复测 924KB 实锤）：手工指派会把按需引入挡在
+        // 图外的组件整族拖回来（carousel/tour/watermark 全进包），**element-plus
+        // 一律留给自动分包**。窄组只收 vue 全家 / pinia / axios。
+        // 【稳定性天花板（实测两次破防后定论）】本层内容是摇树后的库代码——依赖没动，
+        // 新批次「新用了一处 vue/pinia 导出」或「新增图标导入」都会改写摇树面 → 整层
+        // 换哈希（v0.36 建 DhLJTouY → v0.39+ 批 BI3CZRwj，lockfile 零变化即此机制）。
+        // 所以本层只承诺「不动库 API 用法与图标集的迭代」不换哈希；彻底消灭部署冷载
+        // 需 service-worker 预缓存策略（候选项）。icons 不入层：单图标 ~1KB 随业务
+        // chunk 走，别让「加图标」这种高频动作破防 223KB 大层。
         // vditor/CM6 维持组件内动态 import 的既有异步链路；
         // experimentalMinChunkSize 继续兜碎片（题面页闭包曾 40+ 个 2-7KB 小 chunk）。
         experimentalMinChunkSize: 15000,
@@ -55,8 +60,7 @@ export default defineConfig({
             id.includes('vue-router') ||
             id.includes('/pinia/') ||
             id.includes('pinia/') ||
-            id.includes('/axios/') ||
-            id.includes('@element-plus/icons-vue')
+            id.includes('/axios/')
           ) {
             return 'vendor-core'
           }
