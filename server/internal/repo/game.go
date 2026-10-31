@@ -495,18 +495,21 @@ func (r *Repo) StarMap(ctx context.Context, uid int64) ([]StarNode, error) {
 	if err := cur.Err(); err != nil {
 		return nil, err
 	}
-	// tag 名解析（tagtree 集合直查，仅名字）
+	// tag 名解析：知识树存 nodes 文档（非逐节点集合），整树拉回走 map
+	names := map[int64]string{}
+	if tree, terr := r.GetTagTree(ctx); terr == nil {
+		var walk func(nodes []TagNode)
+		walk = func(nodes []TagNode) {
+			for _, n := range nodes {
+				names[n.ID] = n.Name
+				walk(n.Children)
+			}
+		}
+		walk(tree)
+	}
 	nodes := make([]StarNode, 0, len(solved))
 	for tagID, n := range solved {
-		name := ""
-		var t struct {
-			Name string `bson:"name"`
-		}
-		if err := r.db.Collection("tags").FindOne(ctx, bson.M{"_id": tagID},
-			options.FindOne().SetProjection(bson.M{"name": 1})).Decode(&t); err == nil {
-			name = t.Name
-		}
-		nodes = append(nodes, StarNode{TagID: tagID, Name: name, Solved: n, Lit: n >= 3})
+		nodes = append(nodes, StarNode{TagID: tagID, Name: names[tagID], Solved: n, Lit: n >= 3})
 	}
 	// 按点亮与解题数倒序
 	for i := 1; i < len(nodes); i++ {

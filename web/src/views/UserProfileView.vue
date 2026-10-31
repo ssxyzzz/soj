@@ -278,22 +278,28 @@ function openDetail(id: number) {
           </div>
         </div>
 
-        <!-- 成就墙（v0.41，仅本人） -->
+        <!-- 成就墙（v0.41，仅本人）：战利品陈列格，四档配色 -->
         <div v-if="isOwnProfile && achs.length" class="card ach-card">
           <div class="done-head">
             <h3>成就墙</h3>
-            <span class="dim">{{ achUnlocked }} / {{ achs.length }}</span>
+            <div class="ach-meter" :title="`已解锁 ${achUnlocked} / ${achs.length}`">
+              <div class="ach-meter-track">
+                <div class="ach-meter-fill" :style="{ width: (achUnlocked / achs.length) * 100 + '%' }" />
+              </div>
+              <span class="mono">{{ achUnlocked }}/{{ achs.length }}</span>
+            </div>
           </div>
           <div class="ach-grid">
             <div
               v-for="a in achs"
               :key="a.code"
-              class="ach"
+              class="ach-tile"
               :class="[a.tier, { on: a.unlocked_at }]"
-              :title="a.unlocked_at ? a.desc : a.desc + '（未解锁）'"
+              :title="a.unlocked_at ? `${a.desc} · ${a.unlocked_at.slice(0, 10)} 解锁` : a.desc"
             >
               <span class="ach-icon">{{ a.icon }}</span>
               <span class="ach-name">{{ a.name }}</span>
+              <span class="ach-state">{{ a.unlocked_at ? '已达成' : '未解锁' }}</span>
             </div>
           </div>
         </div>
@@ -302,13 +308,13 @@ function openDetail(id: number) {
         <div v-if="isOwnProfile && stars.length" class="card star-card">
           <div class="done-head">
             <h3>知识星图</h3>
-            <span class="dim">已点亮 {{ stars.filter((x) => x.lit).length }} / {{ stars.length }} 站（AC ≥ 3 题点亮）</span>
+            <span class="dim">已点亮 {{ stars.filter((x) => x.lit).length }} / {{ stars.length }} 站 · AC ≥ 3 题点亮</span>
           </div>
           <div class="star-grid">
             <div v-for="s in stars" :key="s.tag_id" class="star" :class="{ lit: s.lit }">
-              <span class="star-dot">✦</span>
-              <span class="star-name">{{ s.name || '未知' }}</span>
-              <span class="star-n mono">{{ s.solved }}</span>
+              <span class="star-dot">{{ s.lit ? '✦' : '✧' }}</span>
+              <span class="star-name">{{ s.name || '未命名知识点' }}</span>
+              <span class="star-n mono">{{ s.solved }} 题</span>
             </div>
           </div>
         </div>
@@ -319,13 +325,14 @@ function openDetail(id: number) {
             <h3>错题本</h3>
             <span class="dim">复仇成功掉落 ×1.5</span>
           </div>
-          <div class="glist">
-            <div v-for="w in wrongbook" :key="w.pid" class="prow">
-              <router-link class="plink" :to="`/problems/${w.pid}`">
-                <span class="mono pid">P{{ w.pid }}</span> {{ w.title }}
-              </router-link>
-              <span class="when mono">上次 {{ w.best_score }} 分</span>
-            </div>
+          <div class="wb-list">
+            <router-link v-for="w in wrongbook" :key="w.pid" class="wb-row" :to="`/problems/${w.pid}`">
+              <TierBadge :tier="w.difficulty || 3" kind="difficulty" size="sm" />
+              <span class="wb-title">{{ w.title }}</span>
+              <span class="mono pid">P{{ w.pid }}</span>
+              <span class="wb-score">上次 {{ w.best_score }} 分</span>
+              <span class="wb-go">去复仇 →</span>
+            </router-link>
           </div>
         </div>
 
@@ -734,50 +741,149 @@ function openDetail(id: number) {
 </style>
 
 <style scoped>
-/* 成就墙（v0.41） */
-.ach-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
-  gap: 8px;
+/* ---- 游戏感三卡（v0.41）：成就墙 / 知识星图 / 错题本 ---- */
+/* 主列卡片统一呼吸间距（PageShell 槽内无 gap，靠卡片自身 margin） */
+.hero,
+.done-card,
+.ach-card,
+.star-card,
+.wb-card {
+  margin-bottom: 16px;
 }
 
-.ach {
+.ach-card,
+.star-card,
+.wb-card {
+  padding: 20px 24px;
+}
+
+/* 成就进度条：细线计量，钩住不施压 */
+.ach-meter {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px dashed var(--el-border-color);
-  opacity: 0.45;
-  filter: grayscale(1);
+  gap: 10px;
+  min-width: 180px;
 }
 
-.ach.on {
-  opacity: 1;
-  filter: none;
+.ach-meter-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--el-fill-color);
+  overflow: hidden;
+}
+
+.ach-meter-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--soj-blue), #5b8def);
+  transition: width 0.6s ease;
+}
+
+.ach-meter .mono {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+/* 战利品陈列格：竖排瓦片（图标/名称/状态），四档配色随解锁点亮 */
+.ach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.ach-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px 12px;
+  border-radius: 12px;
+  border: 1px dashed var(--el-border-color-lighter);
+  text-align: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ach-tile:hover {
+  transform: translateY(-2px);
+}
+
+.ach-tile .ach-icon {
+  font-size: 24px;
+  line-height: 1.2;
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.ach-tile .ach-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+
+.ach-tile .ach-state {
+  font-size: 11px;
+  color: var(--el-text-color-placeholder);
+}
+
+.ach-tile.on {
   border-style: solid;
 }
 
-.ach.on.bronze { border-color: #d0a068; }
-.ach.on.silver { border-color: #9aa7b5; }
-.ach.on.gold { border-color: #e2a93b; background: #fffbeb; }
-.ach.on.color { border-color: #7c3aed; background: #f5f3ff; }
+.ach-tile.on .ach-icon {
+  filter: none;
+  opacity: 1;
+}
 
-.ach-icon { font-size: 18px; }
-.ach-name { font-size: 13px; font-weight: 600; }
+.ach-tile.on .ach-name {
+  color: var(--el-text-color-primary);
+}
 
-/* 知识星图 */
+.ach-tile.on .ach-state {
+  color: var(--soj-blue);
+  font-weight: 600;
+}
+
+/* 四档配色（解锁后）：铜/银/金/彩 */
+.ach-tile.on.bronze {
+  border-color: #dcb58a;
+  background: #fdf8f1;
+}
+
+.ach-tile.on.silver {
+  border-color: #aeb9c6;
+  background: #f6f8fa;
+}
+
+.ach-tile.on.gold {
+  border-color: #e7c268;
+  background: #fffbef;
+}
+
+.ach-tile.on.color {
+  border-color: #c4b5fd;
+  background: #f7f4ff;
+}
+
+.ach-tile.on.gold .ach-icon,
+.ach-tile.on.color .ach-icon {
+  text-shadow: 0 0 10px rgba(226, 169, 59, 0.35);
+}
+
+/* 知识星图：星座感药丸（点亮蓝晕 / 未点亮虚线） */
 .star-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .star {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 14px;
   border-radius: 999px;
   border: 1px dashed var(--el-border-color);
   font-size: 13px;
@@ -786,11 +892,82 @@ function openDetail(id: number) {
 
 .star.lit {
   border: 1px solid var(--soj-blue);
-  color: var(--soj-blue);
   background: var(--soj-blue-soft);
+  color: var(--soj-blue);
   font-weight: 600;
 }
 
+.star.lit .star-dot {
+  text-shadow: 0 0 8px rgba(31, 73, 186, 0.5);
+}
+
 .star-dot { font-size: 14px; }
-.star-n { font-size: 12px; }
+.star-n { font-size: 12px; opacity: 0.75; }
+
+/* 错题本：宽行 + 难度徽章 + 悬停浮出「去复仇」 */
+.wb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+.wb-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--el-text-color-primary);
+  transition: background 0.15s ease;
+}
+
+.wb-row:hover {
+  background: var(--soj-blue-soft);
+}
+
+.wb-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.wb-row .pid {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.wb-score {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  white-space: nowrap;
+}
+
+.wb-go {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--soj-blue);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.wb-row:hover .wb-go {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ach-tile,
+  .ach-meter-fill,
+  .wb-row,
+  .wb-go {
+    transition: none;
+  }
+  .ach-tile:hover {
+    transform: none;
+  }
+}
 </style>
