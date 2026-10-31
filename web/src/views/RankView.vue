@@ -17,8 +17,10 @@ const router = useRouter()
 
 // me = 观察者条目（含榜外名次），随每页请求一并返回，置顶展示用
 const me = ref<RankItem | null>(null)
+const board = ref<'level' | 'solve' | 'combo' | 'streak'>('level')
 const { list, total, page, pageSize, loading, load } = usePagedList<RankItem>(async (p) => {
-  const res = await rankApi.top(p)
+  // 等级榜服务端排序（名次号与排序严格一致）；刷题榜走缺省解题数排序
+  const res = await rankApi.top(p, board.value === 'level' ? 'level' : undefined)
   me.value = res.me
   return { list: res.items, total: res.total }
 }, { pageSize: 100 })
@@ -53,8 +55,10 @@ const podiumOrder = computed<PodiumRow[]>(() => {
   const rows = podium.value as unknown as PodiumRow[]
   return [rows[1], rows[0], rows[2]].filter(Boolean)
 })
-// 表格：自己的条目置顶（含榜外名次），后面跟当前页榜单——方便查看自己
-const tableRows = computed(() => (me.value ? [me.value, ...list.value] : list.value))
+// 表格：观察者置顶行——仅当不在本页榜内（在榜内时榜单行自带「· 我」标记，
+// 置顶会重复出现两行同一人，v0.41 验收修正）
+const meOnBoard = computed(() => !!me.value && list.value.some((x) => x.user_id === me.value!.user_id))
+const tableRows = computed(() => (me.value && !meOnBoard.value ? [me.value, ...list.value] : list.value))
 
 // 页头标题/副标题随榜切换（v0.41 多榜）
 const pageTitle = computed(() =>
@@ -70,7 +74,6 @@ const pageSub = computed(() =>
 )
 
 // ---- 多榜制（v0.41）：等级/刷题共用 /api/rank 数据（客户端重排），连击/坚持走 game-rank ----
-const board = ref<'level' | 'solve' | 'combo' | 'streak'>('level')
 const gameRows = ref<{ rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]>([])
 const gameMeRank = ref(0)
 const gameMeValue = ref(0)
@@ -90,18 +93,22 @@ async function loadGameBoard() {
 }
 
 function switchBoard(b: 'level' | 'solve' | 'combo' | 'streak') {
+  if (board.value === b) return
   board.value = b
-  if (b === 'combo' || b === 'streak') void loadGameBoard()
+  if (b === 'combo' || b === 'streak') {
+    void loadGameBoard()
+  } else {
+    // 等级/刷题换榜：重置回第一页并按新类型重拉（服务端排序口径不同）
+    page.value = 1
+    lq.sync({})
+    load()
+  }
 }
 
-const levelRows = computed(() => {
-  const rows = tableRows.value
-  if (board.value !== 'level') return rows
-  return [...rows].sort((a, b) => (b.level ?? 0) - (a.level ?? 0) || b.solved - a.solved)
-})
+// 等级榜名次号已由服务端重排（type=level），客户端不再二次排序
 const displayRows = computed<Record<string, unknown>[]>(() => {
   if (board.value === 'combo' || board.value === 'streak') return gameRows.value as unknown as Record<string, unknown>[]
-  return levelRows.value as unknown as Record<string, unknown>[]
+  return tableRows.value as unknown as Record<string, unknown>[]
 })
 const boardTitle = computed(() =>
   ({ level: '等级榜', solve: '刷题榜', combo: '连击榜', streak: '坚持榜' })[board.value],

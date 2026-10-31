@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -115,13 +116,46 @@ func (rc *rankCache) refresh(ctx context.Context) ([]gin.H, error) {
 	return items, nil
 }
 
-// Rank 解题排行榜（分页榜单：每页 rankPageSize 名 + 观察者位次，榜单 30s 缓存）。
+// Rank 排行榜（分页榜单：每页 rankPageSize 名 + 观察者位次，榜单 30s 缓存）。
 // me = 观察者自己的条目（含榜外名次），前端置顶展示——「方便查看自己」。
+// type=level（v0.41 多榜）：按等级 desc + 解题 desc 重排并重排名次（名次号与排序
+// 严格一致——客户端重排会让名次乱序）；缺省 = 刷题榜（按解题数，v0.11 以来口径）。
 func (h *Handlers) Rank(c *gin.Context) {
 	all := h.rank.get(c.Request.Context())
 	if all == nil {
 		fail(c, http.StatusInternalServerError, "读取排行榜失败")
 		return
+	}
+	if c.Query("type") == "level" {
+		// 深拷贝条目再重排——gin.H 是引用，直接改 rank 会污染共享缓存
+		//（刷题榜名次被改写成等级序，v0.41 验收实弹抓出）
+		sorted := make([]gin.H, len(all))
+		for i, it := range all {
+			cp := gin.H{}
+			for k, v := range it {
+				cp[k] = v
+			}
+			sorted[i] = cp
+		}
+		sort.SliceStable(sorted, func(i, j int) bool {
+			li, _ := sorted[i]["level"].(int)
+			lj, _ := sorted[j]["level"].(int)
+			if li != lj {
+				return li > lj
+			}
+			si, _ := sorted[i]["solved"].(int)
+			sj, _ := sorted[j]["solved"].(int)
+			if si != sj {
+				return si > sj
+			}
+			ui, _ := sorted[i]["user_id"].(int64)
+			uj, _ := sorted[j]["user_id"].(int64)
+			return ui < uj
+		})
+		for i := range sorted {
+			sorted[i]["rank"] = i + 1
+		}
+		all = sorted
 	}
 	page, _ := strconv.Atoi(c.Query("page"))
 	if page < 1 {
@@ -138,14 +172,37 @@ func (h *Handlers) Rank(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
 	var me gin.H
 	if logged {
-		// 在榜内直接取缓存条目（名次与榜单严格一致）；榜外走 RankMe 补算
+		// 在榜内直接取条目（名次与当前榜单严格一致）；榜外走 RankMe 补算
 		for _, it := range all {
 			if it["user_id"] == uid {
 				me = it
 				break
 			}
 		}
-		if me == nil {
+		if me == nil && c.Query("type") == "level" {
+			// 等级榜榜外观察者：等级位次 = 等级/解题都比我高的人数 +1
+			myLv := h.userLevelFresh(c, uid)
+			mySolved := int64(0)
+			if _, solved, err := h.repo.RankMe(c.Request.Context(), uid); err == nil {
+				mySolved = solved
+			}
+			above := 0
+			for _, it := range all {
+				lv, _ := it["level"].(int)
+				sv, _ := it["solved"].(int)
+				if lv > myLv || (lv == myLv && int64(sv) > mySolved) {
+					above++
+				}
+			}
+			me = gin.H{"rank": above + 1, "user_id": uid, "solved": mySolved, "level": myLv}
+			if u, err := h.repo.GetUserByID(c.Request.Context(), uid); err == nil {
+				uname, nick := u.Username, u.Nickname
+				if uname == "" {
+					uname, nick = "-", "-"
+				}
+				me["username"], me["nickname"] = uname, nick
+			}
+		} else if me == nil {
 			rank, solved, err := h.repo.RankMe(c.Request.Context(), uid)
 			if err == nil {
 				me = gin.H{"rank": rank, "user_id": uid, "solved": solved}

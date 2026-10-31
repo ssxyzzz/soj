@@ -428,7 +428,8 @@ export const userApi = {
 export const rankApi = {
   // items = 当前页榜单（每页 100 名，rank 为全榜绝对名次）；me = 观察者条目（含榜外
   // 名次，未登录为 null）；total = 榜上总人数（翻页器用）
-  top: (page = 1) => get<{ items: RankItem[]; me: RankItem | null; total: number }>('/rank', { page }),
+  top: (page = 1, type?: 'level') =>
+    get<{ items: RankItem[]; me: RankItem | null; total: number }>('/rank', { page, ...(type ? { type } : {}) }),
 }
 
 // 等级体系（v0.11）：公开读配置（排行榜/顶栏徽章渲染）
