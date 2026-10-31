@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -92,19 +93,28 @@ func (c *Client) Chat(ctx context.Context, system, user string) (*Response, erro
 		gateMu.Unlock()
 	}()
 
-	body, err := json.Marshal(map[string]any{
+	body := map[string]any{
 		"model": c.p.Model,
 		"messages": []Message{
 			{Role: "system", Content: system},
 			{Role: "user", Content: user},
 		},
 		"temperature": 0.3,
-	})
+	}
+	// GLM（智谱）glm-4.x 默认开深度思考——思考链先于正文产出，分级提示/找 bug 类
+	// 结构化任务思考链动辄数千 token，60s 外呼预算内被撑爆（2026-10-31 实锤：ai-debug
+	// 撞 context deadline exceeded 退费，服务器实测小请求 content 为空、全花在
+	// reasoning）。官方端点自动附 thinking disabled；其余 OpenAI 兼容服务不发此参数
+	//（防未知字段被拒收；自建反代 bigmodel 的部署如需关闭请代理层补写）。
+	if strings.Contains(c.p.BaseURL, "bigmodel.cn") {
+		body["thinking"] = map[string]string{"type": "disabled"}
+	}
+	bodyBytes, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.p.BaseURL+"/chat/completions", bytes.NewReader(body))
+		c.p.BaseURL+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
 	}
