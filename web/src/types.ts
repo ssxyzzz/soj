@@ -794,6 +794,60 @@ export interface BackupStatus {
 // 服务端 403 是最终裁决）
 export const BACKUP_DOWNLOAD_LIMIT_BYTES = 32 * 1024 * 1024
 
+// ---------- 题库一键整理（v0.43） ----------
+
+export type TidyKind = 'difficulty' | 'knowledge' | 'meta'
+
+// 逐题建议（kind 专属字段按需出现；与后端 server/tidy.go TidySuggestion 对齐）
+export interface TidySuggestion {
+  pid: number
+  title: string
+  kind: TidyKind
+  // difficulty
+  has_difficulty?: boolean
+  cur_difficulty?: number
+  suggest_difficulty?: number
+  rate_difficulty?: number
+  pass_rate?: number
+  attempted?: number
+  conflict?: boolean
+  ai_error?: string
+  // knowledge
+  cur_tag_ids?: number[]
+  cur_tag_names?: string[]
+  add_tag_ids?: number[]
+  add_tag_names?: string[]
+  remove_tag_ids?: number[]
+  remove_tag_names?: string[]
+  dropped?: string[]
+  // meta
+  cur_meta_ids?: number[]
+  cur_meta_names?: string[]
+  suggest_meta_ids?: number[]
+  suggest_meta_names?: string[]
+  no_clue?: boolean
+  note?: string
+}
+
+export interface TidyStatus {
+  state: 'idle' | 'running' | 'done' | 'cancelled' | 'failed'
+  kind?: TidyKind
+  total?: number
+  done?: number
+  suggestions?: TidySuggestion[]
+  error?: string
+  by?: string
+  started_at?: string
+  ended_at?: string | null
+}
+
+export interface TidyApplyItem {
+  pid: number
+  difficulty?: number
+  tags?: number[]
+  meta_tags?: number[]
+}
+
 // ---------- 角色与权限位（v0.4.7） ----------
 
 export interface PermInfo {

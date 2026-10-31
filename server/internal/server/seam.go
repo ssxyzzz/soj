@@ -109,6 +109,8 @@ type RepoAPI interface {
 	GetProblemMetas(ctx context.Context, ids []int64) (map[int64]*repo.Problem, error)
 	GetRole(ctx context.Context, id string) (*repo.Role, error)
 	GetRound(ctx context.Context, kind string, id int64) (*repo.Contest, error)
+	TidyListProblems(ctx context.Context) ([]*repo.Problem, error)
+	TidyPassRates(ctx context.Context) (map[int64]float64, map[int64]int64, error)
 	// 课堂 PK（v0.42）：发起/取消/现状/按 id 读 + 榜单（实时榜与结算名次同源）
 	GetClassroomRace(ctx context.Context, id int64) (*repo.ClassroomRace, error)
 	LatestClassroomRace(ctx context.Context, classID int64) (*repo.ClassroomRace, error)
@@ -189,6 +191,7 @@ type RepoAPI interface {
 	ListMembers(ctx context.Context, classID int64) ([]repo.ClassMember, error)
 	ListNotifications(ctx context.Context, uid int64, unreadOnly bool, typ string, page, pageSize int) ([]*repo.Notification, int64, error)
 	ListParticipantPairs(ctx context.Context, pids []int64) ([]repo.ListParticipRow, error)
+	MatchMetaTags(ctx context.Context, hint repo.SourceHint) []int64
 	ListPidSubmissions(ctx context.Context, pid int64, uid int64, page, pageSize int, sort, lang string) ([]*repo.Submission, int64, error)
 	ListProblemLists(ctx context.Context) ([]*repo.ProblemList, error)
 	ListProblemStats(ctx context.Context, pids []int64) (map[int64]repo.ProblemStat, error)

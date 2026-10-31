@@ -22,6 +22,7 @@ import SettingsPanel from '@/components/admin/SettingsPanel.vue'
 import ShopPanel from '@/components/admin/ShopPanel.vue'
 import AiPanel from '@/components/admin/AiPanel.vue'
 import TagsPanel from '@/components/admin/TagsPanel.vue'
+import TidyPanel from '@/components/admin/TidyPanel.vue'
 import UsersPanel from '@/components/admin/UsersPanel.vue'
 import { adminApi } from '@/api'
 import { useUserStore } from '@/stores/user'
@@ -34,10 +35,10 @@ const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 
 type Section = (typeof sections)[number]
 // 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描 / 种子题四面板同页 tab 切换（2026-10-25 双树）；
 // tags/sources 旧深链值映射到 problems 的对应子页
-type SubTab = 'tags' | 'meta' | 'duplicates' | 'seed'
+type SubTab = 'tags' | 'meta' | 'duplicates' | 'seed' | 'tidy'
 const rawSection = (Array.isArray(route.query.section) ? route.query.section[0] : route.query.section) as string | undefined
-// 子页深链值（旧 tags/sources/meta + 重复扫描/种子题）统一映射进题目管理分区
-const isProblemSub = rawSection === 'tags' || rawSection === 'sources' || rawSection === 'meta' || rawSection === 'duplicates' || rawSection === 'seed'
+// 子页深链值（旧 tags/sources/meta + 重复扫描/种子题/题库整理）统一映射进题目管理分区
+const isProblemSub = rawSection === 'tags' || rawSection === 'sources' || rawSection === 'meta' || rawSection === 'duplicates' || rawSection === 'seed' || rawSection === 'tidy'
 const section = ref<Section>(
   rawSection && sections.includes(rawSection as Section)
     ? (rawSection as Section)
@@ -58,6 +59,8 @@ const showTagsTab = userStore.role === 'root'
 const showDuplicatesTab = userStore.can('problem.edit.all')
 // 种子题管理（清除/重部署为部署级操作）：仅 root，端点同样 RequireRoot
 const showSeedTab = userStore.role === 'root'
+// 题库一键整理（v0.43 批量改库）：仅 root，端点同样 RequireRoot
+const showTidyTab = userStore.role === 'root'
 
 // ---- 分组导航（v0.35-①）----
 // 四组眉题 + 名词式命名统一（编辑用户→用户管理、公告编辑→公告发布、实物兑换→兑换商店…）；
@@ -210,11 +213,13 @@ onMounted(loadTodo)
           <el-tab-pane v-if="showTagsTab" name="meta" label="标签树" />
           <el-tab-pane v-if="showDuplicatesTab" name="duplicates" label="重复题扫描" />
           <el-tab-pane v-if="showSeedTab" name="seed" label="种子题管理" />
+          <el-tab-pane v-if="showTidyTab" name="tidy" label="题库整理" />
         </el-tabs>
         <TagsPanel v-if="subTab === 'tags'" @update:dirty="tagsDirty = $event" />
         <TagsPanel v-else-if="subTab === 'meta'" tree="meta" @update:dirty="tagsDirty = $event" />
         <DuplicateProblemsPanel v-else-if="subTab === 'duplicates'" />
         <SeedProblemsPanel v-else-if="subTab === 'seed'" />
+        <TidyPanel v-else-if="subTab === 'tidy'" />
       </div>
       <LevelPanel v-else-if="section === 'levels'" />
       <NoticePanel v-else-if="section === 'notice'" />

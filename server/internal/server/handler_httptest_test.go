@@ -38,6 +38,8 @@ type fakeRepo struct {
 	isMember bool
 	jadeBal  map[int64]int64
 
+	metaTreeNodes []repo.TagNode // 题库整理（v0.43）meta 任务：来源树种子（GetMetaTagTree/MatchMetaTags 用）
+
 	// 题库三视角：捕获 server 传给 repo 的过滤契约 + 回放列表
 	lastFilter *repo.ProblemListFilter
 	listPage   func(f repo.ProblemListFilter) ([]*repo.Problem, int64)

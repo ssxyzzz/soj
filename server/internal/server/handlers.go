@@ -61,6 +61,11 @@ type Handlers struct {
 	// 备份（v0.26 任务化）：与导入同款单任务骨架，后台打包不再占住 HTTP 请求
 	backupMu   sync.Mutex
 	backupTask *backupJob
+
+	// 题库一键整理（v0.43）：root 手动触发，与导入/备份同款单任务骨架——
+	// AI/规则只产建议，apply 确认后才写库
+	tidyMu   sync.Mutex
+	tidyTask *tidyJob
 }
 
 // wakeJudge 提交/重测入队后唤醒判题 worker（多进程部署收不到，靠 1s 轮询兜底）。
