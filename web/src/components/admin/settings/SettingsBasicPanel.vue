@@ -165,8 +165,7 @@ async function save() {
       <el-form-item label="开放实物兑换">
         <el-switch v-model="shopEnabled" />
         <span class="dim" style="margin-left: 8px">
-          开启后导航栏出现「兑换」入口，物品目录与订单履约在后台「实物兑换」面板（root）
-        </span>
+          开启后在「玉」页面右列显示实物兑换区（物品目录与学生订单）</span>
       </el-form-item>
       <el-form-item label="ICP 备案号">
         <el-input

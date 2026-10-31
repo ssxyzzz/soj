@@ -47,12 +47,6 @@ const router = createRouter({
           meta: { title: '讨论', requiresAuth: true },
         },
         {
-          path: 'shop',
-          name: 'shop',
-          component: () => import('@/views/ShopView.vue'),
-          meta: { title: '实物兑换', requiresAuth: true },
-        },
-        {
           path: 'notifications',
           name: 'notifications',
           component: () => import('@/views/NotificationsView.vue'),

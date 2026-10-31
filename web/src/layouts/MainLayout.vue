@@ -39,7 +39,7 @@ const navItems = computed(() => {
     { to: '/classes', label: '班级' },
   ]
   if (site.discussGlobalEnabled) items.push({ to: '/discuss', label: '讨论' })
-  if (site.jadeShopEnabled) items.push({ to: '/shop', label: '兑换' })
+  // 实物兑换（v0.41 调整）：不再占导航栏，入口在「玉」页右列
   items.push({ to: '/rank', label: '排名' })
   if (userStore.can('submission.view.all')) items.push({ to: '/submissions', label: '提交记录' })
   return items
