@@ -38,12 +38,21 @@ const podium = computed<Record<string, unknown>[]>(() => {
   return page.value === 1 ? (list.value as unknown as Record<string, unknown>[]).slice(0, 3) : []
 })
 // 领奖台展示顺序：2 - 1 - 3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
-const podiumOrder = computed(() =>
-  (podium.value as Record<string, number | string>[])
-    .slice(0, 3)
-    .map((r) => r as never)
-    .filter(Boolean) as { rank: number; user_id: number; username: string; nickname: string; solved: number; level?: number; value?: number; best?: number }[],
-)
+// 领奖台顺序 2-1-3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
+type PodiumRow = {
+  rank: number
+  user_id: number
+  username: string
+  nickname: string
+  solved: number
+  level?: number
+  value?: number
+  best?: number
+}
+const podiumOrder = computed<PodiumRow[]>(() => {
+  const rows = podium.value as unknown as PodiumRow[]
+  return [rows[1], rows[0], rows[2]].filter(Boolean)
+})
 // 表格：自己的条目置顶（含榜外名次），后面跟当前页榜单——方便查看自己
 const tableRows = computed(() => (me.value ? [me.value, ...list.value] : list.value))
 
@@ -133,7 +142,7 @@ onMounted(() => {
         v-for="p in podiumOrder"
         :key="p.rank"
         class="card pcard"
-        :class="{ p1: p.rank === 1, solo: podiumOrder.length === 1 }"
+        :class="{ p1: p.rank === 1, p2: p.rank === 2, p3: p.rank === 3, solo: podiumOrder.length === 1 }"
         title="查看主页"
         @click="router.push(`/users/${p.user_id}`)"
       >
@@ -237,7 +246,7 @@ onMounted(() => {
 /* v3 领奖台：三卡并排、冠军居中放大（渐变数字 + 渐变头像 + 淡蓝顶光） */
 .podium {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: 1fr 1.22fr 1fr; /* 冠军居中列加宽（配合 2-1-3 顺序） */
   gap: 16px;
   margin-bottom: 22px;
   align-items: end;
@@ -267,10 +276,38 @@ onMounted(() => {
 }
 
 .pcard.p1 {
-  padding: 30px 22px 26px;
+  padding: 38px 22px 32px;
   background:
     radial-gradient(300px 120px at 50% 0%, rgb(var(--soj-blue-rgb) / 0.08), transparent 70%), var(--el-bg-color);
   border-color: rgb(var(--soj-blue-rgb) / 0.22);
+}
+
+/* 尺寸层级 1>2>3（v0.41 验收调整）：冠军头像/名次号放大，二三名收敛 */
+.pcard.p1 .pav {
+  width: 66px;
+  height: 66px;
+  font-size: 25px;
+}
+
+.pcard.p1 .rank-no {
+  font-size: 52px;
+}
+
+.pcard.p2 .rank-no,
+.pcard.p3 .rank-no {
+  font-size: 32px;
+}
+
+.pcard.p2 .pav,
+.pcard.p3 .pav {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
+}
+
+.pcard.p2 .pname,
+.pcard.p3 .pname {
+  font-size: 14px;
 }
 
 .rank-no {
