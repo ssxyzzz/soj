@@ -142,6 +142,19 @@ func (f *fakeRepo) UpdateProblemMeta(_ context.Context, pid int64, p repo.Proble
 	return nil
 }
 
+// MarkTidied 内存水位（apply 后打点，断点续整测试用）
+func (f *fakeRepo) MarkTidied(_ context.Context, kind string, pids []int64) error {
+	for _, pid := range pids {
+		if p, ok := f.problems[pid]; ok {
+			if p.TidiedAt == nil {
+				p.TidiedAt = map[string]time.Time{}
+			}
+			p.TidiedAt[kind] = time.Now()
+		}
+	}
+	return nil
+}
+
 func TestTidyApplyValidation(t *testing.T) {
 	f := baseFake()
 	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
@@ -162,7 +175,7 @@ func TestTidyApplyValidation(t *testing.T) {
 		t.Fatalf("失败项不得写库，实际 difficulty=%d", f.problems[3001].Difficulty)
 	}
 
-	// 合法改判 → 写库
+	// 合法改判 → 写库 + 水位打点（下次默认跳过）
 	code, body = doJSON(r, "POST", "/api/admin/tidy/apply", tok,
 		`{"kind":"difficulty","items":[{"pid":3001,"difficulty":6},{"pid":3002,"difficulty":4}]}`)
 	if code != 200 || int(body["data"].(map[string]any)["applied"].(float64)) != 2 {
@@ -170,6 +183,9 @@ func TestTidyApplyValidation(t *testing.T) {
 	}
 	if f.problems[3001].Difficulty != 6 || f.problems[3002].Difficulty != 4 {
 		t.Fatalf("改判未落库：%d %d", f.problems[3001].Difficulty, f.problems[3002].Difficulty)
+	}
+	if _, ok := f.problems[3001].TidiedAt["difficulty"]; !ok {
+		t.Fatal("apply 后未打整理水位")
 	}
 }
 
@@ -184,6 +200,8 @@ func TestTidyRunMetaFlow(t *testing.T) {
 	f.problems[3101] = &repo.Problem{ID: 3101, Title: "[洛谷] A+B Problem"}                          // 有线索 → 重挂命中「洛谷」
 	f.problems[3102] = &repo.Problem{ID: 3102, Title: "完全没有线索的题", MetaTags: []int64{9999}} // 无线索 + 树外孤儿 → 建议清孤儿（空集）
 	f.problems[3103] = &repo.Problem{ID: 3103, Title: "也没有线索", MetaTags: []int64{500}}      // 无线索无孤儿 → 纯列出
+	f.problems[3104] = &repo.Problem{ID: 3104, Title: "[洛谷] 已整理过的题",                        // 水位内 → 默认排除
+		TidiedAt: map[string]time.Time{"meta": time.Now()}}
 	h := newTestHandlers(f)
 	r := testEngine(h)
 	r.POST("/api/admin/tidy/run", AuthRequired(h), RequireRoot(), h.TidyRun)
@@ -226,6 +244,13 @@ func TestTidyRunMetaFlow(t *testing.T) {
 	// 3103：无线索无孤儿 → 纯列出（suggest 字段缺席）
 	if s := byP[3103]; s["no_clue"] != true || asAnySlice(s["suggest_meta_ids"]) != nil {
 		t.Fatalf("3103 = %v，期望纯列出", s)
+	}
+	// 3104：水位内 → 默认排除（不出建议 + excluded 计数）
+	if _, ok := byP[3104]; ok {
+		t.Fatalf("3104 已整理应被水位排除，却出现在建议里")
+	}
+	if n, _ := snap["excluded"].(float64); n != 1 {
+		t.Fatalf("excluded = %v，期望 1", snap["excluded"])
 	}
 }
 

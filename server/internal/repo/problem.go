@@ -56,6 +56,9 @@ type Problem struct {
 	CreatedBy            int64               `bson:"createdBy"`           // 导入者 uid（0 = 系统/命令行导入，仅 root 可改其隐藏态）
 	Tags                 []int64             `bson:"tags"`                // 知识树节点 ID（v0.5.5，2026-10-25 更名），名字与层级由 tags 集合知识树实时解析
 	MetaTags             []int64             `bson:"meta_tags,omitempty"` // 来源标签树节点 ID（2026-10-25 双树：地区/赛事/题库/年份/其他），名字由来源树实时解析
+	// 整理水位（v0.43 验收期拍板「已整理默认排除」）：tidy apply 成功时按类打点——
+	// 任务默认跳过水位内的题（断点续整：剩未整理的从后继续），redo 开关全量重跑。
+	TidiedAt map[string]time.Time `bson:"tidiedAt,omitempty"`
 	Subtasks             []Subtask           `bson:"subtasks,omitempty"`  // nil = 单点等分
 	Cases                []CaseMeta          `bson:"cases"`
 	Compare              string              `bson:"compare,omitempty"`        // 比对模式，空 = exact

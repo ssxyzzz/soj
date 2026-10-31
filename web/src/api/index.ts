@@ -649,9 +649,9 @@ export const adminApi = {
   backupOfflineKey: () => post<{ private_key: string }>('/admin/backup/offline-key'),
   // 题库一键整理（v0.43 两段式）：run/status/cancel = 任务段，apply = root 确认后写库段。
   // run/apply 走 client.post 放宽超时（AI 批量 5min / 批量写库 2min），默认 20s 会先断
-  tidyRun: (kind: TidyKind) =>
+  tidyRun: (kind: TidyKind, redo = false) =>
     client
-      .post<ApiResponse<{ started: boolean; kind: TidyKind }>>('/admin/tidy/run', { kind }, { timeout: 300_000 })
+      .post<ApiResponse<{ started: boolean; kind: TidyKind }>>('/admin/tidy/run', { kind, redo }, { timeout: 300_000 })
       .then((r) => r.data.data),
   tidyStatus: () => get<TidyStatus>('/admin/tidy/status'),
   tidyCancel: () => post<{ cancel_requested: boolean }>('/admin/tidy/cancel'),

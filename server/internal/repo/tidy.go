@@ -76,3 +76,15 @@ func (r *Repo) TidyPassRates(ctx context.Context) (rates map[int64]float64, atte
 	}
 	return rates, attempted, nil
 }
+
+// MarkTidied 整理应用水位：apply 成功后按类打点（题级 tidiedAt.<kind>）。
+// 失败不致命——水位落后只会让下次任务重复建议，root 预览可再弃。
+func (r *Repo) MarkTidied(ctx context.Context, kind string, pids []int64) error {
+	if len(pids) == 0 {
+		return nil
+	}
+	_, err := r.problems.UpdateMany(ctx,
+		bson.M{"_id": bson.M{"$in": pids}},
+		bson.M{"$set": bson.M{"tidiedAt." + kind: time.Now()}})
+	return err
+}

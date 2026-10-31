@@ -25,6 +25,7 @@ const KIND_META: Record<TidyKind, { label: string; desc: string }> = {
 }
 
 const kind = ref<TidyKind>('difficulty')
+const redo = ref(false) // 重新整理已整理过的题（默认只整理未整理的，断点续整）
 const starting = ref(false)
 const status = ref<TidyStatus | null>(null)
 const applying = ref(false)
@@ -148,10 +149,10 @@ async function runTidy() {
   appliedPids.value = new Set()
   onlyConflict.value = false
   try {
-    await adminApi.tidyRun(kind.value)
+    await adminApi.tidyRun(kind.value, redo.value)
     status.value = { state: 'running', kind: kind.value, total: 0, done: 0, suggestions: [] }
     startPoll()
-    ElMessage.info('整理任务已启动，可随时取消')
+    ElMessage.info(redo.value ? '整理任务已启动（全量重跑）' : '整理任务已启动（只整理未整理过的题）')
   } catch {
     starting.value = false // 拦截器已提示（409 已有任务 / AI 未配置）
   }
@@ -263,7 +264,8 @@ onUnmounted(stopPoll)
         <el-button type="primary" :loading="starting" @click="runTidy">
           开始整理（{{ KIND_META[kind].label }}）
         </el-button>
-        <span class="muted">只产建议不写库——完成后勾选确认才会应用；AI 走「AI 助教」面板配置的供应商，整理不扣玉。</span>
+        <el-checkbox v-model="redo">重新整理已整理过的题</el-checkbox>
+        <span class="muted">默认只整理未整理过的（已应用的自动排除，从后继续）；只产建议不写库，勾选确认后才应用。</span>
       </div>
     </template>
 
@@ -276,7 +278,9 @@ onUnmounted(stopPoll)
         striped-flow
         class="prog"
       />
-      <span class="muted">{{ status?.done ?? 0 }} / {{ status?.total ?? '…' }} 题</span>
+      <span class="muted">
+        {{ status?.done ?? 0 }} / {{ status?.total ?? '…' }} 题<template v-if="status?.excluded">（已排除 {{ status.excluded }} 题整理过的）</template>
+      </span>
     </div>
 
     <!-- 终态提示 -->
@@ -305,6 +309,7 @@ onUnmounted(stopPoll)
         </template>
         <span class="muted">
           已勾选 <b>{{ selectedCount }}</b> / {{ tableRows.length }} 题
+          <template v-if="status?.excluded"> · 已排除 {{ status.excluded }} 题整理过的</template>
           <template v-if="appliedPids.size"> · 已应用 {{ appliedPids.size }} 题</template>
         </span>
         <span class="spacer" />

@@ -75,6 +75,7 @@ type tidyJob struct {
 	Kind        string
 	Total       int
 	Done        int
+	Excluded    int // 水位排除数（已整理/已设难度；redo=false 时），快照带出让 root 有感知
 	Suggestions []TidySuggestion
 	Err         string
 	ByName      string
@@ -116,6 +117,7 @@ func (j *tidyJob) snapshot() gin.H {
 	})
 	return gin.H{
 		"state": j.State, "kind": j.Kind, "total": j.Total, "done": j.Done,
+		"excluded": j.Excluded,
 		"suggestions": out, "error": j.Err, "by": j.ByName,
 		"started_at": j.StartedAt, "ended_at": j.EndedAt,
 	}
@@ -123,10 +125,13 @@ func (j *tidyJob) snapshot() gin.H {
 
 // ---- 路由（root 专属） ----
 
-// TidyRun POST /api/admin/tidy/run {kind}：启动整理任务（全站单任务，进行中 409）。
+// TidyRun POST /api/admin/tidy/run {kind, redo?}：启动整理任务（全站单任务，进行中 409）。
+// redo=false（默认）排除已整理过的题（tidiedAt.<kind> 水位 + 难度类含已设难度）——
+// 断点续整：上次应用过的不再跑，剩未整理的按题号从后继续；redo=true 全量重跑。
 func (h *Handlers) TidyRun(c *gin.Context) {
 	var req struct {
 		Kind string `json:"kind"`
+		Redo bool   `json:"redo"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || !tidyKinds[req.Kind] {
 		fail(c, http.StatusBadRequest, "kind 需为 difficulty / knowledge / meta")
@@ -162,11 +167,11 @@ func (h *Handlers) TidyRun(c *gin.Context) {
 		var err error
 		switch req.Kind {
 		case "difficulty":
-			err = h.runTidyDifficulty(ctx, job, uid)
+			err = h.runTidyDifficulty(ctx, job, uid, req.Redo)
 		case "knowledge":
-			err = h.runTidyKnowledge(ctx, job, uid)
+			err = h.runTidyKnowledge(ctx, job, uid, req.Redo)
 		case "meta":
-			err = h.runTidyMeta(ctx, job)
+			err = h.runTidyMeta(ctx, job, req.Redo)
 		}
 		if err != nil {
 			if ctx.Err() != nil {
@@ -246,6 +251,7 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 
 	ctx := c.Request.Context()
 	okN, failN := 0, 0
+	var appliedPIDs []int64
 	var firstErr string
 	for _, it := range req.Items {
 		patch := repo.ProblemMetaPatch{}
@@ -280,10 +286,16 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 			continue
 		}
 		okN++
+		appliedPIDs = append(appliedPIDs, it.PID)
 	}
 	msg := fmt.Sprintf("已应用 %d 题", okN)
 	if failN > 0 {
 		msg += fmt.Sprintf("，失败 %d（%s）", failN, firstErr)
+	}
+	// 应用成功 = 已整理水位（下次默认跳过，redo 可重跑）；失败不致命，水位落后仅重复建议
+	if err := h.repo.MarkTidied(ctx, req.Kind, appliedPIDs); err != nil {
+		ok(c, gin.H{"applied": okN, "failed": failN, "message": msg + "（水位记录失败，下次可能重复建议这些题）"})
+		return
 	}
 	ok(c, gin.H{"applied": okN, "failed": failN, "message": msg})
 }
@@ -293,10 +305,25 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 // runTidyDifficulty 难度整理：AI 读题面（锚点表同尺）为主建议，通过率档位交叉验证，
 // 档差 ≥2 判冲突；AI 未配置/失败按通过率启发式兜底（无人做过 D3，启发式最高 D9——
 // D10 只由 AI 建议或人工给）。已设难度的题照常出建议但标记 has_difficulty（预览默认不勾）。
-func (h *Handlers) runTidyDifficulty(ctx context.Context, job *tidyJob, uid int64) error {
+func (h *Handlers) runTidyDifficulty(ctx context.Context, job *tidyJob, uid int64, redo bool) error {
 	probs, err := h.repo.TidyListProblems(ctx)
 	if err != nil {
 		return err
+	}
+	// 水位排除（redo=false）：已整理过（tidiedAt.difficulty）与已显式设难度的题
+	// 都不进本轮——后者照常出建议只烧 token（apply 后才有水位），直接不跑
+	if !redo {
+		kept := probs[:0]
+		for _, p := range probs {
+			if _, done := p.TidiedAt["difficulty"]; done || (p.Difficulty >= 1 && p.Difficulty <= 10) {
+				job.mu.Lock()
+				job.Excluded++
+				job.mu.Unlock()
+				continue
+			}
+			kept = append(kept, p)
+		}
+		probs = kept
 	}
 	rates, attempted, err := h.repo.TidyPassRates(ctx)
 	if err != nil {
@@ -368,10 +395,13 @@ func (h *Handlers) tidySuggestDifficulty(ctx context.Context, uid int64, sys str
 
 // runTidyKnowledge 知识点整理：知识树候选名（按一级分类分组）进 prompt，AI 返回名字
 // 列表 → 唯一名映射回 ID（同名歧义/幻觉/树外丢弃不挂）；差集 = 新增/移除。
-func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64) error {
+func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64, redo bool) error {
 	probs, err := h.repo.TidyListProblems(ctx)
 	if err != nil {
 		return err
+	}
+	if !redo {
+		probs = excludeTidied(probs, "knowledge", job)
 	}
 	tree, err := h.repo.GetTagTree(ctx)
 	if err != nil {
@@ -465,10 +495,13 @@ func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64
 // runTidyMeta 来源标签整理（纯规则零 AI）：全量重跑标题解析 + MatchMetaTags 对齐；
 // 建议集 = 现有树内标签 ∪ 标题线索命中（手动挂的来源不丢），树外孤儿剔除
 //（apply 整组覆写 meta_tags，孤儿自然清除）；标题无线索的题只列出不动。
-func (h *Handlers) runTidyMeta(ctx context.Context, job *tidyJob) error {
+func (h *Handlers) runTidyMeta(ctx context.Context, job *tidyJob, redo bool) error {
 	probs, err := h.repo.TidyListProblems(ctx)
 	if err != nil {
 		return err
+	}
+	if !redo {
+		probs = excludeTidied(probs, "meta", job)
 	}
 	metaTree, err := h.repo.GetMetaTagTree(ctx)
 	if err != nil {
@@ -696,6 +729,21 @@ func tidyKnowledgeUser(candidates string, curNames []string, p *repo.Problem) st
 	fmt.Fprintf(&b, "\n标题：%s\n题面：\n%s\n\n请输出知识点 JSON。",
 		p.Title, truncateTail(p.Statement, tidyStatementMaxRunes))
 	return b.String()
+}
+
+// excludeTidied 水位过滤（redo=false 共用）：tidiedAt.<kind> 已打点的题跳过并计数。
+func excludeTidied(probs []*repo.Problem, kind string, job *tidyJob) []*repo.Problem {
+	kept := probs[:0]
+	for _, p := range probs {
+		if _, done := p.TidiedAt[kind]; done {
+			job.mu.Lock()
+			job.Excluded++
+			job.mu.Unlock()
+			continue
+		}
+		kept = append(kept, p)
+	}
+	return kept
 }
 
 // ---- 树工具 ----

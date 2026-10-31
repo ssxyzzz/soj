@@ -111,6 +111,7 @@ type RepoAPI interface {
 	GetRound(ctx context.Context, kind string, id int64) (*repo.Contest, error)
 	TidyListProblems(ctx context.Context) ([]*repo.Problem, error)
 	TidyPassRates(ctx context.Context) (map[int64]float64, map[int64]int64, error)
+	MarkTidied(ctx context.Context, kind string, pids []int64) error
 	// 课堂 PK（v0.42）：发起/取消/现状/按 id 读 + 榜单（实时榜与结算名次同源）
 	GetClassroomRace(ctx context.Context, id int64) (*repo.ClassroomRace, error)
 	LatestClassroomRace(ctx context.Context, classID int64) (*repo.ClassroomRace, error)

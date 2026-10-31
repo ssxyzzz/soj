@@ -834,6 +834,7 @@ export interface TidyStatus {
   kind?: TidyKind
   total?: number
   done?: number
+  excluded?: number // 水位排除数（已整理/已设难度；redo=false 时）
   suggestions?: TidySuggestion[]
   error?: string
   by?: string
