@@ -16,6 +16,7 @@ import { gameApi } from '@/api'
 import { isMuted, setMuted, playLevelUp } from '@/utils/gameSounds'
 import { pickWelcome } from '@/utils/gameText'
 import { applyTheme, initTheme, type ThemeName } from '@/utils/theme'
+import { applySWUpdate, swUpdateReady } from '@/utils/swClient'
 import { APP_VERSION as appVersion } from '@/utils/version'
 import { fmtRel } from '@/utils/format'
 import type { NotificationItem } from '@/types'
@@ -262,6 +263,15 @@ function onCommand(command: string) {
       </div>
     </Transition>
     <FeastOverlay />
+    <!-- 换版横幅（v0.46 SW 预缓存）：新版本已后台预热就绪，用户确认才切换（skipWaiting
+         确认制）；× 可暂缓（本次会话内不再打扰），下次探测到 waiting 仍会提示 -->
+    <Transition name="herald-slide">
+      <div v-if="swUpdateReady" class="sw-update-banner" role="status">
+        <span>新版本已就绪</span>
+        <button type="button" class="sw-refresh-btn" @click="applySWUpdate">点此刷新</button>
+        <button type="button" class="sw-dismiss" aria-label="暂不刷新" @click="swUpdateReady = false">×</button>
+      </div>
+    </Transition>
     <el-header class="header">
       <div class="header-inner">
         <!-- 品牌：渐变闪电标志（与 /favicon.svg 同源）+ 流彩渐变字 -->
@@ -929,5 +939,52 @@ function onCommand(command: string) {
   .herald-slide-leave-active {
     transition: opacity 0.3s;
   }
+}
+
+/* 换版横幅（v0.46）：与降临横幅同一套顶部胶囊视觉，蓝底白字、错开降临横幅的 12px 层位 */
+.sw-update-banner {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px 6px 18px;
+  border-radius: 999px;
+  background: rgba(31, 73, 186, 0.92);
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 8px 28px rgba(31, 73, 186, 0.4);
+}
+
+.sw-refresh-btn {
+  border: none;
+  border-radius: 999px;
+  padding: 4px 14px;
+  background: #fff;
+  color: #1f49ba;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sw-refresh-btn:hover {
+  background: var(--soj-blue-soft);
+}
+
+.sw-dismiss {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.sw-dismiss:hover {
+  color: #fff;
 }
 </style>

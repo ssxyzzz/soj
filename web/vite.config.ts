@@ -1,9 +1,48 @@
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+
+// v0.46 前端预缓存批：构建尾给 dist/sw.js 盖构建戳并产出 /asset-manifest.json。
+// 构建戳 = VERSION 环境变量（Makefile 注入 git describe，与二进制 /api/health 同源）
+// + 时间戳——同一提交连发两次也保证 sw.js 字节变化，这是浏览器对 SW 做 update 检查
+// 的唯一触发信号；清单独立成 /asset-manifest.json 由 SW 运行时拉取，避免 SW 体内
+// 联清单导致本体重哈希循环。清单含全部 assets/ 哈希件（预热+cache-first 的全集）
+// 与稳定名入口件（index.html/favicon.svg，离线兜底）；sw.js 与清单本体不入清单。
+function sojPrecache(): Plugin {
+  return {
+    name: 'soj-precache',
+    apply: 'build',
+    closeBundle() {
+      const dist = fileURLToPath(new URL('./dist', import.meta.url))
+      const build = `${process.env.VERSION || 'dev'}.${Date.now().toString(36)}`
+      // public/sw.js 原样拷进 dist 后盖戳。断言占位符恰好一次：曾因散文注释里也
+      // 出现同名字符串、replace 只换首个命中而盖到注释上——BUILD 常量恒为占位符、
+      // 缓存名永不变、换版永不触发的静默杀手，故此处宁可构建失败也不带病出货
+      const swPath = join(dist, 'sw.js')
+      const sw = readFileSync(swPath, 'utf8')
+      const hits = sw.split('__SOJ_SW_BUILD__').length - 1
+      if (hits !== 1) {
+        this.error(`sw.js 占位符 __SOJ_SW_BUILD__ 应恰好出现 1 次，实际 ${hits} 次`)
+      }
+      writeFileSync(swPath, sw.replace('__SOJ_SW_BUILD__', build))
+      // 与服务端 static.go hashedAsset 同口径的 8 位哈希判定
+      const hashed = /-[0-9A-Za-z_$]{8}\.[0-9A-Za-z]+$/
+      const assets = readdirSync(join(dist, 'assets'))
+        .filter((f) => hashed.test(f))
+        .map((f) => 'assets/' + f)
+      const entries = ['index.html', 'favicon.svg'].filter((f) => existsSync(join(dist, f)))
+      writeFileSync(
+        join(dist, 'asset-manifest.json'),
+        JSON.stringify({ version: build, assets, entries }),
+      )
+    },
+  }
+}
 
 export default defineConfig({
   plugins: [
@@ -12,6 +51,7 @@ export default defineConfig({
     // 样式，全量注册与全量 CSS 退役；程序化调用（ElMessage/ElMessageBox）的样式在
     // main.ts 手动补（直接 import JS 不会带样式）
     Components({ resolvers: [ElementPlusResolver()], dts: 'src/components.d.ts' }),
+    sojPrecache(),
   ],
   resolve: {
     alias: [

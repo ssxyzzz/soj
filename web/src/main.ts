@@ -12,9 +12,11 @@ import 'element-plus/es/components/loading/style/css'
 import App from './App.vue'
 import router from './router'
 import './styles/main.css'
+import { initSW } from './utils/swClient'
 import { initTheme } from './utils/theme'
 
 initTheme() // 主题（默认 v5 新案）在挂载前落到 <html data-theme>，避免首帧闪色
+initSW() // SW 预缓存（v0.46）：仅生产构建注册，内部自带 ?nosw 注销与失败降级
 
 const app = createApp(App)
 app.use(createPinia())
