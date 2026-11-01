@@ -38,7 +38,9 @@ const title = ref('')
 const range = ref<Date[]>([])
 const intro = ref('')
 const fileIO = ref(false)
-const scoreboard = ref(true)
+// 「关闭成绩表」开关（2026-11 语义反转）：UI 上开关开 = 成绩表关闭；提交时反转为
+// scoreboard 字段。回填在 reset() 里按场次真实值取反
+const scoreboardOff = ref(true)
 const hideDuring = ref(true)
 // 赛时隐藏难度与知识点（2026-10-27）：比赛场景开关（考试不提供）
 const hideMeta = ref(true)
@@ -55,7 +57,7 @@ function reset() {
   range.value = [new Date(props.round.start), new Date(props.round.end)]
   intro.value = props.round.intro || ''
   fileIO.value = !!props.round.file_io
-  scoreboard.value = !!props.round.scoreboard
+  scoreboardOff.value = !props.round.scoreboard
   hideDuring.value = !!props.round.hide_during
   hideMeta.value = props.round.hide_meta ?? false
   jadePool.value = props.round.jade_pool ?? 0
@@ -134,7 +136,7 @@ async function save() {
             start: new Date(range.value[0]).toISOString(),
             end: new Date(range.value[1]).toISOString(),
             intro: intro.value,
-            scoreboard: scoreboard.value,
+            scoreboard: !scoreboardOff.value,
             hide_during: hideDuring.value,
             ...(props.kind === 'contest' ? { hide_meta: hideMeta.value } : {}),
             file_io: fileIO.value,
@@ -191,7 +193,11 @@ watch(
           />
         </el-form-item>
         <el-form-item>
-          <SwitchRow v-model="scoreboard" label="开启成绩表" tip="关闭后参与者看不到成绩表，组织者仍可见" />
+          <SwitchRow
+            v-model="scoreboardOff"
+            label="关闭成绩表"
+            tip="默认开启：参与者看不到成绩表（组织者不受影响）；关闭此开关则本场向参与者开放成绩表"
+          />
         </el-form-item>
         <el-form-item>
           <SwitchRow

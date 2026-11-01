@@ -27,7 +27,7 @@ const form = ref({
   hiddenDays: 0,
   picked: [] as PickedProblem[],
   fileIO: false,
-  scoreboard: true,
+  scoreboardOff: true, // 「关闭成绩表」开关（默认开 = 成绩表关闭）；提交时反转为 scoreboard
   hideDuring: true,
   hideMeta: true,
 })
@@ -116,7 +116,7 @@ async function create() {
       hidden_days: form.value.hiddenDays,
       problem_ids: problemIds,
       file_io: form.value.fileIO,
-      scoreboard: form.value.scoreboard,
+      scoreboard: !form.value.scoreboardOff,
       hide_during: form.value.hideDuring,
       hide_meta: form.value.hideMeta,
     })
@@ -231,9 +231,9 @@ function openContest(c: ContestListItem) {
       </el-form-item>
       <el-form-item>
         <SwitchRow
-          v-model="form.scoreboard"
-          label="开启成绩表"
-          tip="关闭后参与者看不到成绩表，组织者仍可见"
+          v-model="form.scoreboardOff"
+          label="关闭成绩表"
+          tip="默认开启：参与者看不到成绩表（组织者不受影响）；关闭此开关则本场向参与者开放成绩表"
         />
       </el-form-item>
       <el-form-item>

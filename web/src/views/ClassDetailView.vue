@@ -104,7 +104,7 @@ const examForm = ref({
   hiddenDays: 0,
   picked: [] as PickedProblem[],
   fileIO: false,
-  scoreboard: true,
+  scoreboardOff: true, // 「关闭成绩表」开关（默认开 = 成绩表关闭）；提交时反转为 scoreboard
   hideDuring: true,
 })
 
@@ -143,7 +143,7 @@ async function createExam() {
       hidden_days: examForm.value.hiddenDays,
       problem_ids: examForm.value.picked.map((p) => p.id),
       file_io: examForm.value.fileIO,
-      scoreboard: examForm.value.scoreboard,
+      scoreboard: !examForm.value.scoreboardOff,
       hide_during: examForm.value.hideDuring,
     })
     ElMessage.success('考试创建成功')
@@ -854,9 +854,9 @@ onMounted(load)
         </el-form-item>
         <el-form-item>
           <SwitchRow
-            v-model="examForm.scoreboard"
-            label="开启成绩表"
-            tip="关闭后参与者看不到成绩表，组织者仍可见"
+            v-model="examForm.scoreboardOff"
+            label="关闭成绩表"
+            tip="默认开启：参与者看不到成绩表（组织者不受影响）；关闭此开关则本场向参与者开放成绩表"
           />
         </el-form-item>
         <el-form-item>

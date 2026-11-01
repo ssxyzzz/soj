@@ -717,7 +717,7 @@ export interface CreateContestPayload {
   hidden_days?: number
   problem_ids: number[]
   file_io?: boolean
-  scoreboard?: boolean // v0.7：开启成绩表（默认 true）
+  scoreboard?: boolean // v0.7：开启成绩表（2026-11 起创建缺省 false——UI 为「关闭成绩表」开关，存量场次不动）
   hide_during?: boolean // v0.7：赛期内对参赛者隐藏结果（默认 true）
   hide_meta?: boolean // 2026-10-27：发布前对参赛者隐藏难度与知识点（比赛默认开，考试不提供）
   jade_pool?: number // 玉名次奖池（v0.33-①，仅教师/admin/root 可设）
@@ -775,7 +775,7 @@ export interface CreateExamPayload {
   hidden_days?: number
   problem_ids: number[]
   file_io?: boolean
-  scoreboard?: boolean // v0.7：开启成绩表（默认 true）
+  scoreboard?: boolean // v0.7：开启成绩表（2026-11 起创建缺省 false——UI 为「关闭成绩表」开关，存量场次不动）
   hide_during?: boolean // v0.7：赛期内对参赛者隐藏结果（默认 true）
 }
 

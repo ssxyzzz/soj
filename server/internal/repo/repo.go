@@ -551,6 +551,7 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 	if !flagDone("roundFlagsV1") {
 		// v0.7：比赛/考试新增「开启成绩表」「赛时隐藏成绩」两个开关。存量场次补默认值：
 		// 两者都开——成绩表保持现状可见规则，赛时隐藏成绩保持 OI 现状。
+		// 2026-11：新场次创建缺省改为关（UI 反转为「关闭成绩表」开关），存量 true 不动。
 		for _, col := range []*mongo.Collection{r.roundsCol(KindContest), r.roundsCol(KindExam)} {
 			if _, err := col.UpdateMany(ctx,
 				bson.M{"scoreboard": bson.M{"$exists": false}},

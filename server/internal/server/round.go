@@ -46,7 +46,7 @@ type roundCreateReq struct {
 	HiddenDays int       `json:"hidden_days"`
 	ProblemIDs []int64   `json:"problem_ids" binding:"required"`
 	FileIO     bool      `json:"file_io"`
-	Scoreboard *bool     `json:"scoreboard"`  // 缺省 true：开启成绩表
+	Scoreboard *bool     `json:"scoreboard"`  // 缺省 false：关闭成绩表（2026-11 UI 反转为「关闭成绩表」开关，默认开）
 	HideDuring *bool     `json:"hide_during"` // 缺省 true：赛期内对参赛者隐藏结果
 	HideMeta   *bool     `json:"hide_meta"`   // 缺省：比赛 true / 考试 false——发布前对参赛者隐藏难度与知识点
 	// 玉奖池（v0.33-①）：双池可配（0/缺省 = 不发）；设置权限仅教师/admin/root。
@@ -165,7 +165,7 @@ func (h *Handlers) createRound(c *gin.Context, s roundScope, classID int64) {
 		Problems:   problems,
 		CreatedBy:  uid,
 		FileIO:     req.FileIO,
-		Scoreboard: req.Scoreboard == nil || *req.Scoreboard,
+		Scoreboard: req.Scoreboard != nil && *req.Scoreboard, // 缺省关（2026-11 反转，原缺省开）
 		HideDuring: req.HideDuring == nil || *req.HideDuring,
 		// 赛时隐藏难度/知识点是比赛场景开关：比赛默认开；考试 UI 不提供，保持关
 		HideMeta: s.Kind == repo.KindContest && (req.HideMeta == nil || *req.HideMeta),
