@@ -882,6 +882,15 @@ strong {
 }
 
 /* 分页：页钮圆角方块 + 当前页实心主蓝 */
+.el-pagination.el-pagination {
+  /* EP 2.14 把 --el-pagination-border-radius:2px 声明在 .el-pagination 组件类上
+     （:root 覆盖无效，见下方「EP / 浏览器默认字号 token 覆盖」同款套路），同特异度的
+     border-radius 规则又受 chunk 加载顺序摆布——箭头钮吃回 2px 方角与页钮 10px 圆角
+     同排混搭（2026-11-02 反馈「翻页两个按钮还是 EP 的」）。双类提级钉死 10px，全局
+     箭头钮/页钮统一（2026-10-30 的箭头钮规则保留，管宽度/底色/悬停）。 */
+  --el-pagination-border-radius: 10px;
+}
+
 .el-pagination .el-pager li {
   border-radius: 10px;
   transition: background-color 0.15s, color 0.15s;
