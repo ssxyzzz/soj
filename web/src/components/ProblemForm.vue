@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 建题/编辑题目共用表单：字段、布局与校验单一来源。
 // 布局为单 el-form 跨主/右两列（统一校验与 payload），卡片只是字段分组容器：
-// 主列三卡 = 题目身份 / 分类（知识点·来源·难度页签三合一，直接点选）/ 题面；
+// 主列三卡 = 题目身份 / 分类（知识点·标签·难度页签三合一，直接点选）/ 题面；
 // 右列三卡 = 发布（含完成度清单）/ 测试数据 / 评测参数；<992px 折单列。
 // 视觉基准 private_doc/preview/soj-problem-form-redesign.html。
 // 提交动作 emit 给调用方——新增 = POST /problems 一次交齐；
@@ -25,7 +25,7 @@ import { useUserStore } from '@/stores/user'
 import type { ObjectiveKind, ObjectiveQuestionDraft } from '@/types'
 
 export interface ProblemFormPayload {
-  meta_tag_ids?: number[] // 来源标签树节点（2026-10-25 双树）
+  meta_tag_ids?: number[] // 标签树节点（2026-10-25 双树）
   title: string
   type: 'default' | 'objective' | 'function' | 'interactive' // 题目类型（v0.9）：客观题走 question；函数题带 driver/template（v0.9.1）；交互题带 interactor（v0.9.2）
   difficulty: number // 难度 1–10（v0.11，缺省 D3）
@@ -62,7 +62,7 @@ const props = withDefaults(
         explanation?: string
         score?: number
       }[]
-      meta_tag_ids?: number[] // 来源标签树节点（2026-10-25 双树，编辑回填）
+      meta_tag_ids?: number[] // 标签树节点（2026-10-25 双树，编辑回填）
     }
     fileIOHint?: { input: string; output: string } // 编辑模式：现行文件 IO 实际文件名
     pid?: number // 编辑模式：题目 ID（「下载数据」按钮拼下载地址用）
@@ -131,7 +131,7 @@ tagStore.ensure()
 // 难度档展示名（默认与等级名相同，root 后台可改；选择器不再用 D1~D10 描述）
 const levels = useLevelsStore()
 levels.ensure()
-// 来源标签树（分类页签「来源」与卡底摘要的名字解析）
+// 标签树（分类页签「标签」与卡底摘要的名字解析）
 const metaStore = useMetaTreeStore()
 metaStore.ensure()
 // 空树时展示「管理员尚未配置标签树」占位
@@ -139,7 +139,7 @@ const tagTreeEmpty = computed(() => !tagStore.nodes.length)
 // 标签必填（建题同标题必填口径）；空树无从选择不拦截，编辑存量无标签题也不强制补挂
 const tagsRequired = computed(() => props.mode === 'create' && !tagTreeEmpty.value)
 
-// 分类页签：知识点 / 来源 / 难度 三合一入口，一次只展开一个选择器
+// 分类页签：知识点 / 标签 / 难度 三合一入口，一次只展开一个选择器
 const catTab = ref<'knowledge' | 'meta' | 'difficulty'>('knowledge')
 
 const knowledgeNames = computed(() => form.tag_ids.map((id) => tagStore.nameOf(id)))
@@ -153,9 +153,15 @@ function onTagsChange(ids: number[]) {
   form.tag_ids = ids
 }
 
-// 来源打标点选回调（2026-10-25 双树）：整体替换 meta_tag_ids
+// 标签打标点选回调（2026-10-25 双树）：整体替换 meta_tag_ids
 function onMetaTagsChange(ids: number[]) {
   form.meta_tag_ids = ids
+}
+
+// 题目类型下拉回调：创建后不可更改（编辑模式 select 禁用）
+function changeType(v: string) {
+  form.type =
+    v === 'objective' || v === 'function' || v === 'interactive' ? v : 'default'
 }
 
 // 发布卡完成度清单（只做展示，拦截仍以 payload() 校验为准）
@@ -315,33 +321,36 @@ function onSubmitClick() {
             <div class="card-head-text"><div class="card-title">题目身份</div></div>
           </div>
 
-          <el-form-item label="标题" required>
-            <el-input v-model="form.title" maxlength="64" show-word-limit placeholder="64 字符以内" />
-          </el-form-item>
+          <div class="identity-row">
+            <el-form-item label="标题" required class="identity-title">
+              <el-input v-model="form.title" maxlength="64" show-word-limit placeholder="64 字符以内" />
+            </el-form-item>
 
-          <el-form-item>
-            <template #label>
-              <span class="label-with-tip">
-                题目类型
-                <el-tooltip placement="top" content="传统题=编程评测；客观题=选择/填空；函数题=补全函数；交互题=双向通信。创建后不可更改">
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </span>
-            </template>
-            <el-radio-group
-              :model-value="form.type"
-              :disabled="mode === 'edit'"
-              @change="(v?: string | number | boolean) => { form.type = v === 'objective' ? 'objective' : v === 'function' ? 'function' : v === 'interactive' ? 'interactive' : 'default' }"
-            >
-              <el-radio-button value="default">传统题（编程）</el-radio-button>
-              <el-radio-button value="objective">客观题（选择/填空）</el-radio-button>
-              <el-radio-button value="function">函数题（补全实现）</el-radio-button>
-              <el-radio-button value="interactive">交互题（双向通信）</el-radio-button>
-            </el-radio-group>
-          </el-form-item>
+            <el-form-item class="identity-type">
+              <template #label>
+                <span class="label-with-tip">
+                  题目类型
+                  <el-tooltip placement="top" content="传统题=编程评测；客观题=选择/填空；函数题=补全函数；交互题=双向通信。创建后不可更改">
+                    <el-icon class="dim"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
+              <el-select
+                :model-value="form.type"
+                :disabled="mode === 'edit'"
+                class="identity-type-select"
+                @change="changeType"
+              >
+                <el-option value="default" label="传统题（编程）" />
+                <el-option value="objective" label="客观题（选择/填空）" />
+                <el-option value="function" label="函数题（补全实现）" />
+                <el-option value="interactive" label="交互题（双向通信）" />
+              </el-select>
+            </el-form-item>
+          </div>
         </el-card>
 
-        <!-- ② 分类：知识点 / 来源 / 难度 三合一，页签切换直接点选 -->
+        <!-- ② 分类：知识点 / 标签 / 难度 三合一，页签切换直接点选 -->
         <el-card class="form-card">
           <div class="card-head">
             <span class="card-ico">
@@ -350,7 +359,7 @@ function onSubmitClick() {
             <div class="card-head-text">
               <div class="card-title">
                 分类
-                <el-tooltip placement="top" content="知识点 / 难度影响推荐与经验；来源用于筛选与试卷打印">
+                <el-tooltip placement="top" content="知识点 / 难度影响推荐与经验；标签用于筛选与试卷打印">
                   <el-icon class="dim"><QuestionFilled /></el-icon>
                 </el-tooltip>
               </div>
@@ -363,7 +372,7 @@ function onSubmitClick() {
               <span v-if="form.tag_ids.length" class="n">{{ form.tag_ids.length }}</span>
             </button>
             <button type="button" class="cat-tab" :class="{ on: catTab === 'meta' }" @click="catTab = 'meta'">
-              来源
+              标签
               <span v-if="form.meta_tag_ids.length" class="n">{{ form.meta_tag_ids.length }}</span>
             </button>
             <button type="button" class="cat-tab" :class="{ on: catTab === 'difficulty' }" @click="catTab = 'difficulty'">
@@ -402,7 +411,7 @@ function onSubmitClick() {
           <div class="cat-summary">
             <span class="dim">已选：</span>
             <span v-if="form.tag_ids.length" class="sum-item"><i class="sum-dot" style="background: var(--el-color-primary)" />知识点：{{ knowledgeNames.join(' · ') }}</span>
-            <span v-if="form.meta_tag_ids.length" class="sum-item"><i class="sum-dot" style="background: #0e7a9c" />来源：{{ metaNames.join(' · ') }}</span>
+            <span v-if="form.meta_tag_ids.length" class="sum-item"><i class="sum-dot" style="background: #0e7a9c" />标签：{{ metaNames.join(' · ') }}</span>
             <span class="sum-item"><i class="sum-dot" style="background: #d99141" />难度：{{ difficultyName }}</span>
           </div>
         </el-card>
@@ -850,7 +859,7 @@ function onSubmitClick() {
   color: var(--el-color-danger);
 }
 
-/* ---- 分类页签（知识点 / 来源 / 难度 三合一）---- */
+/* ---- 分类页签（知识点 / 标签 / 难度 三合一）---- */
 .cat-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -1118,6 +1127,40 @@ function onSubmitClick() {
 
 .data-status .el-button {
   margin-left: auto;
+}
+
+/* ---- 题目身份：标题 + 类型下拉同一行（标题吃剩余宽度，类型定宽）---- */
+.identity-row {
+  display: flex;
+  gap: 16px;
+}
+
+.identity-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.identity-type {
+  flex: 0 0 auto;
+}
+
+.identity-type-select {
+  width: 200px;
+}
+
+/* 类型下拉与标题输入同档：EP 2.8 重写版 select 写死 32px/14px，不吃全站
+   --el-component-size(40)/--el-font-size-base(15) 两 token（输入框吃到才 40/15）；
+   此处对齐主档，min-height 撑高、文字垂直居中 */
+.identity-type-select :deep(.el-select__wrapper) {
+  min-height: var(--el-component-size);
+  font-size: var(--el-font-size-base);
+}
+
+@media (max-width: 640px) {
+  .identity-row {
+    flex-direction: column;
+    gap: 0;
+  }
 }
 
 /* label 插槽内的图标/提示与标签文字垂直居中（label 为块级布局，行内元素默认按基线对齐会偏高） */

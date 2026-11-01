@@ -41,15 +41,18 @@ const kindLabel = computed(() => {
   return ''
 })
 
-// 标签平铺（prob-meta 知识点格）——五级层级色与题库列表统一
-//（2026-10-25 修复⑰：原 soj-tagchip 青系单色与题库 lv 色不一致）；
-// 全量渲染不截断（2026-10-27 验收反馈）：过多时格子内另起一行铺开
+// 知识点（prob-meta 元信息条格）：格内只露「知识点」label 保一行，悬停立即浮层
+// 平铺全量 chips（2026-11-01：原格内平铺/展开随名字变长挤成两行，撤）；chip 挂
+// 五级层级色与题库列表 FitTags 统一
 const metaTags = computed(() =>
   (props.problem.tags ?? []).map((id) => ({ id, name: tagStore.nameOf(id), lv: tagStore.levelOf(id) })),
 )
 
-// 来源节点（2026-10-25 双树）：标签树（地区/赛事/题库/年份）节点，中性色 chips（同样全量换行）
-const sourceTags = computed(() => (props.problem.meta_tags ?? []).map((id) => metaStore.nameOf(id)))
+// 标签（标签树：地区/赛事/题库/年份，格内同知识点收敛、悬停浮层平铺；
+// 2026-11-01「来源」更名「标签」）
+const labelTags = computed(() =>
+  (props.problem.meta_tags ?? []).map((id) => ({ id, name: metaStore.nameOf(id) })),
+)
 
 // 空心大题号取后四位（P1024 → 1024；三位以内原样）
 const bigNo = computed(() => String(props.problem.id))
@@ -68,7 +71,9 @@ const bigNo = computed(() => String(props.problem.id))
       </h1>
     </div>
 
-    <!-- v3 prob-meta 分格条：时限/内存/通过数/难度/知识点/来源（难度在知识点左；知识点悬停显示，见 .meta-chips） -->
+    <!-- v3 prob-meta 分格条：时限/内存/通过数/难度/知识点/标签（难度在知识点左）。
+         知识点/标签格只露 label 保整条一行不换行，悬停立即浮层平铺全量 chips
+         （2026-11-01：原格内平铺/展开随名字变长把分格条挤成两行，撤） -->
     <div class="soj-prob-meta">
       <template v-if="!isObjective">
         <div class="cell">时间限制 <b class="mono">{{ fmtSec(problem.time_limit_ms) }}</b></div>
@@ -83,22 +88,30 @@ const bigNo = computed(() => String(props.problem.id))
       <div v-if="problem.difficulty != null" class="cell diff-cell">
         <TierBadge :tier="problem.difficulty" kind="difficulty" />
       </div>
-      <div v-if="metaTags.length" class="cell tag-cell">
-        知识点
-        <span class="meta-chips">
-          <span
-            v-for="t in metaTags"
-            :key="t.id"
-            class="soj-tagchip meta-chip"
-            :class="`lv-${t.lv}`"
-          >{{ t.name }}</span>
-        </span>
+      <div v-if="metaTags.length" class="cell">
+        <el-tooltip placement="top" effect="light">
+          <template #content>
+            <div class="tag-pop">
+              <span
+                v-for="t in metaTags"
+                :key="t.id"
+                class="soj-tagchip meta-chip"
+                :class="`lv-${t.lv}`"
+              >{{ t.name }}</span>
+            </div>
+          </template>
+          <span class="tag-brief">知识点</span>
+        </el-tooltip>
       </div>
-      <div v-if="sourceTags.length" class="cell tag-cell src-cell">
-        来源
-        <span class="meta-chips">
-          <span v-for="n in sourceTags" :key="n" class="soj-tagchip meta-chip src-chip">{{ n }}</span>
-        </span>
+      <div v-if="labelTags.length" class="cell">
+        <el-tooltip placement="top" effect="light">
+          <template #content>
+            <div class="tag-pop">
+              <span v-for="t in labelTags" :key="t.id" class="soj-tagchip meta-chip src-chip">{{ t.name }}</span>
+            </div>
+          </template>
+          <span class="tag-brief">标签</span>
+        </el-tooltip>
       </div>
     </div>
 
@@ -195,45 +208,30 @@ const bigNo = computed(() => String(props.problem.id))
 
 .meta-chip {
   height: 20px;
-  margin-left: 4px;
   cursor: default;
-  flex: none; /* chip 整颗换行不被压缩截断 */
+  flex: none;
   /* 五级层级色（--lv 由全局 .lv-N 注入）：与题库列表 FitTags 统一（修复⑰） */
   color: var(--lv);
   background: var(--lv-bg);
   border-color: var(--lv-border);
 }
 
-/* 标签格：默认只露出「标签」label，chips 透明占位（分格条不跳宽）；
-   悬停本格快速淡入，移走即缓慢淡出、1 秒淡尽（2026-10-25 用户回调，原 3s 延迟撤）——
-   纯 transition 时长承载，无需 JS 计时器。
-   换行（2026-10-27 验收反馈）：知识点/来源过多时格子内另起一行铺开，不再溢出裁切——
-   格子与 chips 容器双向 flex-wrap + max-width 收窄，chip flex:none 整颗下移 */
-.tag-cell {
-  cursor: default;
+/* 悬停浮层（el-tooltip light 内容）：全量 chips 平铺，样式同格内原展开态；
+   格内只露 label 不占宽，浮层随内容自适应换行（2026-11-01） */
+.tag-pop {
+  display: flex;
   flex-wrap: wrap;
-  max-width: 100%;
-  min-width: 0;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  gap: 6px;
+  max-width: 360px;
 }
 
-.meta-chips {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  row-gap: 4px;
-  max-width: 100%;
-  opacity: 0;
-  transition: opacity 1s ease 0s;
+/* 浮层 chip 提到 13px 档（全局 soj-tagchip 12px 偏小，2026-11-01 反馈；只提浮层，
+   题库列表等可点击筛选 chip 不动） */
+.tag-pop .meta-chip {
+  font-size: var(--soj-fs-13);
 }
 
-.tag-cell:hover .meta-chips {
-  opacity: 1;
-  transition: opacity 0.15s ease 0s;
-}
-
-/* 来源 chips：单色中性（石墨蓝），与知识树五级色区分（2026-10-25 双树） */
+/* 标签 chips：单色中性（石墨蓝），与知识树五级色区分（2026-10-25 双树） */
 .src-chip {
   color: var(--soj-ink-2);
   background: var(--soj-surface-2);

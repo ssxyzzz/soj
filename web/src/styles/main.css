@@ -2088,18 +2088,21 @@ samp {
 }
 /* 交互题说明提示（ProblemStatement el-alert，type=info）：与题型徽章同族浅蓝。
    EP 结构：.el-alert--info.is-light (0,2,0) 定 bg 与根 color（标题/图标继承之），
-   .el-alert--info.is-light .el-alert__description (0,3,0) 单独定 description——
-   两条各对齐特异度靠恒序取胜；图标无独立 color 规则，随根 color 走。
+   .el-alert__description (0,3,0) 单独定 description。
    2026-10-25：文件 IO 提示与「暂无测试数据」提示（.notice-alert，type=warning）并入
    同族——EP 琥珀橙是全站唯一暖色大色块，与蓝调页面冲突（验收反馈「颜色不和谐」）；
-   语义仍是「注意事项」，浅青族为站内提示条的既定语言。 */
-.el-alert.ptype-alert,
-.el-alert.notice-alert {
+   语义仍是「注意事项」，浅青族为站内提示条的既定语言。
+   2026-11-01 复发修复：选择器提级到 (0,4,0)（EP 的 .el-alert--warning.is-light 根
+   color (0,2,0)、description (0,3,0) 恒被压过）——原 (0,2,0)/(0,3,0) 与 EP 同阶靠
+   加载顺序取胜，vite 打包下 EP chunk 后置即被打回 --el-color-warning(#ff8c00)，
+   实测橙字浅青底（用户反馈「配色不好看」）。 */
+.el-alert.el-alert--warning.is-light.notice-alert,
+.el-alert.el-alert--info.is-light.ptype-alert {
   --el-alert-bg-color: var(--soj-probtype-bg);
   color: var(--soj-probtype-text);
 }
-.el-alert.ptype-alert .el-alert__description,
-.el-alert.notice-alert .el-alert__description {
+.el-alert.el-alert--warning.is-light.notice-alert .el-alert__description,
+.el-alert.el-alert--info.is-light.ptype-alert .el-alert__description {
   color: var(--soj-probtype-text);
 }
 
