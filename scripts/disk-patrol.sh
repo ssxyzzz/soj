@@ -26,10 +26,11 @@ case "$THRESHOLD" in *[!0-9]*|'') echo "阈值需为 1-99 的整数"; exit 2 ;; 
 TAG="[$(date '+%F %T')][disk-patrol]"
 log() { echo "$TAG $*"; }
 
-# ---- cron 安装（幂等：按标记行替换，同 backup.sh 范式） ----
+# ---- cron 安装（幂等：按行尾标记替换，同 backup.sh 范式） ----
+# 标记必须在有效行尾：整行 # 注释 cron 永不执行（2026-11-01 迁移实锤旧机 cron 从未跑过）
 if [ "$INSTALL_CRON" = "1" ]; then
-  CRON_SOJ="# SOJ-DISK-PATROL-CRON"
-  LINE="$CRON_SOJ 30 8 * * * cd \$HOME/soj && ./scripts/disk-patrol.sh >> backups/cron.log 2>&1"
+  MARK="SOJ-DISK-PATROL-CRON"
+  LINE="30 8 * * * cd \$HOME/soj && ./scripts/disk-patrol.sh >> backups/cron.log 2>&1 #$MARK"
   (crontab -l 2>/dev/null | grep -v "$CRON_SOJ"; echo "$LINE") | crontab - \
     || { echo "crontab 安装失败（服务器上执行）"; exit 1; }
   echo "已安装磁盘巡检 crontab："

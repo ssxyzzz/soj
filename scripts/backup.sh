@@ -44,17 +44,19 @@ die() { echo "$LOG_TAG !! $*" >&2; exit 1; }
 exec 9>/tmp/soj-backup.lock
 flock -n 9 || { log "已有备份在跑，跳过本次"; exit 0; }
 
-# ---- cron 安装（幂等：按标记行替换）----
+# ---- cron 安装（幂等：按行尾标记替换）----
+# 标记必须在有效行尾（cron 对整行 # 注释永不执行；行尾 #… 由 shell 忽略、仍可 grep 定位）。
+# 2026-11-01 迁移实测：旧写法标记在行首，crontab 全是死注释行——自动备份从未真正跑过。
 if [ "$INSTALL_CRON" = "1" ]; then
   OFF_FLAG=""
   [ "$OFFSITE" = "1" ] && OFF_FLAG=" --offsite"
-  CRON_SOJ="# SOJ-BACKUP-CRON"
-  LINE1="$CRON_SOJ 17 4 * * * cd \$HOME/soj && ./scripts/backup.sh --tier db --with-snapshots$OFF_FLAG >> backups/cron.log 2>&1"
-  LINE2="$CRON_SOJ 20 4 * * 0 cd \$HOME/soj && ./scripts/backup.sh --tier media$OFF_FLAG >> backups/cron.log 2>&1"
-  (crontab -l 2>/dev/null | grep -v "$CRON_SOJ"; echo "$LINE1"; echo "$LINE2") | crontab - \
+  MARK="SOJ-BACKUP-CRON"
+  LINE1="17 4 * * * cd \$HOME/soj && ./scripts/backup.sh --tier db --with-snapshots$OFF_FLAG >> backups/cron.log 2>&1 #$MARK-db"
+  LINE2="20 4 * * 0 cd \$HOME/soj && ./scripts/backup.sh --tier media$OFF_FLAG >> backups/cron.log 2>&1 #$MARK-media"
+  (crontab -l 2>/dev/null | grep -v "$MARK"; echo "$LINE1"; echo "$LINE2") | crontab - \
     || die "crontab 安装失败（服务器上执行）"
   echo "已安装备份 crontab："
-  crontab -l | grep "$CRON_SOJ"
+  crontab -l | grep "$MARK"
   exit 0
 fi
 
