@@ -253,4 +253,20 @@ router.beforeEach((to) => {
   document.title = to.meta.title ? `${to.meta.title} - SOJ` : 'SOJ'
 })
 
+// 发版后旧标签页按旧 hash 拉路由懒 chunk：服务器已无该文件、SPA fallback 回 index.html，
+// 动态 import() 抛错、导航中止——此时 beforeEach 已改 title、URL 与视图滞留旧页（用户感知
+// 「点击无反应/界面卡住」，chunk 尚在磁盘缓存的路由仍能进，症状呈偶发）。此处整页导航到
+// 目标路由：拿到新 index.html 与新 chunk 引用，一次刷新完成版本升级（v0.46 SW 预缓存
+// 落地前的止血）。10s 时间窗防循环：真断网时刷新后仍失败，不在同一路径上无限重载。
+router.onError((error, to, from) => {
+  if (!error?.message || !/dynamically imported|imported module|module script/i.test(error.message)) return
+  // 导航已失败：回滚 beforeEach 预设的目标页标题（视图实际还停在 from）
+  document.title = from.meta.title ? `${from.meta.title} - SOJ` : 'SOJ'
+  const last = Number(sessionStorage.getItem('soj:chunk-reload') ?? 0)
+  if (to?.fullPath && Date.now() - last > 10_000) {
+    sessionStorage.setItem('soj:chunk-reload', String(Date.now()))
+    window.location.href = to.fullPath
+  }
+})
+
 export default router
