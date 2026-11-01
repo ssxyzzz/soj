@@ -5,6 +5,9 @@ package repo
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -82,23 +85,71 @@ func (r *Repo) CountAiCallsToday(ctx context.Context, uid int64) (int64, error) 
 		bson.M{"uid": uid, "at": bson.M{"$gte": dayStart}})
 }
 
-// ListAiCalls 审计分页（root；uid>0 过滤单人）。
-func (r *Repo) ListAiCalls(ctx context.Context, uid int64, page, pageSize int) ([]*AiCall, int64, error) {
-	q := bson.M{}
+// ErrInvalidCursor 审计游标无法解码（调用方应映射 400，不静默回首页——防脏游标洗成翻到第一页）。
+var ErrInvalidCursor = errors.New("游标无效")
+
+// aiCallCursor 游标载荷：at(UnixNano)+_id 双键定位，排序 {at:-1,_id:-1} 的行边界。
+type aiCallCursor struct {
+	At int64 `json:"a"`
+	ID int64 `json:"i"`
+}
+
+func encodeAiCallCursor(c aiCallCursor) string {
+	b, _ := json.Marshal(c)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func decodeAiCallCursor(s string) (aiCallCursor, error) {
+	var c aiCallCursor
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err == nil {
+		err = json.Unmarshal(b, &c)
+	}
+	return c, err
+}
+
+// ListAiCalls 审计游标分页（root；uid>0 过滤单人）。cursor 空 = 首页；返回 next 空 = 末页。
+// v0.51 弃 skip 翻页：aiCalls 只增不减无 TTL，深页 skip 线性放大（全站最深 skip 户）；
+// 游标每页都是索引定位；total 恒按基础过滤计（COUNT_SCAN），供「共 N 条」展示。
+// 多取一条探测末页，next 空即无下一页。
+func (r *Repo) ListAiCalls(ctx context.Context, uid int64, cursor string, pageSize int) (list []*AiCall, next string, total int64, err error) {
+	if pageSize <= 0 || pageSize > 100 {
+		pageSize = 20
+	}
+	base := bson.M{}
 	if uid > 0 {
-		q["uid"] = uid
+		base["uid"] = uid
 	}
-	total, err := r.db.Collection("aiCalls").CountDocuments(ctx, q)
+	total, err = r.db.Collection("aiCalls").CountDocuments(ctx, base)
 	if err != nil {
-		return nil, 0, err
+		return nil, "", 0, err
 	}
-	cursor, err := r.db.Collection("aiCalls").Find(ctx, q,
-		options.Find().SetSort(bson.D{{Key: "at", Value: -1}}).
-			SetSkip(int64((page-1)*pageSize)).SetLimit(int64(pageSize)))
+	q := base
+	if cursor != "" {
+		c, derr := decodeAiCallCursor(cursor)
+		if derr != nil {
+			return nil, "", 0, ErrInvalidCursor
+		}
+		at := time.Unix(0, c.At)
+		q = bson.M{"$and": bson.A{base, bson.M{"$or": bson.A{
+			bson.M{"at": bson.M{"$lt": at}},
+			bson.M{"at": at, "_id": bson.M{"$lt": c.ID}},
+		}}}}
+	}
+	cur, err := r.db.Collection("aiCalls").Find(ctx, q,
+		options.Find().SetSort(bson.D{{Key: "at", Value: -1}, {Key: "_id", Value: -1}}).
+			SetLimit(int64(pageSize+1)))
 	if err != nil {
-		return nil, 0, err
+		return nil, "", 0, err
 	}
-	defer cursor.Close(ctx)
-	var list []*AiCall
-	return list, total, cursor.All(ctx, &list)
+	defer cur.Close(ctx)
+	if err := cur.All(ctx, &list); err != nil {
+		return nil, "", 0, err
+	}
+	if len(list) > pageSize {
+		list = list[:pageSize]
+		last := list[len(list)-1]
+		next = encodeAiCallCursor(aiCallCursor{At: last.At.UnixNano(), ID: last.ID})
+	}
+	return list, next, total, nil
 }

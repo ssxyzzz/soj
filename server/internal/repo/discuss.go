@@ -9,6 +9,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"time"
 
@@ -154,8 +155,9 @@ func (r *Repo) listDiscussTopics(ctx context.Context, filter bson.M, page, pageS
 }
 
 // ListGlobalTopics 导航栏讨论区列表（可按类型筛选；关键词在标题里找）。
+// global 帖恒 scopeId=0（发帖侧固定），查询显式补等值让五键索引全段生效（v0.51）。
 func (r *Repo) ListGlobalTopics(ctx context.Context, kind, q string, page, pageSize int) ([]*DiscussTopic, int64, error) {
-	filter := bson.M{"scope": DiscussScopeGlobal, "deleted": bson.M{"$ne": true}}
+	filter := bson.M{"scope": DiscussScopeGlobal, "scopeId": 0, "deleted": bson.M{"$ne": true}}
 	if kind != "" {
 		filter["kind"] = kind
 	}
@@ -605,10 +607,25 @@ func (r *Repo) LiftDiscussMute(ctx context.Context, id int64) error {
 // EnsureDiscussIndexes 讨论区/通知集合索引（Bootstrap 调用，幂等）。
 func (r *Repo) EnsureDiscussIndexes(ctx context.Context) error {
 	if _, err := r.discussions.Indexes().CreateMany(ctx, []mongo.IndexModel{
-		{Keys: bson.D{{Key: "scope", Value: 1}, {Key: "scopeId", Value: 1}, {Key: "lastActiveAt", Value: -1}}},
+		// v0.51 五键版：等值前缀 (scope,scopeId) + 排序尾段 (pinned,lastActiveAt,_id)
+		// 完全对齐 listDiscussTopics 的排序——置顶优先不再内存排序；global 列表查询
+		// 补 scopeId:0 等值后同吃全索引（取代 v0.24 三键版，见下方 DropOne）
+		{Keys: bson.D{{Key: "scope", Value: 1}, {Key: "scopeId", Value: 1},
+			{Key: "pinned", Value: -1}, {Key: "lastActiveAt", Value: -1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "createdAt", Value: -1}}},
+		// v0.51：悬赏退款 cron（RefundDueBounties 每 10 分钟）partial 收窄到 bounty>0 段，
+		// 原为周期性全表扫
+		{Keys: bson.D{{Key: "bounty", Value: 1}, {Key: "lastActiveAt", Value: 1}},
+			Options: options.Index().SetPartialFilterExpression(bson.M{"bounty": bson.M{"$gt": 0}})},
 	}); err != nil {
 		return err
+	}
+	// v0.51 索引改版收尾：旧三键版被五键版取代，落位即删（新库本就没有，NotFound 静默）
+	if err := r.discussions.Indexes().DropOne(ctx, "scope_1_scopeId_1_lastActiveAt_-1"); err != nil {
+		var ce mongo.CommandError
+		if !errors.As(err, &ce) || ce.Code != 27 { // 27 = IndexNotFound
+			return err
+		}
 	}
 	if _, err := r.discussReplies.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "tid", Value: 1}, {Key: "_id", Value: 1}}},

@@ -107,6 +107,9 @@ func (r *Repo) CancelClassroomRace(ctx context.Context, classID, raceID int64) (
 	if err != nil {
 		return false, err
 	}
+	if res.MatchedCount > 0 {
+		r.invalidateRaceBoard(raceID) // 取消后榜单只读不增，失效防串场残留（v0.51）
+	}
 	return res.MatchedCount > 0, nil
 }
 
@@ -203,11 +206,52 @@ func (r *Repo) RaceBoard(ctx context.Context, raceID int64, limit int) ([]RaceRa
 	if limit <= 0 {
 		limit = 50
 	}
+	// 榜单微缓存（v0.51）：PK 进行中全班 3s 轮询同一份榜（还有 race AC 回写的即时
+	// 名次查询），命中即免聚合；短 TTL 兜底 + 三个写路径主动失效（raceMs CAS 回写 /
+	// 取消 / 结算）保证收口正确。返回切片只读共享（三处调用方均不改动行）。
+	r.raceBoardMu.Lock()
+	e, ok := r.raceBoardCache[raceID]
+	r.raceBoardMu.Unlock()
+	if ok && time.Since(e.at) < raceBoardCacheTTL && (e.complete || len(e.rows) >= limit) {
+		if limit > len(e.rows) {
+			limit = len(e.rows)
+		}
+		return e.rows[:limit], nil
+	}
+	rows, err := r.raceBoardQuery(ctx, raceID, raceBoardCacheRows)
+	if err != nil {
+		return nil, err
+	}
+	r.raceBoardMu.Lock()
+	r.raceBoardCache[raceID] = raceBoardEntry{rows: rows, complete: len(rows) < raceBoardCacheRows, at: time.Now()}
+	r.raceBoardMu.Unlock()
+	if limit > len(rows) {
+		limit = len(rows)
+	}
+	return rows[:limit], nil
+}
+
+// invalidateRaceBoard 榜单写路径后的主动失效（raceMs 回写 / 取消 / 结算）。
+func (r *Repo) invalidateRaceBoard(raceID int64) {
+	r.raceBoardMu.Lock()
+	delete(r.raceBoardCache, raceID)
+	r.raceBoardMu.Unlock()
+}
+
+// raceBoardCacheTTL / raceBoardCacheRows 微缓存窗口与单场缓存行数上限（榜单展示上限 50）。
+const (
+	raceBoardCacheTTL  = 1500 * time.Millisecond
+	raceBoardCacheRows = 50
+)
+
+// raceBoardQuery 榜单聚合原实现：race 内 AC 提交按 raceMs 升序去重取每人最快。
+func (r *Repo) raceBoardQuery(ctx context.Context, raceID int64, limit int) ([]RaceRankRow, error) {
 	cur, err := r.submissions.Find(ctx,
 		bson.M{"raceId": raceID, "status": StatusAccepted},
 		options.Find().
 			SetSort(bson.D{{Key: "raceMs", Value: 1}, {Key: "_id", Value: 1}}).
-			SetProjection(bson.M{"uid": 1, "uname": 1, "raceMs": 1, "createdAt": 1}))
+			SetProjection(bson.M{"uid": 1, "uname": 1, "raceMs": 1, "createdAt": 1}).
+			SetLimit(int64(limit)))
 	if err != nil {
 		return nil, err
 	}
@@ -284,6 +328,7 @@ func (r *Repo) ResolveRaceBonusMult(ctx context.Context, sub *Submission) int {
 	if res.MatchedCount == 0 {
 		return 0
 	}
+	r.invalidateRaceBoard(sub.RaceID) // 新 raceMs 落榜，微缓存即失效（v0.51）
 	if rc.Status != RaceRunning {
 		return 0 // 已结算/已取消：只留数据不计加成
 	}
@@ -369,8 +414,12 @@ func (r *Repo) sweepRaces(ctx context.Context, classID int64) {
 			slog.Warn("race 结算失败", "component", "race", "rid", rc.ID, "error", err)
 			continue
 		}
-		if res.MatchedCount == 0 || winner.UID == 0 {
-			continue // 并发双结算落败方 / 空榜不广播
+		if res.MatchedCount == 0 {
+			continue // 并发双结算落败方
+		}
+		r.invalidateRaceBoard(rc.ID) // 结算固化，微缓存失效（v0.51）
+		if winner.UID == 0 {
+			continue // 空榜不广播
 		}
 		r.notifyRaceSettled(ctx, &rc, &winner)
 	}

@@ -51,6 +51,8 @@ var ErrInsufficientJade = errors.New("余额不足")
 func (r *Repo) EnsureJadeIndexes(ctx context.Context) error {
 	if _, err := r.jadeAwards.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "pid", Value: 1}}, Options: options.Index().SetUnique(true)},
+		// v0.51：CountDailySolved 每日一题页按 (pid, 当日) 计数（原 pid 非任何索引前导全表扫）
+		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "at", Value: -1}}},
 	}); err != nil {
 		return err
 	}
@@ -61,6 +63,8 @@ func (r *Repo) EnsureJadeIndexes(ctx context.Context) error {
 	}
 	if _, err := r.jadeBlessings.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "level", Value: 1}}, Options: options.Index().SetUnique(true)},
+		// v0.51：RecentHeralds 免登录首页横幅（level≥7 按 at 倒序取 5，原全表扫+内存排序）
+		{Keys: bson.D{{Key: "level", Value: 1}, {Key: "at", Value: -1}}},
 	}); err != nil {
 		return err
 	}

@@ -614,7 +614,8 @@ export const adminApi = {
     staff_daily_limit: number
     tutor_name: string
   }) => post<{ saved: boolean }>('/admin/ai/config', body),
-  aiCalls: (page = 1, uid?: number) =>
+  // 调用审计（v0.51 游标分页）：cursor 空 = 首页，响应 next_cursor 空 = 末页；total 恒全量
+  aiCalls: (cursor = '', uid?: number) =>
     get<{
       list: {
         id: number; uid: number; pid: number; kind: string; tokens: number
@@ -622,7 +623,8 @@ export const adminApi = {
         ok: boolean; err: string; at: string
       }[]
       total: number
-    }>('/admin/ai/calls', { page, ...(uid ? { uid } : {}) }),
+      next_cursor: string
+    }>('/admin/ai/calls', { cursor, ...(uid ? { uid } : {}) }),
   // 安全日志（v0.14，root）：登录/锁定/改密/重置/限流事件，type 精确、q 按用户名/IP 模糊
   securityLogs: (page: number, pageSize: number, type?: string, q?: string) =>
     get<{ list: SecurityLogItem[]; total: number; types: string[] }>('/admin/security-logs', {

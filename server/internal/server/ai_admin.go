@@ -4,6 +4,7 @@ package server
 // 提示/找 bug 两能的生成端点在 v0.33-④（ai_tutor.go）复用本文件的价格/守卫助手。
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/ai"
+	"soj/internal/repo"
 )
 
 // maskedProvider 回显档位（key 打码：有 key 显示已配置、空显示未配置；不回明文）。
@@ -131,11 +133,16 @@ func (h *Handlers) AdminSaveAIConfig(c *gin.Context) {
 	ok(c, gin.H{"saved": true})
 }
 
-// AdminAiCalls GET /api/admin/ai/calls?uid=&page= —— 调用审计（root，成本监控）。
+// AdminAiCalls GET /api/admin/ai/calls?uid=&cursor= —— 调用审计（root，成本监控）。
+// v0.51 改游标分页：aiCalls 只增不减无 TTL，原 skip 深页线性放大；游标每页索引定位，
+// next_cursor 空 = 末页；total 恒为全量计数供「共 N 条」。
 func (h *Handlers) AdminAiCalls(c *gin.Context) {
 	uid, _ := strconv.ParseInt(c.Query("uid"), 10, 64)
-	page, pageSize := queryPage(c)
-	list, total, err := h.repo.ListAiCalls(c.Request.Context(), uid, page, pageSize)
+	list, next, total, err := h.repo.ListAiCalls(c.Request.Context(), uid, c.Query("cursor"), 20)
+	if errors.Is(err, repo.ErrInvalidCursor) {
+		fail(c, http.StatusBadRequest, "游标无效")
+		return
+	}
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "读取审计失败")
 		return
@@ -149,5 +156,5 @@ func (h *Handlers) AdminAiCalls(c *gin.Context) {
 			"ok": a.OK, "err": a.Err, "at": a.At.Format("2006-01-02 15:04"),
 		})
 	}
-	ok(c, gin.H{"list": items, "total": total})
+	ok(c, gin.H{"list": items, "total": total, "next_cursor": next})
 }

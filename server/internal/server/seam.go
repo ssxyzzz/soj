@@ -165,7 +165,7 @@ type RepoAPI interface {
 	SaveAIConfig(ctx context.Context, cfg *ai.Config) error
 	RecordAiCall(ctx context.Context, c *repo.AiCall)
 	CountAiCallsToday(ctx context.Context, uid int64) (int64, error)
-	ListAiCalls(ctx context.Context, uid int64, page, pageSize int) ([]*repo.AiCall, int64, error)
+	ListAiCalls(ctx context.Context, uid int64, cursor string, pageSize int) (list []*repo.AiCall, next string, total int64, err error)
 	GetAiHint(ctx context.Context, pid int64, level int) (*repo.AiHint, error)
 	EnsureAiHint(ctx context.Context, p *repo.Problem, level int, gen func() (*ai.Response, error)) (*repo.AiHint, error)
 	RecordAiHintUnlock(ctx context.Context, uid, pid int64, level int, price int64) error

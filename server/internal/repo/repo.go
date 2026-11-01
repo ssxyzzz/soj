@@ -67,6 +67,23 @@ type Repo struct {
 	//（掉落额本就按 AC 时点固化进 awards）。
 	acMu    sync.Mutex
 	acRates map[int64]acRateEntry
+
+	// race 榜单微缓存（v0.51）：PK 进行中全班 3s 轮询同一份榜，RaceBoard 聚合
+	// 按命中摊薄；短 TTL + raceMs 回写/取消/结算时主动失效兜底正确性。
+	// 全站榜 solved 微缓存（v0.51）：RankMe 靠前人数的全体 AC 双 $group 共享前段，
+	// 个人主页/榜单页每请求一次收敛为每 TTL 一次。两者均为单副本进程内态（工程备忘口径）。
+	raceBoardMu    sync.Mutex
+	raceBoardCache map[int64]raceBoardEntry
+	rankMu         sync.Mutex
+	rankSolved     map[int64]int64
+	rankSolvedAt   time.Time
+}
+
+type raceBoardEntry struct {
+	rows []RaceRankRow
+	// complete = 查询已取尽榜单（返回行数 < 缓存上限）：小榜任意 limit 都可命中
+	complete bool
+	at       time.Time
 }
 
 type acRateEntry struct {
@@ -133,6 +150,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		dailyProblems: db.Collection("dailyProblems"),
 		classroomRaces: db.Collection("classroomRaces"),
 		acRates:       map[int64]acRateEntry{},
+		raceBoardCache: map[int64]raceBoardEntry{},
 	}, nil
 }
 
@@ -165,16 +183,44 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		{Keys: bson.D{{Key: "status", Value: 1}, {Key: "published", Value: 1}, {Key: "uid", Value: 1}, {Key: "pid", Value: 1}}},
 		// v0.38：效率榜按题取 AC 最快（原内存排序该题全部提交）
 		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "status", Value: 1}, {Key: "timeMs", Value: 1}}},
+		// v0.51：RaceBoard 过滤+排序全覆盖（PK 榜全班 3s 轮询 + 每次 race AC 回写 + 结算
+		// 三处同源，原 raceId 不在任何索引内全表扫）
+		{Keys: bson.D{{Key: "raceId", Value: 1}, {Key: "status", Value: 1}, {Key: "raceMs", Value: 1}, {Key: "_id", Value: 1}}},
+		// v0.51：效率榜内存榜（与 timeMs 榜对偶，原该题全部 AC 内存排序）
+		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "status", Value: 1}, {Key: "memKb", Value: 1}, {Key: "timeMs", Value: 1}}},
 	})
 	if err != nil {
 		return err
 	}
 	// v0.25 万题体检补索引：IsMember 逐班成员查询（原集合扫描，题库列表每请求都跑锁题评估）、
 	// 作业列表排序（filter classId + sort sort,_id 降序）、导入同标题查重（skip_same_title 逐题 CountDocuments）
+	// v0.51 补 {uid} 反向索引：MyClassIDs/MyClasses（班级列表每请求）、userClassIDs
+	// （每次挑战提交创建）、SyncUnameReferences 改名同步——uid 非原复合索引前导，四处全表扫
 	if _, err := r.db.Collection("classmembers").Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "classId", Value: 1}, {Key: "uid", Value: 1}}},
+		{Keys: bson.D{{Key: "uid", Value: 1}}},
 	}); err != nil {
 		return err
+	}
+	// v0.51：班级视图标记（GetClassMarks 班级列表每请求，原零二级索引）
+	if _, err := r.db.Collection("classmarks").Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "uid", Value: 1}}},
+	}); err != nil {
+		return err
+	}
+	// v0.51：题面图片配额聚合（UploadsUsedBytes 每次上传触发，uploads 原零二级索引）
+	if _, err := r.uploads.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "uid", Value: 1}}},
+	}); err != nil {
+		return err
+	}
+	// v0.51：开赛提醒扫描（ListRoundsStartingSoon 每分钟 cron 双集合全扫）
+	for _, col := range []string{"contests", "exams"} {
+		if _, err := r.db.Collection(col).Indexes().CreateMany(ctx, []mongo.IndexModel{
+			{Keys: bson.D{{Key: "start", Value: 1}}},
+		}); err != nil {
+			return err
+		}
 	}
 	if _, err := r.db.Collection("assignments").Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "classId", Value: 1}, {Key: "sort", Value: 1}, {Key: "_id", Value: -1}}},
@@ -201,10 +247,12 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	if err != nil {
 		return err
 	}
-	// 绑定邮箱/手机（v0.16）：sparse 唯一——多数用户无邮箱（字段缺省）不占号，非空必唯一
+	// 绑定邮箱/手机（v0.16）：sparse 唯一——多数用户无邮箱（字段缺省）不占号，非空必唯一；
+	// v0.51 补 role：UserIDsByRole（下单通知同步路径）与后台用户列表 role 过滤
 	if _, err := r.users.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
 		{Keys: bson.D{{Key: "phone", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
+		{Keys: bson.D{{Key: "role", Value: 1}}},
 	}); err != nil {
 		return err
 	}

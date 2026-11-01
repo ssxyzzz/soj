@@ -767,10 +767,53 @@ func (r *Repo) RankBoard(ctx context.Context, limit int) ([]RankRow, error) {
 	return rows, nil
 }
 
+// rankSolvedTTL 全站榜 solved 微缓存窗口：个人主页/榜单页的 RankMe 每请求跑一遍
+// 全体 AC 双 $group（读路径最重的非 COLLSCAN 查询），共享前段按窗口摊薄（v0.51）。
+const rankSolvedTTL = 2 * time.Second
+
+// rankSolvedMap 全站 (uid → 去重解题数)，RankBoard 同口径（status=accepted &&
+// published，按 (uid,pid) 去重）。进程内短 TTL 缓存，map 对调用方只读共享。
+func (r *Repo) rankSolvedMap(ctx context.Context) (map[int64]int64, error) {
+	r.rankMu.Lock()
+	m, at := r.rankSolved, r.rankSolvedAt
+	r.rankMu.Unlock()
+	if m != nil && time.Since(at) < rankSolvedTTL {
+		return m, nil
+	}
+	pipe := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"status": StatusAccepted, "published": true}}},
+		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
+		{{Key: "$group", Value: bson.M{"_id": "$_id.uid", "solved": bson.M{"$sum": 1}}}},
+	}
+	cur, err := r.submissions.Aggregate(ctx, pipe)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	nm := map[int64]int64{}
+	for cur.Next(ctx) {
+		var row struct {
+			ID     int64 `bson:"_id"`
+			Solved int64 `bson:"solved"`
+		}
+		if err := cur.Decode(&row); err != nil {
+			return nil, err
+		}
+		nm[row.ID] = row.Solved
+	}
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+	r.rankMu.Lock()
+	r.rankSolved, r.rankSolvedAt = nm, time.Now()
+	r.rankMu.Unlock()
+	return nm, nil
+}
+
 // RankMe 观察者位次：与榜单完全同序（solved desc、uid asc 决胜）——
 // rank = 比我靠前的人数 + 1，solved = 我的去重解题数。无任何 AC 时 solved=0、
-// rank = 全榜人数 + 1（所有有 AC 的用户都排前面）。与 RankBoard 同一聚合口径
-// （status=accepted && published，按 (uid,pid) 去重计题）。
+// rank = 全榜人数 + 1（所有有 AC 的用户都排前面）。与 RankBoard 同一聚合口径。
+// v0.51：靠前人数改在 rankSolvedMap 微缓存上内存决胜，替代原每请求全体 AC 双 $group。
 func (r *Repo) RankMe(ctx context.Context, uid int64) (rank, solved int64, err error) {
 	// 我的解题数：AC 且已发布的提交按 pid 去重
 	myPipe := mongo.Pipeline{
@@ -792,31 +835,17 @@ func (r *Repo) RankMe(ctx context.Context, uid int64) (rank, solved int64, err e
 		solved = mine[0].N
 	}
 	// 靠前人数：解题更多，或同分但 uid 更小（与榜单排序键一致，同分不用并列名次）
-	aheadPipe := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"status": StatusAccepted, "published": true}}},
-		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
-		{{Key: "$group", Value: bson.M{"_id": "$_id.uid", "solved": bson.M{"$sum": 1}}}},
-		{{Key: "$match", Value: bson.M{"$or": bson.A{
-			bson.M{"solved": bson.M{"$gt": solved}},
-			bson.M{"solved": solved, "_id": bson.M{"$lt": uid}},
-		}}}},
-		{{Key: "$count", Value: "n"}},
-	}
-	cur2, err := r.submissions.Aggregate(ctx, aheadPipe)
+	board, err := r.rankSolvedMap(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
-	var ahead []struct {
-		N int64 `bson:"n"`
+	ahead := int64(0)
+	for u, s := range board {
+		if s > solved || (s == solved && u < uid) {
+			ahead++
+		}
 	}
-	if err := cur2.All(ctx, &ahead); err != nil {
-		return 0, 0, err
-	}
-	rank = 1
-	if len(ahead) > 0 {
-		rank = ahead[0].N + 1
-	}
-	return rank, solved, nil
+	return ahead + 1, solved, nil
 }
 
 // BoardRow 题内效率榜行（v0.23）：Value = timeMs（用时榜）或 memKb（内存榜）。

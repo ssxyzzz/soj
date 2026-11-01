@@ -83,7 +83,7 @@ async function save() {
   }
 }
 
-// ---- 调用审计 ----
+// ---- 调用审计（v0.51 游标分页：aiCalls 只增不减，页号 skip 深翻页线性放大弃用）----
 interface AiCallRow {
   id: number; uid: number; pid: number; kind: string; tokens: number
   prompt_chars: number; cost: number; provider: string; model: string
@@ -91,14 +91,22 @@ interface AiCallRow {
 }
 const calls = ref<AiCallRow[]>([])
 const callTotal = ref(0)
-const callPage = ref(1)
+const pageCursors = ref<string[]>(['']) // 各页起点游标，pageCursors[0]='' 即首页
+const pageIdx = ref(0)
+const nextCursor = ref('') // 当前页响应的下一页游标；空 = 末页
 
-async function loadCalls(page = 1) {
-  callPage.value = page
+async function loadCalls(idx = 0) {
+  if (idx < 0 || pageCursors.value[idx] === undefined) return
+  pageIdx.value = idx
   try {
-    const r = await adminApi.aiCalls(page)
+    const r = await adminApi.aiCalls(pageCursors.value[idx])
     calls.value = r.list
     callTotal.value = r.total
+    nextCursor.value = r.next_cursor
+    // 首次翻到的页登记其下一页起点（回翻不覆盖已登记游标）
+    if (pageCursors.value[idx + 1] === undefined && r.next_cursor) {
+      pageCursors.value[idx + 1] = r.next_cursor
+    }
   } catch {
     /* 静默 */
   }
@@ -143,8 +151,10 @@ onMounted(() => {
       </el-table-column>
       <el-table-column label="API Key" width="190">
         <template #default="{ row }">
-          <el-input v-model="row.api_key" type="password" show-password
-            :placeholder="row.has_key ? '已配置（留空不改）' : 'sk-…'" />
+          <el-input
+v-model="row.api_key" type="password" show-password
+            :placeholder="row.has_key ? '已配置（留空不改）' : 'sk-…'"
+/>
         </template>
       </el-table-column>
       <el-table-column label="模型" width="160">
@@ -205,9 +215,10 @@ onMounted(() => {
         </template>
       </el-table-column>
     </el-table>
-    <div v-if="callTotal > 20" style="display: flex; justify-content: flex-end; margin-top: 10px">
-      <el-pagination layout="prev, pager, next" :total="callTotal" :page-size="20" :current-page="callPage"
-        @current-change="loadCalls" />
+    <div v-if="callTotal > 20" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px">
+      <span style="color: var(--soj-ink-2, #666); font-size: 13px">共 {{ callTotal }} 条</span>
+      <el-button size="small" :disabled="pageIdx === 0" @click="loadCalls(pageIdx - 1)">上一页</el-button>
+      <el-button size="small" :disabled="!nextCursor" @click="loadCalls(pageIdx + 1)">下一页</el-button>
     </div>
   </el-card>
 </template>
