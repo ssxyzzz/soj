@@ -23,8 +23,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # 运行阶段
 FROM alpine:3.21
-# 国内网络加速：apk 源换清华镜像（sandbox 镜像对 Debian 源做了同样处理），官方 CDN 会连接假死
-RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.tuna.tsinghua.edu.cn|g' /etc/apk/repositories
+# 国内网络加速：apk 源换阿里云镜像（sandbox 镜像对 Debian 源做了同样处理），官方 CDN 会连接假死；
+# 清华源在部分网络 403（2026-10-31 迁移实测：tuna 403、aliyun 秒通），统一走 aliyun
+RUN sed -i 's|dl-cdn.alpinelinux.org|mirrors.aliyun.com|g' /etc/apk/repositories
 # mongodb-tools 提供 mongodump（备份模块经 PATH 调用）；ca-certs 供外连，tzdata 时区
 RUN apk add --no-cache ca-certificates tzdata mongodb-tools
 COPY --from=build /out/soj /app/soj

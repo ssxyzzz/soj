@@ -3,8 +3,9 @@
 # 基础镜像: https://github.com/criyle/go-judge
 FROM criyle/go-judge:latest
 
-# 国内网络加速：Debian 源替换为清华镜像（兼容新旧两种源配置格式）
-RUN sed -i 's|deb.debian.org|mirrors.tuna.tsinghua.edu.cn|g' \
+# 国内网络加速：Debian 源替换为阿里云镜像（兼容新旧两种源配置格式；清华源部分网络 403，
+# 2026-10-31 迁移实测）
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' \
       /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list \
     2>/dev/null || true
 

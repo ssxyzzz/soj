@@ -49,10 +49,12 @@ elif [[ "$ARCHIVE" == *.tar.age ]]; then
     exit 1
   }
   echo "==> 解密 $(basename "$ARCHIVE")（alpine 容器内 age，宿主机无需安装）"
+  # apk 换国内镜像：dl-cdn.alpinelinux.org 在部分网络无限挂起（2026-10-31 迁移演练实测，
+  # tuna 403、aliyun 秒通），挂起时表象是脚本卡在「解密」一行无任何输出
   docker run --rm -i \
     -v "$WORK":/w -v "$(cd "$(dirname "$KEY")" && pwd)":/keydir:ro \
     alpine:3.21 \
-    sh -c "apk add --no-cache age >/dev/null 2>&1 && age -d -i \"/keydir/$(basename "$KEY")\" -o /w/backup.tar" \
+    sh -c "sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/' /etc/apk/repositories && apk add --no-cache age >/dev/null 2>&1 && age -d -i \"/keydir/$(basename "$KEY")\" -o /w/backup.tar" \
     < "$ARCHIVE" \
     || {
       echo "!! 解密失败：私钥不匹配或归档损坏。"
