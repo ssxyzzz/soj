@@ -766,7 +766,10 @@ onBeforeUnmount(() => {
 }
 
 .md-edit-pane {
-  flex-grow: 1;
+  /* 宽度完全由内联 flex-basis（splitPct%）控制：grow/shrink 必须归零——两侧同时
+     flex-grow:1 会把 basis 之外的剩余空间平分，divider 实际位置恒被稀释向中线
+     （表现为拖拽不跟手、拖不过 50%）。preview 侧 flex:1 1 0 吃掉剩余即跟手 */
+  flex: 0 0 auto;
   min-width: 0;
   position: relative;
 }
@@ -783,7 +786,7 @@ onBeforeUnmount(() => {
 }
 
 .md-preview-pane {
-  flex-grow: 1;
+  flex: 1 1 0; /* 占据 basis 之外的全部剩余宽度 */
   min-width: 0;
   overflow-y: auto;
   padding: 12px 16px;
