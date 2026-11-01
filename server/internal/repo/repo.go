@@ -361,7 +361,7 @@ var freshSkipFlags = []string{
 	"roundFlagsV1", "classLeaveV1", "assignmentScoreViewV1", "contestScorePermV1",
 	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
 	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2", "listManageV1",
-	"gradeNoV1",
+	"gradeNoV1", "discussCreatePermV1",
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
@@ -598,6 +598,19 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		slog.Info("admin 角色已补发讨论权限位（discussion.manage / rate_exempt / code.bypass）", "component", "boot")
+	}
+	if !flagDone("discussCreatePermV1") {
+		// v0.48：发讨论贴权限位（三区主楼 + 回复通用），初始归属 admin（root 走 "*" 恒通；
+		// default 刻意不给）
+		if _, err := r.roles.UpdateOne(ctx,
+			bson.M{"_id": RoleAdmin},
+			bson.M{"$addToSet": bson.M{"perms": PermDiscussCreate}}); err != nil {
+			return err
+		}
+		if err := setFlag("discussCreatePermV1"); err != nil {
+			return err
+		}
+		slog.Info("admin 角色已补发发讨论贴权限位（discussion.create）", "component", "boot")
 	}
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次

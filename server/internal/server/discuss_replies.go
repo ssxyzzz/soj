@@ -22,6 +22,9 @@ func (h *Handlers) CreateDiscussReply(c *gin.Context) {
 		fail(c, http.StatusUnauthorized, "未登录")
 		return
 	}
+	if !h.discussCreatePermCheck(c) {
+		return
+	}
 	tid, okID := parseID(c, "tid")
 	if !okID {
 		return

@@ -141,6 +141,8 @@ async function accept(rep: DiscussReply) {
   emit('changed')
 }
 
+// 发讨论贴权限位（v0.48）：三区主楼+回复通用，无位者不显示回复入口与回复框
+const canPost = computed(() => userStore.can('discussion.create'))
 // 悬赏打赏（v0.33-②）：发帖人专属；输入金额从托管池划给回复作者
 const canTip = computed(() => !!topic.value?.bounty_remaining && topic.value.uid === userStore.uid)
 // 打赏 in-flight 守卫（v0.37）：扣玉操作，慢网双击 = 双扣；后端余额条件扣减只是防
@@ -304,7 +306,7 @@ onMounted(load)
             >
               👍 {{ topic.like_count }}
             </el-button>
-            <el-button v-if="!topic.locked && !topic.deleted" size="small" @click="startReply(0)">
+            <el-button v-if="canPost && !topic.locked && !topic.deleted" size="small" @click="startReply(0)">
               回复
             </el-button>
             <el-button v-if="topic.can_edit" size="small" @click="editing = !editing">编辑</el-button>
@@ -360,7 +362,7 @@ onMounted(load)
               <span class="time">{{ fmtRel(r.created_at) }}</span>
               <span v-if="r.edited" class="edited">已编辑</span>
               <span class="grow"></span>
-              <el-button text size="small" @click="startReply(r.id)">回复</el-button>
+              <el-button v-if="canPost" text size="small" @click="startReply(r.id)">回复</el-button>
             </div>
             <MdView v-if="!r.deleted" :content="r.content" variant="compact" auto-height class="dtd-reply-content" />
             <div v-else class="dtd-deleted-hint sm">该回复已删除</div>
@@ -426,7 +428,7 @@ onMounted(load)
         </div>
 
         <!-- 回复框 -->
-        <div v-if="!topic.deleted && !topic.locked" class="dtd-editor">
+        <div v-if="canPost && !topic.deleted && !topic.locked" class="dtd-editor">
           <div class="dtd-editor-tip">
             {{ replyTarget ? '回复楼层 #' + replyTarget : '回复本帖' }}
             <el-button v-if="replyTarget" text size="small" @click="replyTarget = 0">改为回复主楼</el-button>

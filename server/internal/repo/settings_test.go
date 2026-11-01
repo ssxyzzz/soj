@@ -57,3 +57,18 @@ func TestUpdateSystemSettingsRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// v0.48 冷静期单位改天换血：nil/负数回落默认 7 天，正数直通；老的小时字段不再参与。
+func TestDiscussNewbieDaysNormalize(t *testing.T) {
+	if got := (&SystemSettings{}).DiscussNewbieDaysVal(); got != DefaultDiscussNewbieDays {
+		t.Errorf("空设置冷静期 = %d，期望默认 %d 天", got, DefaultDiscussNewbieDays)
+	}
+	neg := -1
+	if got := (&SystemSettings{DiscussNewbieDays: &neg}).DiscussNewbieDaysVal(); got != DefaultDiscussNewbieDays {
+		t.Errorf("负数冷静期 = %d，期望默认 %d 天", got, DefaultDiscussNewbieDays)
+	}
+	ten := 10
+	if got := (&SystemSettings{DiscussNewbieDays: &ten}).DiscussNewbieDaysVal(); got != 10 {
+		t.Errorf("自定义冷静期 = %d，期望 10 天", got)
+	}
+}

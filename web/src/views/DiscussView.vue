@@ -6,6 +6,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { useSiteStore } from '@/stores/site'
+import { useUserStore } from '@/stores/user'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import DiscussTopicList from '@/components/discuss/DiscussTopicList.vue'
@@ -17,6 +18,9 @@ const router = useRouter()
 const category = ref('')
 const q = ref('')
 const site = useSiteStore()
+const userStore = useUserStore()
+// 发讨论贴权限位（v0.48）：三区主楼+回复通用，无位者整个发帖卡不渲染
+const canPost = computed(() => userStore.can('discussion.create'))
 const siteReady = ref(false)
 // 总开关关闭：导航项已隐藏，直达 URL 也只显示空态（接口本身另有闸门）
 const closed = computed(() => siteReady.value && !site.discussGlobalEnabled)
@@ -103,7 +107,7 @@ onMounted(async () => {
     </template>
 
     <template #aside>
-      <RailCard ov="分享" title="发起讨论" class="aside-card">
+      <RailCard v-if="canPost" ov="分享" title="发起讨论" class="aside-card">
         <el-button type="primary" style="width: 100%" :disabled="disabled" @click="postVisible = true">
           ✏️ 发帖
         </el-button>

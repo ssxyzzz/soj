@@ -6,10 +6,15 @@
 import { computed, defineAsyncComponent, ref } from 'vue'
 
 import { discussApi } from '@/api'
+import { useUserStore } from '@/stores/user'
 import type { DiscussScope, DiscussTopic } from '@/types'
 const DiscussTopicList = defineAsyncComponent(() => import('./DiscussTopicList.vue'))
 const DiscussTopicDetail = defineAsyncComponent(() => import('./DiscussTopicDetail.vue'))
 const DiscussPostDialog = defineAsyncComponent(() => import('./DiscussPostDialog.vue'))
+
+const userStore = useUserStore()
+// 发讨论贴权限位（v0.48）：三区主楼+回复通用，无位者不显示发起入口
+const canPost = computed(() => userStore.can('discussion.create'))
 
 const props = defineProps<{
   scope: Exclude<DiscussScope, 'global'>
@@ -80,7 +85,7 @@ function onPosted(id: number) {
     </div>
     <template #footer>
       <el-button v-if="mode.name === 'topic'" @click="backToList">返回列表</el-button>
-      <el-button v-else type="primary" @click="postVisible = true">发起讨论</el-button>
+      <el-button v-else-if="canPost" type="primary" @click="postVisible = true">发起讨论</el-button>
       <el-button @click="visible = false">关闭</el-button>
     </template>
   </el-dialog>

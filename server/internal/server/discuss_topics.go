@@ -61,7 +61,7 @@ func (h *Handlers) ListGlobalDiscuss(c *gin.Context) {
 
 // CreateGlobalDiscuss POST /api/discuss
 func (h *Handlers) CreateGlobalDiscuss(c *gin.Context) {
-	uid, _, _, logged := currentUser(c)
+	uid, _, role, logged := currentUser(c)
 	if !logged {
 		fail(c, http.StatusUnauthorized, "未登录")
 		return
@@ -79,6 +79,9 @@ func (h *Handlers) CreateGlobalDiscuss(c *gin.Context) {
 		fail(c, http.StatusForbidden, "讨论区临时锁定（考试期间），考试结束后恢复")
 		return
 	}
+	if !h.discussCreatePermCheck(c) {
+		return
+	}
 	if !h.discussMuteCheck(c, uid) {
 		return
 	}
@@ -86,11 +89,11 @@ func (h *Handlers) CreateGlobalDiscuss(c *gin.Context) {
 		fail(c, http.StatusTooManyRequests, msg)
 		return
 	}
-	// 新号冷静期：仅拦导航栏主楼（题内求助不受限，别把提问的新生挡在外面）
-	if hours := s.DiscussNewbieHoursVal(); hours > 0 {
+	// 新号冷静期：仅拦导航栏主楼（题内求助不受限，别把提问的新生挡在外面）；root 不受限（v0.48）
+	if days := s.DiscussNewbieDaysVal(); days > 0 && role != repo.RoleRoot {
 		if u, err := h.repo.GetUserByID(c.Request.Context(), uid); err == nil &&
-			time.Since(u.CreatedAt) < time.Duration(hours)*time.Hour {
-			fail(c, http.StatusForbidden, fmt.Sprintf("注册未满 %d 小时，暂不能在讨论区发帖（可在题目下提问）", hours))
+			time.Since(u.CreatedAt) < time.Duration(days)*24*time.Hour {
+			fail(c, http.StatusForbidden, fmt.Sprintf("注册未满 %d 天，暂不能在讨论区发帖（可在题目下提问）", days))
 			return
 		}
 	}
@@ -174,6 +177,9 @@ func (h *Handlers) CreateProblemDiscuss(c *gin.Context) {
 		return
 	}
 	uid, _, _, _ := currentUser(c)
+	if !h.discussCreatePermCheck(c) {
+		return
+	}
 	if !h.discussMuteCheck(c, uid) {
 		return
 	}
@@ -258,6 +264,9 @@ func (h *Handlers) CreateContestDiscuss(c *gin.Context) {
 		return
 	}
 	uid, _, _, _ := currentUser(c)
+	if !h.discussCreatePermCheck(c) {
+		return
+	}
 	if !h.discussMuteCheck(c, uid) {
 		return
 	}

@@ -13,7 +13,7 @@ const discussGlobalLocked = ref(false)
 const discussCodeThreshold = ref(60)
 const discussTopicDailyLimit = ref(5)
 const discussReplyIntervalSec = ref(30)
-const discussNewbieHours = ref(48)
+const discussNewbieDays = ref(7)
 const discussReportFold = ref(3)
 
 const saving = ref(false)
@@ -28,7 +28,7 @@ onMounted(async () => {
     discussCodeThreshold.value = s.discuss_code_threshold ?? 60
     discussTopicDailyLimit.value = s.discuss_topic_daily_limit ?? 5
     discussReplyIntervalSec.value = s.discuss_reply_interval_sec ?? 30
-    discussNewbieHours.value = s.discuss_newbie_hours ?? 48
+    discussNewbieDays.value = s.discuss_newbie_days ?? 7
     discussReportFold.value = s.discuss_report_fold ?? 3
   } catch {
     // 加载失败保留默认值展示
@@ -46,7 +46,7 @@ async function save() {
       discuss_code_threshold: discussCodeThreshold.value,
       discuss_topic_daily_limit: discussTopicDailyLimit.value,
       discuss_reply_interval_sec: discussReplyIntervalSec.value,
-      discuss_newbie_hours: discussNewbieHours.value,
+      discuss_newbie_days: discussNewbieDays.value,
       discuss_report_fold: discussReportFold.value,
     })
     ElMessage.success('讨论区设置已保存')
@@ -99,9 +99,9 @@ async function save() {
         <el-input-number v-model="discussReplyIntervalSec" :min="0" :max="3600" />
         <span class="dim" style="margin-left: 8px">相邻两次回复的最小间隔（0 = 不限制）</span>
       </el-form-item>
-      <el-form-item label="新号冷静期（小时）">
-        <el-input-number v-model="discussNewbieHours" :min="0" :max="720" />
-        <span class="dim" style="margin-left: 8px">注册未满该时长不能在导航栏讨论区发主楼（0 = 不限制）</span>
+      <el-form-item label="新号冷静期（天）">
+        <el-input-number v-model="discussNewbieDays" :min="0" :max="30" />
+        <span class="dim" style="margin-left: 8px">注册未满该天数不能在导航栏讨论区发主楼（root 不受限；0 = 不限制）</span>
       </el-form-item>
       <el-form-item label="举报自动折叠阈值">
         <el-input-number v-model="discussReportFold" :min="0" :max="100" />

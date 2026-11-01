@@ -316,7 +316,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"discuss_code_threshold":     s.DiscussCodeThresholdVal(),
 		"discuss_topic_daily_limit":  s.DiscussTopicDailyLimitVal(),
 		"discuss_reply_interval_sec": s.DiscussReplyIntervalVal(),
-		"discuss_newbie_hours":       s.DiscussNewbieHoursVal(),
+		"discuss_newbie_days":        s.DiscussNewbieDaysVal(),
 		"discuss_report_fold":        int(s.DiscussReportFoldVal()),
 		"notify_retention_days":      s.NotifyRetentionDaysVal(),
 		"notify_broadcast_per_day":   s.NotifyBroadcastPerDayVal(),
@@ -415,7 +415,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		DiscussCodeThreshold    *int  `json:"discuss_code_threshold"`
 		DiscussTopicDailyLimit  *int  `json:"discuss_topic_daily_limit"`
 		DiscussReplyIntervalSec *int  `json:"discuss_reply_interval_sec"`
-		DiscussNewbieHours      *int  `json:"discuss_newbie_hours"`
+		DiscussNewbieDays       *int  `json:"discuss_newbie_days"`
 		DiscussReportFold       *int  `json:"discuss_report_fold"`
 		NotifyRetentionDays     *int  `json:"notify_retention_days"`
 		NotifyBroadcastPerDay   *int  `json:"notify_broadcast_per_day"`
@@ -594,12 +594,12 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.DiscussReplyIntervalSec = req.DiscussReplyIntervalSec
 	}
-	if req.DiscussNewbieHours != nil {
-		if *req.DiscussNewbieHours < 0 || *req.DiscussNewbieHours > 24*30 {
-			fail(c, http.StatusBadRequest, "新号冷静期需在 0-720 小时之间（0 为不限制）")
+	if req.DiscussNewbieDays != nil {
+		if *req.DiscussNewbieDays < 0 || *req.DiscussNewbieDays > 30 {
+			fail(c, http.StatusBadRequest, "新号冷静期需在 0-30 天之间（0 为不限制）")
 			return
 		}
-		s.DiscussNewbieHours = req.DiscussNewbieHours
+		s.DiscussNewbieDays = req.DiscussNewbieDays
 	}
 	if req.DiscussReportFold != nil {
 		if *req.DiscussReportFold < 0 || *req.DiscussReportFold > 100 {

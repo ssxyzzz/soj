@@ -21,9 +21,10 @@ type Role struct {
 // v0.5.2-2 起 admin 增查看用户提交明细，v0.6.x 起 default/admin 增本人昵称修改，
 // v0.7.2 起 admin 增退出班级——default 刻意不给，v0.8.3 起 admin 增下载数据，
 // v0.11 起 default/admin 增查看班级作业成绩表、admin 增比赛/考试成绩表查看与详情——default 刻意不给，
-// v0.18.3 起 admin 增题单管理）。
+// v0.18.3 起 admin 增题单管理，v0.48 起 admin 增发讨论贴——default 刻意不给）。
 // 存量库由 solutionManageV1 / submissionViewUserV1 / nicknameEditV1 / classLeaveV1 /
-// dataDownloadPermV1 / assignmentScoreViewV1 / contestScorePermV1 / listManageV1 迁移补发新位。
+// dataDownloadPermV1 / assignmentScoreViewV1 / contestScorePermV1 / listManageV1 /
+// discussCreatePermV1 迁移补发新位。
 var builtinRoles = []Role{
 	{ID: RoleDefault, Name: "普通用户", Perms: []string{PermUserNicknameEdit, PermAssignmentScoreView}, Builtin: true},
 	{ID: RoleAdmin, Name: "管理员", Perms: []string{
@@ -34,7 +35,7 @@ var builtinRoles = []Role{
 		PermClassCreate, PermClassViewAll, PermClassLeave, PermAssignmentScoreView,
 		PermSubmissionViewAll, PermSubmissionViewUser, PermSubmissionRateExempt,
 		PermSolutionManage, PermUserNicknameEdit,
-		PermDiscussManage, PermDiscussRateExempt, PermDiscussCodeBypass, // v0.24：全站公告广播刻意不给（默认仅 root）
+		PermDiscussCreate, PermDiscussManage, PermDiscussRateExempt, PermDiscussCodeBypass, // v0.24：全站公告广播刻意不给（默认仅 root）
 	}, Builtin: true},
 	{ID: RoleRoot, Name: "超级管理员", Perms: []string{PermAll}, Builtin: true},
 }

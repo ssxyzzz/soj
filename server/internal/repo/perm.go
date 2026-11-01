@@ -26,6 +26,7 @@ const (
 	PermSubmissionViewUser   = "submission.view.user"   // 榜单/进度表中点看指定用户在某题的提交明细（含代码）
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
 	PermSolutionManage       = "solution.manage"        // 题解管理：置顶/删除他人题解（v0.5.2-1）
+	PermDiscussCreate        = "discussion.create"      // 发讨论贴：三区主楼与回复（v0.48，default 默认关闭）
 	PermDiscussManage        = "discussion.manage"      // 讨论管理：删帖/置顶/加精/锁定/处理举报与禁言（v0.24）
 	PermDiscussRateExempt    = "discussion.rate_exempt" // 发帖不受讨论区限速（v0.24）
 	PermDiscussCodeBypass    = "discussion.code.bypass" // 题内讨论代码块查看不受分数门槛（v0.24）
@@ -90,6 +91,7 @@ var PermCatalog = []PermInfo{
 	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码", "submission"},
 	{PermSubmissionViewUser, "查看用户提交明细", "榜单/进度表中点看指定用户在某题的全部提交（含代码与测试点明细）", "submission"},
 	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},
+	{PermDiscussCreate, "发讨论贴", "在讨论区发主楼与回复（全站/题内/比赛三区通用）；关闭后只能浏览、点赞等，不能发任何内容。default 角色默认关闭", "discussion"},
 	{PermDiscussManage, "讨论管理", "讨论区：删帖/置顶/加精/锁定/处理举报与禁言（三区通用）", "discussion"},
 	{PermDiscussRateExempt, "发帖不限速", "讨论发帖/回复不受全站讨论限速约束", "discussion"},
 	{PermDiscussCodeBypass, "讨论代码门槛豁免", "题内讨论中查看被分数门槛隐藏的代码块（教师群体本就不受限）", "discussion"},

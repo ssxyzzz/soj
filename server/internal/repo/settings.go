@@ -47,8 +47,9 @@ type SystemSettings struct {
 	// 发帖限速：主楼每日上限 / 回复最小间隔秒；0 = 不限。
 	DiscussTopicDailyLimit  *int `bson:"discussTopicDailyLimit,omitempty"`
 	DiscussReplyIntervalSec *int `bson:"discussReplyIntervalSec,omitempty"`
-	// 新号冷静期（小时）：注册未满 N 小时不能在导航栏讨论区发主楼（题内求助不受限）；0 = 不限。
-	DiscussNewbieHours *int `bson:"discussNewbieHours,omitempty"`
+	// 新号冷静期（天，v0.48 单位改天换血）：注册未满 N 天不能在导航栏讨论区发主楼
+	// （题内求助不受限）；root 不受限；0 = 不限。
+	DiscussNewbieDays *int `bson:"discussNewbieDays,omitempty"`
 	// 举报自动折叠阈值：同一目标未处理举报达到 N 条自动折叠；0 = 不自动折叠。
 	DiscussReportFold *int `bson:"discussReportFold,omitempty"`
 	// 通知保留天数（TTL 在插入时按当时值写死）；0 = 按默认 90。
@@ -148,7 +149,7 @@ const (
 	DefaultDiscussCodeThreshold   = 60 // 题内代码门槛：最高分 ≥ 60 可见代码块
 	DefaultDiscussTopicDailyLimit = 5  // 主楼每日上限
 	DefaultDiscussReplyInterval   = 30 // 回复间隔秒
-	DefaultDiscussNewbieHours     = 48 // 新号冷静期
+	DefaultDiscussNewbieDays      = 7  // 新号冷静期（天）
 	DefaultDiscussReportFold      = 3  // 举报折叠阈值
 	DefaultNotifyRetentionDays    = 90 // 通知保留天数
 	DefaultNotifyBroadcastPerDay  = 1  // 广播每日上限
@@ -180,10 +181,10 @@ const (
 	AiHintTotalPct = 70
 	AiDebugPct     = 90
 
-	DefaultAiHintPrice1   = 2 // 已退役（上表公式接管），字段保留不读写
-	DefaultAiHintPrice2   = 6 // 已退役
-	DefaultAiDebugPrice   = 8 // 已退役
-	DefaultAiTutorName    = "小玉"
+	DefaultAiHintPrice1 = 2 // 已退役（上表公式接管），字段保留不读写
+	DefaultAiHintPrice2 = 6 // 已退役
+	DefaultAiDebugPrice = 8 // 已退役
+	DefaultAiTutorName  = "小玉"
 )
 
 func downloadLimitPtr(v int) *int { return &v }
@@ -298,8 +299,8 @@ func (s *SystemSettings) normalizeDiscuss() {
 	if s.DiscussReplyIntervalSec == nil || *s.DiscussReplyIntervalSec < 0 {
 		s.DiscussReplyIntervalSec = intPtr(DefaultDiscussReplyInterval)
 	}
-	if s.DiscussNewbieHours == nil || *s.DiscussNewbieHours < 0 {
-		s.DiscussNewbieHours = intPtr(DefaultDiscussNewbieHours)
+	if s.DiscussNewbieDays == nil || *s.DiscussNewbieDays < 0 {
+		s.DiscussNewbieDays = intPtr(DefaultDiscussNewbieDays)
 	}
 	if s.DiscussReportFold == nil || *s.DiscussReportFold < 0 {
 		s.DiscussReportFold = intPtr(DefaultDiscussReportFold)
@@ -398,11 +399,11 @@ func (s *SystemSettings) DiscussReplyIntervalVal() int {
 	return *s.DiscussReplyIntervalSec
 }
 
-func (s *SystemSettings) DiscussNewbieHoursVal() int {
-	if s.DiscussNewbieHours == nil || *s.DiscussNewbieHours < 0 {
-		return DefaultDiscussNewbieHours
+func (s *SystemSettings) DiscussNewbieDaysVal() int {
+	if s.DiscussNewbieDays == nil || *s.DiscussNewbieDays < 0 {
+		return DefaultDiscussNewbieDays
 	}
-	return *s.DiscussNewbieHours
+	return *s.DiscussNewbieDays
 }
 
 func (s *SystemSettings) DiscussReportFoldVal() int64 {
@@ -457,7 +458,7 @@ func (s *SystemSettings) CurrencyNameVal() string {
 var DefaultJadeDiscount = [6]int{95, 90, 85, 80, 75, 70}
 
 // normalizeJadeDiscount 折扣归一：逐档夹取 [10,100]，并保证高等级不高于低等级
-//（违者把高档提到低档值——折扣只能随等级加深）。
+// （违者把高档提到低档值——折扣只能随等级加深）。
 func normalizeJadeDiscount(d [6]int) [6]int {
 	for i := range d {
 		if d[i] < 10 || d[i] > 100 {
@@ -678,7 +679,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"discussCodeThreshold":    s.DiscussCodeThresholdVal(),
 			"discussTopicDailyLimit":  s.DiscussTopicDailyLimitVal(),
 			"discussReplyIntervalSec": s.DiscussReplyIntervalVal(),
-			"discussNewbieHours":      s.DiscussNewbieHoursVal(),
+			"discussNewbieDays":       s.DiscussNewbieDaysVal(),
 			"discussReportFold":       int(s.DiscussReportFoldVal()),
 			"notifyRetentionDays":     s.NotifyRetentionDaysVal(),
 			"notifyBroadcastPerDay":   s.NotifyBroadcastPerDayVal(),
@@ -703,7 +704,10 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"aiTutorName":             s.AiTutorNameVal(),
 			// 资料自改开关（v0.34）：归一后整组覆盖；gradePromoYear 不在此处——晋级逻辑独占
 			"profileEdit": s.ProfileEditCfg(),
-		}},
+		},
+			// v0.48 冷静期单位改天换血：顺手清掉老的小时字段（不存在时 $unset 为空操作）
+			"$unset": bson.M{"discussNewbieHours": ""},
+		},
 	)
 	if err == nil {
 		r.setMu.Lock()

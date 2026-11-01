@@ -279,6 +279,15 @@ func (h *Handlers) contestDiscussGate(c *gin.Context, cid int64) (*discussContes
 	}, true
 }
 
+// discussCreatePermCheck 发讨论贴权限位（v0.48：三区主楼 + 回复通用；root 走 hasPerm 特判恒通）。
+func (h *Handlers) discussCreatePermCheck(c *gin.Context) bool {
+	if hasPerm(c, repo.PermDiscussCreate) {
+		return true
+	}
+	fail(c, http.StatusForbidden, "暂无发讨论贴权限，请联系管理员开通")
+	return false
+}
+
 // discussMuteCheck 禁言检查（命中即 403）。
 func (h *Handlers) discussMuteCheck(c *gin.Context, uid int64) bool {
 	mute, err := h.repo.ActiveDiscussMute(c.Request.Context(), uid)
