@@ -166,12 +166,15 @@ onMounted(() => {
     <el-table v-loading="loading" :data="rows" size="small">
       <el-table-column prop="id" label="题号" width="76" />
       <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+      <!-- persistent=false：收起即销毁下拉 popper——否则每行选项随挂载整树渲染进 DOM
+           （100 行 × 全树 465 选项 = 4.6 万 el-option 实例，生产实测页首要挂 5s） -->
       <el-table-column label="难度" width="108">
         <template #default="{ row }">
           <el-select
             :model-value="draftOf(row as TidyManualProblem).difficulty || undefined"
             placeholder="未设置"
             size="small"
+            :persistent="false"
             @update:model-value="(v?: number) => (draftOf(row as TidyManualProblem).difficulty = v ?? 0)"
           >
             <el-option v-for="d in 10" :key="d" :value="d" :label="`D${d}`" />
@@ -187,6 +190,7 @@ onMounted(() => {
             clearable
             collapse-tags
             collapse-tags-tooltip
+            :persistent="false"
             size="small"
             placeholder="—"
           >
@@ -203,6 +207,7 @@ onMounted(() => {
             clearable
             collapse-tags
             collapse-tags-tooltip
+            :persistent="false"
             size="small"
             placeholder="—"
           >

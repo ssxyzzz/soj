@@ -455,9 +455,11 @@ onUnmounted(stopPoll)
         </el-table-column>
         <el-table-column label="建议（可改判）" width="150">
           <template #default="{ row }">
+            <!-- persistent=false 同 ManualTidyPanel：收起即销毁 popper，别让每行选项随挂载渲染 -->
             <el-select
               :model-value="finalDiff.get(row.pid) ?? row.suggest_difficulty"
               size="small"
+              :persistent="false"
               :disabled="appliedPids.has(row.pid)"
               @update:model-value="(v: number) => finalDiff.set(row.pid, v)"
             >
