@@ -32,6 +32,7 @@ import type {
   BatchImportStatus,
   TidyApplyItem,
   TidyKind,
+  TidyManualProblem,
   TidyStatus,
   UserProfile,
   UserPrefs,
@@ -661,11 +662,25 @@ export const adminApi = {
       .post<ApiResponse<{ started: boolean; kind: TidyKind }>>(
         '/admin/tidy/run', { kind, redo, from, to }, { timeout: 300_000 })
       .then((r) => r.data.data),
-  tidyStatus: () => get<TidyStatus>('/admin/tidy/status'),
+  // 建议快照服务端分页（v0.49 验收期调整）：页面只持有当前页，2s 轮询不再整包搬运
+  tidyStatus: (page = 1, pageSize = 100, onlyConflict = false) =>
+    get<TidyStatus>('/admin/tidy/status', { page, page_size: pageSize, ...(onlyConflict ? { only_conflict: 'true' } : {}) }),
   tidyCancel: () => post<{ cancel_requested: boolean }>('/admin/tidy/cancel'),
   tidyApply: (kind: TidyKind, items: TidyApplyItem[]) =>
     client
       .post<ApiResponse<{ applied: number; failed: number; message: string }>>('/admin/tidy/apply', { kind, items }, { timeout: 120_000 })
+      .then((r) => r.data.data),
+  // 手动整理（v0.49 双模式）：分页题目表（root 视角零排除，difficulty 原始值 0=未设置）
+  // + 最终值批量写库（按字段打 tidiedAt 水位）；写库放宽超时同 tidyApply
+  tidyManualProblems: (page: number, pageSize: number, q?: string) =>
+    get<{ list: TidyManualProblem[]; total: number }>('/admin/tidy/problems', {
+      page,
+      page_size: pageSize,
+      ...(q ? { q } : {}),
+    }),
+  tidyManualApply: (items: TidyApplyItem[]) =>
+    client
+      .post<ApiResponse<{ applied: number; failed: number; message: string }>>('/admin/tidy/manual', { items }, { timeout: 120_000 })
       .then((r) => r.data.data),
 }
 

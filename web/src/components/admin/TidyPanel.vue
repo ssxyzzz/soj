@@ -1,13 +1,33 @@
 <script setup lang="ts">
-// 题库一键整理（v0.43，plan §2.45）：两段式——AI/规则只产建议，root 预览勾选确认后
-// 才批量写库。三类任务共用单任务骨架（run → 2s 轮询 → 差异表 → apply），照 BackupPanel
+// 题库整理（v0.43 两段式；v0.49 拆双模式）：AI 整理 = AI/规则只产建议，root 预览勾选
+// 确认后才批量写库；手动整理 = 分页题目表（每页 100 题）直接手改，见 ManualTidyPanel。
+// 三类任务共用单任务骨架（run → 2s 轮询 → 差异表 → apply），照 BackupPanel
 // 轮询范式（失败计数超限复位按钮，v0.37）。冲突题置顶 + 默认不勾 + 可改判是本面板灵魂：
 // AI 档与通过率档并列展示由 root 拍板（plan 2026-10-31 三拍板）。
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+// v0.49 双模式 + 建议表服务端分页（验收期调整）：页面只持有当前页 ≤100 条建议——
+// 全量快照（2000 题级）整包进 2s 轮询是卡顿根源；勾选为当前页独立语义，翻页即清，
+// 不做跨页保留。suggestion_total/conflict_total 为全量口径（翻页器与冲突计数）。
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
+import ManualTidyPanel from './ManualTidyPanel.vue'
 import type { TidyKind, TidySuggestion, TidyStatus } from '@/types'
+
+// 模式卡（v0.49）：AI整理（建议流）/ 手动整理（直改流）
+const MODE_META = {
+  ai: {
+    label: 'AI整理',
+    desc: 'AI 读题面评估难度、从知识树候选集选知识点、标题规则重挂来源标签——只产建议不写库，预览勾选确认后才应用。',
+  },
+  manual: {
+    label: '手动整理',
+    desc: '分页题目表（每页 100 题）直接手改难度 / 知识点 / 来源标签，保存即写库并计入已整理水位，不经 AI。',
+  },
+} as const
+
+const mode = ref<keyof typeof MODE_META>('ai')
+const PAGE_SIZE = 100
 
 const KIND_META: Record<TidyKind, { label: string; desc: string }> = {
   difficulty: {
@@ -41,8 +61,12 @@ const tableRef = ref()
 
 const running = computed(() => status.value?.state === 'running')
 const done = computed(() => ['done', 'cancelled', 'failed'].includes(status.value?.state ?? ''))
+// 当前页切片（服务端分页后 status.suggestions 只含本页 ≤100 条）
 const suggestions = computed<TidySuggestion[]>(() => status.value?.suggestions ?? [])
-const conflictCount = computed(() => suggestions.value.filter((s) => s.conflict).length)
+const suggestionTotal = computed(() => status.value?.suggestion_total ?? suggestions.value.length)
+const conflictCount = computed(
+  () => status.value?.conflict_total ?? suggestions.value.filter((s) => s.conflict).length,
+)
 const jobKind = computed<TidyKind | null>(() => status.value?.kind ?? null)
 
 // 任务题号范围（快照带出）：单边留空显示开口；全空 = 全库不显示
@@ -53,12 +77,16 @@ const rangeLabel = computed(() => {
   return `题号 ${f || '起'}~${t || '止'}`
 })
 
-// 预览表数据（难度表按「只看冲突」过滤；其余全量）
-const tableRows = computed<TidySuggestion[]>(() => {
-  if (jobKind.value === 'difficulty' && onlyConflict.value) {
-    return suggestions.value.filter((s) => s.conflict)
-  }
-  return suggestions.value
+// 预览表数据 = 服务端当前页切片（only_conflict 过滤也在服务端做，总数口径一致）
+const tableRows = computed<TidySuggestion[]>(() => suggestions.value)
+
+const page = ref(1)
+const pageLabel = computed(() => {
+  const n = suggestionTotal.value
+  if (n <= PAGE_SIZE) return ''
+  const lo = (page.value - 1) * PAGE_SIZE + 1
+  const hi = Math.min(page.value * PAGE_SIZE, n)
+  return ` · 当前第 ${lo}–${hi} 条`
 })
 
 // 勾选默认值（plan 拍板）：难度=未设且非冲突才勾；知识点=有增/移建议才勾；来源=有建议且与现值不同才勾
@@ -86,30 +114,59 @@ function syncSelection(rows: TidySuggestion[]) {
   finalDiff.value = new Map(
     rows.filter((s) => s.kind === 'difficulty').map((s) => [s.pid, s.suggest_difficulty ?? 3]),
   )
+  // toggle 会逐个触发 selection-change → onSelectionChange 用表格部分实况覆盖 selected，
+  // 故循环前快照目标集、toggle 只吃快照常量（活读会让第 2 个起全部失真——实测实锤）
+  const want = new Set(selected.value)
   void nextTick(() => {
     for (const row of rows) {
-      tableRef.value?.toggleRowSelection(row, selected.value.has(row.pid))
+      tableRef.value?.toggleRowSelection(row, want.has(row.pid))
     }
   })
 }
 
+function clearSelection() {
+  selected.value = new Set()
+  void nextTick(() => {
+    for (const row of tableRows.value) {
+      tableRef.value?.toggleRowSelection(row, false)
+    }
+  })
+}
+
+// 按当前 page/onlyConflict 拉取状态快照（服务端切片）
+async function fetchStatus(): Promise<boolean> {
+  try {
+    status.value = await adminApi.tidyStatus(page.value, PAGE_SIZE, onlyConflict.value)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function onSelectionChange(rows: TidySuggestion[]) {
+  // 当前页语义：勾选集 = 本页表格实况（翻页即清，无跨页状态）
   selected.value = new Set(rows.map((r) => r.pid))
 }
 
 function selectAllVisible() {
-  for (const row of tableRows.value) selected.value.add(row.pid)
+  const target = new Set<number>()
+  for (const row of tableRows.value) target.add(row.pid)
+  selected.value = target
   void nextTick(() => {
     for (const row of tableRows.value) tableRef.value?.toggleRowSelection(row, true)
   })
 }
 
 function invertVisible() {
+  // 同 syncSelection 的快照纪律：先算目标集整体赋值，再按 target 常量回放
+  const target = new Set<number>()
   for (const row of tableRows.value) {
-    if (selected.value.has(row.pid)) selected.value.delete(row.pid)
-    else selected.value.add(row.pid)
-    tableRef.value?.toggleRowSelection(row, selected.value.has(row.pid))
+    if (!selected.value.has(row.pid)) target.add(row.pid)
   }
+  selected.value = target
+  void nextTick(() => {
+    for (const row of tableRows.value) tableRef.value?.toggleRowSelection(row, target.has(row.pid))
+  })
 }
 
 const selectedCount = computed(() => selected.value.size)
@@ -130,22 +187,21 @@ function startPoll() {
   stopPoll()
   pollFails.value = 0
   pollTimer = setInterval(async () => {
-    try {
-      status.value = await adminApi.tidyStatus()
-      pollFails.value = 0
-    } catch {
+    const ok = await fetchStatus()
+    if (!ok) {
       if (++pollFails.value >= 5) {
         stopPoll()
         ElMessage.error('整理状态查询持续失败——请刷新页面查看；任务仍在服务器后台执行')
       }
       return
     }
+    pollFails.value = 0
     if (status.value?.state && status.value.state !== 'running') {
       stopPoll()
       if (status.value.state === 'done') {
         // 全被水位排除是断点续整的正常终态（v0.45 验收期用户反馈「像跳过了扫描」）：
         // 有建议才请核对差异表；零建议带排除数时明说原因，别让 root 误判成异常
-        if (suggestions.value.length) {
+        if (suggestionTotal.value > 0) {
           ElMessage.success('整理完成，请核对差异表后勾选应用')
         } else if (status.value.excluded) {
           ElMessage.info(`整理完成：${status.value.excluded} 题均已整理过，默认排除、无新建议`)
@@ -162,6 +218,14 @@ function startPoll() {
   }, 2000)
 }
 
+// 翻页 / 「只看冲突」切换：终态下按新条件拉取对应切片（轮询进行中由轮询自然带新页），
+// 勾选清空重置（当前页独立语义）
+watch([page, onlyConflict], async () => {
+  if (running.value) return
+  const ok = await fetchStatus()
+  if (ok && done.value) clearSelection()
+})
+
 async function runTidy() {
   const f = rangeFrom.value
   const t = rangeTo.value
@@ -171,6 +235,7 @@ async function runTidy() {
   }
   starting.value = true
   appliedPids.value = new Set()
+  page.value = 1
   onlyConflict.value = false
   try {
     await adminApi.tidyRun(kind.value, redo.value, f, t)
@@ -249,14 +314,10 @@ async function discardResults() {
 }
 
 onMounted(async () => {
-  // 进页恢复任务态（刷新后仍在跑/刚完成的任务照常可续）
-  try {
-    status.value = await adminApi.tidyStatus()
-    if (status.value.state === 'running') startPoll()
-    else if (done.value) syncSelection(suggestions.value)
-  } catch {
-    /* 未登录等由拦截器处理 */
-  }
+  // 进页恢复任务态（刷新后仍在跑/刚完成的任务照常可续；建议切片按当前页拉取）
+  const ok = await fetchStatus()
+  if (ok && status.value?.state === 'running') startPoll()
+  else if (ok && done.value) syncSelection(suggestions.value)
 })
 onUnmounted(stopPoll)
 </script>
@@ -265,43 +326,62 @@ onUnmounted(stopPoll)
   <el-card>
     <template #header>
       <div class="head">
-        <span>题库一键整理</span>
+        <span>题库整理</span>
         <el-button v-if="running" type="warning" plain @click="cancelTidy">取消整理</el-button>
         <el-button v-else-if="done" type="primary" plain @click="discardResults">发起新整理</el-button>
       </div>
     </template>
 
-    <!-- 发起区：三类任务卡（任务进行中或已有结果待处置时收起，弃置结果后回到这里） -->
+    <!-- 发起区：模式卡（AI整理 / 手动整理）+ AI 三类任务卡。任务进行中或已有结果待
+         处置时收起（结果属于「当次任务当次处置」，弃置结果后回到这里） -->
     <template v-if="!running && (!status || status.state === 'idle')">
-      <div class="kind-cards">
+      <div class="mode-cards">
         <div
-          v-for="(m, k) in KIND_META"
+          v-for="(m, k) in MODE_META"
           :key="k"
-          class="kind-card"
-          :class="{ on: kind === k }"
+          class="kind-card mode-card"
+          :class="{ on: mode === k }"
           role="button"
           tabindex="0"
-          @click="kind = k"
-          @keydown.enter="kind = k"
+          @click="mode = k"
+          @keydown.enter="mode = k"
         >
           <div class="kc-title">{{ m.label }}</div>
           <div class="kc-desc">{{ m.desc }}</div>
         </div>
       </div>
-      <div class="run-row">
-        <el-button type="primary" :loading="starting" @click="runTidy">
-          开始整理（{{ KIND_META[kind].label }}）
-        </el-button>
-        <el-checkbox v-model="redo">重新整理已整理过的题</el-checkbox>
-        <span class="range-box">
-          <span class="muted">题号</span>
-          <el-input-number v-model="rangeFrom" :min="1" :controls="false" placeholder="起始" class="range-input" />
-          <span class="muted">~</span>
-          <el-input-number v-model="rangeTo" :min="1" :controls="false" placeholder="结束" class="range-input" />
-          <span class="muted">留空 = 全库</span>
-        </span>
-        <span class="muted">默认只整理未整理过的（已应用的自动排除，从后继续）；可指定题号范围只扫部分题；只产建议不写库，勾选确认后才应用。</span>
-      </div>
+      <template v-if="mode === 'ai'">
+        <div class="kind-cards">
+          <div
+            v-for="(m, k) in KIND_META"
+            :key="k"
+            class="kind-card"
+            :class="{ on: kind === k }"
+            role="button"
+            tabindex="0"
+            @click="kind = k"
+            @keydown.enter="kind = k"
+          >
+            <div class="kc-title">{{ m.label }}</div>
+            <div class="kc-desc">{{ m.desc }}</div>
+          </div>
+        </div>
+        <div class="run-row">
+          <el-button type="primary" :loading="starting" @click="runTidy">
+            开始整理（{{ KIND_META[kind].label }}）
+          </el-button>
+          <el-checkbox v-model="redo">重新整理已整理过的题</el-checkbox>
+          <span class="range-box">
+            <span class="muted">题号</span>
+            <el-input-number v-model="rangeFrom" :min="1" :controls="false" placeholder="起始" class="range-input" />
+            <span class="muted">~</span>
+            <el-input-number v-model="rangeTo" :min="1" :controls="false" placeholder="结束" class="range-input" />
+            <span class="muted">留空 = 全库</span>
+          </span>
+          <span class="muted">默认只整理未整理过的（已应用的自动排除，从后继续）；可指定题号范围只扫部分题；只产建议不写库，勾选确认后才应用。</span>
+        </div>
+      </template>
+      <ManualTidyPanel v-else />
     </template>
 
     <!-- 进行中：进度 + 取消 -->
@@ -343,7 +423,7 @@ onUnmounted(stopPoll)
           <el-checkbox v-model="onlyConflict">只看冲突（{{ conflictCount }}，默认不勾待改判）</el-checkbox>
         </template>
         <span class="muted">
-          已勾选 <b>{{ selectedCount }}</b> / {{ tableRows.length }} 题
+          已勾选 <b>{{ selectedCount }}</b> / {{ suggestionTotal }} 题{{ pageLabel }}
           <template v-if="status?.excluded"> · 已排除 {{ status.excluded }} 题整理过的</template>
           <template v-if="appliedPids.size"> · 已应用 {{ appliedPids.size }} 题</template>
           <template v-if="rangeLabel"> · {{ rangeLabel }}</template>
@@ -469,11 +549,23 @@ onUnmounted(stopPoll)
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 100/页分页器（v0.49，服务端分页）：只拉当前页切片，翻页勾选清空（当前页独立语义） -->
+      <div v-if="suggestionTotal > PAGE_SIZE" class="pager-row">
+        <el-pagination
+          background
+          layout="prev, pager, next, total"
+          :total="suggestionTotal"
+          :page-size="PAGE_SIZE"
+          :current-page="page"
+          @current-change="(p: number) => (page = p)"
+        />
+      </div>
     </template>
 
     <!-- 完成但零结果：全被水位排除（断点续整的正常终态，v0.45 验收期用户反馈曾误读为跳过扫描） -->
     <el-alert
-      v-else-if="done && !suggestions.length && status?.excluded"
+      v-else-if="done && !suggestionTotal && status?.excluded"
       type="info"
       :closable="false"
       show-icon
@@ -485,7 +577,7 @@ onUnmounted(stopPoll)
         如需全量重跑：点右上角「发起新整理」→ 勾选「重新整理已整理过的题」→ 重新开始。
       </span>
     </el-alert>
-    <div v-else-if="done && !suggestions.length" class="muted" style="padding: 12px 0">
+    <div v-else-if="done && !suggestionTotal" class="muted" style="padding: 12px 0">
       本次任务没有产出任何建议（{{ status?.error || (rangeLabel ? `${rangeLabel} 内没有待整理的题` : '题库为空，或在产出第一条建议前被取消') }}）。
     </div>
   </el-card>
@@ -502,6 +594,20 @@ onUnmounted(stopPoll)
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
+}
+
+/* 模式卡（v0.49）：AI整理 / 手动整理 两列，嵌在任务卡上方 */
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pager-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
 }
 
 .kind-card {
@@ -588,7 +694,7 @@ onUnmounted(stopPoll)
   color: var(--el-text-color-secondary);
 }
 
-/* 窄屏：任务卡纵排（面板内非整页，≤992px 收为一列） */
+/* 窄屏：任务卡纵排（面板内非整页，≤992px 收为一列；模式卡两列够放不动） */
 @media (max-width: 992px) {
   .kind-cards {
     grid-template-columns: 1fr;

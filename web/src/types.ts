@@ -805,7 +805,7 @@ export interface BackupStatus {
 // 服务端 403 是最终裁决）
 export const BACKUP_DOWNLOAD_LIMIT_BYTES = 32 * 1024 * 1024
 
-// ---------- 题库一键整理（v0.43） ----------
+// ---------- 题库整理（v0.43；v0.49 拆 AI整理/手动整理双模式） ----------
 
 export type TidyKind = 'difficulty' | 'knowledge' | 'meta'
 
@@ -848,7 +848,9 @@ export interface TidyStatus {
   excluded?: number // 水位排除数（已整理/已设难度；redo=false 时）
   from?: number // 题号范围下界（含；0/缺席 = 不限）
   to?: number // 题号范围上界（含；0/缺席 = 不限）
-  suggestions?: TidySuggestion[]
+  suggestions?: TidySuggestion[] // 当前页切片（服务端分页，v0.49 验收期调整）
+  suggestion_total?: number // 过滤后全量条数（翻页器口径；only_conflict 时 = 冲突数）
+  conflict_total?: number // 难度冲突全量计数（「只看冲突」勾选框文案）
   error?: string
   by?: string
   started_at?: string
@@ -860,6 +862,16 @@ export interface TidyApplyItem {
   difficulty?: number
   tags?: number[]
   meta_tags?: number[]
+}
+
+// 手动整理分页题目表行（v0.49，与后端 server/tidy.go TidyManualProblems 对齐）：
+// difficulty 为原始值（0 = 未设置），tags/meta_tags 为双树节点 ID
+export interface TidyManualProblem {
+  id: number
+  title: string
+  difficulty: number
+  tags: number[]
+  meta_tags: number[]
 }
 
 // ---------- 角色与权限位（v0.4.7） ----------

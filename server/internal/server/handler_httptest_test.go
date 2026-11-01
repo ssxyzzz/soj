@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -39,6 +41,7 @@ type fakeRepo struct {
 	jadeBal  map[int64]int64
 
 	metaTreeNodes []repo.TagNode // 题库整理（v0.43）meta 任务：来源树种子（GetMetaTagTree/MatchMetaTags 用）
+	tagTreeNodes  []repo.TagNode // 手动整理（v0.49）：知识树种子（ValidateTagRefs 用）
 
 	// 题库三视角：捕获 server 传给 repo 的过滤契约 + 回放列表
 	lastFilter *repo.ProblemListFilter
@@ -79,7 +82,7 @@ func (f *fakeRepo) HiddenProblemIDs(context.Context) ([]int64, error) {
 	return ids, nil
 }
 
-func (f *fakeRepo) ListProblemsPage(_ context.Context, flt repo.ProblemListFilter, _, _ int) ([]*repo.Problem, int64, error) {
+func (f *fakeRepo) ListProblemsPage(_ context.Context, flt repo.ProblemListFilter, page, pageSize int) ([]*repo.Problem, int64, error) {
 	cp := flt
 	f.lastFilter = &cp
 	excluded := map[int64]bool{}
@@ -94,9 +97,33 @@ func (f *fakeRepo) ListProblemsPage(_ context.Context, flt repo.ProblemListFilte
 		if flt.ExcludeHidden && p.Hidden {
 			continue // v0.38：隐藏题由正向条件排除（与真库 hidden:{$ne:true} 同语义）
 		}
+		// v0.49：q = 题号精确（纯数字）∨ 标题子串，照真库并集口径的简化版
+		if q := strings.TrimSpace(flt.Q); q != "" {
+			hit := strings.Contains(p.Title, q)
+			if n, err := strconv.ParseInt(q, 10, 64); err == nil && n == p.ID {
+				hit = true
+			}
+			if !hit {
+				continue
+			}
+		}
 		out = append(out, p)
 	}
-	return out, int64(len(out)), nil
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID }) // 真库 _id 升序，分页切片前必须有序
+	total := int64(len(out))
+	if page > 0 && pageSize > 0 {
+		lo := (page - 1) * pageSize
+		if lo >= len(out) {
+			out = nil
+		} else {
+			hi := lo + pageSize
+			if hi > len(out) {
+				hi = len(out)
+			}
+			out = out[lo:hi]
+		}
+	}
+	return out, total, nil
 }
 
 func (f *fakeRepo) ListProblemStats(context.Context, []int64) (map[int64]repo.ProblemStat, error) {

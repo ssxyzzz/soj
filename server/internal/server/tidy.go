@@ -1,6 +1,6 @@
 package server
 
-// 题库一键整理（v0.43，plan §2.45）：AI 打标 + 规则归一化。
+// 题库整理（v0.43，plan §2.45；v0.49 拆双模式）：AI 打标 + 规则归一化 + 手动直改。
 // 两段式铁律（2026-10-31 拍板）：整理任务只产**建议**（逐题差异 + 冲突标记），
 // root 在预览表勾选确认后经 TidyApply 走 UpdateProblemMeta 校验链批量写库——
 // 不自动写库、不自动建树节点、不动题面、无定时自动整理（纯 root 手动触发）。
@@ -8,6 +8,11 @@ package server
 //   difficulty = AI 读题面为主 + 通过率启发式交叉验证（档差 ≥2 判冲突，AI 失败按通过率兜底）
 //   knowledge  = AI 从知识树候选集选名（幻觉/歧义/树外名丢弃，不自动建节点）
 //   meta       = 纯规则零 AI（ParseSourceHint + MatchMetaTags 对齐重挂 + 树外孤儿剔除）
+// v0.49 手动模式（root 拍板）：不经 AI 无建议环节——分页题目表（每页 ≤100 题）行内
+// 手改难度/知识点/来源标签，TidyManualApply 收最终值批量写库并按字段对应 kind 打
+// tidiedAt 水位（保存过 = 已整理，AI 整理默认跳过，redo 可重跑）。
+// 建议快照按页下发（v0.49 验收期调整）：status 端点 page/page_size 切片，页面只持有
+// 当前页——全量建议整包进 2s 轮询是 2000 题规模页面卡顿的根源。
 // AI 调用走既有并发闸与 aiCalls 审计（kind=tidy_*，cost=0 管理侧不扣玉；不占学生每日上限——
 // 该上限保护的是学生侧 AI 功能配额，root 批量整理是后台任务）。
 
@@ -103,7 +108,7 @@ func (j *tidyJob) addSuggestion(s TidySuggestion) {
 	j.mu.Unlock()
 }
 
-func (j *tidyJob) snapshot() gin.H {
+func (j *tidyJob) snapshot(page, pageSize int, onlyConflict bool) gin.H {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	out := make([]TidySuggestion, len(j.Suggestions))
@@ -116,10 +121,41 @@ func (j *tidyJob) snapshot() gin.H {
 		}
 		return pa.PID < pb.PID
 	})
+	// 冲突总数与「只看冲突」过滤基于全量建议算好再切页（v0.49 验收期调整：
+	// 快照按页下发——2000 题全量建议整包进 2s 轮询响应是页面卡顿根源，
+	// 页面上只持有当前页 ≤100 条，跨页勾选随之退役）
+	conflictN := 0
+	for i := range out {
+		if out[i].Kind == "difficulty" && out[i].Conflict {
+			conflictN++
+		}
+	}
+	if onlyConflict {
+		flt := make([]TidySuggestion, 0, conflictN)
+		for _, s := range out {
+			if s.Kind == "difficulty" && s.Conflict {
+				flt = append(flt, s)
+			}
+		}
+		out = flt
+	}
+	total := len(out)
+	lo := (page - 1) * pageSize
+	if lo < 0 {
+		lo = 0
+	}
+	if lo > total {
+		lo = total
+	}
+	hi := lo + pageSize
+	if hi > total {
+		hi = total
+	}
 	return gin.H{
 		"state": j.State, "kind": j.Kind, "total": j.Total, "done": j.Done,
 		"excluded": j.Excluded, "from": j.From, "to": j.To,
-		"suggestions": out, "error": j.Err, "by": j.ByName,
+		"suggestions": out[lo:hi], "suggestion_total": total, "conflict_total": conflictN,
+		"error": j.Err, "by": j.ByName,
 		"started_at": j.StartedAt, "ended_at": j.EndedAt,
 	}
 }
@@ -205,7 +241,12 @@ func (h *Handlers) TidyRun(c *gin.Context) {
 }
 
 // TidyStatus GET /api/admin/tidy/status：任务进度与建议结果（无任务 = idle）。
+// 建议按页下发（v0.49 验收期调整，page/page_size 走 queryPage 上限 100）：
+// only_conflict=true 时先全量过滤难度冲突再切页；suggestion_total/conflict_total
+// 为全量口径（翻页器与「只看冲突」计数用），页面只持有当前页切片。
 func (h *Handlers) TidyStatus(c *gin.Context) {
+	page, pageSize := queryPage(c)
+	onlyConflict := c.Query("only_conflict") == "true"
 	h.tidyMu.Lock()
 	job := h.tidyTask
 	h.tidyMu.Unlock()
@@ -213,7 +254,7 @@ func (h *Handlers) TidyStatus(c *gin.Context) {
 		ok(c, gin.H{"state": "idle"})
 		return
 	}
-	ok(c, job.snapshot())
+	ok(c, job.snapshot(page, pageSize, onlyConflict))
 }
 
 // TidyCancel POST /api/admin/tidy/cancel：取消进行中任务（中断在途 AI 调用与后续题）。
@@ -314,6 +355,128 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 	if err := h.repo.MarkTidied(ctx, req.Kind, appliedPIDs); err != nil {
 		ok(c, gin.H{"applied": okN, "failed": failN, "message": msg + "（水位记录失败，下次可能重复建议这些题）"})
 		return
+	}
+	ok(c, gin.H{"applied": okN, "failed": failN, "message": msg})
+}
+
+// TidyManualProblems GET /api/admin/tidy/problems?page=&page_size=100&q=：手动整理分页题目表
+//（v0.49，root 特权视角零排除——隐藏/重复/锁题均在列）。下发原始难度（0 = 未设置，
+// 非 EffDifficulty 的 D3 兜底）与双树标签 ID，编辑控件在前端展开。
+func (h *Handlers) TidyManualProblems(c *gin.Context) {
+	page, pageSize := queryPage(c)
+	filter := repo.ProblemListFilter{Q: strings.TrimSpace(c.Query("q"))}
+	probs, total, err := h.repo.ListProblemsPage(c.Request.Context(), filter, page, pageSize)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题库失败")
+		return
+	}
+	items := make([]gin.H, 0, len(probs))
+	for _, p := range probs {
+		items = append(items, gin.H{
+			"id":         p.ID,
+			"title":      p.Title,
+			"difficulty": p.Difficulty,
+			"tags":       orEmptyInt64(p.Tags),
+			"meta_tags":  orEmptyInt64(p.MetaTags),
+		})
+	}
+	ok(c, gin.H{"list": items, "total": total})
+}
+
+// TidyManualApply POST /api/admin/tidy/manual：手动整理批量写库（root 手改最终值，
+// v0.49）。body {items:[{pid, difficulty?, tags?, meta_tags?}]}——字段 nil = 不动该字段，
+// 非空 = 最终值整体替换（同 TidyApply 语义）；逐题走 UpdateProblemMeta 校验链，
+// 单题失败跳过出报告不中断其余。保存成功按 item 携带的字段打水位
+//（difficulty→difficulty、tags→knowledge、meta_tags→meta）：手动整理过 = 已整理，
+// 下次 AI 整理默认跳过（redo 可重跑）。
+func (h *Handlers) TidyManualApply(c *gin.Context) {
+	var req struct {
+		Items []struct {
+			PID        int64    `json:"pid"`
+			Difficulty *int     `json:"difficulty,omitempty"`
+			Tags       *[]int64 `json:"tags,omitempty"`
+			MetaTags   *[]int64 `json:"meta_tags,omitempty"`
+		} `json:"items"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.Items) == 0 {
+		fail(c, http.StatusBadRequest, "请求不合法：非空 items 必填")
+		return
+	}
+	ctx := c.Request.Context()
+	// 双树引用预校验（照 TidyApply 口径整批 400）：编辑控件吃树 store，树外引用意味着
+	// store 过期（树刚被改），整批拒掉让前端重拉比逐题静默失败更诚实
+	for _, it := range req.Items {
+		if it.Tags != nil {
+			if err := h.repo.ValidateTagRefs(ctx, *it.Tags); err != nil {
+				fail(c, http.StatusBadRequest, fmt.Sprintf("题 #%d 的知识点引用过期（%v），请刷新页面后重试", it.PID, err))
+				return
+			}
+		}
+		if it.MetaTags != nil {
+			if err := h.repo.ValidateMetaTagRefs(ctx, *it.MetaTags); err != nil {
+				fail(c, http.StatusBadRequest, fmt.Sprintf("题 #%d 的来源标签引用过期（%v），请刷新页面后重试", it.PID, err))
+				return
+			}
+		}
+	}
+
+	okN, failN := 0, 0
+	var firstErr string
+	var wmPIDs = map[string][]int64{} // kind → 成功写入的题（按字段对应水位）
+	for _, it := range req.Items {
+		patch := repo.ProblemMetaPatch{}
+		if it.Difficulty != nil {
+			if !repo.ValidDifficulty(*it.Difficulty) {
+				failN++
+				if firstErr == "" {
+					firstErr = fmt.Sprintf("题 #%d 难度值非法", it.PID)
+				}
+				continue
+			}
+			patch.Difficulty = it.Difficulty
+		}
+		if it.Tags != nil {
+			patch.Tags = it.Tags
+		}
+		if it.MetaTags != nil {
+			patch.MetaTags = it.MetaTags
+		}
+		if patch.Empty() {
+			failN++
+			if firstErr == "" {
+				firstErr = fmt.Sprintf("题 #%d 没有需要更新的字段", it.PID)
+			}
+			continue
+		}
+		if err := h.repo.UpdateProblemMeta(ctx, it.PID, patch); err != nil {
+			failN++
+			if firstErr == "" {
+				firstErr = fmt.Sprintf("题 #%d 写库失败: %v", it.PID, err)
+			}
+			continue
+		}
+		okN++
+		if it.Difficulty != nil {
+			wmPIDs["difficulty"] = append(wmPIDs["difficulty"], it.PID)
+		}
+		if it.Tags != nil {
+			wmPIDs["knowledge"] = append(wmPIDs["knowledge"], it.PID)
+		}
+		if it.MetaTags != nil {
+			wmPIDs["meta"] = append(wmPIDs["meta"], it.PID)
+		}
+	}
+	msg := fmt.Sprintf("已保存 %d 题", okN)
+	if failN > 0 {
+		msg += fmt.Sprintf("，失败 %d（%s）", failN, firstErr)
+	}
+	for _, kind := range []string{"difficulty", "knowledge", "meta"} {
+		if pids := wmPIDs[kind]; len(pids) > 0 {
+			if err := h.repo.MarkTidied(ctx, kind, pids); err != nil {
+				msg += "（部分水位记录失败，下次 AI 整理可能重复建议这些题）"
+				break
+			}
+		}
 	}
 	ok(c, gin.H{"applied": okN, "failed": failN, "message": msg})
 }
