@@ -1,16 +1,18 @@
 <script setup lang="ts">
-// 题单编辑器（v0.18.3，plan §2.12）：左树右题双栏——
-// 左：章节树（章/节增删改、上下移与拖拽排序，标题/描述就地编辑）；
-// 右：选中节点的题目列表（ProblemPicker 加题 + 拖拽排序，ProblemPicker 自带）。
-// 单章不混挂（拍板 3）：有子节的章不再收题、有题的章不再加节；保存整体 PATCH，
-// 服务端 ValidateListShape 兜底（深度 ≤2、不混挂、标题 1-32 字、描述 ≤128 字）。
-import { computed, onMounted, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+// 题单编辑器（2026-11-01 重构批，plan 讨论拍板）：
+// 主列 = 题单标题/简介 + 章节大纲（全部章/节平铺：拖拽排序含跨章、标题描述就地编辑、
+// hover 出操作、0 题警示）；右栏 = 题单管理卡（保存/预览/删除/隐藏 + 脏标记）+
+// 章节目录卡（迷你导航，点击滚动定位）。节点题目管理走大弹窗（SectionProblemsDialog：
+// 双栏选题 + 上一节/下一节 + 跨节防重），标题/描述只在大纲就地编辑（只留一处）。
+// 数据模型不动：两层章/节、单章不混挂、整体 PATCH；新增脏标记 + ⌘S + 离开拦截。
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import MdEditor from '@/components/MdEditor.vue'
-import ProblemPicker from '@/components/ProblemPicker.vue'
+import InlineEdit from '@/components/InlineEdit.vue'
 import RailCard from '@/components/RailCard.vue'
+import SectionProblemsDialog from '@/components/SectionProblemsDialog.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
 import { listApi } from '@/api'
 import type { ListDetail, ListEntryDraft } from '@/types'
@@ -23,9 +25,24 @@ const title = ref('')
 const intro = ref('')
 const hidden = ref(false)
 const chs = ref<ListEntryDraft[]>([])
-const selected = ref<string | null>(null) // 'ch:i' | 'sec:i-j'
 const loading = ref(true)
 const saving = ref(false)
+
+// ---- 脏标记：与加载时快照全量比对（结构/标题/简介/隐藏任何变化都算） ----
+const snapshot = ref('')
+
+function takeSnapshot() {
+  snapshot.value = JSON.stringify({ title: title.value, intro: intro.value, hidden: hidden.value, chs: chs.value })
+}
+
+const dirty = computed(() => {
+  return (
+    !!snapshot.value &&
+    JSON.stringify({ title: title.value, intro: intro.value, hidden: hidden.value, chs: chs.value }) !== snapshot.value
+  )
+})
+
+const savedAt = ref('')
 
 function fromDetail(d: ListDetail): ListEntryDraft[] {
   return d.chapters.map((c) => ({
@@ -53,52 +70,53 @@ onMounted(async () => {
     intro.value = d.intro
     hidden.value = !!d.hidden
     chs.value = fromDetail(d)
+    takeSnapshot()
   } finally {
     loading.value = false
   }
+  window.addEventListener('keydown', onKeydown)
 })
 
-// ---- 选中节点 ----
-function secOf(key: string): { ci: number; si: number } | null {
-  const m = /^sec:(\d+)-(\d+)$/.exec(key)
-  return m ? { ci: Number(m[1]), si: Number(m[2]) } : null
-}
-const selectedNode = computed<ListEntryDraft | null>(() => {
-  if (!selected.value) return null
-  if (selected.value.startsWith('ch:')) {
-    const ci = Number(selected.value.slice(3))
-    return chs.value[ci] ?? null
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+
+// ⌘S / Ctrl+S 保存
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 's' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault()
+    if (dirty.value) save()
   }
-  const pos = secOf(selected.value)
-  return pos ? (chs.value[pos.ci]?.children[pos.si] ?? null) : null
-})
-const selectedIsChapter = computed(() => !!selected.value?.startsWith('ch:'))
-// 选中的章有子节时不可收题（单章不混挂）
-const selectedChapterHasChildren = computed(() => {
-  if (!selectedIsChapter.value || !selected.value) return false
-  return (chs.value[Number(selected.value.slice(3))]?.children.length ?? 0) > 0
-})
-
-function select(key: string) {
-  selected.value = key
 }
+
+// 离开拦截：有未保存改动时确认
+onBeforeRouteLeave(async () => {
+  if (!dirty.value) return true
+  try {
+    await ElMessageBox.confirm('有未保存的改动，离开将丢失。确定离开？', '未保存', {
+      type: 'warning',
+      confirmButtonText: '离开',
+      cancelButtonText: '留在本页',
+    })
+    return true
+  } catch {
+    return false
+  }
+})
 
 // ---- 章节操作 ----
 function addChapter() {
   chs.value.push({ title: `第${chs.value.length + 1}章`, desc: '', problems: [], children: [] })
-  select(`ch:${chs.value.length - 1}`)
+  folded.value.delete(chs.value.length - 1)
 }
 
 function addSection(ci: number) {
   const ch = chs.value[ci]
-  if (!ch || ch.problems.length) return // 有直挂题的章不再加节（不混挂）
+  if (!ch) return
+  if (ch.problems.length) {
+    ElMessage.warning('该章已有直挂题目（单章不混挂），不能再加小节')
+    return
+  }
   ch.children.push({ title: `${ci + 1}.${ch.children.length + 1} 小节`, desc: '', problems: [], children: [] })
-  select(`sec:${ci}-${ch.children.length - 1}`)
-}
-
-function nodeStat(n: ListEntryDraft): string {
-  if (n.children.length) return `${n.children.length} 个小节`
-  return `${n.problems.length} 道题`
+  folded.value.delete(ci)
 }
 
 async function removeChapter(ci: number) {
@@ -116,7 +134,6 @@ async function removeChapter(ci: number) {
     return
   }
   chs.value.splice(ci, 1)
-  selected.value = null
 }
 
 async function removeSection(ci: number, si: number) {
@@ -134,60 +151,78 @@ async function removeSection(ci: number, si: number) {
     }
   }
   chs.value[ci].children.splice(si, 1)
-  if (selected.value === `sec:${ci}-${si}`) selected.value = null
 }
 
-function moveChapter(ci: number, dir: -1 | 1) {
-  const j = ci + dir
-  if (j < 0 || j >= chs.value.length) return
-  const next = [...chs.value]
-  ;[next[ci], next[j]] = [next[j], next[ci]]
-  chs.value = next
+// ---- 展开/收起（默认全展开；仅影响展示，拖拽折叠章时其小节随行移动） ----
+const folded = ref(new Set<number>())
+
+function toggleFold(ci: number) {
+  const next = new Set(folded.value)
+  if (next.has(ci)) next.delete(ci)
+  else next.add(ci)
+  folded.value = next
 }
 
-function moveSection(ci: number, si: number, dir: -1 | 1) {
-  const ch = chs.value[ci]
-  const j = si + dir
-  if (!ch || j < 0 || j >= ch.children.length) return
-  const next = [...ch.children]
-  ;[next[si], next[j]] = [next[j], next[si]]
-  ch.children = next
+// ---- 大弹窗：当前管理的节点（'ch:i' | 'sec:i-j'） ----
+const dialogKey = ref<string | null>(null)
+
+function openDialog(key: string) {
+  dialogKey.value = key
 }
 
-// ---- 拖拽排序（章之间 / 章内小节之间） ----
+// ---- 大纲拖拽（章排序 / 小节章内排序与跨章移动，不混挂守卫沿用） ----
 const dragKey = ref<string | null>(null)
+const dropKey = ref<string | null>(null)
+
 function onDragStart(key: string) {
   dragKey.value = key
 }
+
+function onDragEnter(key: string) {
+  if (dragKey.value && dragKey.value !== key) dropKey.value = key
+}
+
+function onDragLeave(key: string) {
+  if (dropKey.value === key) dropKey.value = null
+}
+
 function onDropChapter(ci: number) {
   if (!dragKey.value) return
-  // 小节拖到章节上 = 移入该章（追加到末尾；拍板 4：支持单节跨章）
-  const secPos = secOf(dragKey.value)
-  if (secPos) {
-    moveSectionToChapter(secPos.ci, secPos.si, ci, -1)
+  dropKey.value = null
+  // 小节拖到章节行 = 移入该章（追加到末尾）
+  const m = /^sec:(\d+)-(\d+)$/.exec(dragKey.value)
+  if (m) {
+    moveSectionToChapter(Number(m[1]), Number(m[2]), ci, -1)
     return
   }
   const from = Number(dragKey.value.slice(3))
-  if (from === ci) return
+  if (from === ci) {
+    dragKey.value = null
+    return
+  }
   const next = [...chs.value]
   const [moved] = next.splice(from, 1)
   next.splice(ci, 0, moved)
   chs.value = next
   dragKey.value = null
 }
+
 function onDropSection(ci: number, si: number) {
-  const pos = dragKey.value ? secOf(dragKey.value) : null
-  if (!pos) return // 章节拖到小节上忽略
+  dropKey.value = null
+  const pos = dragKey.value ? (/^sec:(\d+)-(\d+)$/.exec(dragKey.value) ? { ci: Number(RegExp.$1), si: Number(RegExp.$2) } : null) : null
+  if (!pos) {
+    dragKey.value = null
+    return // 章拖到小节上忽略
+  }
   if (pos.ci === ci) {
-    // 章内排序
-    if (pos.si === si) return
-    const ch = chs.value[ci]
-    const next = [...ch.children]
-    const [moved] = next.splice(pos.si, 1)
-    next.splice(si, 0, moved)
-    ch.children = next
+    if (pos.si !== si) {
+      const ch = chs.value[ci]
+      const next = [...ch.children]
+      const [moved] = next.splice(pos.si, 1)
+      next.splice(si, 0, moved)
+      ch.children = next
+    }
   } else {
-    // 跨章：移入目标章该位置（拍板 4）
     moveSectionToChapter(pos.ci, pos.si, ci, si)
   }
   dragKey.value = null
@@ -209,8 +244,55 @@ function moveSectionToChapter(fromCi: number, fromSi: number, toCi: number, targ
   const [moved] = src.children.splice(fromSi, 1)
   if (targetSi < 0) dst.children.push(moved)
   else dst.children.splice(Math.min(targetSi, dst.children.length), 0, moved)
-  selected.value = null
   dragKey.value = null
+}
+
+// ---- 章节目录卡（右栏迷你导航）：点击滚动定位 + 闪烁提示 ----
+interface TocRow {
+  key: string
+  elId: string
+  no: string
+  title: string
+  stat: string
+  zero: boolean
+  depth: 0 | 1
+}
+
+const toc = computed<TocRow[]>(() => {
+  const rows: TocRow[] = []
+  chs.value.forEach((c, ci) => {
+    rows.push({
+      key: `ch:${ci}`,
+      elId: `ol-ch-${ci}`,
+      no: `${ci + 1}`,
+      title: c.title || '未命名',
+      stat: c.children.length ? `${c.children.length} 小节` : `${c.problems.length} 题`,
+      zero: !c.children.length && !c.problems.length,
+      depth: 0,
+    })
+    c.children.forEach((s, si) => {
+      rows.push({
+        key: `sec:${ci}-${si}`,
+        elId: `ol-sec-${ci}-${si}`,
+        no: `${ci + 1}.${si + 1}`,
+        title: s.title || '未命名',
+        stat: `${s.problems.length} 题`,
+        zero: !s.problems.length,
+        depth: 1,
+      })
+    })
+  })
+  return rows
+})
+
+const flashId = ref('')
+
+function tocGo(row: TocRow) {
+  const el = document.getElementById(row.elId)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  flashId.value = row.elId
+  window.setTimeout(() => (flashId.value = ''), 1200)
 }
 
 // ---- 保存 ----
@@ -256,8 +338,9 @@ async function save() {
       return { ...base, problems: c.problems.map((p) => p.id) }
     })
     await listApi.update(id, { title: title.value.trim(), intro: intro.value, hidden: hidden.value, chapters })
+    takeSnapshot()
+    savedAt.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     ElMessage.success('题单已保存')
-    router.push(`/lists/${id}`)
   } finally {
     saving.value = false
   }
@@ -283,159 +366,163 @@ async function removeList() {
   <div class="page" v-loading="loading">
     <div class="page-head">
       <div class="kicker">EDITOR</div>
-      <h1 class="page-title">编辑题单<small>章节最多两层 · 题挂叶子 · 单章不混挂</small></h1>
+      <h1 class="page-title">编辑题单<small>章节最多两层 · 单章不混挂 · 点小节行管理题目</small></h1>
     </div>
 
     <div class="edit-layout">
       <div class="edit-main">
         <div class="card meta-card">
-          <div class="meta-row">
-            <el-input v-model="title" maxlength="64" placeholder="题单名（1-64 字）" class="title-input" />
-          </div>
+          <el-input v-model="title" maxlength="64" placeholder="题单名（1-64 字）" class="title-input" />
           <div class="intro-wrap">
             <div class="fl">简介（Markdown）</div>
             <MdEditor v-model="intro" variant="compact" auto-height height="200px" />
           </div>
         </div>
 
-        <div class="cols">
-      <!-- 左：章节树 -->
-      <div class="card tree-card">
-        <div class="tree-head">
-          <b>章节</b>
-          <el-button size="small" type="primary" plain @click="addChapter">+ 新章节</el-button>
-        </div>
-        <el-empty v-if="!chs.length" description="还没有章节，点右上角新建" :image-size="60" />
-        <div v-else class="tree">
-          <div
-            v-for="(c, ci) in chs"
-            :key="ci"
-            class="node chapter-node"
-            :class="{ on: selected === `ch:${ci}` }"
-            draggable="true"
-            @dragstart="onDragStart(`ch:${ci}`)"
-            @dragover.prevent
-            @drop="onDropChapter(ci)"
-          >
-            <div class="node-row" @click="select(`ch:${ci}`)">
-              <span class="drag">⠿</span>
-              <span class="no mono">{{ ci + 1 }}</span>
-              <el-input
-                :model-value="c.title"
-                maxlength="32"
-                class="node-title"
-                @update:model-value="c.title = $event"
-                @click.stop
-              />
-              <span class="stat">{{ nodeStat(c) }}</span>
-            </div>
-            <div class="node-sub">
-              <el-input
-                :model-value="c.desc"
-                size="small"
-                maxlength="128"
-                placeholder="本章描述（选填，一句以内）"
-                class="node-desc"
-                @update:model-value="c.desc = $event"
-              />
-              <span class="acts" @click.stop>
-                <el-button link size="small" :disabled="ci === 0" @click="moveChapter(ci, -1)">↑</el-button>
-                <el-button link size="small" :disabled="ci === chs.length - 1" @click="moveChapter(ci, 1)">↓</el-button>
-                <el-button
-                  v-if="!c.children.length"
-                  link
-                  size="small"
-                  type="primary"
-                  title="给本章直接挂题（挂题后不能再加小节）"
-                  @click="select(`ch:${ci}`)"
-                >加题</el-button>
-                <el-button
-                  v-if="!c.problems.length"
-                  link
-                  size="small"
-                  type="primary"
-                  title="本章下分小节（加节后不能再直挂题）"
-                  @click="addSection(ci)"
-                >+节</el-button>
-                <el-button link size="small" type="danger" @click="removeChapter(ci)">删</el-button>
-              </span>
-            </div>
-            <!-- 小节层 -->
-            <div
-              v-for="(s, si) in c.children"
-              :key="si"
-              class="node sec-node"
-              :class="{ on: selected === `sec:${ci}-${si}` }"
-              draggable="true"
-              @dragstart="onDragStart(`sec:${ci}-${si}`)"
-              @dragover.prevent
-              @drop="onDropSection(ci, si)"
-            >
-              <div class="node-row" @click="select(`sec:${ci}-${si}`)">
+        <div class="card outline-card">
+          <div class="outline-head">
+            <b>章节</b>
+            <span class="dim">{{ chs.length }} 章</span>
+            <el-button size="small" type="primary" plain @click="addChapter">＋ 新章节</el-button>
+          </div>
+
+          <el-empty v-if="!chs.length" description="还没有章节，先建第一章">
+            <el-button type="primary" @click="addChapter">＋ 新章节</el-button>
+          </el-empty>
+
+          <div v-else class="outline">
+            <template v-for="(c, ci) in chs" :key="ci">
+              <!-- 章行 -->
+              <div
+                :id="`ol-ch-${ci}`"
+                class="ol-row ch-row"
+                :class="{ 'drop-target': dropKey === `ch:${ci}`, flash: flashId === `ol-ch-${ci}` }"
+                draggable="true"
+                @dragstart="onDragStart(`ch:${ci}`)"
+                @dragenter="onDragEnter(`ch:${ci}`)"
+                @dragleave="onDragLeave(`ch:${ci}`)"
+                @dragover.prevent
+                @drop="onDropChapter(ci)"
+                @click="c.children.length ? toggleFold(ci) : openDialog(`ch:${ci}`)"
+              >
                 <span class="drag">⠿</span>
-                <span class="no mono">{{ ci + 1 }}.{{ si + 1 }}</span>
-                <el-input
-                  :model-value="s.title"
+                <span class="fold" @click.stop="toggleFold(ci)">{{ c.children.length ? (folded.has(ci) ? '▸' : '▾') : '' }}</span>
+                <span class="no mono">{{ ci + 1 }}</span>
+                <InlineEdit
+                  :model-value="c.title"
                   maxlength="32"
-                  class="node-title"
-                  @update:model-value="s.title = $event"
-                  @click.stop
+                  variant="title"
+                  placeholder="未命名章节"
+                  class="ol-title"
+                  @update:model-value="c.title = $event"
                 />
-              </div>
-              <div class="node-sub">
-                <el-input
-                  :model-value="s.desc"
-                  size="small"
+                <InlineEdit
+                  :model-value="c.desc"
                   maxlength="128"
-                  placeholder="小节描述（选填）"
-                  class="node-desc"
-                  @update:model-value="s.desc = $event"
+                  variant="desc"
+                  placeholder="本章描述（选填，一句以内）"
+                  class="ol-desc"
+                  @update:model-value="c.desc = $event"
                 />
-                <span class="acts" @click.stop>
-                  <el-button link size="small" :disabled="si === 0" @click="moveSection(ci, si, -1)">↑</el-button>
-                  <el-button link size="small" :disabled="si === c.children.length - 1" @click="moveSection(ci, si, 1)">↓</el-button>
-                  <el-button link size="small" type="danger" @click="removeSection(ci, si)">删</el-button>
+                <span class="ol-stat dim">{{ c.children.length ? `${c.children.length} 小节` : `${c.problems.length} 题` }}</span>
+                <span class="ol-acts" @click.stop>
+                  <el-button v-if="!c.problems.length" link size="small" type="primary" @click="addSection(ci)">＋节</el-button>
+                  <el-button link size="small" type="danger" @click="removeChapter(ci)">删</el-button>
                 </span>
               </div>
-            </div>
+              <!-- 小节行 -->
+              <template v-if="!folded.has(ci)">
+                <div
+                  v-for="(s, si) in c.children"
+                  :id="`ol-sec-${ci}-${si}`"
+                  :key="si"
+                  class="ol-row sec-row"
+                  :class="{ 'drop-target': dropKey === `sec:${ci}-${si}`, flash: flashId === `ol-sec-${ci}-${si}` }"
+                  draggable="true"
+                  @dragstart="onDragStart(`sec:${ci}-${si}`)"
+                  @dragenter="onDragEnter(`sec:${ci}-${si}`)"
+                  @dragleave="onDragLeave(`sec:${ci}-${si}`)"
+                  @dragover.prevent
+                  @drop="onDropSection(ci, si)"
+                  @click="openDialog(`sec:${ci}-${si}`)"
+                >
+                  <span class="drag">⠿</span>
+                  <span class="fold" />
+                  <span class="no mono">{{ ci + 1 }}.{{ si + 1 }}</span>
+                  <InlineEdit
+                    :model-value="s.title"
+                    maxlength="32"
+                    variant="title"
+                    placeholder="未命名小节"
+                    class="ol-title"
+                    @update:model-value="s.title = $event"
+                  />
+                  <InlineEdit
+                    :model-value="s.desc"
+                    maxlength="128"
+                    variant="desc"
+                    placeholder="小节描述（选填）"
+                    class="ol-desc"
+                    @update:model-value="s.desc = $event"
+                  />
+                  <span class="ol-stat dim" :class="{ 'zero-warn': !s.problems.length }">
+                    {{ s.problems.length ? `${s.problems.length} 题` : '0 题' }}
+                  </span>
+                  <span class="ol-acts" @click.stop>
+                    <el-button size="small" @click="openDialog(`sec:${ci}-${si}`)">管理题目 ›</el-button>
+                    <el-button link size="small" type="danger" @click="removeSection(ci, si)">删</el-button>
+                  </span>
+                </div>
+              </template>
+            </template>
           </div>
+
+          <p v-if="chs.length" class="outline-hint dim">⠿ 拖拽排序（小节可跨章移动）· 点标题/描述就地编辑 · 点小节行管理题目</p>
         </div>
       </div>
 
-      <!-- 右：选中节点的题目 -->
-      <div class="card probs-card">
-        <template v-if="selectedNode">
-          <div class="probs-head">
-            <b>{{ selectedIsChapter ? '章' : '小节' }}「{{ selectedNode.title || '未命名' }}」的题目</b>
-            <span class="stat">{{ selectedNode.problems.length }} 题</span>
-          </div>
-          <div v-if="selectedChapterHasChildren" class="mixed-hint">
-            该章已包含小节——单章不混挂，题目请加到小节里。
-          </div>
-          <template v-else>
-            <div v-if="!selectedNode.problems.length" class="empty-hint">还没有题，从下方题库选取加入。</div>
-            <ProblemPicker v-model="selectedNode.problems" />
-            <p class="hint">同题可出现在多个章节（复习章等）；进度按题去重，不会重复计。</p>
-          </template>
-        </template>
-        <el-empty v-else description="在左侧选择章节或小节，在这里管理它的题目" :image-size="70" />
-      </div>
-        </div>
-      </div>
-
-      <!-- 右：管理卡（web-design.md 副列原则①；吸顶随手可存） -->
       <aside class="edit-aside">
         <RailCard ov="管理" title="题单管理" class="aside-card">
           <div class="mgmt-actions">
-            <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+            <el-button type="primary" :loading="saving" @click="save">
+              保存<span v-if="dirty" class="dirty-dot" title="有未保存改动" />
+            </el-button>
             <el-button @click="router.push(`/lists/${id}`)">预览</el-button>
             <el-button type="danger" plain @click="removeList">删除题单</el-button>
+          </div>
+          <div class="save-state">
+            <span v-if="dirty" class="dirty-text">● 有未保存改动（⌘S 保存）</span>
+            <span v-else-if="savedAt" class="dim">已保存 {{ savedAt }}</span>
           </div>
           <div class="aside-divider" />
           <SwitchRow v-model="hidden" label="隐藏题单" tip="隐藏期间学生端不可见（列表与详情），仅你与 root 可见；可用于备题" />
         </RailCard>
+
+        <RailCard v-if="chs.length" ov="导航" title="章节目录" class="aside-card">
+          <div class="toc">
+            <button
+              v-for="row in toc"
+              :key="row.key"
+              type="button"
+              class="toc-row"
+              :class="[`d-${row.depth}`, { 'zero-warn': row.zero }]"
+              @click="tocGo(row)"
+            >
+              <span class="toc-no mono">{{ row.no }}</span>
+              <span class="toc-title">{{ row.title }}</span>
+              <span class="toc-stat">{{ row.stat }}</span>
+            </button>
+          </div>
+        </RailCard>
       </aside>
     </div>
+
+    <SectionProblemsDialog
+      :chs="chs"
+      :node-key="dialogKey"
+      @update:node-key="dialogKey = $event"
+      @close="dialogKey = null"
+    />
   </div>
 </template>
 
@@ -448,26 +535,9 @@ async function removeList() {
   gap: 12px;
 }
 
-.meta-row {
-  display: flex;
-  gap: 10px;
-}
-
-.title-input {
-  max-width: 480px;
-}
-
-.intro-wrap .fl {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--soj-navy, #0b1f45);
-  margin-bottom: 6px;
-}
-
-/* 编辑器总布局：左主列（meta + 双列）/ 右管理卡（吸顶） */
 .edit-layout {
   display: flex;
-  gap: 16px;
+  gap: 20px;
   align-items: flex-start;
 }
 
@@ -477,16 +547,161 @@ async function removeList() {
 }
 
 .edit-aside {
-  flex: 0 0 300px;
-  width: 300px;
+  flex: 0 0 320px;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   position: sticky;
   top: 84px;
 }
 
+@media (max-width: 992px) {
+  .edit-layout {
+    flex-direction: column;
+  }
+
+  .edit-aside {
+    width: auto;
+    flex: 1 1 auto;
+    position: static;
+  }
+}
+
+/* ---- 章节大纲 ---- */
+.outline-card {
+  padding: 16px 20px;
+}
+
+.outline-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.outline-head b {
+  color: var(--soj-navy);
+}
+
+.outline-head .el-button {
+  margin-left: auto;
+}
+
+.ol-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--el-border-radius-base);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.ol-row:hover {
+  background: var(--el-fill-color-light);
+}
+
+.ol-row.drop-target {
+  border-color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.ol-row.flash {
+  animation: ol-flash 1.2s ease;
+}
+
+@keyframes ol-flash {
+  0%,
+  60% {
+    background: var(--el-color-primary-light-8);
+  }
+
+  100% {
+    background: transparent;
+  }
+}
+
+.ol-row.ch-row {
+  background: var(--el-fill-color-lighter);
+}
+
+.ol-row.ch-row:hover {
+  background: var(--el-fill-color-light);
+}
+
+.ol-row.sec-row {
+  margin-left: 34px;
+}
+
+.drag {
+  color: var(--el-text-color-placeholder);
+  cursor: grab;
+  flex: none;
+}
+
+.fold {
+  width: 12px;
+  flex: none;
+  color: var(--el-text-color-secondary);
+  cursor: pointer;
+  text-align: center;
+}
+
+.no {
+  flex: none;
+  width: 34px;
+  color: var(--el-text-color-secondary);
+  font-size: var(--soj-fs-13);
+}
+
+.ol-title {
+  flex: 0 1 auto;
+  min-width: 120px;
+  max-width: 45%;
+}
+
+.ol-desc {
+  flex: 1 1 120px;
+  min-width: 60px;
+}
+
+.ol-stat {
+  flex: none;
+  font-size: var(--soj-fs-13);
+}
+
+.zero-warn {
+  color: var(--el-color-warning);
+}
+
+.ol-acts {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.ol-row:hover .ol-acts {
+  opacity: 1;
+}
+
+.ol-acts .el-button + .el-button {
+  margin-left: 8px;
+}
+
+.outline-hint {
+  margin: 12px 2px 0;
+  font-size: var(--soj-fs-13);
+}
+
+/* ---- 右栏 ---- */
 .mgmt-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .mgmt-actions .el-button {
@@ -494,156 +709,81 @@ async function removeList() {
   margin-left: 0;
 }
 
+.save-state {
+  min-height: 18px;
+  margin-top: 8px;
+  font-size: var(--soj-fs-13);
+  text-align: center;
+}
+
+.dirty-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.dirty-text {
+  color: var(--el-color-warning);
+}
+
 .aside-divider {
   height: 1px;
-  background: var(--soj-line, #e3eaf6);
-  margin: 14px 0;
+  background: var(--soj-line);
+  margin: 12px 0;
 }
 
-.cols {
-  /* 章节 : 题目 = 1:1（2026-10-26 用户拍板）；minmax(0,·) 锁轨道——
-     否则 ProblemPicker 的 min-content（标签横滚行等）会把 1fr 撑出容器 */
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.tree-card,
-.probs-card {
-  min-width: 0;
-}
-
-.tree-card,
-.probs-card {
-  padding: 16px 18px;
-  min-height: 320px;
-}
-
-.tree-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.tree-head b {
-  font-size: 15px;
-  color: var(--soj-navy, #0b1f45);
-}
-
-.tree {
+/* 章节目录（迷你导航） */
+.toc {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
+  max-height: 420px;
+  overflow-y: auto;
 }
 
-.node {
-  border: 1px solid var(--soj-line, #e3eaf6);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: #fff;
-}
-
-.node.on {
-  border-color: var(--soj-blue);
-  box-shadow: 0 0 0 2px rgb(var(--soj-blue-hi-rgb) / 0.12);
-}
-
-.sec-node {
-  margin: 6px 0 2px 26px;
-  background: #fafcff;
-}
-
-.node-row {
+.toc-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: var(--el-border-radius-base);
   cursor: pointer;
-}
-
-.drag {
-  cursor: grab;
-  color: #b6c2d6;
-  user-select: none;
-}
-
-.no {
-  flex: none;
-  min-width: 30px;
-  font-weight: 700;
-  color: var(--soj-blue);
-  font-size: 13px;
-}
-
-.node-title {
-  flex: 1 1 auto;
+  font-size: var(--soj-fs-13);
   min-width: 0;
 }
 
-/* 第二行：描述占满 + 操作簇靠右 */
-.node-sub {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
+.toc-row:hover {
+  background: var(--el-fill-color-light);
 }
 
-.node-sub .node-desc {
-  flex: 1 1 auto;
+.toc-row.d-1 {
+  margin-left: 18px;
+}
+
+.toc-no {
+  flex: none;
+  color: var(--el-text-color-secondary);
+  width: 34px;
+}
+
+.toc-title {
+  flex: 1;
   min-width: 0;
-  margin: 0;
-  width: auto;
-}
-
-.node-sub .acts {
-  flex: none;
-}
-
-.stat {
-  flex: none;
-  font-size: 13px;
-  color: var(--soj-ink-3, #5b6b85);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--soj-ink);
 }
 
-.acts {
+.toc-stat {
   flex: none;
-  display: inline-flex;
-}
-
-.acts .el-button + .el-button {
-  margin-left: 2px;
-}
-
-.probs-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-
-.probs-head b {
-  font-size: 15px;
-  color: var(--soj-navy, #0b1f45);
-}
-
-.mixed-hint,
-.empty-hint {
-  font-size: 13px;
-  color: var(--soj-ink-3, #5b6b85);
-  padding: 12px 0;
-}
-
-.hint {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
-}
-
-@media (max-width: 1100px) {
-  .cols {
-    grid-template-columns: 1fr;
-  }
+  color: var(--el-text-color-placeholder);
 }
 </style>

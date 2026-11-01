@@ -9,3 +9,5 @@
 // 否则构建会以「本模块未导出该名字」显式报错，不会静默回退到全量包。
 export { ElMessage } from 'element-plus/es/components/message/index.mjs'
 export { ElMessageBox } from 'element-plus/es/components/message-box/index.mjs'
+// 改题单删题撤销 toast（render 函数 h() 内用，模板解析不到全局注册）
+export { ElButton } from 'element-plus/es/components/button/index.mjs'
