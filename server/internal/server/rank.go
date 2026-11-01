@@ -80,16 +80,19 @@ func (rc *rankCache) refresh(ctx context.Context) ([]gin.H, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 等级（v0.11）：一次聚合批算全榜各难度 AC 数再定级；失败降级为不带 level 字段
+	// 等级（v0.11）：一次聚合批算全榜各难度 AC 数再定级；失败降级为不带 level 字段。
+	// xp 同批落条目（等级榜同级排名的副键）；仅计入有 AC 历史的用户（与 level 同进出）
 	levels := map[int64]int{}
+	xps := map[int64]int64{}
 	uids := make([]int64, 0, len(rows))
 	for _, r := range rows {
 		uids = append(uids, r.UID)
 	}
 	if cfg, counts, adjs, ok := levelAgg(ctx, rc.repo, uids); ok {
 		for uid, c := range counts {
-			lv, _, _, _, _ := repo.LevelProgress(cfg, c, adjs[uid])
+			lv, xp, _, _, _ := repo.LevelProgress(cfg, c, adjs[uid])
 			levels[uid] = lv
+			xps[uid] = xp
 		}
 	}
 	items := make([]gin.H, 0, len(rows))
@@ -107,6 +110,7 @@ func (rc *rankCache) refresh(ctx context.Context) ([]gin.H, error) {
 		}
 		if lv := levels[r.UID]; lv > 0 {
 			item["level"] = lv
+			item["xp"] = xps[r.UID]
 		}
 		items = append(items, item)
 	}
@@ -116,10 +120,44 @@ func (rc *rankCache) refresh(ctx context.Context) ([]gin.H, error) {
 	return items, nil
 }
 
+// levelBoardSorted 等级榜重排并重排名次（名次号与排序严格一致——客户端重排会让名次乱序）：
+// 等级 desc → 经验 desc（同等级比经验累计，含难度加权与 xpAdjust）→ uid asc 兜底确定性。
+// 深拷贝条目再重排——gin.H 是引用，直接改 rank 会污染共享缓存
+//（刷题榜名次被改写成等级序，v0.41 验收实弹抓出）。
+func levelBoardSorted(all []gin.H) []gin.H {
+	sorted := make([]gin.H, len(all))
+	for i, it := range all {
+		cp := gin.H{}
+		for k, v := range it {
+			cp[k] = v
+		}
+		sorted[i] = cp
+	}
+	sort.SliceStable(sorted, func(i, j int) bool {
+		li, _ := sorted[i]["level"].(int)
+		lj, _ := sorted[j]["level"].(int)
+		if li != lj {
+			return li > lj
+		}
+		xi, _ := sorted[i]["xp"].(int64)
+		xj, _ := sorted[j]["xp"].(int64)
+		if xi != xj {
+			return xi > xj
+		}
+		ui, _ := sorted[i]["user_id"].(int64)
+		uj, _ := sorted[j]["user_id"].(int64)
+		return ui < uj
+	})
+	for i := range sorted {
+		sorted[i]["rank"] = i + 1
+	}
+	return sorted
+}
+
 // Rank 排行榜（分页榜单：每页 rankPageSize 名 + 观察者位次，榜单 30s 缓存）。
 // me = 观察者自己的条目（含榜外名次），前端置顶展示——「方便查看自己」。
-// type=level（v0.41 多榜）：按等级 desc + 解题 desc 重排并重排名次（名次号与排序
-// 严格一致——客户端重排会让名次乱序）；缺省 = 刷题榜（按解题数，v0.11 以来口径）。
+// type=level（v0.41 多榜）：等级榜重排（口径见 levelBoardSorted）；
+// 缺省 = 刷题榜（按解题数，v0.11 以来口径）。
 func (h *Handlers) Rank(c *gin.Context) {
 	all := h.rank.get(c.Request.Context())
 	if all == nil {
@@ -127,35 +165,7 @@ func (h *Handlers) Rank(c *gin.Context) {
 		return
 	}
 	if c.Query("type") == "level" {
-		// 深拷贝条目再重排——gin.H 是引用，直接改 rank 会污染共享缓存
-		//（刷题榜名次被改写成等级序，v0.41 验收实弹抓出）
-		sorted := make([]gin.H, len(all))
-		for i, it := range all {
-			cp := gin.H{}
-			for k, v := range it {
-				cp[k] = v
-			}
-			sorted[i] = cp
-		}
-		sort.SliceStable(sorted, func(i, j int) bool {
-			li, _ := sorted[i]["level"].(int)
-			lj, _ := sorted[j]["level"].(int)
-			if li != lj {
-				return li > lj
-			}
-			si, _ := sorted[i]["solved"].(int)
-			sj, _ := sorted[j]["solved"].(int)
-			if si != sj {
-				return si > sj
-			}
-			ui, _ := sorted[i]["user_id"].(int64)
-			uj, _ := sorted[j]["user_id"].(int64)
-			return ui < uj
-		})
-		for i := range sorted {
-			sorted[i]["rank"] = i + 1
-		}
-		all = sorted
+		all = levelBoardSorted(all)
 	}
 	page, _ := strconv.Atoi(c.Query("page"))
 	if page < 1 {
@@ -180,8 +190,11 @@ func (h *Handlers) Rank(c *gin.Context) {
 			}
 		}
 		if me == nil && c.Query("type") == "level" {
-			// 等级榜榜外观察者：等级位次 = 等级/解题都比我高的人数 +1
-			myLv := h.userLevelFresh(c, uid)
+			// 等级榜榜外观察者：位次 = (等级, 经验) 字典序都比我高的人数 +1（与榜内排序同口径）
+			myLv, myXp := 1, int64(0)
+			if cfg, counts, adjs, ok := levelAgg(c.Request.Context(), h.repo, []int64{uid}); ok {
+				myLv, myXp, _, _, _ = repo.LevelProgress(cfg, counts[uid], adjs[uid])
+			}
 			mySolved := int64(0)
 			if _, solved, err := h.repo.RankMe(c.Request.Context(), uid); err == nil {
 				mySolved = solved
@@ -189,12 +202,12 @@ func (h *Handlers) Rank(c *gin.Context) {
 			above := 0
 			for _, it := range all {
 				lv, _ := it["level"].(int)
-				sv, _ := it["solved"].(int)
-				if lv > myLv || (lv == myLv && int64(sv) > mySolved) {
+				xv, _ := it["xp"].(int64)
+				if lv > myLv || (lv == myLv && xv > myXp) {
 					above++
 				}
 			}
-			me = gin.H{"rank": above + 1, "user_id": uid, "solved": mySolved, "level": myLv}
+			me = gin.H{"rank": above + 1, "user_id": uid, "solved": mySolved, "level": myLv, "xp": myXp}
 			if u, err := h.repo.GetUserByID(c.Request.Context(), uid); err == nil {
 				uname, nick := u.Username, u.Nickname
 				if uname == "" {

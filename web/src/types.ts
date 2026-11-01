@@ -310,6 +310,7 @@ export interface RankItem {
   nickname: string
   solved: number
   level?: number // 学生等级 1–10（v0.11；聚合失败省略）
+  xp?: number // 经验累计（等级榜同级排序副键，随接口下发但不展示；有 AC 历史才有）
 }
 
 // 选人筛选用账号条目（GET /users/lookup；提交记录/所有代码的「选手」下拉）
