@@ -263,7 +263,7 @@ onMounted(() => {
       <!-- 题目表：T1 / 状态 / 题目 / 标签 / 通过率 -->
       <el-card class="block">
         <template #header><span>作业题目（{{ problemTotal }}）</span></template>
-        <el-table v-if="problemTotal" stripe :data="assignment.problems">
+        <el-table v-if="problemTotal" stripe :data="assignment.problems" style="cursor: pointer" @row-click="(row: AssignmentProblem) => problemRoute(row)">
           <el-table-column label="题号" width="80">
             <template #default="{ $index }">T{{ $index + 1 }}</template>
           </el-table-column>
@@ -279,7 +279,8 @@ onMounted(() => {
           </el-table-column>
           <el-table-column label="题目" min-width="260">
             <template #default="{ row }">
-              <span class="tlink" @click="problemRoute(row as AssignmentProblem)">{{ row.title }}</span>
+              <!-- 整行可点跳题（2026-11-01 对齐题库交互）：标题只留链接样式，点击落行事件 -->
+              <span class="tlink">{{ row.title }}</span>
             </template>
           </el-table-column>
           <!-- 难度（2026-10-27）：TierBadge 与题库难度列同款（锁题隐藏期随行隐藏信息口径，不给难度也无妨——服务端已下发） -->

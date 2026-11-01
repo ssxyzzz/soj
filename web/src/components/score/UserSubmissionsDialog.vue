@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { fmtMem, fmtRel, fmtSec } from '@/utils/format'
 import SubStatus from '@/components/SubStatus.vue'
+import CodePane from '@/components/CodePane.vue'
 import type { Submission } from '@/types'
 
 withDefaults(
@@ -29,11 +30,15 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
       <el-table-column type="expand">
         <template #default="{ row }">
           <div class="user-subs-detail">
-            <pre v-if="row.code" class="mono sub-code">{{ row.code }}</pre>
+            <template v-if="row.code">
+              <div class="detail-sub">代码</div>
+              <CodePane class="sub-code" :code="row.code" :language="row.language" />
+            </template>
+            <!-- 有测试点明细时错误原因已在明细列展示，仅无明细时独立成行兜底（如编译错误） -->
             <el-table
               v-if="row.detail?.length || row.error_info"
               stripe
-              :data="[...(row.detail ?? []), ...(row.error_info ? [{ msg: row.error_info }] : [])]"
+              :data="row.detail?.length ? row.detail : [{ msg: row.error_info }]"
               size="small"
               border
             >
@@ -81,6 +86,13 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 <style scoped>
 .user-subs-detail {
   padding: 8px 20px 16px;
+}
+
+/* 「代码」小节标题（AllCodesDialog 详情同款） */
+.detail-sub {
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-navy);
+  margin-bottom: 8px;
 }
 
 .user-subs-detail .sub-code {

@@ -107,7 +107,11 @@ func TestFileIOKeyword(t *testing.T) {
 		{"ifstream cin(\"a.in\");", "ifstream"},
 		{"#include <fstream>", "fstream"},
 		{"int main(){ std::cin >> s; }", ""},
-		{"// 注释里提到 freopen 也算命中", "freopen"},
+		// 2026-11-01 用户反馈：freopen 注释掉是普通答案错误，不得报「检测到文件操作」
+		{"// freopen(\"problem.in\", \"r\", stdin);", ""},
+		{"/* fopen(\"a.in\", \"r\"); */", ""},
+		{"// 注释里提到 freopen 也不算命中", ""},
+		{"string s = \"freopen in comment\"; freopen(\"a.in\",\"r\",stdin);", "freopen"},
 	}
 	for _, c := range cases {
 		if got := fileIOKeyword(c.code); got != c.want {

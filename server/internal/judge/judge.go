@@ -795,14 +795,69 @@ func waFileIOHint(code string, fio fileIOParams) string {
 // fileIOKeyword 扫描源码中的文件操作痕迹（freopen/fopen/fstream 家族，大小写不敏感）。
 // 仅在 stdio 判题（题库/练习恒 stdio、场次未开启文件 IO）的 WA 提示里引用：
 // freopen 打不开配置文件会静默失败，表现恰好是读空输入、输出为空。空串 = 未检出。
+// 扫描前剥掉行/块注释（2026-11-01 用户反馈：freopen 注释掉仍误报「检测到文件
+// 操作」，实则就是普通答案错误）；字符串/字符字面量原样保留不参与剥离。
 func fileIOKeyword(code string) string {
-	lc := strings.ToLower(code)
+	lc := strings.ToLower(stripComments(code))
 	for _, kw := range []string{"freopen", "fopen", "ifstream", "ofstream", "fstream"} {
 		if strings.Contains(lc, kw) {
 			return kw
 		}
 	}
 	return ""
+}
+
+// stripComments 剥掉 C 家族源码的行注释（//…）与块注释（/*…*/），返回裸代码。
+// 字符串/字符字面量整体原样拷贝（含转义），字面量内的注释符不当作注释；
+// 块注释未闭合吞到文末。仅服务于 WA 提示的痕迹扫描（启发式，非编译前端）：
+// C++ 原始字符串 R"(...)" 内含注释符的极端写法不保证，误判代价只是一条提示文案。
+func stripComments(code string) string {
+	var b strings.Builder
+	b.Grow(len(code))
+	n := len(code)
+	copyLiteral := func(i int, quote byte) int {
+		// 从 i（引号处）原样拷贝到闭引号（含），返回新下标；未闭合吞到文末
+		b.WriteByte(quote)
+		i++
+		for i < n {
+			if code[i] == '\\' && i+1 < n {
+				b.WriteByte(code[i])
+				b.WriteByte(code[i+1])
+				i += 2
+				continue
+			}
+			b.WriteByte(code[i])
+			if code[i] == quote {
+				return i + 1
+			}
+			i++
+		}
+		return i
+	}
+	for i := 0; i < n; {
+		switch {
+		case code[i] == '/' && i+1 < n && code[i+1] == '/':
+			for i < n && code[i] != '\n' { // 行注释：吞到行尾（\n 留给原文结构）
+				i++
+			}
+		case code[i] == '/' && i+1 < n && code[i+1] == '*':
+			i += 2
+			for i+1 < n && !(code[i] == '*' && code[i+1] == '/') { // 块注释：吞到 */
+				i++
+			}
+			if i+1 < n {
+				i += 2
+			} else {
+				i = n
+			}
+		case code[i] == '"' || code[i] == '\'':
+			i = copyLiteral(i, code[i])
+		default:
+			b.WriteByte(code[i])
+			i++
+		}
+	}
+	return b.String()
 }
 
 func truncate(s string, n int) string {
