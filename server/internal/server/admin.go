@@ -364,7 +364,6 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"discuss_problem_enabled":    s.DiscussProblemOpen(),
 		"discuss_contest_enabled":    s.DiscussContestOpen(),
 		"discuss_global_locked":      s.DiscussGlobalLocked,
-		"discuss_code_threshold":     s.DiscussCodeThresholdVal(),
 		"discuss_topic_daily_limit":  s.DiscussTopicDailyLimitVal(),
 		"discuss_reply_interval_sec": s.DiscussReplyIntervalVal(),
 		"discuss_newbie_days":        s.DiscussNewbieDaysVal(),
@@ -435,7 +434,7 @@ func (h *Handlers) GetNotice(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取公告失败")
 		return
 	}
-	ok(c, gin.H{"content": s.HomeNotice})
+	ok(c, gin.H{"content": s.HomeNotice, "html": s.HomeNoticeHtml})
 }
 
 // UpdateSettings 更新系统设置（公告收 Markdown）。
@@ -463,7 +462,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		DiscussProblemEnabled   *bool `json:"discuss_problem_enabled"`
 		DiscussContestEnabled   *bool `json:"discuss_contest_enabled"`
 		DiscussGlobalLocked     *bool `json:"discuss_global_locked"`
-		DiscussCodeThreshold    *int  `json:"discuss_code_threshold"`
 		DiscussTopicDailyLimit  *int  `json:"discuss_topic_daily_limit"`
 		DiscussReplyIntervalSec *int  `json:"discuss_reply_interval_sec"`
 		DiscussNewbieDays       *int  `json:"discuss_newbie_days"`
@@ -623,13 +621,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	}
 	if req.DiscussGlobalLocked != nil {
 		s.DiscussGlobalLocked = *req.DiscussGlobalLocked
-	}
-	if req.DiscussCodeThreshold != nil {
-		if *req.DiscussCodeThreshold < 0 || *req.DiscussCodeThreshold > 100 {
-			fail(c, http.StatusBadRequest, "讨论代码门槛需在 0-100 之间（0 = 不隐藏代码）")
-			return
-		}
-		s.DiscussCodeThreshold = req.DiscussCodeThreshold
 	}
 	if req.DiscussTopicDailyLimit != nil {
 		if *req.DiscussTopicDailyLimit < 0 || *req.DiscussTopicDailyLimit > 100 {

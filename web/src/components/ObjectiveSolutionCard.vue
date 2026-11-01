@@ -31,6 +31,7 @@ const rows = computed(() =>
       score: q.score ?? 0,
       text,
       explanation: q.explanation ?? '',
+      explanationHtml: q.explanation_html ?? '',
     }
   }),
 )
@@ -49,7 +50,7 @@ const rows = computed(() =>
         <span class="dim">{{ r.score }} 分</span>
         <span class="sol-answer">参考答案：{{ r.text || '—' }}</span>
       </div>
-      <MdView v-if="r.explanation" :content="r.explanation" />
+      <MdView v-if="r.explanation" :html="r.explanationHtml" />
     </div>
   </el-card>
 </template>

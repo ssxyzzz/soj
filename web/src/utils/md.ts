@@ -12,11 +12,9 @@ export function contentBytes(s: string): number {
 }
 
 // ---- 代码块复制按钮（站内自建 md-copy-btn） ----
-// Vditor 自带的复制按钮（.vditor-copy，绝对定位 + tooltip）与站内胶囊样式反复冲突，
-// 干脆整个隐藏，在 pre 上挂自建按钮：淡蓝胶囊（图标+「复制」），点击复制后换
-// 「已复制」、变淡绿并弹站内 toast（ElMessage 顶部提示），3 秒恢复。
-// 代码块由编辑器动态渲染，MutationObserver（rAF 去抖）补挂新 pre；编辑态的
-// pre（vditor-wysiwyg__pre）与图示/公式类代码块不挂按钮。
+// 在 pre 上挂自建按钮：淡蓝胶囊（图标+「复制」），点击复制后换「已复制」、变淡绿
+// 并弹站内 toast（ElMessage 顶部提示），3 秒恢复。代码块由查看端/预览动态渲染，
+// MutationObserver（rAF 去抖）补挂新 pre；图示/公式类代码块不挂按钮。
 
 import { ElMessage } from 'element-plus'
 
@@ -36,8 +34,6 @@ function injectCopyButtons(root: HTMLElement) {
     if (noCopyLangs.test(code.className)) return
     // 样例格（.md-io）的 pre 不挂胶囊按钮：复制入口在格头「复制」文字按钮（pairIOSamples 创建）
     if (pre.closest('.md-io')) return
-    // wysiwyg 编辑态的 pre 由编辑器管理，插入按钮会污染文档模型（预览面板的 pre 不受影响）
-    if (pre.classList.contains('vditor-wysiwyg__pre')) return
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'md-copy-btn'
@@ -73,9 +69,8 @@ async function copyText(text: string): Promise<boolean> {
 // 成对优先：紧邻同号 inputN/outputN 配成两列；落单的编号围栏（只有一侧/错号/隔内容）
 // 也生成单列单卡（.md-io-single），格头同为「样例输入 #N/样例输出 #N」（2026-10-25）。
 // 只认带编号的围栏：无编号 input/output、「输入：」+裸围栏等写法一律不碰（普通代码块竖排）。
-// 与复制按钮同一套渲染后 DOM 增强管道（观察者 rAF 去抖里跑）：查看端（Vditor.preview 给
-// el 本身加 .vditor-reset）与编辑端 sv 分屏预览（内容根同为 .vditor-reset）都生效；
-// wysiwyg/ir 编辑面不动 DOM（插节点会污染编辑器文档模型，与复制按钮跳过 wysiwyg 同理）。
+// 与复制按钮同一套渲染后 DOM 增强管道（观察者 rAF 去抖里跑）：查看端与编辑器分屏
+// 预览（MdViewInner，内容根 .vditor-reset——lute 输出 DOM 的类名契约）都生效。
 
 const IO_FENCE_RE = /\blanguage-(input|output)(\d+)\b/
 
@@ -108,7 +103,6 @@ export function pairIOSamples(root: HTMLElement) {
     const pre = code.parentElement
     if (!pre) return
     if (pre.closest('.md-io')) return // 已成卡（幂等：观察者会因节点移动再次触发）
-    if (pre.closest('.vditor-wysiwyg, .vditor-ir')) return // 编辑面不碰
     if (!pre.parentElement?.classList.contains('vditor-reset')) return
     const info = ioFenceInfo(code)
     if (!info) return

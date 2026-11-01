@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"soj/internal/ai"
+	"soj/internal/mdrender"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -21,6 +22,7 @@ type AiHint struct {
 	PID         int64     `bson:"pid"`
 	Level       int       `bson:"level"`
 	Content     string    `bson:"content"`
+	ContentHtml string    `bson:"contentHtml,omitempty"` // 写入时渲染缓存（v0.53 渲染收口）
 	Tokens      int       `bson:"tokens,omitempty"`
 	PromptChars int       `bson:"promptChars,omitempty"`
 	At          time.Time `bson:"at"`
@@ -28,12 +30,13 @@ type AiHint struct {
 
 // AiDebugResult 一次找 bug 分析的落档。
 type AiDebugResult struct {
-	ID        int64     `bson:"_id"`
-	UID       int64     `bson:"uid"`
-	SID       int64     `bson:"sid"`
-	PID       int64     `bson:"pid"`
-	Content   string    `bson:"content"`
-	CreatedAt time.Time `bson:"createdAt"`
+	ID          int64     `bson:"_id"`
+	UID         int64     `bson:"uid"`
+	SID         int64     `bson:"sid"`
+	PID         int64     `bson:"pid"`
+	Content     string    `bson:"content"`
+	ContentHtml string    `bson:"contentHtml,omitempty"` // 写入时渲染缓存（v0.53）
+	CreatedAt   time.Time `bson:"createdAt"`
 }
 
 // EnsureAiHintIndexes（Bootstrap）：aiHints {pid, level} 唯一；debug 结果 {uid, _id}。
@@ -82,7 +85,7 @@ func (r *Repo) EnsureAiHint(ctx context.Context, p *Problem, level int, gen func
 	if err != nil {
 		return nil, err
 	}
-	h := &AiHint{ID: id, PID: p.ID, Level: level, Content: resp.Content, Tokens: resp.TotalTokens, PromptChars: resp.PromptChars, At: time.Now()}
+	h := &AiHint{ID: id, PID: p.ID, Level: level, Content: resp.Content, ContentHtml: mdrender.Render(resp.Content), Tokens: resp.TotalTokens, PromptChars: resp.PromptChars, At: time.Now()}
 	_, err = r.db.Collection("aiHints").InsertOne(ctx, h)
 	if mongo.IsDuplicateKeyError(err) {
 		return r.GetAiHint(ctx, p.ID, level) // 并发赢家已生成
@@ -119,7 +122,7 @@ func (r *Repo) SaveAiDebugResult(ctx context.Context, uid, sid, pid int64, conte
 		return err
 	}
 	_, err = r.db.Collection("aiDebugResults").InsertOne(ctx, &AiDebugResult{
-		ID: id, UID: uid, SID: sid, PID: pid, Content: content, CreatedAt: time.Now(),
+		ID: id, UID: uid, SID: sid, PID: pid, Content: content, ContentHtml: mdrender.Render(content), CreatedAt: time.Now(),
 	})
 	return err
 }
@@ -128,18 +131,19 @@ func (r *Repo) SaveAiDebugResult(ctx context.Context, uid, sid, pid int64, conte
 // 每次另计费并覆盖自己这份；解锁记录（一次性买断查看权）不变。共享缓存 aiHints
 // 仍服务「首份内容的全班复用」，个人档是各自重算后的私人版本。
 type AiHintResult struct {
-	UID     int64     `bson:"uid"`
-	PID     int64     `bson:"pid"`
-	Level   int       `bson:"level"`
-	Content string    `bson:"content"`
-	At      time.Time `bson:"at"`
+	UID         int64     `bson:"uid"`
+	PID         int64     `bson:"pid"`
+	Level       int       `bson:"level"`
+	Content     string    `bson:"content"`
+	ContentHtml string    `bson:"contentHtml,omitempty"` // 写入时渲染缓存（v0.53）
+	At          time.Time `bson:"at"`
 }
 
 // SaveAiHintResult 覆盖保存本人该级最新结果（upsert；唯一索引 {uid,pid,level} 并发兜底）。
 func (r *Repo) SaveAiHintResult(ctx context.Context, uid, pid int64, level int, content string) error {
 	_, err := r.db.Collection("aiHintResults").UpdateOne(ctx,
 		bson.M{"uid": uid, "pid": pid, "level": level},
-		bson.M{"$set": bson.M{"content": content, "at": time.Now()}},
+		bson.M{"$set": bson.M{"content": content, "contentHtml": mdrender.Render(content), "at": time.Now()}},
 		options.UpdateOne().SetUpsert(true),
 	)
 	return err

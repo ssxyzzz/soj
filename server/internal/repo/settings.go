@@ -9,12 +9,16 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"soj/internal/mailer"
+	"soj/internal/mdrender"
 )
 
 // SystemSettings 系统设置（settings 集合，_id="system"）。
 type SystemSettings struct {
 	RateLimitPerMinute int    `bson:"rateLimitPerMinute"` // default 角色每分钟提交上限
 	HomeNotice         string `bson:"homeNotice"`         // 首页公告（Markdown，空 = 不展示）
+	// HomeNoticeHtml 写入时渲染缓存（v0.53 渲染收口）：匿名首页直发 html，
+	// 访客不再为看公告下载渲染引擎；md 永远是事实源
+	HomeNoticeHtml string `bson:"homeNoticeHtml,omitempty"`
 	// 每日每用户可下载数据的题目数上限（problem.data.download 权限位持有者受此限额）。
 	// 指针区分「旧文档未设置」与「显式 0」：nil = 未设置按默认；0 = 不限制；>0 = 每日上限。
 	DataDownloadDailyLimit *int `bson:"dataDownloadDailyLimit,omitempty"`
@@ -41,9 +45,8 @@ type SystemSettings struct {
 	DiscussProblemEnabled *bool `bson:"discussProblemEnabled,omitempty"`
 	DiscussContestEnabled *bool `bson:"discussContestEnabled,omitempty"`
 	DiscussGlobalLocked   bool  `bson:"discussGlobalLocked,omitempty"`
-	// 题内讨论代码门槛全局默认（0–100 分）：查看者本题历史最高分（published）≥ 阈值才可见
-	// 代码块；0 = 不隐藏。每题可覆盖（problems.discussCodeThreshold，0 = 跟随全局）。
-	DiscussCodeThreshold *int `bson:"discussCodeThreshold,omitempty"`
+	// 讨论区代码门槛（discussCodeThreshold）随 v0.53 渲染收口批整体退役：功能连同题目级
+	// 覆盖、读时裁剪、PermDiscussCodeBypass 全链下线；存量库值不再读写
 	// 发帖限速：主楼每日上限 / 回复最小间隔秒；0 = 不限。
 	DiscussTopicDailyLimit  *int `bson:"discussTopicDailyLimit,omitempty"`
 	DiscussReplyIntervalSec *int `bson:"discussReplyIntervalSec,omitempty"`
@@ -146,8 +149,7 @@ const (
 	DefaultBatchImportZipMB     = 2048 // 整包 zip 2GB
 
 	// 讨论区（v0.24）默认值。
-	DefaultDiscussCodeThreshold   = 60 // 题内代码门槛：最高分 ≥ 60 可见代码块
-	DefaultDiscussTopicDailyLimit = 5  // 主楼每日上限
+	DefaultDiscussTopicDailyLimit = 5 // 主楼每日上限
 	DefaultDiscussReplyInterval   = 30 // 回复间隔秒
 	DefaultDiscussNewbieDays      = 7  // 新号冷静期（天）
 	DefaultDiscussReportFold      = 3  // 举报折叠阈值
@@ -290,9 +292,6 @@ func (s *SystemSettings) normalizeDiscuss() {
 	if s.DiscussContestEnabled == nil {
 		s.DiscussContestEnabled = boolPtr(true)
 	}
-	if s.DiscussCodeThreshold == nil || *s.DiscussCodeThreshold < 0 || *s.DiscussCodeThreshold > 100 {
-		s.DiscussCodeThreshold = intPtr(DefaultDiscussCodeThreshold)
-	}
 	if s.DiscussTopicDailyLimit == nil || *s.DiscussTopicDailyLimit < 0 {
 		s.DiscussTopicDailyLimit = intPtr(DefaultDiscussTopicDailyLimit)
 	}
@@ -376,13 +375,6 @@ func (s *SystemSettings) DiscussProblemOpen() bool {
 }
 func (s *SystemSettings) DiscussContestOpen() bool {
 	return s.DiscussContestEnabled == nil || *s.DiscussContestEnabled
-}
-
-func (s *SystemSettings) DiscussCodeThresholdVal() int {
-	if s.DiscussCodeThreshold == nil || *s.DiscussCodeThreshold < 0 || *s.DiscussCodeThreshold > 100 {
-		return DefaultDiscussCodeThreshold
-	}
-	return *s.DiscussCodeThreshold
 }
 
 func (s *SystemSettings) DiscussTopicDailyLimitVal() int {
@@ -662,6 +654,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 		bson.M{"$set": bson.M{
 			"rateLimitPerMinute":      s.RateLimitPerMinute,
 			"homeNotice":              s.HomeNotice,
+			"homeNoticeHtml":          mdrender.Render(s.HomeNotice), // 写入时渲染（v0.53 渲染收口）
 			"dataDownloadDailyLimit":  s.DownloadDailyLimit(),
 			"autocompleteMinLevel":    s.MinAutocompleteLevel(),
 			"allowRegister":           s.RegistrationOpen(),
@@ -676,7 +669,6 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"discussProblemEnabled":   s.DiscussProblemOpen(),
 			"discussContestEnabled":   s.DiscussContestOpen(),
 			"discussGlobalLocked":     s.DiscussGlobalLocked,
-			"discussCodeThreshold":    s.DiscussCodeThresholdVal(),
 			"discussTopicDailyLimit":  s.DiscussTopicDailyLimitVal(),
 			"discussReplyIntervalSec": s.DiscussReplyIntervalVal(),
 			"discussNewbieDays":       s.DiscussNewbieDaysVal(),

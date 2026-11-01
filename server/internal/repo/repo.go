@@ -632,20 +632,20 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 		}
 		slog.Info("admin 角色已补发题单管理权限位（list.manage）", "component", "boot")
 	}
-	if !flagDone("discussPermV1") {
-		// v0.24：讨论三权限位（管理/免限速/代码门槛豁免），初始归属 admin（root 恒通；
-		// notify.broadcast 默认仅 root，不在补发之列）
-		if _, err := r.roles.UpdateOne(ctx,
-			bson.M{"_id": RoleAdmin},
-			bson.M{"$addToSet": bson.M{"perms": bson.M{"$each": []string{
-				PermDiscussManage, PermDiscussRateExempt, PermDiscussCodeBypass,
-			}}}}); err != nil {
+	if !flagDone("discussCodeGateRetiredV1") {
+		// v0.53 渲染收口：讨论代码门槛功能退役，discussion.code.bypass 权限位从全部
+		// 角色清除（含自定义角色存量；字符串级 $pull，无命中天然幂等）。历史补发块
+		// discussPermV1 随之移除——已部署环境 flag 已置不再需要；新环境 admin 的
+		// manage/rate_exempt 两位由内置角色种子直接带入。
+		if _, err := r.roles.UpdateMany(ctx,
+			bson.M{"perms": "discussion.code.bypass"},
+			bson.M{"$pull": bson.M{"perms": "discussion.code.bypass"}}); err != nil {
 			return err
 		}
-		if err := setFlag("discussPermV1"); err != nil {
+		if err := setFlag("discussCodeGateRetiredV1"); err != nil {
 			return err
 		}
-		slog.Info("admin 角色已补发讨论权限位（discussion.manage / rate_exempt / code.bypass）", "component", "boot")
+		slog.Info("讨论代码门槛退役：discussion.code.bypass 权限位已从角色清理", "component", "boot")
 	}
 	if !flagDone("discussCreatePermV1") {
 		// v0.48：发讨论贴权限位（三区主楼 + 回复通用），初始归属 admin（root 走 "*" 恒通；

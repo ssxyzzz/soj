@@ -35,7 +35,7 @@ var builtinRoles = []Role{
 		PermClassCreate, PermClassViewAll, PermClassLeave, PermAssignmentScoreView,
 		PermSubmissionViewAll, PermSubmissionViewUser, PermSubmissionRateExempt,
 		PermSolutionManage, PermUserNicknameEdit,
-		PermDiscussCreate, PermDiscussManage, PermDiscussRateExempt, PermDiscussCodeBypass, // v0.24：全站公告广播刻意不给（默认仅 root）
+		PermDiscussCreate, PermDiscussManage, PermDiscussRateExempt, // v0.24：全站公告广播刻意不给（默认仅 root）；代码门槛豁免随 v0.53 门槛退役下线
 	}, Builtin: true},
 	{ID: RoleRoot, Name: "超级管理员", Perms: []string{PermAll}, Builtin: true},
 }

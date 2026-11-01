@@ -1139,15 +1139,18 @@ strong {
   margin: 0.5em 0; /* vditor 默认 1em 0，紧凑化：样例「输入:/输出:」与块间距减半 */
 }
 .soj-md .vditor-reset pre > code {
+  display: block; /* 布局基础显式声明（v0.53：hljs 主题随 vditor css 消失曾致 inline 退化，行号列被正文压住——不再依赖主题提供） */
+  overflow-x: auto;
   font-size: var(--soj-fs-code);
   font-family: var(--font-mono);
   line-height: 1.6;
   padding: 0.5em 0.75em;
 }
 
-/* 多行代码块：淡蓝底 + 淡蓝边（2026-10-22 二版调淡）。白底来自运行时 hljs github
-   主题（.hljs 在 code 上），故底色落 pre、code 透明；pre 原无圆角边框（圆角 5px
-   在 code 上），改落 pre 一处。特异度 (0,3,0) 压运行时 (0,1,0)/(0,1,2)，不依赖加载顺序 */
+/* 多行代码块：淡蓝底 + 淡蓝边（2026-10-22 二版调淡）。代码 token 配色来自 hljs
+   github 主题（@/hljs.ts 随 chunk 引入；.hljs 在 code 上），故底色落 pre、code
+   透明；pre 原无圆角边框（圆角 5px 在 code 上），改落 pre 一处。特异度 (0,3,0)
+   压主题 (0,1,0)/(0,1,2)，不依赖加载顺序 */
 .soj-md.md-light .vditor-reset pre {
   background: #f5faff;
   border: 1px solid #ebf5ff;
@@ -1176,6 +1179,46 @@ strong {
 .soj-md.md-light .vditor-reset pre .vditor-linenumber__rows > span::before {
   color: #8ba3c2;
   padding-right: 0.4em;
+}
+
+/* ---- 行号几何与任务列表（vditor index.css 移植，v0.53 渲染收口）----
+   vditor npm 依赖全站退役后，这两组查看端仍依赖的基础规则从 vditor index.css
+   原样搬入（几何值与上游逐字一致；配色/间距的站内调整仍由上方 md-light 规则
+   覆盖，特异度不变）：① .vditor-linenumber 家族 = 代码行号覆盖层的定位与
+   ::before 计数器；② .vditor-task = GFM 任务列表勾选框的列表取消与缩进对齐。 */
+.vditor-linenumber {
+  padding-left: 4em !important;
+  position: relative;
+}
+.vditor-linenumber__rows {
+  position: absolute;
+  pointer-events: none;
+  top: 1em;
+  left: 0;
+  width: 3em;
+  user-select: none;
+  counter-reset: linenumber;
+}
+.vditor-linenumber__rows > span {
+  pointer-events: none;
+  display: block;
+}
+.vditor-linenumber__rows > span::before {
+  counter-increment: linenumber;
+  content: counter(linenumber);
+  color: rgba(158, 150, 150, 0.38);
+  display: block;
+  padding-right: 1em;
+  text-align: right;
+}
+.vditor-task {
+  list-style: none !important;
+  word-break: break-all;
+}
+.vditor-task input {
+  margin: 0 0.2em 0.25em -1.6em;
+  font-size: 12px;
+  vertical-align: middle;
 }
 
 /* ---- 样例卡片（.md-io）：```input1/```output1 围栏 ----
@@ -1308,14 +1351,10 @@ strong {
 }
 
 /* ---- 代码块复制按钮（站内自建 md-copy-btn）----
-   Vditor 自带按钮（.vditor-copy：绝对定位 + tooltip 浮框）与站内胶囊样式反复冲突，
-   整个隐藏；utils/md.ts bindCopyFeedback 在 pre 上挂自建按钮。常态淡蓝胶囊
-   （图标+「复制」），点击复制后变淡绿「已复制」+ 站内 toast，3 秒恢复。
-   code 右侧预留 64px，长代码行不钻到按钮下面 */
-.soj-md .vditor-reset pre .vditor-copy {
-  display: none !important;
-}
-
+   utils/md.ts bindCopyFeedback 在 pre 上挂自建按钮（v0.53 渲染收口后唯一实现，
+   服务端渲染产物无其他按钮来源）。常态淡蓝胶囊（图标+「复制」），点击复制后变
+   淡绿「已复制」+ 站内 toast，3 秒恢复。code 右侧预留 64px，长代码行不钻到按钮
+   下面 */
 .soj-md .vditor-reset pre {
   position: relative; /* 自建按钮的定位基准 */
 }

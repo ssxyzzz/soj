@@ -76,11 +76,11 @@ type Problem struct {
 	FileIO               bool                `bson:"fileIo,omitempty"`           // 文件 IO 模式（v0.5.2-3 生效）
 	FileIOInput          string              `bson:"fileIoInput,omitempty"`
 	FileIOOutput         string              `bson:"fileIoOutput,omitempty"`
-	ChallengeTimeSec     int                 `bson:"challengeTimeSec,omitempty"`     // 挑战时长秒（v0.23；0 = 按难度×5min 默认，60–14400 生效）
-	VideoURL             string              `bson:"videoUrl,omitempty"`             // 答案解析视频链接（v0.23；B 站/直链 mp4，题解同门槛可见）
-	DiscussCodeThreshold int                 `bson:"discussCodeThreshold,omitempty"` // 题内讨论代码门槛覆盖（v0.24；0 = 跟随全局默认，1–100 生效）
-	CreatedAt            time.Time           `bson:"createdAt"`
-	UpdatedAt            time.Time           `bson:"updatedAt"`
+	ChallengeTimeSec     int                 `bson:"challengeTimeSec,omitempty"` // 挑战时长秒（v0.23；0 = 按难度×5min 默认，60–14400 生效）
+	VideoURL             string              `bson:"videoUrl,omitempty"`         // 答案解析视频链接（v0.23；B 站/直链 mp4，题解同门槛可见）
+	// DiscussCodeThreshold（题内讨论代码门槛覆盖）随 v0.53 渲染收口批退役：功能全链下线，存量库值不再读写
+	CreatedAt time.Time `bson:"createdAt"`
+	UpdatedAt time.Time `bson:"updatedAt"`
 }
 
 // ValidDifficulty 难度是否在 1–10 档内。
@@ -118,6 +118,7 @@ func (r *Repo) UpsertProblem(ctx context.Context, p *Problem) error {
 	now := time.Now()
 	p.UpdatedAt = now
 	p.StatementHtml = mdrender.Render(p.Statement)
+	RenderQuestionsHtml(p.Questions) // 客观题干/解析渲染缓存（v0.53 渲染收口）
 	// 新建时补 createdAt 并把计数器推进到已占用的最大 pid
 	if err := r.problems.FindOne(ctx, bson.M{"_id": p.ID}).Err(); IsNotFound(err) {
 		p.CreatedAt = now
@@ -150,6 +151,7 @@ func (r *Repo) CreateProblemShell(ctx context.Context, p *Problem) error {
 	p.ID = id
 	p.CreatedAt = time.Now()
 	p.StatementHtml = mdrender.Render(p.Statement)
+	RenderQuestionsHtml(p.Questions) // 客观题干/解析渲染缓存（v0.53）
 	_, err = r.problems.InsertOne(ctx, p)
 	return err
 }
@@ -454,7 +456,6 @@ type ProblemMetaPatch struct {
 	MetaTags            *[]int64 // bson: meta_tags
 	VideoURL            *string  // bson: videoUrl
 	ChallengeTimeSec    *int
-	DiscussCodeThreshold *int
 	Questions           *[]ObjectiveQuestion
 	CheckerFile         *string
 	CheckerSHA          *string // bson: checkerSha
@@ -471,7 +472,7 @@ func (p ProblemMetaPatch) Empty() bool {
 	return p.Title == nil && p.TimeLimitMS == nil && p.MemoryLimitKB == nil &&
 		p.Compare == nil && p.FloatTolerance == nil && p.FileIOInput == nil &&
 		p.FileIOOutput == nil && p.Difficulty == nil && p.Tags == nil && p.MetaTags == nil &&
-		p.VideoURL == nil && p.ChallengeTimeSec == nil && p.DiscussCodeThreshold == nil &&
+		p.VideoURL == nil && p.ChallengeTimeSec == nil &&
 		p.Questions == nil && p.CheckerFile == nil && p.CheckerSHA == nil &&
 		p.CheckerFileID == nil && p.DriverFile == nil && p.DriverSHA == nil &&
 		p.TemplateFile == nil && p.InteractorFile == nil && p.InteractorSHA == nil &&
@@ -499,7 +500,9 @@ func (r *Repo) UpdateProblemMeta(ctx context.Context, pid int64, p ProblemMetaPa
 	setIf(p.MetaTags != nil, "meta_tags", p.MetaTags)
 	setIf(p.VideoURL != nil, "videoUrl", p.VideoURL)
 	setIf(p.ChallengeTimeSec != nil, "challengeTimeSec", p.ChallengeTimeSec)
-	setIf(p.DiscussCodeThreshold != nil, "discussCodeThreshold", p.DiscussCodeThreshold)
+	if p.Questions != nil {
+		RenderQuestionsHtml(*p.Questions) // 客观题干/解析渲染缓存（v0.53；覆盖 YAML 导入与编辑两条路）
+	}
 	setIf(p.Questions != nil, "questions", p.Questions)
 	setIf(p.CheckerFile != nil, "checkerFile", p.CheckerFile)
 	setIf(p.CheckerSHA != nil, "checkerSha", p.CheckerSHA)

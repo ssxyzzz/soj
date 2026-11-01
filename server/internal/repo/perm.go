@@ -29,7 +29,6 @@ const (
 	PermDiscussCreate        = "discussion.create"      // 发讨论贴：三区主楼与回复（v0.48，default 默认关闭）
 	PermDiscussManage        = "discussion.manage"      // 讨论管理：删帖/置顶/加精/锁定/处理举报与禁言（v0.24）
 	PermDiscussRateExempt    = "discussion.rate_exempt" // 发帖不受讨论区限速（v0.24）
-	PermDiscussCodeBypass    = "discussion.code.bypass" // 题内讨论代码块查看不受分数门槛（v0.24）
 	PermNotifyBroadcast      = "notify.broadcast"       // 全站公告广播（v0.24，默认仅 root）
 	PermUserNicknameEdit     = "user.nickname.edit"     // 本人自助修改昵称（默认用户默认开启）
 	PermUserUsernameEdit     = "user.username.edit"     // 用户管理中修改登录用户名（身份标识；默认仅 root，admin 无此位）
@@ -94,7 +93,6 @@ var PermCatalog = []PermInfo{
 	{PermDiscussCreate, "发讨论贴", "在讨论区发主楼与回复（全站/题内/比赛三区通用）；关闭后只能浏览、点赞等，不能发任何内容。default 角色默认关闭", "discussion"},
 	{PermDiscussManage, "讨论管理", "讨论区：删帖/置顶/加精/锁定/处理举报与禁言（三区通用）", "discussion"},
 	{PermDiscussRateExempt, "发帖不限速", "讨论发帖/回复不受全站讨论限速约束", "discussion"},
-	{PermDiscussCodeBypass, "讨论代码门槛豁免", "题内讨论中查看被分数门槛隐藏的代码块（教师群体本就不受限）", "discussion"},
 	{PermNotifyBroadcast, "全站公告广播", "向全员发站内通知公告（受每日频次约束）；默认仅 root", "discussion"},
 	{PermUserNicknameEdit, "修改昵称", "允许用户在本人的个人设置中修改昵称；关闭后只能由管理员在用户管理中修改", "user"},
 	{PermUserUsernameEdit, "修改用户名", "在用户管理中修改任意用户的登录用户名（改名后原用户名即释放，登录与展示即时切换）；默认仅 root 开启，admin 无此位", "user"},

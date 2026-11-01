@@ -16,6 +16,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/mdrender"
 )
 
 // 挂载面。
@@ -54,7 +56,10 @@ type DiscussTopic struct {
 	UID       int64     `bson:"uid"`
 	Kind      string    `bson:"kind"`
 	Title     string    `bson:"title"`
-	Content   string    `bson:"content"` // Markdown（global 单一事实源；题内代码块按门槛读时裁剪）
+	Content   string    `bson:"content"` // Markdown（唯一事实源）
+	// ContentHtml 写入时渲染缓存（v0.53 渲染收口）：与题面族同构，md 可随时重算；
+	// 读取接口直发 html，查看端零引擎零渲染 pass
+	ContentHtml string    `bson:"contentHtml,omitempty"`
 	// global 实体关联（可选）：相关题目（多选）/ 题单 / 知识树节点
 	RelatedPids []int64 `bson:"relatedPids,omitempty"`
 	ListID      int64   `bson:"listId,omitempty"`
@@ -92,7 +97,9 @@ type DiscussReply struct {
 	ID      int64     `bson:"_id"`
 	TID     int64     `bson:"tid"`
 	UID     int64     `bson:"uid"`
-	Content string    `bson:"content"`
+	Content string    `bson:"content"` // Markdown（唯一事实源）
+	// ContentHtml 写入时渲染缓存（v0.53 渲染收口，同 DiscussTopic）
+	ContentHtml string    `bson:"contentHtml,omitempty"`
 	ReplyTo int64     `bson:"replyTo,omitempty"`
 	LikeCount int64   `bson:"likeCount"`
 	Accepted  bool    `bson:"accepted,omitempty"`
@@ -122,6 +129,7 @@ func (r *Repo) InsertDiscussTopic(ctx context.Context, t *DiscussTopic) error {
 	t.ID = id
 	now := time.Now()
 	t.CreatedAt, t.UpdatedAt, t.LastActiveAt = now, now, now
+	t.ContentHtml = mdrender.Render(t.Content) // 写入时渲染（v0.53，题面族同构）
 	_, err = r.discussions.InsertOne(ctx, t)
 	return err
 }
@@ -204,9 +212,9 @@ func (r *Repo) LastUserReplyAt(ctx context.Context, uid int64) (time.Time, error
 	return doc.CreatedAt, nil
 }
 
-// UpdateDiscussTopicContent 作者编辑（保「已编辑」痕迹）。
+// UpdateDiscussTopicContent 作者编辑（保「已编辑」痕迹；html 随 md 重渲）。
 func (r *Repo) UpdateDiscussTopicContent(ctx context.Context, tid int64, title, content, kind string, relatedPids []int64, listID, tagID int64) error {
-	set := bson.M{"content": content, "edited": true, "updatedAt": time.Now()}
+	set := bson.M{"content": content, "contentHtml": mdrender.Render(content), "edited": true, "updatedAt": time.Now()}
 	if title != "" {
 		set["title"] = title
 	}
@@ -306,6 +314,7 @@ func (r *Repo) InsertDiscussReply(ctx context.Context, rep *DiscussReply) error 
 	}
 	rep.ID = id
 	rep.CreatedAt, rep.UpdatedAt = time.Now(), time.Now()
+	rep.ContentHtml = mdrender.Render(rep.Content) // 写入时渲染（v0.53）
 	_, err = r.discussReplies.InsertOne(ctx, rep)
 	return err
 }
@@ -367,7 +376,7 @@ func (r *Repo) GetDiscussReply(ctx context.Context, rid int64) (*DiscussReply, e
 
 func (r *Repo) UpdateDiscussReplyContent(ctx context.Context, rid int64, content string) error {
 	res, err := r.discussReplies.UpdateOne(ctx, bson.M{"_id": rid},
-		bson.M{"$set": bson.M{"content": content, "edited": true, "updatedAt": time.Now()}})
+		bson.M{"$set": bson.M{"content": content, "contentHtml": mdrender.Render(content), "edited": true, "updatedAt": time.Now()}})
 	if res.MatchedCount == 0 {
 		return mongo.ErrNoDocuments
 	}

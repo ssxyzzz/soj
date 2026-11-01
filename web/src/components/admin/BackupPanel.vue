@@ -8,7 +8,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { adminApi } from '@/api'
+import { adminApi, mdApi } from '@/api'
 import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import { copyText } from '@/utils/clipboard'
@@ -16,6 +16,24 @@ import { BACKUP_DOWNLOAD_LIMIT_BYTES, BACKUP_DOWNLOAD_URL } from '@/types'
 import type { BackupStatus } from '@/types'
 
 const userStore = useUserStore()
+
+// 使用说明的渲染缓存（v0.53 渲染收口）：写死 md 常量经 /api/render 渲一次，
+// 模块级缓存——同会话重开面板零请求；失败留空（面板主体功能不受影响）
+let guideHtmlCache = ''
+const guideHtml = ref('')
+async function loadGuide() {
+  if (guideHtmlCache) {
+    guideHtml.value = guideHtmlCache
+    return
+  }
+  try {
+    const r = await mdApi.render(BACKUP_GUIDE)
+    guideHtmlCache = r.html
+    guideHtml.value = r.html
+  } catch {
+    // 拦截器已 toast；说明区留空
+  }
+}
 
 // 使用说明（Markdown，写死）：定位是「偶尔查的参考手册」，默认折叠、按小标题速查。
 const BACKUP_GUIDE = `## 备份了什么
@@ -185,6 +203,7 @@ async function downloadArchive(filename: string) {
 }
 
 onMounted(loadBackup)
+onMounted(loadGuide) // 使用说明渲染缓存（v0.53 渲染收口：md 常量经 /api/render 渲一次）
 onUnmounted(stopPoll)
 
 const backupModeMeta: Record<string, { label: string; type: 'info' | 'warning' | 'success'; desc: string }> = {
@@ -350,7 +369,7 @@ onMounted(loadBackup)
           <template #title>
             <span class="section-title">使用说明（备份了什么 / 自动备份 / 本机查看）</span>
           </template>
-          <MdView :content="BACKUP_GUIDE" class="guide-md" />
+          <MdView v-if="guideHtml" :html="guideHtml" class="guide-md" />
         </el-collapse-item>
       </el-collapse>
     </div>

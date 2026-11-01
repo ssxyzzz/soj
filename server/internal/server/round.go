@@ -620,6 +620,7 @@ func paperProblemJSON(p *repo.Problem, withFileIO bool) gin.H {
 			qs = append(qs, gin.H{
 				"kind":        q.Kind,
 				"stem":        q.Stem,
+				"stem_html":   q.StemHtml, // 写入时渲染缓存（v0.53）：打印页零引擎零等待
 				"options":     q.Options,
 				"blank_count": len(q.Blanks),
 			})

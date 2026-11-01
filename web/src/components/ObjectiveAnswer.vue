@@ -93,7 +93,7 @@ function doSubmit() {
         <el-tag size="small" class="ptype-tag">{{ kindLabel(q.kind) }}</el-tag>
         <span class="dim obj-score">{{ q.score }} 分</span>
       </div>
-      <div v-if="q.stem" class="obj-stem"><MdView :content="q.stem" /></div>
+      <div v-if="q.stem" class="obj-stem"><MdView :html="q.stem_html" /></div>
 
       <!-- 填空：逐空输入 -->
       <div v-if="q.kind === 'blank'" class="blank-list">

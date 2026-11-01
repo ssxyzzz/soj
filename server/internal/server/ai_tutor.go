@@ -24,6 +24,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/ai"
+	"soj/internal/mdrender"
 	"soj/internal/repo"
 	"soj/internal/testdata"
 )
@@ -211,7 +212,7 @@ func (h *Handlers) GetAiHint(c *gin.Context) {
 	}
 	// 个人档优先（方案二）：谁生成看谁的
 	if personal, err := h.repo.GetAiHintResult(c.Request.Context(), uid, pid, level); err == nil {
-		ok(c, gin.H{"hint": gin.H{"content": personal.Content, "unlocked": true, "at": personal.At.Format(time.RFC3339)}})
+		ok(c, gin.H{"hint": gin.H{"content": personal.Content, "content_html": personal.ContentHtml, "unlocked": true, "at": personal.At.Format(time.RFC3339)}})
 		return
 	}
 	hint, err := h.repo.GetAiHint(c.Request.Context(), pid, level)
@@ -222,7 +223,7 @@ func (h *Handlers) GetAiHint(c *gin.Context) {
 	// 兼容存量：升级前解锁的老用户 / 满分·教师查看——共享缓存兜底，并顺手落个人档
 	if unlocked && hint != nil {
 		_ = h.repo.SaveAiHintResult(c.Request.Context(), uid, pid, level, hint.Content)
-		ok(c, gin.H{"hint": gin.H{"content": hint.Content, "unlocked": true, "at": hint.At.Format(time.RFC3339)}})
+		ok(c, gin.H{"hint": gin.H{"content": hint.Content, "content_html": hint.ContentHtml, "unlocked": true, "at": hint.At.Format(time.RFC3339)}})
 		return
 	}
 	ok(c, gin.H{"hint": hintJSON(hint, unlocked)})
@@ -232,11 +233,12 @@ func hintJSON(h *repo.AiHint, unlocked bool) gin.H {
 	if h == nil {
 		return gin.H{"content": "", "unlocked": unlocked}
 	}
-	content := ""
+	content, contentHtml := "", ""
 	if unlocked {
 		content = h.Content
+		contentHtml = h.ContentHtml // 写入时渲染缓存（v0.53），与 content 同门槛下发
 	}
-	return gin.H{"content": content, "unlocked": unlocked, "at": h.At.Format(time.RFC3339)}
+	return gin.H{"content": content, "content_html": contentHtml, "unlocked": unlocked, "at": h.At.Format(time.RFC3339)}
 }
 
 func (h *Handlers) aiHintUnlocked(c *gin.Context, uid, pid int64, level int) bool {
@@ -314,7 +316,7 @@ func (h *Handlers) BuyAiHint(c *gin.Context) {
 	_ = h.repo.SaveAiHintResult(ctx, uid, pid, level, content) // 个人档（方案二）
 	h.recordAiCall(c, uid, pid, fmt.Sprintf("hint%d", level), price, tokens, chars, true, "")
 	bal, _ := h.repo.JadeBalance(ctx, uid)
-	ok(c, gin.H{"hint": gin.H{"content": content, "unlocked": true},
+	ok(c, gin.H{"hint": gin.H{"content": content, "content_html": mdrender.Render(content), "unlocked": true},
 		"charged": price > 0, "price": price, "balance": bal})
 }
 
@@ -381,7 +383,7 @@ func (h *Handlers) AiDebug(c *gin.Context) {
 	h.recordAiCall(c, uid, sub.ProblemID, "debug", price, resp.TotalTokens, resp.PromptChars, true, "")
 	_ = h.repo.SaveAiDebugResult(ctx, uid, sid, sub.ProblemID, resp.Content)
 	bal, _ := h.repo.JadeBalance(ctx, uid)
-	ok(c, gin.H{"content": resp.Content, "price": price, "balance": bal})
+	ok(c, gin.H{"content": resp.Content, "content_html": mdrender.Render(resp.Content), "price": price, "balance": bal})
 }
 
 // AiDebugResult 回看找 bug 结果（GET，2026-10-30 反馈：分析过的解释要常驻可回看）。
@@ -401,11 +403,12 @@ func (h *Handlers) AiDebugResult(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取分析结果失败")
 		return
 	}
-	content := ""
+	content, contentHtml := "", ""
 	if res != nil {
 		content = res.Content
+		contentHtml = res.ContentHtml
 	}
-	ok(c, gin.H{"content": content})
+	ok(c, gin.H{"content": content, "content_html": contentHtml})
 }
 
 // buildDebugUser 组装找 bug 素材（题面 + 样例 + 学生代码 + 判题结果 + 失败点数据）。

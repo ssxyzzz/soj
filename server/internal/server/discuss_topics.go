@@ -137,8 +137,7 @@ func (h *Handlers) ListProblemDiscuss(c *gin.Context) {
 	if !okID {
 		return
 	}
-	gate, okG := h.problemDiscussGate(c, pid)
-	if !okG {
+	if _, okG := h.problemDiscussGate(c, pid); !okG {
 		return
 	}
 	uid, _, _, _ := currentUser(c)
@@ -160,10 +159,8 @@ func (h *Handlers) ListProblemDiscuss(c *gin.Context) {
 		items = append(items, topicJSON(t, users, liked, true))
 	}
 	ok(c, gin.H{
-		"list": items, "total": total,
-		"code_threshold": gate.Threshold,
-		"can_view_code":  gate.CanViewCode,
-		"locked":         false,
+		"list":   items, "total": total,
+		"locked": false,
 	})
 }
 
@@ -304,23 +301,20 @@ func (h *Handlers) CreateContestDiscuss(c *gin.Context) {
 
 // ---------- 通用话题操作 ----------
 
-// replyJSON 单条回复下发视图。
-func replyJSON(rep *repo.DiscussReply, users map[int64]repo.User, liked map[int64]bool, threshold int, canViewCode bool) gin.H {
-	content := rep.Content
-	if !canViewCode {
-		content = stripDiscussCodeBlocks(content, threshold)
-	}
+// replyJSON 单条回复下发视图（content_html = 写入时渲染缓存，v0.53 渲染收口）。
+func replyJSON(rep *repo.DiscussReply, users map[int64]repo.User, liked map[int64]bool) gin.H {
 	item := gin.H{
-		"id":         rep.ID,
-		"tid":        rep.TID,
-		"uid":        rep.UID,
-		"content":    content,
-		"reply_to":   rep.ReplyTo,
-		"like_count": rep.LikeCount,
-		"accepted":   rep.Accepted,
-		"folded":     rep.Folded,
-		"created_at": rep.CreatedAt.Format(time.RFC3339),
-		"liked":      liked[rep.ID],
+		"id":           rep.ID,
+		"tid":          rep.TID,
+		"uid":          rep.UID,
+		"content":      rep.Content,
+		"content_html": rep.ContentHtml,
+		"reply_to":     rep.ReplyTo,
+		"like_count":   rep.LikeCount,
+		"accepted":     rep.Accepted,
+		"folded":       rep.Folded,
+		"created_at":   rep.CreatedAt.Format(time.RFC3339),
+		"liked":        liked[rep.ID],
 	}
 	if rep.Edited {
 		item["edited"] = true
@@ -328,6 +322,7 @@ func replyJSON(rep *repo.DiscussReply, users map[int64]repo.User, liked map[int6
 	if rep.Deleted {
 		item["deleted"] = true
 		item["content"] = ""
+		item["content_html"] = ""
 	}
 	if u, ok := users[rep.UID]; ok {
 		item["nickname"] = u.Nickname
@@ -422,16 +417,12 @@ func (h *Handlers) GetDiscussTopic(c *gin.Context) {
 		return
 	}
 
-	var threshold int
-	canViewCode := true
 	isOrganizer := false
 	switch t.Scope {
 	case repo.DiscussScopeProblem:
-		gate, okG := h.problemDiscussGate(c, t.ScopeID)
-		if !okG {
+		if _, okG := h.problemDiscussGate(c, t.ScopeID); !okG {
 			return
 		}
-		threshold, canViewCode = gate.Threshold, gate.CanViewCode
 	case repo.DiscussScopeContest:
 		gate, okG := h.contestDiscussGate(c, t.ScopeID)
 		if !okG {
@@ -480,13 +471,12 @@ func (h *Handlers) GetDiscussTopic(c *gin.Context) {
 	replyLiked, _ := h.repo.LikedDiscussTargets(c.Request.Context(), uid, "reply", replyIDs)
 
 	tj := topicJSON(t, users, topicLiked, true)
+	tj["content"] = t.Content
+	tj["content_html"] = t.ContentHtml
 	if t.Deleted {
 		tj["content"] = "" // 软删除：正文抹掉，保留楼层（回复照常下发）
+		tj["content_html"] = ""
 		tj["title"] = "该帖已删除"
-	} else if !canViewCode {
-		tj["content"] = stripDiscussCodeBlocks(t.Content, threshold)
-	} else {
-		tj["content"] = t.Content
 	}
 	canManage := hasPerm(c, repo.PermDiscussManage)
 	tj["can_edit"] = t.UID == uid && !t.Deleted
@@ -496,7 +486,7 @@ func (h *Handlers) GetDiscussTopic(c *gin.Context) {
 
 	items := make([]gin.H, 0, len(replies))
 	for _, r := range replies {
-		items = append(items, replyJSON(r, users, replyLiked, threshold, canViewCode))
+		items = append(items, replyJSON(r, users, replyLiked))
 	}
 	resp := gin.H{
 		"topic":       tj,
@@ -504,9 +494,6 @@ func (h *Handlers) GetDiscussTopic(c *gin.Context) {
 		"reply_total": replyTotal, // 顶层楼总数（分页口径，不含楼中楼）
 		"reply_page":  replyPage,
 		"reply_pages": (replyTotal + int64(repo.DiscussReplyPageSize) - 1) / int64(repo.DiscussReplyPageSize),
-	}
-	if t.Scope == repo.DiscussScopeProblem {
-		resp["gate"] = gin.H{"code_threshold": threshold, "can_view_code": canViewCode}
 	}
 	ok(c, resp)
 }

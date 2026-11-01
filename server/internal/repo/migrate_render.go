@@ -35,6 +35,12 @@ func renderTargets(r *Repo) []struct {
 		{r.db.Collection("classes"), "intro", "introHtml"},
 		{r.lists, "intro", "introHtml"},
 		{r.solutions, "content", "contentHtml"},
+		// v0.53 渲染收口：讨论区与 AI 三集合并入（写入点已随批渲 html，这里管存量回填）
+		{r.discussions, "content", "contentHtml"},
+		{r.discussReplies, "content", "contentHtml"},
+		{r.db.Collection("aiHints"), "content", "contentHtml"},
+		{r.db.Collection("aiHintResults"), "content", "contentHtml"},
+		{r.db.Collection("aiDebugResults"), "content", "contentHtml"},
 	}
 }
 
@@ -137,5 +143,87 @@ func (r *Repo) bootstrapRenderedHtmlAsync() {
 				"docs", n, "lute", mdrender.LuteVersion,
 				"mode", map[bool]string{true: "全量重刷", false: "补缺失"}[refetch])
 		}
+
+		// v0.53 渲染收口的两个非扁平结构专项（每次启动幂等跑，缺失才写）：
+		if nObj, err := r.migrateObjectiveStems(ctx); err != nil {
+			slog.Warn("客观题渲染缓存回填失败（下次启动重试）", "component", "render-migrate", "error", err)
+		} else if nObj > 0 {
+			slog.Info("客观题题干/解析渲染缓存回填完成", "component", "render-migrate", "docs", nObj)
+		}
+		if err := r.migrateHomeNoticeHtml(ctx); err != nil {
+			slog.Warn("首页公告渲染缓存回填失败（下次启动重试）", "component", "render-migrate", "error", err)
+		}
 	}()
+}
+
+// migrateObjectiveStems 客观题小题渲染缓存回填：questions 数组是内嵌结构，通用
+// 字段对迁移够不着——筛「没有任何小题带 stemHtml」的题（写入侧恒整卷同渲，全有
+// 或全无），整卷重渲后 $set 覆盖；带 $exists 守卫防与并发编辑竞态。
+func (r *Repo) migrateObjectiveStems(ctx context.Context) (int, error) {
+	filter := bson.M{
+		"questions":          bson.M{"$exists": true},
+		"questions.stemHtml": bson.M{"$exists": false},
+		"questions.0":        bson.M{"$exists": true},
+	}
+	total := 0
+	for {
+		cursor, err := r.problems.Find(ctx, filter,
+			options.Find().SetProjection(bson.M{"_id": 1, "questions": 1}).
+				SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(100))
+		if err != nil {
+			return total, err
+		}
+		var rows []struct {
+			ID        int64               `bson:"_id"`
+			Questions []ObjectiveQuestion `bson:"questions"`
+		}
+		if err := cursor.All(ctx, &rows); err != nil {
+			return total, err
+		}
+		if len(rows) == 0 {
+			return total, nil
+		}
+		wrote := 0
+		for _, row := range rows {
+			RenderQuestionsHtml(row.Questions)
+			if _, err := r.problems.UpdateOne(ctx,
+				bson.M{"_id": row.ID, "questions.stemHtml": bson.M{"$exists": false}},
+				bson.M{"$set": bson.M{"questions": row.Questions}}); err == nil {
+				wrote++
+			}
+		}
+		total += wrote
+		if wrote == 0 || len(rows) < 100 {
+			return total, nil
+		}
+		lastID := rows[len(rows)-1].ID
+		filter["_id"] = bson.M{"$gt": lastID}
+		select {
+		case <-ctx.Done():
+			return total, ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+// migrateHomeNoticeHtml 首页公告单文档回填：md 非空且 html 缺失时渲一次（$exists
+// 守卫防覆盖并发保存的新渲染）。
+func (r *Repo) migrateHomeNoticeHtml(ctx context.Context) error {
+	var doc struct {
+		HomeNotice     string `bson:"homeNotice"`
+		HomeNoticeHtml string `bson:"homeNoticeHtml"`
+	}
+	if err := r.db.Collection("settings").FindOne(ctx, bson.M{"_id": "system"}).Decode(&doc); err != nil {
+		if IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if doc.HomeNotice == "" || doc.HomeNoticeHtml != "" {
+		return nil
+	}
+	_, err := r.db.Collection("settings").UpdateOne(ctx,
+		bson.M{"_id": "system", "homeNotice": doc.HomeNotice, "homeNoticeHtml": bson.M{"$exists": false}},
+		bson.M{"$set": bson.M{"homeNoticeHtml": mdrender.Render(doc.HomeNotice)}})
+	return err
 }

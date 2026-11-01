@@ -301,7 +301,7 @@ watch(
         <!-- AI 找 bug 结果（v0.33-④）：错误定位 → 原因 → 最小修复建议 -->
         <template v-if="aiDebugContent">
           <div class="detail-sub ai-debug-sub">✦ AI 找 bug</div>
-          <MdView :content="aiDebugContent" variant="compact" auto-height />
+          <MdView :html="aiDebugContent" variant="compact" auto-height />
         </template>
       </template>
     </div>

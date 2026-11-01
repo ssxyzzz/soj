@@ -620,7 +620,7 @@ onBeforeUnmount(() => {
       <template v-if="mode === 'split'">
         <div class="md-divider" @mousedown="startDrag" />
         <div ref="previewPane" class="md-preview-pane">
-          <MdView v-if="previewState === 'ok' && previewHtml" content="" :html="previewHtml" />
+          <MdView v-if="previewState === 'ok' && previewHtml" :html="previewHtml" />
           <div v-else-if="previewState === 'idle'" class="md-preview-state">开始输入后此处实时预览</div>
           <div v-else-if="previewState === 'loading'" class="md-preview-state">渲染中…</div>
           <div v-else class="md-preview-state is-error">

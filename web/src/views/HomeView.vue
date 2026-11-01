@@ -23,6 +23,7 @@ const streakDays = ref(0)
 const dailyQuote = pickDailyQuote()
 const classes = ref<ClassCard[]>([])
 const notice = ref('')
+const noticeHtml = ref('')
 
 // v0.19 三期（对齐 v3-full 首页）：hero 搜索 + 站点统计行 + 今日一题 + 最近赛事卡
 const q = ref('')
@@ -62,6 +63,7 @@ onMounted(async () => {
       .get()
       .then((n) => {
         notice.value = n.content.trim()
+      noticeHtml.value = n.html ?? ''
       })
       .catch(() => {
         // 公告加载失败不影响首页其他内容
@@ -132,7 +134,7 @@ onMounted(async () => {
     <HomeAmbient />
     <div v-if="notice" class="announce">
       <span class="announce-tag">公告</span>
-      <div class="announce-body"><MdView :content="notice" /></div>
+      <div class="announce-body"><MdView :html="noticeHtml" /></div>
     </div>
 
     <!-- v0.19 三期 hero：kicker + 大标题渐变点睛 + 搜索胶囊（orb 渐变圆钮）+ 胶囊按钮组 -->

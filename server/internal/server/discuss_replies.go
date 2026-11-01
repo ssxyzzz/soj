@@ -102,10 +102,6 @@ func (h *Handlers) CreateDiscussReply(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "回复过长（上限 8KB）")
 		return
 	}
-	if t.Scope == repo.DiscussScopeProblem && imageMDRE.MatchString(content) {
-		fail(c, http.StatusBadRequest, "题内讨论不支持图片（代码请用文本代码块）")
-		return
-	}
 	// 楼中楼归一：嵌套回复统一挂到顶层楼（两层结构）
 	replyTo := req.ReplyTo
 	if replyTo > 0 {

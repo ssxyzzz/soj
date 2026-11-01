@@ -89,7 +89,7 @@ const aiDebugging = ref(false)
 // 结果按提交 ID 常驻缓存（2026-10-30 反馈）：切详情/关弹窗不再丢，回看直接命中
 const aiDebugMap = ref<Record<number, string>>({})
 // 结果弹窗（2026-10-30 同一套拍板）：查看免费；重新生成每次扣玉、每点一次都重算
-const dbg = reactive({ show: false, content: '', loading: false })
+const dbg = reactive({ show: false, content: '', loading: false }) // content = 写入时渲染 html（v0.53）
 
 function openDebugDlg() {
   const s = mineDetail.value
@@ -148,9 +148,9 @@ async function runDebug(sid: number) {
   dbg.loading = true
   try {
     const r = await aiTutorApi.debug(sid)
-    aiDebugMap.value[sid] = r.content
+    aiDebugMap.value[sid] = r.content_html
     userStore.setJade(r.balance, userStore.jadeCurrency || '玉')
-    if (dbg.show) dbg.content = r.content
+    if (dbg.show) dbg.content = r.content_html
     ElMessage.success('分析完成')
   } catch {
     // 拦截器统一提示（余额不足/每日上限/赛时封锁/生成失败已退费）
@@ -323,7 +323,7 @@ defineExpose({ refresh: loadMine })
         </div>
       </template>
       <div v-loading="dbg.loading" class="dbg-body">
-        <MdView v-if="dbg.content" :content="dbg.content" variant="compact" />
+        <MdView v-if="dbg.content" :html="dbg.content" variant="compact" />
       </div>
     </el-dialog>
   </el-dialog>

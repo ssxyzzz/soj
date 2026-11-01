@@ -25,8 +25,6 @@ const userStore = useUserStore()
 const loading = ref(false)
 const topic = ref<DiscussTopic | null>(null)
 const replies = ref<DiscussReply[]>([])
-const gate = ref<{ code_threshold: number; can_view_code: boolean } | null>(null)
-const spoilerConfirmed = ref(false)
 
 // 主楼分页（v0.26）：顶层回复按页加载（楼中楼随本页主楼带出），replies 仍是扁平列表
 const REPLY_PAGE_SIZE = 20
@@ -38,10 +36,6 @@ const replyTarget = ref(0)
 const replyContent = ref('')
 const replySubmitting = ref(false)
 const editing = ref(false)
-
-const isProblem = computed(() => topic.value?.scope === 'problem')
-const canViewCode = computed(() => gate.value?.can_view_code ?? true)
-const threshold = computed(() => gate.value?.code_threshold ?? 0)
 
 // 顶层回复与楼中楼分组（保持楼层序）
 const topLevel = computed(() => replies.value.filter((r) => !r.reply_to))
@@ -56,8 +50,6 @@ async function load() {
     topic.value = r.topic
     replies.value = r.replies
     replyTotal.value = r.reply_total ?? r.replies.length
-    gate.value = r.gate || null
-    spoilerConfirmed.value = false
     editing.value = false
   } catch {
     topic.value = null
@@ -249,22 +241,8 @@ onMounted(load)
 <template>
   <div v-loading="loading" class="dtd">
     <template v-if="topic">
-      <!-- 题内剧透确认层（v0.24 口径：文字点一次确认可见，代码块按分数门槛始终隐藏） -->
-      <el-alert
-        v-if="isProblem && !canViewCode && !spoilerConfirmed"
-        type="warning"
-        :closable="false"
-        class="spoiler"
-      >
-        <template #title>
-          讨论内容可能包含剧透。文字点「继续查看」后可见；代码块需本题最高得分 ≥ {{ threshold }} 分。
-        </template>
-        <el-button type="primary" size="small" @click="spoilerConfirmed = true">继续查看</el-button>
-      </el-alert>
-
-      <template v-else>
-        <!-- 主楼 -->
-        <div class="dtd-main">
+      <!-- 主楼 -->
+      <div class="dtd-main">
           <div class="dtd-tags">
             <el-tag v-if="topic.pinned" type="danger" size="small" effect="dark" round>置顶</el-tag>
             <el-tag v-if="topic.featured" type="warning" size="small" effect="plain" round>精华</el-tag>
@@ -291,7 +269,7 @@ onMounted(load)
           </div>
           <MdView
             v-if="!topic.deleted"
-            :content="topic.content || ''"
+            :html="topic.content_html || ''"
             variant="compact"
             auto-height
             class="dtd-content"
@@ -364,7 +342,7 @@ onMounted(load)
               <span class="grow"></span>
               <el-button v-if="canPost" text size="small" @click="startReply(r.id)">回复</el-button>
             </div>
-            <MdView v-if="!r.deleted" :content="r.content" variant="compact" auto-height class="dtd-reply-content" />
+            <MdView v-if="!r.deleted" :html="r.content_html || ''" variant="compact" auto-height class="dtd-reply-content" />
             <div v-else class="dtd-deleted-hint sm">该回复已删除</div>
             <div class="dtd-reply-actions">
               <el-button text size="small" :type="r.liked ? 'primary' : ''" @click="toggleLikeReply(r)">
@@ -405,7 +383,7 @@ onMounted(load)
                     删除
                   </el-button>
                 </div>
-                <MdView v-if="!c.deleted" :content="c.content" variant="compact" auto-height class="dtd-nested-content" />
+                <MdView v-if="!c.deleted" :html="c.content_html || ''" variant="compact" auto-height class="dtd-nested-content" />
                 <div v-else class="dtd-deleted-hint sm">该回复已删除</div>
               </div>
             </div>
@@ -438,7 +416,6 @@ onMounted(load)
             <el-button type="primary" :loading="replySubmitting" @click="submitReply">回复</el-button>
           </div>
         </div>
-      </template>
     </template>
   </div>
 </template>
@@ -446,12 +423,6 @@ onMounted(load)
 <style scoped>
 .dtd {
   min-height: 160px;
-}
-.spoiler {
-  margin: 12px 0;
-}
-.spoiler :deep(.el-button) {
-  margin-top: 8px;
 }
 .dtd-tags {
   display: flex;

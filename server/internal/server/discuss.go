@@ -32,15 +32,10 @@ const (
 	maxDiscussTitleRunes  = 80
 	maxDiscussReasonRunes = 300
 	discussMentionLimit   = 10 // 单条内容最多触达的被 @ 用户数
-	// 代码门槛占位：未达标视角的围栏代码块被整体替换为这行提示
-	codeHidePlaceholderFmt = "\n\n> 🔒 代码块已隐藏：本题最高得分需 ≥ %d 分，达到后自动可见\n\n"
 )
 
 // mentionRE 被 @ 提及：@用户名（限用户名字符集）。
 var mentionRE = regexp.MustCompile(`@([0-9A-Za-z_\-]{1,32})`)
-
-// imageMDRE 题内禁图检查：Markdown 图片语法或内联 <img（防截图代码绕过分数门槛）。
-var imageMDRE = regexp.MustCompile(`!\[[^\]]*\]\([^)]*\)|<img\b`)
 
 // ---------- 小工具 ----------
 
@@ -55,39 +50,6 @@ func truncRunes(s string, n int) string {
 func validDiscussKind(scope, kind string) bool {
 	set, ok := repo.DiscussValidKinds[scope]
 	return ok && kind != "" && set[kind]
-}
-
-// stripDiscussCodeBlocks 把 Markdown 围栏代码块整体替换为门槛提示（未达标视角读时裁剪）。
-// 只处理 ``` 围栏（缩进式代码块不入门槛语义）；未闭合围栏裁到文末。
-func stripDiscussCodeBlocks(content string, threshold int) string {
-	if threshold <= 0 || !strings.Contains(content, "```") {
-		return content
-	}
-	lines := strings.Split(content, "\n")
-	out := make([]string, 0, len(lines)+8)
-	inFence := false
-	wrote := false
-	for _, ln := range lines {
-		if strings.HasPrefix(strings.TrimSpace(ln), "```") {
-			if !inFence {
-				inFence = true
-				wrote = false
-				out = append(out, fmt.Sprintf(codeHidePlaceholderFmt, threshold))
-				continue
-			}
-			inFence = false
-			continue
-		}
-		if inFence {
-			if !wrote {
-				out = append(out, "```", fmt.Sprintf(codeHidePlaceholderFmt, threshold), "```")
-				wrote = true
-			}
-			continue
-		}
-		out = append(out, ln)
-	}
-	return strings.Join(out, "\n")
 }
 
 // notifyOne 站内通知 + 可选邮件转发（仅 1:1 互动类；发布/广播类扇出走 NotifyUsers）。
@@ -161,13 +123,12 @@ func authorUIDsReplies(list []*repo.DiscussReply) []int64 {
 // ---------- 访问闸门 ----------
 
 // discussProblemGate 题内讨论闸门：设置开关 / 题目可见性（隐藏题、赛程隐藏期与详情同口径）/
-// 赛中整题锁定 / 代码门槛。返回 nil 表示已写响应。
+// 赛中整题锁定。返回 nil 表示已写响应。（代码门槛 v0.53 渲染收口批整体退役——
+// 题内讨论代码对所有人可见，防泄漏依赖题解双闸与举报/删帖。）
 type discussProblemGate struct {
-	Problem     *repo.Problem
-	Threshold   int // 生效代码门槛（0 = 不隐藏）
-	CanViewCode bool
-	CanManage   bool // 题面编辑者（教师群体）
-	Privileged  bool
+	Problem   *repo.Problem
+	CanManage bool // 题面编辑者（教师群体）
+	Privileged bool
 }
 
 func (h *Handlers) problemDiscussGate(c *gin.Context, pid int64) (*discussProblemGate, bool) {
@@ -218,23 +179,8 @@ func (h *Handlers) problemDiscussGate(c *gin.Context, pid int64) (*discussProble
 		fail(c, http.StatusForbidden, "该题处于比赛/考试中，讨论已锁定，赛后开放")
 		return nil, false
 	}
-	// 代码门槛：每题覆盖 > 全局默认；0 = 不隐藏
-	threshold := s.DiscussCodeThresholdVal()
-	if p.DiscussCodeThreshold > 0 {
-		threshold = p.DiscussCodeThreshold
-	}
-	canViewCode := true
-	if threshold > 0 {
-		canViewCode = privileged || canManage || hasPerm(c, repo.PermDiscussCodeBypass)
-		if !canViewCode {
-			if best, err := h.repo.UserBestStatuses(c.Request.Context(), uid, []int64{p.ID}); err == nil {
-				canViewCode = best[p.ID].Score >= threshold
-			}
-		}
-	}
 	return &discussProblemGate{
-		Problem: p, Threshold: threshold, CanViewCode: canViewCode,
-		CanManage: canManage, Privileged: privileged,
+		Problem: p, CanManage: canManage, Privileged: privileged,
 	}, true
 }
 
@@ -406,9 +352,6 @@ func validateTopicBody(scope string, b *discussTopicBody) string {
 	}
 	if len(b.Content) > maxDiscussTopicBytes {
 		return "内容过长（上限 64KB）"
-	}
-	if scope == repo.DiscussScopeProblem && imageMDRE.MatchString(b.Content) {
-		return "题内讨论不支持图片（代码请用文本代码块， screenshots 会被分数门槛拦截）"
 	}
 	if len(b.RelatedPids) > 10 {
 		return "相关题目最多关联 10 道"

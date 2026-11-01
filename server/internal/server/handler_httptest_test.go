@@ -474,50 +474,34 @@ func jsonInt(v int64) string {
 	return string(b)
 }
 
-// ---- ④ 讨论代码门槛 ----
+// ---- ④ 讨论区渲染收口（v0.53：代码门槛退役，content 直发 + content_html 缓存） ----
 
-func TestStripDiscussCodeBlocks(t *testing.T) {
-	src := "前置\n```cpp\nsecret_code();\n```\n后置"
-	got := stripDiscussCodeBlocks(src, 60)
-	if strings.Contains(got, "secret_code") || !strings.Contains(got, "需 ≥ 60 分") {
-		t.Fatalf("未达标视角裁剪失效：%q", got)
+func TestDiscussTopicServesHtmlNoGate(t *testing.T) {
+	// 门槛功能已退役：题内讨论帖代码块对所有人可见，正文 md 原样直发并附写入时渲染的
+	// content_html；响应不再携带 gate/code_threshold/can_view_code 字段。
+	f := baseFake()
+	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
+	f.problems[3001] = &repo.Problem{ID: 3001, Title: "P", Difficulty: 3}
+	f.discussTopic = &repo.DiscussTopic{
+		ID: 7, Scope: repo.DiscussScopeProblem, ScopeID: 3001, UID: 200, Title: "求助",
+		Content:     "我的做法\n```cpp\nsecret_code();\n```",
+		ContentHtml: "<p>我的做法</p><pre><code>secret_code();</code></pre>",
 	}
-	if got := stripDiscussCodeBlocks(src, 0); got != src {
-		t.Fatalf("门槛 0 不应裁剪：%q", got)
-	}
-}
+	h := newTestHandlers(f)
+	r := testEngine(h)
+	tok := f.addUser(h, 100, "stu", repo.RoleDefault, 0)
 
-func TestDiscussCodeThresholdGate(t *testing.T) {
-	// 题内讨论帖含代码块：门槛 60 分，视角按本题最高分读时裁剪
-	mk := func(best int) (*gin.Engine, string) {
-		f := baseFake()
-		f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
-		f.problems[3001] = &repo.Problem{ID: 3001, Title: "P", Difficulty: 3}
-		f.settings.DiscussCodeThreshold = func() *int { v := 60; return &v }()
-		f.bestScores[3001] = best
-		f.discussTopic = &repo.DiscussTopic{
-			ID: 7, Scope: repo.DiscussScopeProblem, ScopeID: 3001, UID: 200, Title: "求助",
-			Content: "我的做法\n```cpp\nsecret_code();\n```",
-		}
-		h := newTestHandlers(f)
-		return testEngine(h), f.addUser(h, 100, "stu", repo.RoleDefault, 0)
-	}
-
-	r, tok := mk(30) // 最高 30 分 < 60：代码块被裁成门槛提示
 	_, body := doJSON(r, "GET", "/api/discuss/7", tok, "")
-	content := body["data"].(map[string]any)["topic"].(map[string]any)["content"].(string)
-	if strings.Contains(content, "secret_code") {
-		t.Fatalf("未达标视角泄漏代码：%q", content)
+	data := body["data"].(map[string]any)
+	topic := data["topic"].(map[string]any)
+	if content := topic["content"].(string); !strings.Contains(content, "secret_code") {
+		t.Fatalf("门槛退役后代码应原样可见：%q", content)
 	}
-	if !strings.Contains(content, "需 ≥ 60 分") {
-		t.Fatalf("未达标视角缺门槛提示：%q", content)
+	if html := topic["content_html"].(string); !strings.Contains(html, "secret_code") {
+		t.Fatalf("content_html 应随写入时渲染缓存下发：%q", html)
 	}
-
-	r2, tok2 := mk(100) // 满分 ≥ 60：代码原样可见
-	_, body2 := doJSON(r2, "GET", "/api/discuss/7", tok2, "")
-	content2 := body2["data"].(map[string]any)["topic"].(map[string]any)["content"].(string)
-	if !strings.Contains(content2, "secret_code") {
-		t.Fatalf("达标视角代码被误裁：%q", content2)
+	if _, has := data["gate"]; has {
+		t.Fatal("gate 字段应随门槛退役移除")
 	}
 }
 

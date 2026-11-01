@@ -782,7 +782,7 @@ export interface CreateExamPayload {
 // ---------- 首页公告 ----------
 
 export const noticeApi = {
-  get: () => get<{ content: string }>('/notice'),
+  get: () => get<{ content: string; html: string }>('/notice'),
 }
 
 // ---------- 讨论区（v0.24）：三区通用话题操作 + 题内/比赛独立列表入口 ----------
@@ -892,13 +892,13 @@ export const aiTutorApi = {
       daily_left?: number
     }>(`/problems/${pid}/ai`),
   getHint: (pid: number, level: number) =>
-    get<{ hint: { content: string; unlocked: boolean; at?: string } }>(`/problems/${pid}/ai/hint/${level}`),
+    get<{ hint: { content: string; content_html: string; unlocked: boolean; at?: string } }>(`/problems/${pid}/ai/hint/${level}`),
   buyHint: (pid: number, level: number) =>
     // 可能真生成（后端 AI 客户端上限 120s）：同 debug，放开到 130s 避免前端 20s 先断
     client
       .post<
         ApiResponse<{
-          hint: { content: string; unlocked: boolean }
+          hint: { content: string; content_html: string; unlocked: boolean }
           charged: boolean
           price?: number
           balance?: number
@@ -909,10 +909,10 @@ export const aiTutorApi = {
     // 真生成常超 20s（后端 AI 客户端上限 120s）：全局 20s 超时会先断、后端却继续跑完
     //（审计佐证：失败全为配置错误、无超时）——生成类请求放开到 130s 对齐后端
     client
-      .post<ApiResponse<{ content: string; price: number; balance: number }>>(`/submissions/${sid}/ai-debug`, {}, { timeout: 130000 })
+      .post<ApiResponse<{ content: string; content_html: string; price: number; balance: number }>>(`/submissions/${sid}/ai-debug`, {}, { timeout: 130000 })
       .then((r) => r.data.data),
   // 回看本人对该提交的最近一次找 bug 结果（无记录 content 为空串）
-  result: (sid: number) => get<{ content: string }>(`/submissions/${sid}/ai-debug`),
+  result: (sid: number) => get<{ content: string; content_html: string }>(`/submissions/${sid}/ai-debug`),
 }
 
 export const notifyApi = {

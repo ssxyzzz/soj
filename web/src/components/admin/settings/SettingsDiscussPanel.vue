@@ -10,7 +10,6 @@ const discussGlobalEnabled = ref(true)
 const discussProblemEnabled = ref(true)
 const discussContestEnabled = ref(true)
 const discussGlobalLocked = ref(false)
-const discussCodeThreshold = ref(60)
 const discussTopicDailyLimit = ref(5)
 const discussReplyIntervalSec = ref(30)
 const discussNewbieDays = ref(7)
@@ -25,7 +24,6 @@ onMounted(async () => {
     discussProblemEnabled.value = s.discuss_problem_enabled ?? true
     discussContestEnabled.value = s.discuss_contest_enabled ?? true
     discussGlobalLocked.value = !!s.discuss_global_locked
-    discussCodeThreshold.value = s.discuss_code_threshold ?? 60
     discussTopicDailyLimit.value = s.discuss_topic_daily_limit ?? 5
     discussReplyIntervalSec.value = s.discuss_reply_interval_sec ?? 30
     discussNewbieDays.value = s.discuss_newbie_days ?? 7
@@ -43,7 +41,6 @@ async function save() {
       discuss_problem_enabled: discussProblemEnabled.value,
       discuss_contest_enabled: discussContestEnabled.value,
       discuss_global_locked: discussGlobalLocked.value,
-      discuss_code_threshold: discussCodeThreshold.value,
       discuss_topic_daily_limit: discussTopicDailyLimit.value,
       discuss_reply_interval_sec: discussReplyIntervalSec.value,
       discuss_newbie_days: discussNewbieDays.value,
@@ -84,12 +81,6 @@ async function save() {
       <el-form-item label="比赛讨论区">
         <el-switch v-model="discussContestEnabled" />
         <span class="dim" style="margin-left: 8px">主题库比赛讨论区总开关（班级考试无讨论区）</span>
-      </el-form-item>
-      <el-form-item label="讨论代码门槛（分）">
-        <el-input-number v-model="discussCodeThreshold" :min="0" :max="100" />
-        <span class="dim" style="margin-left: 8px">
-          题内讨论代码块：本题最高得分 ≥ 该值才可见（0 = 不隐藏）；每题可在编辑页覆盖
-        </span>
       </el-form-item>
       <el-form-item label="每人每日发帖上限">
         <el-input-number v-model="discussTopicDailyLimit" :min="0" :max="100" />

@@ -172,9 +172,6 @@ async function submit() {
       </span>
     </div>
     <MdEditor v-model="content" :height="isProblem ? '320px' : '380px'" variant="compact" />
-    <div v-if="isProblem" class="post-hint">
-      代码块按分数门槛展示：未达到本题「讨论代码门槛」的同学看不到你贴的代码
-    </div>
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
       <el-button type="primary" :loading="submitting" @click="submit">

@@ -127,7 +127,7 @@ async function printPaper() {
         <div v-if="p.file_io_input" class="paper-file-io">
           文件 IO：{{ p.file_io_input }} / {{ p.file_io_output }}
         </div>
-        <MdView v-if="p.description" :content="p.description" :html="p.description_html" />
+        <MdView v-if="p.description" :html="p.description_html ?? ''" />
 
         <div v-if="p.type === 'objective' && p.questions?.length" class="paper-objective">
           <div v-for="(q, qi) in p.questions" :key="qi" class="paper-question">
@@ -135,7 +135,7 @@ async function printPaper() {
               <span>第 {{ qi + 1 }} 题</span>
               <span class="paper-q-kind">{{ kindName(q.kind) }}</span>
             </div>
-            <MdView v-if="q.stem" :content="q.stem" />
+            <MdView v-if="q.stem" :html="q.stem_html" />
             <div v-if="q.kind === 'blank'" class="paper-blanks">
               <div v-for="bi in q.blank_count" :key="bi" class="paper-blank">
                 第 {{ bi }} 空：<span class="paper-blank-line"></span>
@@ -305,11 +305,7 @@ async function printPaper() {
   max-width: none !important;
 }
 
-.paper-view .vditor-copy {
-  display: none !important;
-}
-
-/* MdView 复制反馈按钮（.md-copy-btn）也不应出现在试卷上 */
+/* MdView 复制反馈按钮（.md-copy-btn）不应出现在试卷上 */
 .paper-view .md-copy-btn,
 .paper-view .md-copy-text {
   display: none !important;

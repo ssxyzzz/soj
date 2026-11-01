@@ -22,6 +22,7 @@ const tutorName = ref('小玉')
 const levels = ref<AiHintLevel[]>([])
 const dailyLeft = ref(0)
 const hintContent = ref<Record<number, string>>({})
+const hintHtml = ref<Record<number, string>>({}) // 写入时渲染缓存（v0.53）：MdView 直渲
 const buying = ref(0)
 const loading = ref(false)
 
@@ -32,7 +33,7 @@ const levelMeta = [
 ]
 
 // 结果弹窗（动作在右上角，拍板 C）
-const dlg = reactive({ show: false, level: 1, label: '', content: '', loading: false })
+const dlg = reactive({ show: false, level: 1, label: '', content: '', html: '', loading: false })
 
 async function load() {
   if (!userStore.token) return
@@ -50,7 +51,10 @@ async function load() {
       if (lv.unlocked && lv.has_content && !hintContent.value[lv.level]) {
         aiTutorApi
           .getHint(props.pid, lv.level)
-          .then((h) => (hintContent.value[lv.level] = h.hint.content))
+          .then((h) => {
+            hintContent.value[lv.level] = h.hint.content
+            hintHtml.value[lv.level] = h.hint.content_html
+          })
           .catch(() => {})
       }
     }
@@ -81,6 +85,7 @@ async function genLevel(n: number) {
   try {
     const r = await aiTutorApi.buyHint(props.pid, n)
     hintContent.value[n] = r.hint.content
+    hintHtml.value[n] = r.hint.content_html
     const lv = levels.value[n - 1]
     if (lv) {
       lv.unlocked = true
@@ -91,7 +96,10 @@ async function genLevel(n: number) {
       jadeApi.mine().then((m) => userStore.setJade(m.balance, m.currency)).catch(() => {})
     }
     if (dailyLeft.value > 0) dailyLeft.value--
-    if (dlg.show && dlg.level === n) dlg.content = r.hint.content
+    if (dlg.show && dlg.level === n) {
+      dlg.content = r.hint.content
+      dlg.html = r.hint.content_html
+    }
     ElMessage.success(r.charged ? `已生成（花费 ${r.price} 玉）` : '已生成（教师/满分免费）')
   } catch {
     // 拦截器统一提示（余额不足/每日上限/赛时封锁/生成失败已退费）
@@ -113,6 +121,7 @@ async function buy(lv: AiHintLevel) {
   dlg.level = lv.level
   dlg.label = levelMeta[lv.level - 1].label
   dlg.content = ''
+  dlg.html = ''
   dlg.show = true
   await genLevel(lv.level)
 }
@@ -122,17 +131,23 @@ async function openDlg(n: number) {
   dlg.level = n
   dlg.label = levelMeta[n - 1].label
   dlg.show = true
-  if (hintContent.value[n]) {
+  if (hintHtml.value[n]) {
     dlg.content = hintContent.value[n]
+    dlg.html = hintHtml.value[n]
     return
   }
   dlg.content = ''
+  dlg.html = ''
   dlg.loading = true
   try {
     const r = await aiTutorApi.getHint(props.pid, n)
     if (r.hint.content) {
       hintContent.value[n] = r.hint.content
-      if (dlg.show && dlg.level === n) dlg.content = r.hint.content
+      hintHtml.value[n] = r.hint.content_html
+      if (dlg.show && dlg.level === n) {
+        dlg.content = r.hint.content
+        dlg.html = r.hint.content_html
+      }
     }
   } catch {
     // 拦截器统一提示
@@ -217,7 +232,7 @@ defineExpose({ refresh: load })
         </div>
       </template>
       <div v-loading="dlg.loading" class="dlg-body">
-        <MdView v-if="dlg.content" :content="dlg.content" variant="compact" />
+        <MdView v-if="dlg.html" :html="dlg.html" variant="compact" />
         <p v-else class="dim dlg-empty">
           还没有生成过——点击右上角「{{ regenLabel }}」让 {{ tutorName }} 生成一份。
         </p>

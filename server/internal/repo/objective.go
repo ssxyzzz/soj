@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"soj/internal/mdrender"
 )
 
 // 题目类型（Problem.Type；空 = 传统题，存量零迁移）
@@ -40,6 +42,18 @@ type ObjectiveQuestion struct {
 	Blanks      []ObjectiveBlank `bson:"blanks,omitempty"        yaml:"blanks,omitempty"      json:"blanks,omitempty"`
 	Explanation string           `bson:"explanation,omitempty"   yaml:"explanation,omitempty" json:"explanation,omitempty"`
 	Score       int              `bson:"score,omitempty"         yaml:"score,omitempty"       json:"score,omitempty"` // 缺省 0 = 等分
+	// StemHtml/ExplanationHtml 写入时渲染缓存（v0.53 渲染收口）：查看端直发 html 零引擎；
+	// yaml:"-" 两向排除——题包导入导出的 YAML 永远只有 md 事实源
+	StemHtml        string `bson:"stemHtml,omitempty"        yaml:"-" json:"stem_html,omitempty"`
+	ExplanationHtml string `bson:"explanationHtml,omitempty" yaml:"-" json:"explanation_html,omitempty"`
+}
+
+// RenderQuestionsHtml 就地为整卷小题补渲染缓存（写入口单点调用；v0.53 渲染收口）。
+func RenderQuestionsHtml(qs []ObjectiveQuestion) {
+	for i := range qs {
+		qs[i].StemHtml = mdrender.Render(qs[i].Stem)
+		qs[i].ExplanationHtml = mdrender.Render(qs[i].Explanation)
+	}
 }
 
 // ObjectiveBlank 填空题一空：可接受答案列表（任一命中即对）+ 大小写敏感开关。
@@ -406,6 +420,7 @@ func GradeObjectiveSet(qs []ObjectiveQuestion, answers []ObjectiveAnswer) (statu
 type PublicQuestionView struct {
 	Index      int      `json:"index"`
 	Stem       string   `json:"stem"`
+	StemHtml   string   `json:"stem_html"` // 写入时渲染缓存（v0.53）
 	Kind       string   `json:"kind"`
 	Options    []string `json:"options"`
 	BlankCount int      `json:"blank_count"`
@@ -417,7 +432,7 @@ func PublicSetView(qs []ObjectiveQuestion) []PublicQuestionView {
 	out := make([]PublicQuestionView, 0, len(qs))
 	for i := range qs {
 		v := PublicQuestionView{
-			Index: i + 1, Stem: qs[i].Stem, Kind: qs[i].Kind,
+			Index: i + 1, Stem: qs[i].Stem, StemHtml: qs[i].StemHtml, Kind: qs[i].Kind,
 			Options: qs[i].Options, BlankCount: len(qs[i].Blanks), Score: qs[i].Score,
 		}
 		if v.Options == nil {

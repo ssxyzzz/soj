@@ -133,6 +133,7 @@ export type ObjectiveKind = 'single' | 'multiple' | 'judge' | 'blank'
 export interface ObjectiveQuestionView {
   index: number
   stem: string
+  stem_html: string // 写入时渲染缓存（v0.53 渲染收口）
   kind: ObjectiveKind
   options: string[]
   blank_count: number
@@ -142,11 +143,13 @@ export interface ObjectiveQuestionView {
 // 客观题整卷完整定义（满分∨老师门槛下的 questions_full；编辑回填也用它）
 export interface ObjectiveQuestionFull {
   stem?: string
+  stem_html?: string // 写入时渲染缓存（v0.53）；编辑回填忽略
   kind: ObjectiveKind
   options?: string[]
   answer?: number[]
   blanks?: { accept: string[]; case_sensitive?: boolean }[]
   explanation?: string
+  explanation_html?: string // 写入时渲染缓存（v0.53）
   score?: number
 }
 
@@ -212,7 +215,6 @@ export interface ProblemDetail {
   challenge_time_sec?: number // 原始覆盖配置（编辑回填；0/缺省 = 按难度默认）——仅编辑者下发
   video_url?: string // 答案解析视频原始链接（编辑回填）——仅编辑者下发
   solution_video_url?: string // 答案解析视频（展示侧，满分∨老师门槛；无链接缺省）
-  discuss_code_threshold?: number // 题内讨论代码门槛覆盖（编辑回填；0 = 跟随全局）——仅编辑者下发
 }
 
 // 挑战模式（v0.23）
@@ -929,6 +931,7 @@ export interface ContestProblem {
 export interface PaperQuestion {
   kind: ObjectiveKind
   stem: string
+  stem_html: string // 写入时渲染缓存（v0.53）：打印页零引擎零等待
   options?: string[]
   blank_count: number
 }
@@ -1038,6 +1041,7 @@ export interface DiscussTopic {
   kind: string
   title: string
   content?: string
+  content_html?: string // 写入时渲染缓存（v0.53 渲染收口）：查看端唯一渲染源
   related_pids?: number[]
   list_id?: number
   tag_id?: number
@@ -1073,6 +1077,7 @@ export interface DiscussReply {
   tid: number
   uid: number
   content: string
+  content_html?: string // 写入时渲染缓存（v0.53 渲染收口）
   reply_to: number
   like_count: number
   accepted?: boolean
@@ -1090,8 +1095,6 @@ export interface DiscussListResult {
   total: number
   enabled?: boolean
   disabled_reason?: string
-  code_threshold?: number
-  can_view_code?: boolean
   locked?: boolean
   running?: boolean
   ended?: boolean
@@ -1106,7 +1109,6 @@ export interface DiscussTopicDetail {
   reply_total?: number
   reply_page?: number
   reply_pages?: number
-  gate?: { code_threshold: number; can_view_code: boolean }
 }
 
 export interface NotificationItem {
@@ -1151,7 +1153,6 @@ export interface AdminSettings {
   discuss_problem_enabled: boolean
   discuss_contest_enabled: boolean
   discuss_global_locked: boolean
-  discuss_code_threshold: number
   discuss_topic_daily_limit: number
   discuss_reply_interval_sec: number
   discuss_newbie_days: number
