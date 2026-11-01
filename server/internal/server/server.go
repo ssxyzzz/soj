@@ -363,6 +363,8 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.GET("/users", RequirePerm(repo.PermAdminUserManage), h.AdminListUsers)
 				adminG.POST("/users", RequirePerm(repo.PermAdminUserManage), h.AdminCreateUser)
 				adminG.PATCH("/users/:id", RequirePerm(repo.PermAdminUserManage), h.AdminUpdateUser)
+				// 改用户 ID（v0.50）：跨集合引用搬家（事务原子），与用户管理同权限位
+				adminG.PATCH("/users/:id/change-id", RequirePerm(repo.PermAdminUserManage), h.AdminChangeUserID)
 				// 批量建号（v0.34 中文花名册·两段式）：模板下载 + 上传识别 + 确认建号，与建号同权限位
 				adminG.GET("/users/import-template", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportTemplate)
 				adminG.POST("/users/import-preview", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportPreview)

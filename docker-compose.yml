@@ -16,6 +16,12 @@ services:
     command: ["--replSet", "rs0", "--bind_ip_all", "--wiredTigerCacheSizeGB", "1"]
     # 资源上限（v0.28）：与 WT 缓存匹配留出连接/排序开销，防内存挤压整机
     mem_limit: 2g
+    # fd 上限（v0.50 随批）：容器默认软限 1024，go test 套件每例新建连接池的洪峰
+    # 会把 mongod 打到 TooManyFilesOpen 直接崩溃重启（2026-11-01 repo 全量测试实锤）
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     volumes:
       - mongo-data:/data/db
     ports:

@@ -20,6 +20,7 @@ const typeMeta: Record<string, { label: string; kind: 'success' | 'danger' | 'wa
   discuss_mute: { label: '讨论禁言', kind: 'warning' },
   broadcast: { label: '全站广播', kind: 'primary' },
   user_import: { label: '批量建号', kind: 'primary' },
+  uid_change: { label: '改用户 ID', kind: 'warning' },
 }
 
 const list = ref<SecurityLogItem[]>([])

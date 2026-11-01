@@ -560,6 +560,9 @@ export const adminApi = {
       region?: string
     },
   ) => patch<{ updated: number }>(`/admin/users/${id}`, patchBody),
+  // 改用户 ID（v0.50）：跨集合引用搬家（服务端事务原子），stats = 各集合迁移条数
+  changeUserId: (id: number, newId: number) =>
+    patch<{ stats: Record<string, number>; moved: number }>(`/admin/users/${id}/change-id`, { newId }),
   getSettings: () => get<AdminSettings>('/admin/settings'),
   updateSettings: (patch: Partial<AdminSettings>) => put<AdminSettings>('/admin/settings', patch),
   // 等级面板（v0.11，root）

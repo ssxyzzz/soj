@@ -37,6 +37,7 @@ type RepoAPI interface {
 	AttachChallengeSubmission(ctx context.Context, cid, sid int64, langName string, codeLen int, changelog []repo.ChallengeDelta) (bool, error)
 	AvgJudgeMSRecent(ctx context.Context) (float64, error)
 	BumpPwdVer(ctx context.Context, uid int64) error
+	ChangeUserID(ctx context.Context, oldUID, newUID int64) (map[string]int64, error)
 	ChallengeRunningOK(ctx context.Context, cid, uid, pid int64) (bool, error)
 	ClassMemberIDs(ctx context.Context, classID int64) ([]int64, error)
 	ClassMemberRole(ctx context.Context, classID, uid int64) (string, error)

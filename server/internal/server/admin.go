@@ -1,6 +1,8 @@
 package server
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -278,6 +280,55 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		h.idents.flush() // 角色/用户名/密码版本变更即时生效（不等缓存 TTL）
 	}
 	ok(c, gin.H{"updated": id})
+}
+
+// AdminChangeUserID PATCH /api/admin/users/:id/change-id（v0.50 管理端改 ID）。
+// uid 是全站身份主键：搬家在 repo 事务内原子完成，成功后失效身份缓存（被改者旧
+// token 立即下线，原用户名密码重登即恢复）并落 uid_change 安全审计。
+func (h *Handlers) AdminChangeUserID(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	var req struct {
+		NewID int64 `json:"newId" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.NewID <= 0 {
+		fail(c, http.StatusBadRequest, "新 ID 需为正整数")
+		return
+	}
+	if req.NewID == id {
+		fail(c, http.StatusBadRequest, "新 ID 与当前 ID 相同")
+		return
+	}
+	stats, err := h.repo.ChangeUserID(c.Request.Context(), id, req.NewID)
+	if err != nil {
+		switch {
+		case errors.Is(err, repo.ErrChangeIDBadArgs):
+			fail(c, http.StatusBadRequest, "ID 非法（须为不相等的正整数）")
+		case errors.Is(err, repo.ErrChangeIDNotFound):
+			fail(c, http.StatusNotFound, "用户不存在")
+		case errors.Is(err, repo.ErrChangeIDBusy):
+			fail(c, http.StatusBadRequest, "目标 ID 已被占用")
+		case errors.Is(err, repo.ErrChangeIDRoot):
+			fail(c, http.StatusForbidden, "root 账号 ID 受保护，不可修改")
+		default:
+			slog.Error("改用户 ID 失败（事务已回滚）", "component", "admin",
+				"old", id, "new", req.NewID, "error", err)
+			fail(c, http.StatusInternalServerError, "改 ID 失败，数据未变更（事务已整体回滚）")
+		}
+		return
+	}
+	total := int64(0)
+	for _, n := range stats {
+		total += n
+	}
+	h.idents.flush() // 旧 uid 的身份缓存与 token 立即失效
+	if u, err := h.repo.GetUserByID(c.Request.Context(), req.NewID); err == nil {
+		h.securityLog(c, repo.SecUIDChange, req.NewID, u.Username,
+			fmt.Sprintf("用户 ID #%d 改为 #%d（跨集合迁移记录 %d 条）", id, req.NewID, total))
+	}
+	ok(c, gin.H{"stats": stats, "moved": total})
 }
 
 // ---- 系统设置（root） ----
