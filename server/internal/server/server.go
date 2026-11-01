@@ -100,6 +100,7 @@ func Run(ctx context.Context, deps *Deps) {
 		rank:          newRankCache(deps.Repo),
 		limiter:       newRateLimiter(),
 		runLimit:      newRateLimiter(),
+		renderLimit:   newRateLimiter(),
 		boards:        newBoardsCache(deps.Repo),
 		idents:        newIdentCache(),
 		ipLimitGlobal: newIPLimiter(ipRateGlobalPerMin, time.Minute),
@@ -156,6 +157,8 @@ func Run(ctx context.Context, deps *Deps) {
 			api.POST("/problems/:id/ai/hint/:level", AuthRequired(h), h.BuyAiHint)
 			api.POST("/submissions/:id/ai-debug", AuthRequired(h), h.AiDebug)
 			api.GET("/submissions/:id/ai-debug", AuthRequired(h), h.AiDebugResult)
+			// Markdown 预览渲染（v0.52）：编辑器分屏预览服务端同源渲染（见 render.go）
+			api.POST("/render", AuthRequired(h), h.RenderMarkdown)
 
 		api.GET("/problems", AuthOptional(h), h.ListProblems)
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)

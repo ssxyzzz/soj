@@ -37,8 +37,8 @@ type UserPrefs struct {
 	Autocomplete  *bool             `bson:"autocomplete,omitempty" json:"autocomplete,omitempty"` // 代码自动补全（v0.5.3，默认开箱开启；后续按用户等级门槛放开——预留接口）
 	CodeFont      string            `bson:"codeFont,omitempty" json:"codeFont,omitempty"`         // 代码编辑器字体：Consolas / Menlo / Monaco，空为 Consolas
 	CodeFontSize  int               `bson:"codeFontSize,omitempty" json:"codeFontSize,omitempty"` // 编辑器字号 px（12-48），0 为默认 15
-	MdEditMode    string            `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"`     // Markdown 编辑器默认模式：wysiwyg / ir / sv，空为 wysiwyg（v0.8.1）
-	MdTheme       string            `bson:"mdTheme,omitempty" json:"mdTheme,omitempty"`           // Markdown 内容主题：light / ant-design / dark / wechat，空为 light（v0.8.1）
+	MdEditMode string `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"` // Markdown 编辑器模式：split / source（v0.52 起两模式），空为 split；存量 wysiwyg/ir/sv 由前端读时归一 split（v0.8.1 引入，v0.52 收敛）
+	// MdTheme（Vditor 内容主题）随 v0.52 编辑器内芯换血退役：预览恒站内 .soj-md 真实排版，存量库值不再读写
 	// 通知邮件转发（v0.24）：开通的类型列表（NotifyMailCategories 子集），空 = 全关（默认）。
 	// 仅 1:1 互动类支持邮件；发布/广播类是扇出，不做邮件。
 	NotifyEmail []string `bson:"notifyEmail,omitempty" json:"notifyEmail,omitempty"`

@@ -734,8 +734,8 @@ export interface UserPrefs {
   autocomplete?: boolean // 代码自动补全（v0.11 起需等级 ≥ 系统设置阈值，默认 Lv.5）
   codeFont?: string // 编辑器字体：Consolas / Menlo / Monaco（默认 Consolas）
   codeFontSize?: number // 编辑器字号 px（12-48，默认 14）
-  mdEditMode?: 'wysiwyg' | 'ir' | 'sv' | '' // Markdown 编辑器默认模式（空 = wysiwyg）
-  mdTheme?: 'light' | 'ant-design' | 'dark' | 'wechat' | '' // Markdown 内容主题（空 = light）
+  mdEditMode?: 'split' | 'source' | '' // Markdown 编辑器模式（v0.52 起两模式：split 分屏预览 / source 纯源码；空与存量 wysiwyg·ir·sv 读时归一 split）
+  // mdTheme（Vditor 内容主题）随 v0.52 编辑器内芯换血退役：预览恒站内 .soj-md 真实排版
 }
 
 // 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）

@@ -55,7 +55,6 @@ export function mergedPrefs(patch: Partial<UserPrefs>): UserPrefs {
     codeFont: p.codeFont ?? '',
     codeFontSize: p.codeFontSize ?? 0, // 0 = 未设置，后端按默认 14 处理
     mdEditMode: p.mdEditMode ?? '',
-    mdTheme: p.mdTheme ?? '',
     ...patch,
   }
   // 等级未达标时强制 false：后端对 autocomplete=true 一律按等级拒绝，而设置页

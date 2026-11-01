@@ -111,7 +111,7 @@ async function savePrefs() {
   savingPrefs.value = true
   try {
     // 全量合成后整体覆盖（避免清掉在线编程保存的字体/字号），先乐观更新本地再落库。
-    // mdEditMode / mdTheme 不在设置页维护（2026-10-27 起）：编辑器工具栏切换即实时回存，
+    // mdEditMode 不在设置页维护（2026-10-27 起）：编辑器工具栏切换即实时回存，
     // mergedPrefs 会带着 store 里的现值一起落库，不会被旧表单值覆盖
     const merged = mergedPrefs({
       defaultLang: prefsForm.defaultLang,

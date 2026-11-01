@@ -35,6 +35,9 @@ type Handlers struct {
 	rank     *rankCache
 	limiter  *rateLimiter
 	runLimit *rateLimiter // 自测每 人限流（v0.23，独立于提交限流窗口）
+	// 预览渲染限流（v0.52 编辑器内芯换血）：/api/render 独立滑窗——与提交限速
+	// 分账，预览调用不消耗提交预算；上限固定 renderPerMinute（见 render.go）
+	renderLimit *rateLimiter
 	boards   *boardsCache // 题内三榜缓存（v0.23，TTL 30s）
 	idents   *identCache
 	// IP 限流（v0.14）：global 全 /api、auth 登录注册等，独立滑动窗口；内存态，单进程

@@ -1,23 +1,32 @@
 <script setup lang="ts">
-// Markdown 编辑器内芯（v0.8.1：Vditor 4）。
-// 内容 md 进出（modelValue）；编辑模式（wysiwyg / ir / sv）与内容主题（light / ant-design /
-// dark / wechat）读自个人设置（prefs.mdEditMode / prefs.mdTheme），在工具栏切换时自动回存
-// 到账号——换浏览器/换设备仍跟人走。预览顶部的 Desktop/Tablet/Mobile 设备条经
-// preview.actions: [] 关闭。
-// 懒加载子资源（KaTeX/highlight/内容主题）自托管 /vditor——scripts/copy-vditor.mjs 把
-// node_modules/vditor/dist 拷进 public（零 CDN，缓存语义见 server static_test）。
-// 上传直连 /api/uploads：响应信封 {code,data:{succMap}} 与 Vditor 4 原生钩子兼容；
-// 字段名服务端读 form.File["file"]，必须显式覆盖 Vditor 默认的 file[]。
-// 本组件经 MdEditor 薄壳异步加载：Vditor 只进编辑器懒 chunk，主包零增量。
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type Vditor from 'vditor'
-import 'vditor/dist/index.css'
+// Markdown 编辑器内芯（v0.52 编辑器内芯换血：Vditor → CodeMirror 6 自建薄壳）。
+// 红线（plan §2.52）：md 进 md 出——组件契约与 Vditor 时代完全一致，薄壳 MdEditor
+// 与全部调用点零改动，存储模型/写入时渲染零触碰。两模式：split（分屏预览）/
+// source（纯源码），偏好持久化 prefs.mdEditMode（存量 wysiwyg/ir/sv 一律归一
+// split——三者的共同诉求都是「边写边看」）。
+// 预览 = POST /api/render 服务端渲染（与写入口径同一把 lute 同一套消毒），
+// 「编辑器里看到的 = 发布后看到的」；断网/限频预览区降级提示，编辑与保存不受阻。
+// 图片：粘贴/拖入/工具栏直传 /api/uploads（服务端零改动，沿用 Vditor 约定信封）。
+// Vditor 时代补丁全部退役：undo 补同步（updateListener 原生覆盖）、主题单例复位
+// （预览恒站内 .soj-md 真实排版）、全屏 overflow 兜底（自管）、MutationObserver
+// （按钮是自己的 DOM）、量高补丁（autoHeight 由 CSS overflow 自然生长）。
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import {
+  Bold, Code, Columns2, FileCode, Heading1, Heading2, Heading3, Image as ImageIcon, Italic,
+  Link2, List, ListOrdered, ListTodo, Maximize, Minimize, Minus, Redo2, Sigma, SquareCode,
+  SquareSigma, Strikethrough, Table as TableIcon, TextQuote, Undo2,
+} from 'lucide-vue-next'
+import { ElMessage } from 'element-plus'
+import type { Component } from 'vue'
 
-import { authApi } from '@/api'
+import { markdown } from '@codemirror/lang-markdown'
+import { undo, redo } from '@codemirror/commands'
+import { EditorView, keymap, placeholder } from '@codemirror/view'
+import { basicSetup } from 'codemirror'
+
+import { authApi, mdApi } from '@/api'
+import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
-import type { UserPrefs } from '@/types'
-import { bindCopyFeedback } from '@/utils/md'
-import { VDITOR_CDN } from '@/utils/vditorCdn'
 
 const props = withDefaults(
   defineProps<{
@@ -38,165 +47,40 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
 
 const userStore = useUserStore()
 
-type MdEditMode = 'wysiwyg' | 'ir' | 'sv'
-type MdTheme = Exclude<NonNullable<UserPrefs['mdTheme']>, ''>
+type MdEditMode = 'split' | 'source'
+// 存量偏好归一：wysiwyg/ir/sv 的共同诉求都是「边写边看」，一律落 split
+function normalizeMode(v: string | undefined): MdEditMode {
+  return v === 'source' ? 'source' : 'split'
+}
 
-// 合法主题集合：工具栏调色板的图标按钮自身也带 data-type="content-theme"（Vditor MenuItem
-// 统一构造），点开面板的第一次点击会读到它——非主题值必须在这里滤掉，不能直传后端
-const MD_THEMES = new Set<string>(['light', 'ant-design', 'dark', 'wechat'])
-
-const initialMode = (userStore.prefs.mdEditMode || 'wysiwyg') as MdEditMode
-const currentTheme = ref<MdTheme>((userStore.prefs.mdTheme || 'light') as MdTheme)
-const lightTheme = computed(() => currentTheme.value === 'light')
-// 用户拖过 Vditor 右下角 resize 手柄后，手动尺寸优先于内容自适应
-const userSized = ref(false)
+const mode = ref<MdEditMode>(normalizeMode(userStore.prefs.mdEditMode))
+const fullscreen = ref(false)
 const loading = ref(true)
 const editorError = ref('')
+const userSized = ref(false)
+const splitPct = ref(50)
+const uploadingCount = ref(0)
 
-const el = ref<HTMLDivElement>()
-let vd: Vditor | null = null
-let VditorCtor: typeof Vditor | null = null
-let modeObserver: MutationObserver | null = null
-let unbindCopy: (() => void) | null = null
+// 预览态：idle（空内容）/ loading / ok / error（断网、限频、超长——编辑不受阻）
+const previewHtml = ref('')
+const previewState = ref<'idle' | 'loading' | 'ok' | 'error'>('idle')
+
+const rootEl = ref<HTMLDivElement>()
+const toolbarEl = ref<HTMLDivElement>()
+const editorHost = ref<HTMLDivElement>()
+const previewPane = ref<HTMLDivElement>()
+const fileInput = ref<HTMLInputElement>()
+
+// CM6 经静态 import 进编辑器懒 chunk（薄壳 MdEditor 异步加载，主包零增量；
+// 与 CodeEditor 共享 codemirror 公共 chunk）。类型走 any 与 CodeEditor 同口径。
+let view: EditorView | null = null
 let inner = props.modelValue // 防回显循环
 
-// 偏好回存：工具栏切模式/主题只发本次变更的字段（服务端在既有偏好上合并，
-// 不会冲掉默认语言/代码模板等其它偏好）；400ms 防抖合并连续切换。
+// ---- 偏好回存（沿用 Vditor 时代节奏：400ms 防抖合并，只发变更字段） ----
 let prefTimer: number | undefined
-let pendingPref: { mdEditMode?: MdEditMode; mdTheme?: MdTheme } = {}
+let pendingPref: { mdEditMode?: MdEditMode } = {}
 
-// ---- 自生长高度（v0.9.3，v0.9.5 取消视口上限）----
-// Vditor 的 height:'auto' 只在部分模式生效（sv/ir 内容区是定高 flex + 内部滚动），
-// 这里直接量内容区各子面板的 scrollHeight，把编辑器高度设为「内容高 + 工具栏」，
-// 不设 62vh 上限：普通编辑也随内容长高，页面整体滚动；全屏仍由 Vditor 的 100vh 接管。
-let fitTimer: number | undefined
-
-// 现代浏览器（Chrome 123+）支持 field-sizing: content——textarea 按内容原生自撑，
-// 比脚本量 scrollHeight 精确且无抖动。支持时交给 CSS，不支持才走 JS 测量。
-const fieldSizing = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('field-sizing', 'content')
-
-// Vditor 把 .vditor 类直接加在 ref 宿主 div 上，不再另建子节点
-function editorRoot(): HTMLElement | null {
-  const host = el.value
-  if (!host) return null
-  return host.classList.contains('vditor') ? host : host.querySelector<HTMLElement>('.vditor')
-}
-
-function fitHeight() {
-  if (!props.autoHeight || userSized.value) return
-  const root = editorRoot()
-  if (!root) return
-  if (fieldSizing) {
-    // CSS 接管：清掉可能残留的内联高度，让 .md-field 规则生效
-    root.style.removeProperty('height')
-    return
-  }
-  const tb = root.querySelector<HTMLElement>('.vditor-toolbar')
-  const tbH = tb ? tb.offsetHeight : 0
-
-  // 内容高度：各编辑面板的 scrollHeight 反映「内容全高」，与当前可视高度无关。
-  // 注意不能按 offsetParent 过滤——sv 的 textarea 在部分布局下 offsetParent 为 null，
-  // 上一版就是因此量不到内容、高度停在两三行还带滚动条。
-  let contentH = 0
-  const ta = root.querySelector<HTMLTextAreaElement>('textarea.vditor-sv')
-  if (ta) contentH = Math.max(contentH, ta.scrollHeight)
-  const pv = root.querySelector<HTMLElement>('.vditor-preview')
-  if (pv) contentH = Math.max(contentH, pv.scrollHeight)
-  const editable = root.querySelector<HTMLElement>('.vditor-ir .vditor-reset, .vditor-wysiwyg .vditor-reset')
-  if (editable) contentH = Math.max(contentH, editable.scrollHeight)
-  if (contentH <= 0) return
-
-  // 高度 = 内容 + 工具栏（2026-10-27 重新设定）：内容元素的 padding-bottom（.md-auto
-  // 规则，恒定 2 行 = 54px）已计入 scrollHeight——底部留白恒定，空编辑器也有 2 行；
-  // 不再设内容下限（min-height 会随内容拉伸容器，造成各编辑器底部留白忽大忽小）
-  const h = contentH + tbH
-  root.style.height = `${h}px`
-}
-
-function scheduleFit() {
-  if (!props.autoHeight) return
-  if (fitTimer) window.clearTimeout(fitTimer)
-  fitTimer = window.setTimeout(fitHeight, 120)
-}
-
-function onWindowResize() {
-  scheduleFit()
-}
-
-// Vditor 懒 chunk 在服务刚启动/版本刚切换时可能瞬时 404：重试两次，
-// 仍失败则交给 UI 提示刷新页面，避免留下一块什么都不显示的空白。
-async function loadVditor() {
-  let lastErr: unknown
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      return (await import('vditor')).default
-    } catch (e) {
-      lastErr = e
-      await new Promise((resolve) => window.setTimeout(resolve, 400 * (attempt + 1)))
-    }
-  }
-  throw lastErr
-}
-
-function reloadPage() {
-  window.location.reload()
-}
-
-let bodyOverflowBeforeFullscreen = ''
-
-// 全屏按钮切 body overflow；退出时 Vditor 偶发未恢复会让整页无法滚动。
-// 捕获阶段记录进入前的值，退出后一帧兜底恢复（保留弹窗自身的 overflow:hidden）。
-function onToolbarClick(e: MouseEvent) {
-  if (!(e.target as HTMLElement | null)?.closest('[data-type="fullscreen"]')) return
-  const root = editorRoot()
-  if (!root) return
-  if (root.classList.contains('vditor--fullscreen')) {
-    window.setTimeout(() => {
-      if (!document.querySelector('.vditor--fullscreen')) {
-        document.body.style.overflow = bodyOverflowBeforeFullscreen
-      }
-    }, 0)
-  } else {
-    bodyOverflowBeforeFullscreen = document.body.style.overflow
-  }
-}
-
-// undo/redo 补同步（2026-10-27）：Vditor 的撤销/重做（⌘/Ctrl+Z・Y 热键与工具栏按钮）
-// 走 renderDiff 直改 DOM，不触发 options.input——编辑器内容已变而 update:modelValue
-// 没发，保存时把旧值写回，表现为「公告/简介等改了却显示旧内容」。捕获到这两类操作
-// 后补发一次同步（setTimeout 等 Vditor 处理完再取值）。
-function syncValue() {
-  if (!vd) return
-  const v = vd.getValue()
-  inner = v
-  emit('update:modelValue', v)
-}
-
-function onEditorKeydown(e: KeyboardEvent) {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return
-  const k = e.key.toLowerCase()
-  if (k === 'z' || k === 'y') window.setTimeout(syncValue, 0)
-}
-
-function onUndoRedoClick(e: MouseEvent) {
-  if (!(e.target as HTMLElement | null)?.closest('[data-type="undo"],[data-type="redo"]')) return
-  window.setTimeout(syncValue, 0)
-}
-
-// Vditor 的 resize 手柄改的是 .vditor 内联高度，而 .md-field 的 height:auto !important
-// 会把它盖掉，表现为拖了没反应。按下手柄时先锁定当前高度并退出自适应，让内联高度接管；
-// 此后手动尺寸优先，内容增长不再改高。
-function onEditorMouseDown(e: MouseEvent) {
-  if (!props.autoHeight || userSized.value) return
-  const target = e.target as HTMLElement | null
-  if (!target?.closest('.vditor-resize')) return
-  const root = editorRoot()
-  if (!root) return
-  root.style.height = `${root.getBoundingClientRect().height}px`
-  userSized.value = true
-}
-
-function persistPref(patch: { mdEditMode?: MdEditMode; mdTheme?: MdTheme }) {
+function persistPref(patch: { mdEditMode?: MdEditMode }) {
   pendingPref = { ...pendingPref, ...patch }
   window.clearTimeout(prefTimer)
   prefTimer = window.setTimeout(async () => {
@@ -212,255 +96,718 @@ function persistPref(patch: { mdEditMode?: MdEditMode; mdTheme?: MdTheme }) {
   }, 400)
 }
 
-// 公式插入按钮：Vditor 工具栏没有内置公式项，自定义两枚（prefix/suffix 夹住光标，
-// 直接补写 TeX 即时渲染——与在正文里敲 $ 定界符同一条路）
-const mathInlineItem = {
-  name: 'math-inline',
-  icon: '<svg viewBox="0 0 24 24"><path d="M4 20c2 0 3-6 5-10 1-3 2.5-5 4-5 2 0 3 2 3 6s1 9 3 9M15 11H7"/></svg>',
-  tip: '行内公式 $…$',
-  prefix: '$',
-  suffix: '$',
-}
-const mathBlockItem = {
-  name: 'math-block',
-  icon: '<svg viewBox="0 0 24 24"><path d="M6 5v14M3 8l3-3 3 3M18 19V5m-3 3l3 3 3-3"/></svg>',
-  tip: '块级公式 $$…$$',
-  prefix: '\n$$\n',
-  suffix: '\n$$\n',
+function switchMode(m: MdEditMode) {
+  if (mode.value === m) return
+  mode.value = m
+  persistPref({ mdEditMode: m })
+  if (m === 'split') {
+    previewState.value = inner.trim() ? 'loading' : 'idle'
+    runPreview()
+  }
+  nextTick(() => view?.focus())
 }
 
-function toolbar(): Array<string | Record<string, unknown>> {
-  const doc: Array<string | Record<string, unknown>> = [
-    'headings', 'bold', 'italic', 'strike', '|',
-    'list', 'ordered-list', 'check', 'outdent', 'indent', '|',
-    'quote', 'line', 'inline-code', 'code', '|',
-    'link', 'table', 'upload', mathInlineItem, mathBlockItem, '|',
-    'insert-before', 'insert-after', 'outline', '|',
-    'content-theme', 'export', '|',
-    'undo', 'redo', '|', 'edit-mode', 'fullscreen',
+// ---- 预览：300ms 防抖 + 飞行中取消（AbortController），失败降级不阻塞编辑 ----
+let renderTimer: number | undefined
+let renderCtl: AbortController | undefined
+let renderSeq = 0
+
+function schedulePreview() {
+  if (mode.value !== 'split') return
+  if (!inner.trim()) {
+    window.clearTimeout(renderTimer)
+    previewHtml.value = ''
+    previewState.value = 'idle'
+    return
+  }
+  window.clearTimeout(renderTimer)
+  renderTimer = window.setTimeout(runPreview, 300)
+}
+
+async function runPreview() {
+  const md = inner
+  if (!md.trim()) {
+    previewHtml.value = ''
+    previewState.value = 'idle'
+    return
+  }
+  renderCtl?.abort()
+  const ctl = new AbortController()
+  renderCtl = ctl
+  const seq = ++renderSeq
+  previewState.value = 'loading'
+  try {
+    const { html } = await mdApi.render(md, ctl.signal)
+    if (seq !== renderSeq || ctl.signal.aborted) return // 已被更新的一次顶掉
+    previewHtml.value = html
+    previewState.value = 'ok'
+  } catch {
+    if (ctl.signal.aborted || seq !== renderSeq) return
+    previewState.value = 'error'
+  }
+}
+
+// ---- 编辑器命令（工具栏与快捷键共用；CM6 selection 运算，无第三方状态） ----
+
+/** 选区包裹（带 toggle：已包裹则剥标记）——加粗/斜体/删除线/行内代码/行内公式 */
+function wrapSel(mark: string) {
+  if (!view) return
+  const s = view.state.selection.main
+  const text = view.state.sliceDoc(s.from, s.to)
+  const changes = text.startsWith(mark) && text.endsWith(mark) && text.length >= mark.length * 2
+    ? [{ from: s.from, to: s.to, insert: text.slice(mark.length, text.length - mark.length) }]
+    : s.empty
+      ? [{ from: s.from, insert: mark + mark }]
+      : [{ from: s.from, to: s.to, insert: mark + text + mark }]
+  view.dispatch({
+    changes,
+    // 无选区时光标落两标记之间；剥标记后选中原文本，便于继续操作
+    selection: { anchor: s.from + (text.startsWith(mark) && text.endsWith(mark) && text.length >= mark.length * 2 ? 0 : mark.length) },
+  })
+  view.focus()
+}
+
+/** 行前缀切换（标题/引用/无序列表）——作用于全部选中行，已带前缀则剥掉 */
+function linePrefix(prefix: string) {
+  if (!view) return
+  const { state } = view
+  const s = state.selection.main
+  const first = state.doc.lineAt(s.from).number
+  const last = state.doc.lineAt(s.to).number
+  const changes: { from: number; to?: number; insert: string }[] = []
+  for (let n = first; n <= last; n++) {
+    const line = state.doc.line(n)
+    if (line.text.startsWith(prefix)) {
+      changes.push({ from: line.from, to: line.from + prefix.length, insert: '' })
+    } else {
+      changes.push({ from: line.from, insert: prefix })
+    }
+  }
+  view.dispatch({ changes })
+  view.focus()
+}
+
+/** 有序列表：逐行编号 1. 2. …（已是有序行则剥号，再点变无序可再套） */
+function orderedList() {
+  if (!view) return
+  const { state } = view
+  const s = state.selection.main
+  const first = state.doc.lineAt(s.from).number
+  const last = state.doc.lineAt(s.to).number
+  const changes: { from: number; to?: number; insert: string }[] = []
+  let allOrdered = true
+  for (let n = first; n <= last; n++) {
+    if (!/^\d+\.\s/.test(state.doc.line(n).text)) allOrdered = false
+  }
+  for (let n = first; n <= last; n++) {
+    const line = state.doc.line(n)
+    if (allOrdered) {
+      const m = line.text.match(/^\d+\.\s/)
+      if (m) changes.push({ from: line.from, to: line.from + m[0].length, insert: '' })
+    } else {
+      changes.push({ from: line.from, insert: `${n - first + 1}. ` })
+    }
+  }
+  view.dispatch({ changes })
+  view.focus()
+}
+
+/** 任务列表：- [ ] 前缀切换（渲染端 GFM 任务勾选框） */
+function taskList() {
+  linePrefix('- [ ] ')
+}
+
+/** 光标处插入块模板（块级公式/代码块/表格/分隔线），片段尾留光标 */
+function insertBlock(text: string, cursorOffset?: number) {
+  if (!view) return
+  const s = view.state.selection.main
+  view.dispatch({
+    changes: [{ from: s.from, insert: text }],
+    selection: { anchor: s.from + (cursorOffset ?? text.length) },
+  })
+  view.focus()
+}
+
+function insertLink() {
+  if (!view) return
+  const s = view.state.selection.main
+  const text = s.empty ? '链接文字' : view.state.sliceDoc(s.from, s.to)
+  const insert = `[${text}](url)`
+  view.dispatch({
+    changes: [{ from: s.from, to: s.to, insert }],
+    // 光标落到 url 处待替换（insert 起点 + 标题 + ]( 共 3 定长字符前缀之外再让位 url）
+    selection: { anchor: s.from + text.length + 3 },
+  })
+  view.focus()
+}
+
+const TABLE_SNIPPET = '\n| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n|  |  |  |\n'
+const CODE_SNIPPET = '\n```\n\n```\n'
+
+// ---- 图片上传：粘贴/拖入/工具栏三入口，直传 /api/uploads 后插 md ----
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+const IMAGE_MAX = 5 * 1024 * 1024
+
+function pickImage() {
+  fileInput.value?.click()
+}
+
+async function uploadFiles(files: FileList | File[]) {
+  const list = Array.from(files).filter((f) => {
+    if (!IMAGE_TYPES.includes(f.type)) {
+      ElMessage.warning(`已跳过非图片文件：${f.name}`)
+      return false
+    }
+    if (f.size > IMAGE_MAX) {
+      ElMessage.warning(`已跳过超过 5MB 的图片：${f.name}`)
+      return false
+    }
+    return true
+  })
+  if (!list.length) return
+  uploadingCount.value++
+  try {
+    const form = new FormData()
+    for (const f of list) form.append('file', f)
+    const res = await mdApi.uploadImages(form)
+    if (res.errFiles?.length) ElMessage.warning(`${res.errFiles.length} 张图片上传失败`)
+    if (res.succMap && view) {
+      const pos = view.state.selection.main.to
+      let insert = ''
+      for (const [name, url] of Object.entries(res.succMap)) insert += `![${name}](${url})\n`
+      view.dispatch({ changes: [{ from: pos, insert }] })
+      inner = view.state.doc.toString()
+      emit('update:modelValue', inner)
+    }
+  } catch {
+    // 拦截器已 toast
+  } finally {
+    uploadingCount.value--
+  }
+}
+
+// ---- 分栏拖拽（split 模式，20%–80% 钳制） ----
+function startDrag(e: MouseEvent) {
+  if (e.button !== 0) return
+  e.preventDefault()
+  document.addEventListener('mousemove', onDrag)
+  document.addEventListener('mouseup', endDrag)
+  document.body.style.cursor = 'col-resize'
+}
+function onDrag(e: MouseEvent) {
+  const host = editorHost.value?.parentElement
+  if (!host) return
+  const rect = host.getBoundingClientRect()
+  const pct = ((e.clientX - rect.left) / rect.width) * 100
+  splitPct.value = Math.min(80, Math.max(20, pct))
+}
+function endDrag() {
+  document.removeEventListener('mousemove', onDrag)
+  document.removeEventListener('mouseup', endDrag)
+  document.body.style.cursor = ''
+}
+
+// ---- 滚动同步（编辑→预览单向比例同步，rAF 节流） ----
+let syncPending = false
+function syncScroll() {
+  if (syncPending || mode.value !== 'split') return
+  syncPending = true
+  requestAnimationFrame(() => {
+    syncPending = false
+    const ed = view?.scrollDOM
+    const pv = previewPane.value
+    if (!ed || !pv) return
+    const edMax = ed.scrollHeight - ed.clientHeight
+    if (edMax <= 0) return
+    pv.scrollTop = (ed.scrollTop / edMax) * (pv.scrollHeight - pv.clientHeight)
+  })
+}
+
+// ---- 全屏（自管 body overflow；Esc 退出；z-index 盖过 EP 弹层 2000） ----
+let bodyOverflowBefore = ''
+function onEsc(e: KeyboardEvent) {
+  if (e.key === 'Escape' && fullscreen.value) toggleFullscreen()
+}
+function toggleFullscreen() {
+  const on = !fullscreen.value
+  fullscreen.value = on
+  if (on) {
+    bodyOverflowBefore = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onEsc)
+  } else {
+    document.body.style.overflow = bodyOverflowBefore
+    window.removeEventListener('keydown', onEsc)
+  }
+  nextTick(() => view?.focus())
+}
+
+// ---- 高度：autoHeight = 内容自然生长（CSS overflow 方案，无 JS 量高） ----
+// 底部手柄按下进入拖拽：高度随鼠标走（≥140px），松手锁定（userSized）此后内滚
+function startResize(e: MouseEvent) {
+  if (!props.autoHeight || userSized.value || e.button !== 0 || !rootEl.value) return
+  e.preventDefault()
+  userSized.value = true
+  const startY = e.clientY
+  const startH = rootEl.value.getBoundingClientRect().height
+  document.body.style.cursor = 'ns-resize'
+  const onMove = (ev: MouseEvent) => {
+    if (!rootEl.value) return
+    rootEl.value.style.height = `${Math.max(140, startH + (ev.clientY - startY))}px`
+  }
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    document.body.style.cursor = ''
+  }
+  document.addEventListener('mousemove', onMove)
+  document.addEventListener('mouseup', onUp)
+}
+
+// ---- 工具栏 ----
+interface ToolItem {
+  key: string
+  title: string
+  icon?: Component
+  run: () => void
+}
+
+function onFileChange() {
+  if (fileInput.value?.files?.length) void uploadFiles(fileInput.value.files)
+  if (fileInput.value) fileInput.value.value = ''
+}
+
+const toolbar = computed<{ items: ToolItem[]; dividerAfter?: boolean }[]>(() => {
+  const group = (items: ToolItem[]): { items: ToolItem[] } => ({ items })
+  const doc: { items: ToolItem[] }[] = [
+    group([
+      { key: 'h1', title: '一级标题', icon: Heading1, run: () => linePrefix('# ') },
+      { key: 'h2', title: '二级标题', icon: Heading2, run: () => linePrefix('## ') },
+      { key: 'h3', title: '三级标题', icon: Heading3, run: () => linePrefix('### ') },
+      { key: 'bold', title: '加粗（Ctrl+B）', icon: Bold, run: () => wrapSel('**') },
+      { key: 'italic', title: '斜体（Ctrl+I）', icon: Italic, run: () => wrapSel('*') },
+      { key: 'strike', title: '删除线', icon: Strikethrough, run: () => wrapSel('~~') },
+    ]),
+    group([
+      { key: 'ul', title: '无序列表', icon: List, run: () => linePrefix('- ') },
+      { key: 'ol', title: '有序列表', icon: ListOrdered, run: orderedList },
+      { key: 'task', title: '任务列表', icon: ListTodo, run: taskList },
+      { key: 'quote', title: '引用', icon: TextQuote, run: () => linePrefix('> ') },
+    ]),
+    group([
+      { key: 'inline-code', title: '行内代码', icon: Code, run: () => wrapSel('`') },
+      { key: 'code', title: '代码块', icon: SquareCode, run: () => insertBlock(CODE_SNIPPET, CODE_SNIPPET.length - 4) },
+      { key: 'link', title: '链接（Ctrl+K）', icon: Link2, run: insertLink },
+      { key: 'math-inline', title: '行内公式 $…$', icon: Sigma, run: () => wrapSel('$') },
+      { key: 'math-block', title: '块级公式 $$…$$', icon: SquareSigma, run: () => insertBlock('\n$$\n\n$$\n', 4) },
+    ]),
+    group([
+      { key: 'table', title: '表格', icon: TableIcon, run: () => insertBlock(TABLE_SNIPPET) },
+      { key: 'hr', title: '分隔线', icon: Minus, run: () => insertBlock('\n---\n') },
+      { key: 'image', title: '插入图片（也可直接粘贴/拖入）', icon: ImageIcon, run: pickImage },
+    ]),
+    group([
+      { key: 'undo', title: '撤销（Ctrl+Z）', icon: Undo2, run: () => view && undo(view) },
+      { key: 'redo', title: '重做（Ctrl+Y）', icon: Redo2, run: () => view && redo(view) },
+    ]),
   ]
-  const compact: Array<string | Record<string, unknown>> = [
-    'headings', 'bold', 'italic', 'strike', '|',
-    'list', 'ordered-list', 'check', '|',
-    'quote', 'line', 'inline-code', 'code', '|',
-    'link', mathInlineItem, '|',
-    'undo', 'redo', '|', 'edit-mode',
+  const compact: { items: ToolItem[] }[] = [
+    group([
+      { key: 'bold', title: '加粗（Ctrl+B）', icon: Bold, run: () => wrapSel('**') },
+      { key: 'italic', title: '斜体（Ctrl+I）', icon: Italic, run: () => wrapSel('*') },
+      { key: 'strike', title: '删除线', icon: Strikethrough, run: () => wrapSel('~~') },
+    ]),
+    group([
+      { key: 'ul', title: '无序列表', icon: List, run: () => linePrefix('- ') },
+      { key: 'ol', title: '有序列表', icon: ListOrdered, run: orderedList },
+      { key: 'task', title: '任务列表', icon: ListTodo, run: taskList },
+      { key: 'quote', title: '引用', icon: TextQuote, run: () => linePrefix('> ') },
+    ]),
+    group([
+      { key: 'inline-code', title: '行内代码', icon: Code, run: () => wrapSel('`') },
+      { key: 'code', title: '代码块', icon: SquareCode, run: () => insertBlock(CODE_SNIPPET, CODE_SNIPPET.length - 4) },
+      { key: 'link', title: '链接（Ctrl+K）', icon: Link2, run: insertLink },
+      { key: 'math-inline', title: '行内公式 $…$', icon: Sigma, run: () => wrapSel('$') },
+    ]),
+    group([
+      { key: 'undo', title: '撤销（Ctrl+Z）', icon: Undo2, run: () => view && undo(view) },
+      { key: 'redo', title: '重做（Ctrl+Y）', icon: Redo2, run: () => view && redo(view) },
+    ]),
   ]
   return props.variant === 'full' ? doc : compact
-}
+})
 
-onMounted(async () => {
-  let Vditor: Awaited<ReturnType<typeof loadVditor>>
+// ---- CM6 挂载 ----
+onMounted(() => {
+  if (!editorHost.value) return
   try {
-    Vditor = await loadVditor()
+    view = new EditorView({
+      doc: props.modelValue || '',
+      parent: editorHost.value,
+      extensions: [
+        basicSetup,
+        markdown({ codeLanguages: [] }), // GFM（表格/任务列表/删除线）是 lang-markdown 默认开启项
+        EditorView.lineWrapping,
+        keymap.of([
+          {
+            key: 'Mod-b',
+            run: () => {
+              wrapSel('**')
+              return true
+            },
+          },
+          {
+            key: 'Mod-i',
+            run: () => {
+              wrapSel('*')
+              return true
+            },
+          },
+          {
+            key: 'Mod-k',
+            run: () => {
+              insertLink()
+              return true
+            },
+          },
+        ]),
+        EditorView.theme({
+          '&': { height: '100%', fontSize: '15px' },
+          '.cm-content': {
+            fontFamily: 'Consolas, Menlo, Monaco, monospace',
+            lineHeight: '1.7',
+            padding: '10px 4px 54px 12px',
+          },
+          '.cm-gutters': { fontFamily: 'Consolas, Menlo, Monaco, monospace', fontSize: '13px' },
+          '&.cm-focused': { outline: 'none' },
+        }),
+        placeholder('Markdown 编辑：工具栏排版、直接粘贴/拖入图片；公式用 $…$ / $$…$$'),
+        EditorView.domEventHandlers({
+          paste(event) {
+            const files = event.clipboardData?.files
+            if (files?.length) {
+              event.preventDefault()
+              void uploadFiles(files)
+              return true
+            }
+            return false
+          },
+          drop(event) {
+            const files = (event as DragEvent).dataTransfer?.files
+            if (files?.length) {
+              event.preventDefault()
+              void uploadFiles(files)
+              return true
+            }
+            return false
+          },
+        }),
+        EditorView.updateListener.of((u) => {
+          if (u.docChanged) {
+            inner = u.state.doc.toString()
+            emit('update:modelValue', inner)
+            schedulePreview()
+          }
+        }),
+      ],
+    })
+    view.scrollDOM.addEventListener('scroll', syncScroll)
+    loading.value = false
+    if (mode.value === 'split' && inner.trim()) runPreview()
   } catch (e) {
-    console.error('[MdEditor] Vditor 加载失败', e)
-    editorError.value = '编辑器加载失败，可能是页面版本已更新。'
+    console.error('[MdEditor] CodeMirror 初始化失败', e)
+    editorError.value = '编辑器初始化失败。'
     loading.value = false
-    return
   }
-  VditorCtor = Vditor
-  if (!el.value) {
-    loading.value = false
-    return
-  }
-  vd = new Vditor(el.value, {
-    mode: initialMode,
-    lang: 'zh_CN',
-    cdn: VDITOR_CDN,
-    height: props.autoHeight ? '132px' : props.height,
-    placeholder: 'Markdown 编辑：工具栏排版、直接粘贴/拖入图片；公式用 $…$ / $$…$$',
-    toolbar: toolbar() as never,
-    cache: { enable: false }, // 内容由 v-model 管理，关掉 localStorage 草稿
-    fullscreen: { index: 2030 }, // 盖过 Element Plus 弹层（el-dialog ~2000）
-    resize: { enable: true }, // 保留右下角拖拽手柄；自动拟合只在内容变化时调整
-    value: props.modelValue || '',
-    preview: {
-      // actions 置空：去掉 sv 分屏预览顶部的 Device/Wechat 设备切换条
-      actions: [],
-      // 内容主题：跟随个人偏好（工具栏右侧调色板可随时切换并自动回存）
-      theme: { current: currentTheme.value },
-      maxWidth: 860,
-      hljs: { lineNumber: false },
-      math: { engine: 'KaTeX', inlineDigit: true }, // inlineDigit: $ 后允许数字开头（默认 false，会让 $1 \le N$ 不被识别）
-    },
-    upload: {
-      url: '/api/uploads',
-      fieldName: 'file', // 服务端读 form.File["file"]；Vditor 默认 file[] 不匹配
-      accept: 'image/png,image/jpeg,image/gif,image/webp',
-      multiple: true,
-      max: 5 * 1024 * 1024,
-      headers: { Authorization: `Bearer ${userStore.token}` },
-    },
-    input: (v: string) => {
-      inner = v
-      emit('update:modelValue', v)
-      scheduleFit()
-    },
-    after: () => {
-      if (!vd) return
-      loading.value = false
-      editorRoot()?.addEventListener('click', onToolbarClick, true)
-      editorRoot()?.addEventListener('keydown', onEditorKeydown, true)
-      editorRoot()?.addEventListener('click', onUndoRedoClick, true)
-      scheduleFit()
-      window.addEventListener('resize', onWindowResize)
-      // 模式切换（工具栏菜单或 ⌥⌘7/8/9 热键）都会重排 edit-mode 按钮的 current 类，
-      // 用它做变更信号，把最新模式回存到个人偏好
-      const modeItem = vd.vditor?.toolbar?.elements?.['edit-mode']
-      if (modeItem) {
-        modeObserver = new MutationObserver(() => {
-          const m = vd?.getCurrentMode() as MdEditMode | undefined
-          if (m && m !== (userStore.prefs.mdEditMode || 'wysiwyg')) persistPref({ mdEditMode: m })
-        })
-        modeObserver.observe(modeItem, { subtree: true, attributes: true, attributeFilter: ['class'] })
-      }
-      // 主题菜单：内置 content-theme 项点击后自行换肤，这里只记录选择
-      // （图标按钮带 data-type="content-theme"，非主题值在 MD_THEMES 处过滤）
-      const themeItem = vd.vditor?.toolbar?.elements?.['content-theme']
-      themeItem?.addEventListener(
-        'click',
-        (e) => {
-          const btn = (e.target as HTMLElement | null)?.closest('button[data-type]') as HTMLElement | null
-          const t = btn?.dataset.type as MdTheme | undefined
-          if (!t || !MD_THEMES.has(t) || t === currentTheme.value) return
-          currentTheme.value = t
-          persistPref({ mdTheme: t })
-        },
-        true,
-      )
-      // 复制反馈（复制 → 已复制，3s 恢复）：绑在包装层，捕获阶段命中所有代码块按钮
-      if (el.value) unbindCopy = bindCopyFeedback(el.value)
-    },
-  })
 })
 
 watch(
   () => props.modelValue,
   (v) => {
-    if (vd && v !== inner) {
-      vd.setValue(v ?? '')
-      inner = v
+    if (view && v !== inner) {
+      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: v ?? '' } })
+      inner = v ?? ''
+      schedulePreview()
     }
-    // 外部内容变化（编辑回填、切换小题）后重新拟合高度
-    scheduleFit()
   },
 )
 
 onBeforeUnmount(() => {
-  window.removeEventListener('resize', onWindowResize)
-  if (fitTimer) window.clearTimeout(fitTimer)
+  window.clearTimeout(renderTimer)
   window.clearTimeout(prefTimer)
-  modeObserver?.disconnect()
-  modeObserver = null
-  unbindCopy?.()
-  unbindCopy = null
-  const root = editorRoot()
-  root?.removeEventListener('click', onToolbarClick, true)
-  root?.removeEventListener('keydown', onEditorKeydown, true)
-  root?.removeEventListener('click', onUndoRedoClick, true)
-  if (root?.classList.contains('vditor--fullscreen')) {
-    document.body.style.overflow = bodyOverflowBeforeFullscreen
+  renderCtl?.abort()
+  renderSeq++
+  if (fullscreen.value) {
+    document.body.style.overflow = bodyOverflowBefore
+    window.removeEventListener('keydown', onEsc)
   }
-  vd?.destroy()
-  vd = null
-  // 内容主题是全局单例 <link>：编辑器用了非 light 主题时不复位，会把背后的
-  // 查看端（如题解弹窗里的 MdView）也染成暗色。关闭编辑器即回到站内 light。
-  VditorCtor?.setContentTheme('light', `${VDITOR_CDN}/dist/css/content-theme`)
+  endDrag()
+  view?.scrollDOM.removeEventListener('scroll', syncScroll)
+  view?.destroy()
+  view = null
 })
 </script>
 
 <template>
-  <!-- 包装层撑满父容器（el-form-item__content 是 flex，子项不会自动拉伸）；
-       soj-md = 站内 Markdown 排版（main.css），md-light = 仅 light 主题下启用站内配色 -->
+  <!-- 包装层：撑满父容器（el-form-item__content 是 flex）；
+       is-fullscreen 固定视口、is-sized 手动高度优先、md-auto 随内容自然生长 -->
   <div
+    ref="rootEl"
     class="md-editor soj-md"
     :class="{
-      'md-light': lightTheme,
-      'md-auto': autoHeight,
-      'md-field': autoHeight && fieldSizing && !userSized,
+      'is-fullscreen': fullscreen,
+      'is-sized': userSized,
+      'md-auto': autoHeight && !userSized,
     }"
-    @mousedown.capture="onEditorMouseDown"
+    :style="!autoHeight && !fullscreen ? { height: props.height } : undefined"
   >
-    <div ref="el"></div>
-    <div v-if="loading" class="md-editor-status">编辑器加载中…</div>
-    <div v-else-if="editorError" class="md-editor-status is-error">
-      <span>{{ editorError }}</span>
-      <button type="button" @click="reloadPage">刷新页面</button>
+    <div ref="toolbarEl" class="md-toolbar">
+      <template v-for="(g, gi) in toolbar" :key="gi">
+        <span v-if="gi > 0" class="md-toolbar-sep" />
+        <button
+          v-for="item in g.items"
+          :key="item.key"
+          type="button"
+          class="md-tool"
+          :title="item.title"
+          @click="item.run"
+        >
+          <component :is="item.icon" v-if="item.icon" :size="15" :stroke-width="1.8" />
+        </button>
+      </template>
+      <span v-if="uploadingCount > 0" class="md-upload-hint">图片上传中…</span>
+      <span class="md-toolbar-spacer" />
+      <button
+        type="button"
+        class="md-tool"
+        :class="{ 'is-on': mode === 'split' }"
+        title="分屏预览（左编辑右预览）"
+        @click="switchMode('split')"
+      >
+        <Columns2 :size="15" :stroke-width="1.8" />
+      </button>
+      <button
+        type="button"
+        class="md-tool"
+        :class="{ 'is-on': mode === 'source' }"
+        title="纯源码（只显示编辑区）"
+        @click="switchMode('source')"
+      >
+        <FileCode :size="15" :stroke-width="1.8" />
+      </button>
+      <button
+        v-if="variant === 'full'"
+        type="button"
+        class="md-tool"
+        :title="fullscreen ? '退出全屏（Esc）' : '全屏'"
+        @click="toggleFullscreen"
+      >
+        <Minimize v-if="fullscreen" :size="15" :stroke-width="1.8" />
+        <Maximize v-else :size="15" :stroke-width="1.8" />
+      </button>
     </div>
+
+    <div class="md-body">
+      <div
+        ref="editorHost"
+        class="md-edit-pane"
+        :style="mode === 'split' ? { flexBasis: splitPct + '%' } : { flexBasis: '100%' }"
+      >
+        <div v-if="loading" class="md-editor-status">编辑器加载中…</div>
+        <div v-else-if="editorError" class="md-editor-status is-error">{{ editorError }}</div>
+      </div>
+
+      <template v-if="mode === 'split'">
+        <div class="md-divider" @mousedown="startDrag" />
+        <div ref="previewPane" class="md-preview-pane">
+          <MdView v-if="previewState === 'ok' && previewHtml" content="" :html="previewHtml" />
+          <div v-else-if="previewState === 'idle'" class="md-preview-state">开始输入后此处实时预览</div>
+          <div v-else-if="previewState === 'loading'" class="md-preview-state">渲染中…</div>
+          <div v-else class="md-preview-state is-error">
+            <span>预览暂不可用（网络或频率限制），编辑与保存不受影响</span>
+            <button type="button" @click="runPreview">重试</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <div v-if="autoHeight && !userSized" class="md-resize-handle" @mousedown="startResize" />
+
+      <input
+      ref="fileInput"
+      type="file"
+      accept="image/png,image/jpeg,image/gif,image/webp"
+      multiple
+      hidden
+      @change="onFileChange"
+    />
   </div>
 </template>
 
 <style scoped>
 .md-editor {
   box-sizing: border-box; /* width:100% 含边框，避免卡片体内横向溢出 2px 出滚动条 */
+  display: flex;
+  flex-direction: column;
   width: 100%;
-}
-
-/* 自生长高度（v0.9.3）：高度由脚本按内容量出（见 fitHeight）；v0.9.5 起不设视口上限 */
-
-/* field-sizing 原生自撑（Chrome 123+）：textarea 按内容长高，空内容约两行。
-   不设 max-height，普通编辑状态跟内容一起长高，由页面滚动。 */
-.md-field :deep(.vditor) {
-  height: auto !important;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
+  background: var(--el-bg-color);
   overflow: hidden;
 }
 
-.md-field :deep(.vditor-content) {
+/* 高度三态：定高（默认，内滚）/ 手动拖定（is-sized，内滚）/ 自生长（md-auto，随页滚）。
+   is-sized 的具体高度由拖拽手柄写内联样式，这里只给下限兜底 */
+.md-editor.is-sized {
+  min-height: 140px;
+}
+
+.md-editor:not(.md-auto):not(.is-fullscreen) :deep(.cm-editor),
+.md-editor.is-sized :deep(.cm-editor) {
+  height: 100%;
+}
+
+.md-auto :deep(.cm-editor) {
+  height: auto;
+}
+
+.md-auto :deep(.cm-scroller) {
+  overflow: visible; /* 内容自然生长，页面滚动（Vditor 时代量高补丁的 CSS 等价物） */
+}
+
+/* 全屏：固定视口、面板内部滚动，盖过 EP 弹层（el-dialog ~2000） */
+.md-editor.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 2030;
+  height: 100vh !important;
+  max-height: none;
+  border-radius: 0;
+}
+
+.md-editor.is-fullscreen :deep(.cm-editor) {
+  height: 100%;
+}
+
+/* 全屏覆盖 md-auto 的自然生长口径：内部滚动 + 预览面板恢复内滚 + 藏拖高手柄 */
+.md-editor.is-fullscreen .md-body {
   flex: 1 1 auto;
-  /* 不设 min-height（2026-10-27）：min-height 会拉伸内容容器，底部留白随内容多少漂移；
-     空编辑器的高度由内容自身的 1 行 + 底部 2 行 padding（.md-auto 规则）自然构成 */
 }
 
-.md-field :deep(textarea.vditor-sv) {
-  field-sizing: content;
+.md-editor.is-fullscreen .md-preview-pane {
   overflow-y: auto;
 }
 
-/* 其余模式/分屏预览：随内容长高，不再按视口截断 */
-.md-field :deep(.vditor-preview),
-.md-field :deep(.vditor-ir),
-.md-field :deep(.vditor-wysiwyg) {
-  overflow-y: auto;
+.md-editor.is-fullscreen .md-resize-handle {
+  display: none;
 }
 
-/* 自动高度模式内容底部留 2 行空白（2026-10-27）：写完不贴底边。两条量高路径
-   （field-sizing 原生自撑 / JS scrollHeight）都把该 padding 计入总高，与 fitHeight 口径一致 */
-.md-auto :deep(textarea.vditor-sv),
-.md-auto :deep(.vditor-reset) {
-  padding-bottom: 54px;
-}
-
-/* 视觉融合：边框圆角对齐 Element Plus 控件口径 */
-.md-editor :deep(.vditor) {
-  border-radius: var(--el-border-radius-base);
-}
-
-/* 工具栏按钮尺寸与站内编辑器工具栏一致（28px 高），图标继承主题色 */
-.md-editor :deep(.vditor-toolbar) {
+/* 工具栏：对齐站内编辑器工具栏口径（28px 高、主题色图标） */
+.md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
   padding: 4px 6px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
   line-height: normal;
 }
 
-.md-editor :deep(.vditor-toolbar__item) {
-  font-size: var(--soj-fs-editor-toolbar, 14px);
+.md-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--el-border-color-light);
 }
 
-/* 懒加载/加载失败提示：避免服务刚启动或版本切换时只剩一块空白 */
-.md-editor-status {
+.md-toolbar-spacer {
+  flex: 1;
+}
+
+.md-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--el-text-color-regular);
+  cursor: pointer;
+}
+
+.md-tool:hover {
+  background: var(--el-fill-color-light);
+  color: var(--el-color-primary);
+}
+
+.md-tool.is-on {
+  color: var(--el-color-primary);
+  background: var(--el-color-primary-light-9);
+}
+
+.md-upload-hint {
+  margin-left: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+/* 主体：编辑/预览双栏，分栏宽可拖（20%–80% 钳制在 JS） */
+.md-body {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0; /* 允许子面板收缩内滚 */
+}
+
+.md-auto .md-body {
+  flex: 0 0 auto;
+}
+
+.md-edit-pane {
+  flex-grow: 1;
+  min-width: 0;
+  position: relative;
+}
+
+.md-divider {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: var(--el-border-color-lighter);
+  transition: background 0.15s;
+}
+
+.md-divider:hover {
+  background: var(--el-color-primary-light-7);
+}
+
+.md-preview-pane {
+  flex-grow: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+  border-left: 1px solid var(--el-border-color-lighter);
+  background: var(--el-fill-color-blank);
+}
+
+.md-auto .md-preview-pane {
+  overflow-y: visible;
+}
+
+.md-preview-state {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 0;
   color: var(--el-text-color-secondary);
   font-size: var(--soj-fs-body, 14px);
 }
 
-.md-editor-status.is-error {
+.md-preview-state.is-error {
   color: var(--el-color-danger);
 }
 
-.md-editor-status button {
+.md-preview-state button {
   padding: 0;
   border: 0;
   background: none;
@@ -469,23 +816,29 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-/* 全屏：固定 100vh，面板内部滚动 */
-.md-auto :deep(.vditor--fullscreen),
-.md-field :deep(.vditor--fullscreen) {
-  height: 100vh !important;
-  max-height: none;
-  overflow: hidden;
+/* 自生长模式的底部拖高手柄：按下即锁定当前高度（userSized），此后内滚 */
+.md-resize-handle {
+  height: 6px;
+  cursor: ns-resize;
+  background: var(--el-border-color-lighter);
+  transition: background 0.15s;
 }
 
-.md-field :deep(.vditor--fullscreen) textarea.vditor-sv {
-  field-sizing: auto;
-  min-height: 0;
-  max-height: none;
+.md-resize-handle:hover {
+  background: var(--el-color-primary-light-7);
 }
 
-.md-field :deep(.vditor--fullscreen) .vditor-preview,
-.md-field :deep(.vditor--fullscreen) .vditor-ir,
-.md-field :deep(.vditor--fullscreen) .vditor-wysiwyg {
-  max-height: none;
+/* 加载/错误提示 */
+.md-editor-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  color: var(--el-text-color-secondary);
+  font-size: var(--soj-fs-body, 14px);
+}
+
+.md-editor-status.is-error {
+  color: var(--el-color-danger);
 }
 </style>

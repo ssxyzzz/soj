@@ -99,7 +99,11 @@ client.interceptors.response.use(
   (error) => {
     // blob 下载的错误提示由 download.ts 自行解析（fail 响应是 JSON-in-Blob，
     // 这里只能 toast 泛化的「网络错误」，会双重弹窗）；401 处理照常
-    const silent = error.config?.responseType === 'blob'
+    const silent =
+      error.config?.responseType === 'blob' ||
+      // _silent（v0.52 编辑器内芯换血）：调用方自带降级 UI 的轮询/预览类请求
+      //（如编辑器分屏预览 429/断网）不弹全局 toast，错误仍走 reject 由调用方处置
+      (error.config as { _silent?: boolean } | undefined)?._silent
     if (error.response?.status === 401) {
       // 仅 /auth/login 的 401 要提示——登录失败（后端带「还剩 N 次机会」递进文案，
       // v0.14 设计本意）。其余 401 = 会话过期（60s 轮询过期后连环 401），保持静默
@@ -149,6 +153,19 @@ async function put<T>(url: string, body?: unknown): Promise<T> {
 export async function del<T>(url: string): Promise<T> {
   const resp = await client.delete<ApiResponse<T>>(url)
   return resp.data.data
+}
+
+// Markdown 编辑器（v0.52 编辑器内芯换血）：服务端预览 + 图片直传。
+// render 与写入口径同源（服务端同一把 lute 同一套消毒）——编辑器里看到的 =
+// 发布后看到的；upload 沿用 /api/uploads 的 Vditor 约定信封（服务端零改动）。
+export const mdApi = {
+  // 预览失败自带降级提示（编辑不受阻），静默走拦截器不弹全局 toast
+  render: (md: string, signal?: AbortSignal) =>
+    client
+      .post<ApiResponse<{ html: string }>>('/render', { md }, { signal, _silent: true } as never)
+      .then((r) => r.data.data),
+  uploadImages: (form: FormData) =>
+    post<{ msg: string; errFiles: string[]; succMap: Record<string, string> }>('/uploads', form),
 }
 
 // 游戏感批（v0.41）：每日钩子 / 成就星图 / 降临 / 双榜

@@ -230,6 +230,7 @@ func newTestHandlers(f *fakeRepo) *Handlers {
 		repo:           f,
 		limiter:        newRateLimiter(),
 		runLimit:       newRateLimiter(),
+		renderLimit:    newRateLimiter(),
 		idents:         newIdentCache(),
 		ipLimitGlobal:  newIPLimiter(ipRateGlobalPerMin, time.Minute),
 		ipLimitAuth:    newIPLimiter(ipRateAuthPerMin, time.Minute),
