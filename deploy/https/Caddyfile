@@ -34,7 +34,12 @@ soj.example.com {
 	# 注意：caddy 服务用户需可读该目录，必要时 sudo chmod -R a+rX ~/soj/deploy/drawio
 	handle_path /drawio/* {
 		root * /home/<部署用户>/soj/deploy/drawio
-		header Cache-Control "public, max-age=604800"
+		# 资产 30 天（用户拍板）；HTML 入口 1 天——drawio 文件名无哈希版本号，入口短缓存
+		# 保证升级 webapp 后次日入口即换新（资产混用窗口见 deploy/drawio/README.md 升级须知）
+		@html path *.html
+		@assets not path *.html
+		header @html Cache-Control "public, max-age=86400"
+		header @assets Cache-Control "public, max-age=2592000"
 		file_server
 	}
 

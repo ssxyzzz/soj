@@ -26,14 +26,21 @@ sync 会把本目录随仓库 rsync 到 VPS `~/soj/deploy/drawio`。让 VPS 上�
 ```
 handle_path /drawio/* {
     root * /home/<部署用户>/soj/deploy/drawio
-    header Cache-Control "public, max-age=604800"
+    @html path *.html
+    @assets not path *.html
+    header @html Cache-Control "public, max-age=86400"
+    header @assets Cache-Control "public, max-age=2592000"
     file_server
 }
 ```
 
 上线两步：①把块抄进 VPS `/etc/caddy/Caddyfile`（替换 `<部署用户>` 为 rsync 登录用户），
 必要时 `sudo chmod -R a+rX ~/soj/deploy/drawio` 供 caddy 用户读取；②`sudo systemctl reload caddy`。
-同源不变（同域名），DrawView 零改动。浏览器缓存 7 天：第二次起近零拉取。
+同源不变（同域名），DrawView 零改动。缓存策略：资产 30 天、HTML 入口 1 天——第二次起近零拉取。
+
+**升级须知**（重跑获取命令换新版 webapp 后）：文件名无哈希，学生旧资产缓存最长 30 天
+不刷新，期间新旧混用有风险——升级当天通知学生 Ctrl+F5 强刷一次，或等窗口自然过期
+（不想管就接受偶尔混用，embed 协议本身跨版本稳定）。
 
 ## 回退
 
