@@ -19,13 +19,21 @@ rm -rf deploy/drawio/WEB-INF deploy/drawio/META-INF   # Java servlet 段静态�
 
 ## 生产（VPS 直出，不走隧道）
 
-sync 会把本目录随仓库 rsync 到 VPS `~/soj/deploy/drawio`。让 VPS 上的 Caddy 对
-`/drawio/*` 本地发文件（不走 frp 隧道回源）：消掉每文件隧道 RTT（首载 10s 级→2-3s 级）
-与家宽上行占用，全班并发首载由 VPS 云带宽承担。deploy/https/Caddyfile 已含现成块：
+**注意：sync 脚本的 rsync 目标是家里生产机，不是 VPS**——webapp 需要从开发机单独推一份
+到 VPS `/var/www/soj-drawio`（标准 www 目录，caddy 服务用户天然可读，无权限坑）。开发机执行：
+
+```bash
+ssh root@ssxyzzz.cn "mkdir -p /var/www/soj-drawio"
+rsync -a --delete /home/ssxyz/soj/deploy/drawio/ root@ssxyzzz.cn:/var/www/soj-drawio/
+```
+
+让 VPS 上的 Caddy 对 `/drawio/*` 本地发文件（不走 frp 隧道回源）：消掉每文件隧道 RTT
+（首载 10s 级→2-3s 级）与家宽上行占用，全班并发首载由 VPS 云带宽承担。deploy/https/Caddyfile
+已含现成块：
 
 ```
 handle_path /drawio/* {
-    root * /home/<部署用户>/soj/deploy/drawio
+    root * /var/www/soj-drawio
     @html path *.html
     @assets not path *.html
     header @html Cache-Control "public, max-age=86400"
@@ -34,13 +42,12 @@ handle_path /drawio/* {
 }
 ```
 
-上线两步：①把块抄进 VPS `/etc/caddy/Caddyfile`（替换 `<部署用户>` 为 rsync 登录用户），
-必要时 `sudo chmod -R a+rX ~/soj/deploy/drawio` 供 caddy 用户读取；②`sudo systemctl reload caddy`。
+上线两步：①把块抄进 VPS `/etc/caddy/Caddyfile`；②`sudo systemctl reload caddy`。
 同源不变（同域名），DrawView 零改动。缓存策略：资产 30 天、HTML 入口 1 天——第二次起近零拉取。
 
-**升级须知**（重跑获取命令换新版 webapp 后）：文件名无哈希，学生旧资产缓存最长 30 天
-不刷新，期间新旧混用有风险——升级当天通知学生 Ctrl+F5 强刷一次，或等窗口自然过期
-（不想管就接受偶尔混用，embed 协议本身跨版本稳定）。
+**升级/更新 webapp**：本地重跑「获取」命令后，再执行上面两条 rsync 推送命令即刷新 VPS。
+文件名无哈希，学生旧资产缓存最长 30 天不刷新，期间新旧混用有风险——升级当天通知学生
+Ctrl+F5 强刷一次（embed 协议本身跨版本稳定兜底）。
 
 ## 回退
 
