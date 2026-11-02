@@ -123,8 +123,11 @@ const mpsLink = computed(() => {
   gap: 4px;
   border: none;
   background: transparent;
-  font: inherit;
-  font-size: inherit;
+  /* 字体三件套显式继承（font: inherit 的 font-size: inherit 会撞 v0.57 stylelint
+     字号白名单——字号一律走 --soj-fs-* token）；随页脚 12px 档 */
+  font-family: inherit;
+  font-size: var(--soj-fs-12);
+  font-weight: inherit;
   color: var(--soj-ink-3);
   cursor: pointer;
   padding: 0;
