@@ -15,19 +15,25 @@ const DRAW_BASE = '/drawio'
 // ui=sketch：手绘风工具栏——左侧默认带自由绘图笔 / 形状库 / 表格等图标（用户拍板默认可见）
 const DRAW_UI = 'sketch'
 
-// 编辑器内定制 CSS（configure 动作注入，官方通道）：①工具栏图标加深（第 2 项黄色便签
-// 例外，避免涂黑）；②左侧竖排工具条改顶部横排居中（用户拍板）。类名对 sketch UI 恒定。
+// 编辑器内定制 CSS（configure 动作注入，官方通道）：①主菜单卡紧贴左上角；②绘图工具
+// 条横排、置于主菜单与「形状/格式」卡之后的第二格（同一顶行，用户拍板）；③图标纯黑
+// （第 2 项黄色便签例外不涂黑——brightness(0.25) 对浅灰描边件仍显灰，拉满）。类名对
+// sketch UI 恒定。
 const DRAW_CUSTOM_CSS = `
-.geVerticalToolbar > a:not(:nth-child(2)) { filter: brightness(0.25); }
+.geToolbarContainer.geSketchMainMenu { top: 0 !important; left: 0 !important; }
+/* 灰源实锤：drawio 给工具钮挂 mxDisabled 类做半透明置灰（filter 黑了仍显灰）——强制不透明；
+   内部 handler 语义不受影响（点击仍走 drawio 自查） */
+.geVerticalToolbar > a { opacity: 1 !important; }
+.geVerticalToolbar > a:not(:nth-child(2)) { filter: brightness(0); }
 .geToolbarContainer.geVerticalToolbar {
   flex-direction: row !important;
-  top: 56px !important;
+  top: 0 !important;
   bottom: auto !important;
-  left: 50% !important;
-  transform: translateX(-50%);
+  left: 330px !important;
+  transform: none !important;
   width: auto !important;
   height: auto !important;
-  padding: 2px 8px !important;
+  padding: 6px 10px !important;
 }
 `
 
@@ -40,7 +46,7 @@ let pendingExport: '' | 'png' | 'svg' = ''
 
 const DRAFT_KEY = 'soj.draw'
 
-const frameSrc = DRAW_BASE + (DRAW_BASE.includes('?') ? '&' : '?') + `embed=1&proto=json&ui=${DRAW_UI}&configure=1&spin=1`
+const frameSrc = DRAW_BASE + (DRAW_BASE.includes('?') ? '&' : '?') + `embed=1&proto=json&ui=${DRAW_UI}&lang=zh&configure=1&spin=1`
 
 // 画板消息来源校验：只信 iframe 自身 origin（防其它窗口注入消息）；自托管为同源相对路径
 const frameOrigin = (() => {
@@ -95,6 +101,7 @@ function onMessage(e: MessageEvent) {
       sendToFrame({ action: 'load', xml: draft || '', autosave: 1 })
       restored.value = !!draft
       collapsePanelsOnLoad()
+      injectHeaderButtons()
       break
     }
     case 'autosave':
@@ -196,13 +203,14 @@ const toggleFormat = () => {
   if (frameReady.value) sendShortcut(80) // Ctrl+Shift+P
 }
 
-// 面板可见性：形状/格式面板均为编辑器内 mxWindow（标题 Shapes/Format），宽 0 = 收起
+// 面板可见性：形状/格式面板均为编辑器内 mxWindow（标题随 lang=zh 汉化为 形状/格式，
+// 中英双匹配），宽 0 = 收起
 function panelVisible(kind: 'shapes' | 'format') {
   const doc = frameEl.value?.contentWindow?.document
   if (!doc) return false
-  const title = kind === 'shapes' ? 'Shapes' : 'Format'
-  const ws = Array.from(doc.querySelectorAll('.mxWindow')).filter(
-    (w) => (w.querySelector('.mxWindowTitle')?.textContent || '').trim() === title,
+  const pattern = kind === 'shapes' ? /^Shapes$|^形状$/ : /^Format$|^格式$/
+  const ws = Array.from(doc.querySelectorAll('.mxWindow')).filter((w) =>
+    pattern.test((w.querySelector('.mxWindowTitle')?.textContent || '').trim()),
   )
   return ws.length ? Math.max(...ws.map((w) => w.getBoundingClientRect().width)) > 5 : false
 }
@@ -215,6 +223,45 @@ function collapsePanelsOnLoad() {
       if (frameReady.value && panelVisible('format')) toggleFormat()
     }, 600)
   }, 500)
+}
+
+// 顶行「形状/格式」卡注入（用户拍板：主菜单右侧第一格，按 drawio 内置风格）——同源后
+// 往编辑器 DOM 注入与主菜单卡同款的白底圆角卡（阴影/悬停态照搬 sketch 头部按钮），
+// 两个文本钮触发官方快捷键。重挂 iframe（丢弃）后随 init 重注入；跨域回退时 document
+// 访问抛 SecurityError，静默跳过（面板开关随跨域失效，见 DRAW_BASE 注释）。
+function injectHeaderButtons(attempt = 0) {
+  let doc: Document | undefined
+  try {
+    doc = frameEl.value?.contentWindow?.document
+  } catch {
+    return // 跨域回退：不注入
+  }
+  if (!doc || !doc.body) {
+    if (attempt < 10) setTimeout(() => injectHeaderButtons(attempt + 1), 300)
+    return
+  }
+  if (doc.getElementById('soj-panel-toggles')) return
+  const bar = doc.createElement('div')
+  bar.id = 'soj-panel-toggles'
+  bar.style.cssText = [
+    'position:absolute', 'top:0', 'left:186px', 'z-index:10',
+    'display:flex', 'gap:2px', 'align-items:center',
+    'background:#ffffff', 'border-radius:12px', 'padding:6px 10px',
+    'box-shadow:0 1px 3px rgba(0,0,0,0.12)',
+  ].join(';')
+  const mk = (label: string, code: number) => {
+    const b = doc.createElement('button')
+    b.textContent = label
+    b.style.cssText =
+      'border:none;background:transparent;padding:5px 14px;font-family:inherit;font-size:14px;color:#3f3f3f;cursor:pointer;border-radius:8px;white-space:nowrap;'
+    b.addEventListener('mouseenter', () => { b.style.background = '#f2f5f9' })
+    b.addEventListener('mouseleave', () => { b.style.background = 'transparent' })
+    b.addEventListener('click', () => sendShortcut(code))
+    return b
+  }
+  bar.appendChild(mk('形状', 75))
+  bar.appendChild(mk('格式', 80))
+  doc.body.appendChild(bar)
 }
 
 onMounted(() => {
@@ -232,8 +279,6 @@ onBeforeUnmount(() => {
       <div class="dp-actions">
         <span v-if="draftAt" class="dp-draft">已自动暂存 {{ fmtTime(draftAt) }}</span>
         <span v-else-if="restored" class="dp-draft">已恢复上次画稿</span>
-        <el-button size="small" :disabled="!frameReady" @click="toggleShapes">形状</el-button>
-        <el-button size="small" :disabled="!frameReady" @click="toggleFormat">格式</el-button>
         <el-button size="small" :disabled="!frameReady" :icon="Download" @click="exportDiag('png')">导出 PNG</el-button>
         <el-button size="small" :disabled="!frameReady" @click="exportDiag('svg')">导出 SVG</el-button>
         <el-button size="small" type="danger" plain :disabled="!frameReady" :icon="Trash2" @click="discardDraft">丢弃</el-button>
