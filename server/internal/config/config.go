@@ -15,6 +15,7 @@ type Config struct {
 	MongoDB      string
 	DataDir      string // 测试数据根目录 /data/testdata
 	UploadsDir   string // 题面图片目录 /data/uploads
+	DrawioDir    string // 画板自托管静态资源目录（v0.56，空 = 不启用 /drawio 路由）
 	BackupDir    string // 备份密文归档目录（服务器留存） /data/backups
 	KeysDir      string // 备份密钥卷目录（与 testdata 卷分离） /data/keys
 	// 备份归档在线下载体积上限（字节）：media/all 档动辄数百 MB，走在线下载会
@@ -41,6 +42,7 @@ func Load() *Config {
 		MongoDB:            getEnv("SOJ_MONGO_DB", "soj"),
 		DataDir:            getEnv("SOJ_DATA_DIR", "./data/testdata"),
 		UploadsDir:         getEnv("SOJ_UPLOADS_DIR", "./data/uploads"),
+		DrawioDir:          getEnv("SOJ_DRAWIO_DIR", ""),
 		BackupDir:          getEnv("SOJ_BACKUP_DIR", "./data/backups"),
 		KeysDir:            getEnv("SOJ_KEYS_DIR", "./data/keys"),
 		BackupDownloadLimit: getEnvInt64("SOJ_BACKUP_DOWNLOAD_LIMIT", 32<<20),

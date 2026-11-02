@@ -7,11 +7,29 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Trash2 } from 'lucide-vue-next'
 
-// drawio 服务地址（课堂网络拉不动官方 CDN 时改这一处即可切自托管）
-const DRAW_BASE = 'https://embed.diagrams.net'
+// drawio 服务地址：自托管静态卷 /drawio（deploy/drawio + compose 挂载 + SOJ_DRAWIO_DIR），
+// 同源后宿主可控制编辑器内部（面板开关/样式）；目录未部署时 /drawio 404，改回
+// 'https://embed.diagrams.net' 一处即回官方托管（面板按钮功能随跨域失效）
+const DRAW_BASE = '/drawio'
 
 // ui=sketch：手绘风工具栏——左侧默认带自由绘图笔 / 形状库 / 表格等图标（用户拍板默认可见）
 const DRAW_UI = 'sketch'
+
+// 编辑器内定制 CSS（configure 动作注入，官方通道）：①工具栏图标加深（第 2 项黄色便签
+// 例外，避免涂黑）；②左侧竖排工具条改顶部横排居中（用户拍板）。类名对 sketch UI 恒定。
+const DRAW_CUSTOM_CSS = `
+.geVerticalToolbar > a:not(:nth-child(2)) { filter: brightness(0.25); }
+.geToolbarContainer.geVerticalToolbar {
+  flex-direction: row !important;
+  top: 56px !important;
+  bottom: auto !important;
+  left: 50% !important;
+  transform: translateX(-50%);
+  width: auto !important;
+  height: auto !important;
+  padding: 2px 8px !important;
+}
+`
 
 const frameEl = ref<HTMLIFrameElement>()
 const frameKey = ref(0) // 丢弃后换 key 重挂 iframe 回白板态（比发空稿更确定，不赌协议行为）
@@ -22,12 +40,12 @@ let pendingExport: '' | 'png' | 'svg' = ''
 
 const DRAFT_KEY = 'soj.draw'
 
-const frameSrc = DRAW_BASE + (DRAW_BASE.includes('?') ? '&' : '?') + `embed=1&proto=json&ui=${DRAW_UI}&spin=1`
+const frameSrc = DRAW_BASE + (DRAW_BASE.includes('?') ? '&' : '?') + `embed=1&proto=json&ui=${DRAW_UI}&configure=1&spin=1`
 
-// 画板消息来源校验：只信 iframe 自身 origin（防其它窗口注入消息）
+// 画板消息来源校验：只信 iframe 自身 origin（防其它窗口注入消息）；自托管为同源相对路径
 const frameOrigin = (() => {
   try {
-    return new URL(frameSrc).origin
+    return new URL(frameSrc, window.location.href).origin
   } catch {
     return ''
   }
@@ -64,12 +82,19 @@ function onMessage(e: MessageEvent) {
   }
   if (!msg || typeof msg !== 'object') return
   switch (msg.event) {
+    case 'configure': {
+      // configure=1 时编辑器以此事件代替 init 先行启动（源码级确认）：回配置后编辑器
+      // 才继续 doMain → 之后 init 照旧发。customCss 经官方通道注入编辑器内。
+      sendToFrame({ action: 'configure', config: { customCss: DRAW_CUSTOM_CSS } })
+      break
+    }
     case 'init': {
       // 握手完成：恢复浏览器暂存草稿或开新稿；autosave:1 让编辑器定期回传全量 XML
       frameReady.value = true
       const draft = localStorage.getItem(DRAFT_KEY)
       sendToFrame({ action: 'load', xml: draft || '', autosave: 1 })
       restored.value = !!draft
+      collapsePanelsOnLoad()
       break
     }
     case 'autosave':
@@ -138,6 +163,60 @@ function discardDraft() {
     .catch(() => {})
 }
 
+// ---- 同源面板控制（自托管专属；跨域时静默无效） ----
+
+// 面板开关走 drawio 官方快捷键（菜单里明示）：Ctrl+Shift+K = Shapes、Ctrl+Shift+P =
+// Format。同源后向编辑器 document 派发合成 keydown——KeyboardEvent 构造器不带
+// keyCode/which，defineProperty 补上（drawio 快捷键处理读 evt.keyCode），实测接受。
+// 菜单 DOM 驱动路线废弃记录：菜单项有三层嵌套 td（外层包装 td 点了无效）且弹出菜单
+// 隐藏时常驻 DOM，事件模拟踩坑两轮。
+function sendShortcut(code: number) {
+  const win = frameEl.value?.contentWindow
+  const doc = win?.document
+  if (!win || !doc) return
+  const ch = String.fromCharCode(code)
+  for (const target of [doc, doc.body, win]) {
+    try {
+      const evt = new KeyboardEvent('keydown', {
+        key: ch, code: `Key${ch}`, ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true,
+      })
+      Object.defineProperty(evt, 'keyCode', { get: () => code })
+      Object.defineProperty(evt, 'which', { get: () => code })
+      target.dispatchEvent(evt)
+    } catch {
+      // 单目标失败不阻断其余目标
+    }
+  }
+}
+
+const toggleShapes = () => {
+  if (frameReady.value) sendShortcut(75) // Ctrl+Shift+K
+}
+const toggleFormat = () => {
+  if (frameReady.value) sendShortcut(80) // Ctrl+Shift+P
+}
+
+// 面板可见性：形状/格式面板均为编辑器内 mxWindow（标题 Shapes/Format），宽 0 = 收起
+function panelVisible(kind: 'shapes' | 'format') {
+  const doc = frameEl.value?.contentWindow?.document
+  if (!doc) return false
+  const title = kind === 'shapes' ? 'Shapes' : 'Format'
+  const ws = Array.from(doc.querySelectorAll('.mxWindow')).filter(
+    (w) => (w.querySelector('.mxWindowTitle')?.textContent || '').trim() === title,
+  )
+  return ws.length ? Math.max(...ws.map((w) => w.getBoundingClientRect().width)) > 5 : false
+}
+
+// 默认收起（用户拍板：干净画布，要用点顶栏「形状/格式」按钮）——init 后串行
+function collapsePanelsOnLoad() {
+  setTimeout(() => {
+    if (frameReady.value && panelVisible('shapes')) toggleShapes()
+    setTimeout(() => {
+      if (frameReady.value && panelVisible('format')) toggleFormat()
+    }, 600)
+  }, 500)
+}
+
 onMounted(() => {
   window.addEventListener('message', onMessage)
 })
@@ -153,6 +232,8 @@ onBeforeUnmount(() => {
       <div class="dp-actions">
         <span v-if="draftAt" class="dp-draft">已自动暂存 {{ fmtTime(draftAt) }}</span>
         <span v-else-if="restored" class="dp-draft">已恢复上次画稿</span>
+        <el-button size="small" :disabled="!frameReady" @click="toggleShapes">形状</el-button>
+        <el-button size="small" :disabled="!frameReady" @click="toggleFormat">格式</el-button>
         <el-button size="small" :disabled="!frameReady" :icon="Download" @click="exportDiag('png')">导出 PNG</el-button>
         <el-button size="small" :disabled="!frameReady" @click="exportDiag('svg')">导出 SVG</el-button>
         <el-button size="small" type="danger" plain :disabled="!frameReady" :icon="Trash2" @click="discardDraft">丢弃</el-button>
