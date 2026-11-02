@@ -99,7 +99,7 @@ case "$TIER" in
   db) KEEP=30 ;;
   *) KEEP=4 ;;
 esac
-ls -1t "$OUT/$PATTERN.v1.tar.age" 2>/dev/null | tail -n +"$((KEEP + 1))" | while read -r old; do
+ls -1t "$OUT/"$PATTERN".v1.tar.age" 2>/dev/null | tail -n +"$((KEEP + 1))" | while read -r old; do
   rm -f "$old" && log "清理超保留旧档: $(basename "$old")"
 done
 

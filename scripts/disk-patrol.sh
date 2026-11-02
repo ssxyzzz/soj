@@ -31,10 +31,10 @@ log() { echo "$TAG $*"; }
 if [ "$INSTALL_CRON" = "1" ]; then
   MARK="SOJ-DISK-PATROL-CRON"
   LINE="30 8 * * * cd \$HOME/soj && ./scripts/disk-patrol.sh >> backups/cron.log 2>&1 #$MARK"
-  (crontab -l 2>/dev/null | grep -v "$CRON_SOJ"; echo "$LINE") | crontab - \
+  (crontab -l 2>/dev/null | grep -v "$MARK"; echo "$LINE") | crontab - \
     || { echo "crontab 安装失败（服务器上执行）"; exit 1; }
   echo "已安装磁盘巡检 crontab："
-  crontab -l | grep "$CRON_SOJ"
+  crontab -l | grep "$MARK"
   exit 0
 fi
 
