@@ -32,17 +32,36 @@ rsync -a --delete /home/ssxyz/soj/deploy/drawio/ root@ssxyzzz.cn:/var/www/soj-dr
 已含现成块：
 
 ```
-handle_path /drawio/* {
-    root * /var/www/soj-drawio
-    @html path *.html
-    @assets not path *.html
-    header @html Cache-Control "public, max-age=86400"
-    header @assets Cache-Control "public, max-age=2592000"
-    file_server
+ssxyzzz.cn {
+    encode zstd gzip
+    handle_path /drawio/* {
+        root * /var/www/soj-drawio
+        @html path *.html
+        @assets not path *.html
+        header @html Cache-Control "public, max-age=86400"
+        header @assets Cache-Control "public, max-age=2592000"
+        file_server
+    }
+    reverse_proxy 127.0.0.1:8080
 }
 ```
 
-上线两步：①把块抄进 VPS `/etc/caddy/Caddyfile`；②`sudo systemctl reload caddy`。
+**encode 必须有**（2026-11-02 实锤）：漏配时 drawio 资产裸传（app.min.js 10.8MB 不压缩），
+叠加 VPS 带宽顶（按带宽计费实例常见 3Mbps≈0.4MB/s）→ 画板首载 35s；开压缩后传输量降 ~4 倍。
+VPS 带宽是直出后的硬天花板（全班共享），课堂并发场景视带宽决定是否升级或走 SW 预热错峰。
+
+上线两步：①整块按上面替换站点块；②`sudo systemctl reload caddy`。
+
+**验证直出与压缩生效**（必做）：
+
+```bash
+# 直出：max-age=2592000 → Caddy 本地盘 ✓；max-age=86400 → 仍走隧道（Go 发的）
+curl -sI https://ssxyzzz.cn/drawio/js/app.min.js | grep -i cache-control
+# 压缩：下载量应为 ~2MB 级（裸传是 10.8MB）
+curl -s -o /dev/null -w '%{size_download} 字节 / %{time_total}s\n' \
+  -H 'Accept-Encoding: gzip' https://ssxyzzz.cn/drawio/js/app.min.js
+```
+
 同源不变（同域名），DrawView 零改动。缓存策略：资产 30 天、HTML 入口 1 天——第二次起近零拉取。
 
 **升级/更新 webapp**：本地重跑「获取」命令后，再执行上面两条 rsync 推送命令即刷新 VPS。

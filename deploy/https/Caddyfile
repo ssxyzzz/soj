@@ -26,7 +26,10 @@ soj.example.com {
 	# HSTS：强制浏览器后续一律走 HTTPS（上线确认稳定后再放开，见手册）
 	header Strict-Transport-Security "max-age=31536000"
 
-	encode gzip
+	# 压缩必开（2026-11-02 实锤）：漏配 encode 时 drawio 资产裸传（app.min.js 10.8MB
+	# 一字不压），叠加 VPS 带宽顶（按带宽计费实例常见 3Mbps≈0.4MB/s）→ 画板首载 35s；
+	# 开压缩后传输量降 ~4 倍。zstd 优先（压缩率与解压速度双优，现代浏览器全支持），回退 gzip
+	encode zstd gzip
 
 	# 画板 drawio webapp 静态直出（v0.56 自托管同源画板）：webapp 由开发机直接 rsync 到
 	# 本机 /var/www/soj-drawio（sync 脚本目标是家里生产机不是 VPS；见 deploy/drawio/README.md
