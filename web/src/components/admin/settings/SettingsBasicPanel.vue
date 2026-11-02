@@ -9,8 +9,8 @@ import { useSiteStore } from '@/stores/site'
 const rateLimit = ref(3)
 // 每日可下载数据的题目数（0 = 不限制）；作用于拥有「下载数据」权限位的用户
 const dataDownloadLimit = ref(5)
-// 代码自动补全解锁等级（v0.11）：等级 ≥ 该值才能开启自动补全
-const autocompleteMinLevel = ref(5)
+// 代码自动补全解锁等级（v0.11）：等级 ≥ 该值才能开启自动补全（缺省 4）
+const autocompleteMinLevel = ref(4)
 // ICP 备案号（v0.13）：备案下来后填入，页脚悬挂并链接工信部备案系统；空 = 不展示
 const icpNumber = ref('')
 // 公安网备号（2026-11-02）：同页脚悬挂，备案号中数字即公安部备案查询 code；空 = 不展示

@@ -394,7 +394,7 @@ export interface LevelConfigInfo {
   decay: [number, number, number] // 低 1/2/3 级题分系数（低 ≥4 级恒 0）
   effects_enabled: boolean
   effects_tiers: boolean[]
-  autocomplete_min_level?: number // 代码自动补全解锁等级（缺省按 5）
+  autocomplete_min_level?: number // 代码自动补全解锁等级（缺省按 4）
 }
 
 // root 等级面板（GET/PUT /admin/levelconfig）
@@ -733,7 +733,7 @@ export interface ListFlat {
 export interface UserPrefs {
   defaultLang?: string
   codeTemplates?: Record<string, string>
-  autocomplete?: boolean // 代码自动补全（v0.11 起需等级 ≥ 系统设置阈值，默认 Lv.5）
+  autocomplete?: boolean // 代码自动补全（默认关闭；等级 ≥ 系统设置阈值方可开启，阈值默认 Lv.4）
   codeFont?: string // 编辑器字体：Consolas / Menlo / Monaco（默认 Consolas）
   codeFontSize?: number // 编辑器字号 px（12-48，默认 14）
   mdEditMode?: 'split' | 'source' | '' // Markdown 编辑器模式（v0.52 起两模式：split 分屏预览 / source 纯源码；空与存量 wysiwyg·ir·sv 读时归一 split）

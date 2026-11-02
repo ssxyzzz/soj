@@ -34,7 +34,7 @@ const prefsForm = reactive<{
   defaultLang: string
   codeTemplates: Record<string, string>
   autocomplete: boolean
-}>({ defaultLang: '', codeTemplates: {}, autocomplete: true })
+}>({ defaultLang: '', codeTemplates: {}, autocomplete: false })
 
 // 模板编辑器当前编辑的语言（按语言各存一套，切换带出对应模板）
 const tplLang = ref('cpp')
@@ -73,8 +73,9 @@ async function load() {
     prefsForm.defaultLang = p.prefs?.defaultLang ?? ''
     prefsForm.codeTemplates = { ...(p.prefs?.codeTemplates ?? {}) }
     userStore.setLevel(p.level ?? null) // 顶栏徽章与补全门槛同步（AC 后进设置页即刷新）
-    // 开关对未达标用户是禁用的：显示有效值（关），而不是库里可能残留的 true
-    prefsForm.autocomplete = autocompleteAvailable() ? (p.prefs?.autocomplete ?? true) : false
+    // 开关对未达标用户是禁用的：显示有效值（关），而不是库里可能残留的 true；
+    // 未存过该偏好按默认关（v0.57 起默认关闭口径）
+    prefsForm.autocomplete = autocompleteAvailable() ? (p.prefs?.autocomplete ?? false) : false
   } finally {
     loading.value = false
   }

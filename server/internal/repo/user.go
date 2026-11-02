@@ -34,7 +34,7 @@ const InitialAdminID int64 = 1
 type UserPrefs struct {
 	DefaultLang   string            `bson:"defaultLang,omitempty" json:"defaultLang,omitempty"`
 	CodeTemplates map[string]string `bson:"codeTemplates,omitempty" json:"codeTemplates,omitempty"`
-	Autocomplete  *bool             `bson:"autocomplete,omitempty" json:"autocomplete,omitempty"` // 代码自动补全（v0.5.3，默认开箱开启；后续按用户等级门槛放开——预留接口）
+	Autocomplete  *bool             `bson:"autocomplete,omitempty" json:"autocomplete,omitempty"` // 代码自动补全（默认关闭；等级 ≥ 系统设置阈值方可显式开启，阈值默认 Lv.4）
 	CodeFont      string            `bson:"codeFont,omitempty" json:"codeFont,omitempty"`         // 代码编辑器字体：Consolas / Menlo / Monaco，空为 Consolas
 	CodeFontSize  int               `bson:"codeFontSize,omitempty" json:"codeFontSize,omitempty"` // 编辑器字号 px（12-48），0 为默认 15
 	MdEditMode string `bson:"mdEditMode,omitempty" json:"mdEditMode,omitempty"` // Markdown 编辑器模式：split / source（v0.52 起两模式），空为 split；存量 wysiwyg/ir/sv 由前端读时归一 split（v0.8.1 引入，v0.52 收敛）

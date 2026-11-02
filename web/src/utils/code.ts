@@ -25,9 +25,9 @@ export function templateFor(lang: string): string {
 }
 
 // ---- 自动补全可用性（等级门槛，v0.11 落地 v0.5.3 预留的接口） ----
-// 等级 ≥ 系统设置阈值（默认 Lv.5）才能开启自动补全；root/admin 不受限（门槛面向学生）。
-// 编辑器与个人设置都走这一个判断点，不各自为政。等级随 /me/profile 异步就绪，就绪后本
-// 判断响应式刷新（调用处都在 computed/模板中）。
+// 等级 ≥ 系统设置阈值（默认 Lv.4，v0.40 对齐权益阶梯）才能开启自动补全；root/admin
+// 不受限（门槛面向学生）。编辑器与个人设置都走这一个判断点，不各自为政。等级随
+// /me/profile 异步就绪，就绪后本判断响应式刷新（调用处都在 computed/模板中）。
 export function autocompleteAvailable(): boolean {
   const st = useUserStore()
   if (!st.token) return false
@@ -36,9 +36,9 @@ export function autocompleteAvailable(): boolean {
   return lv >= useLevelsStore().autocompleteMinLevel()
 }
 
-// 实际生效：可用且未显式关闭（默认开箱开启，见 v0.5.3 功能基线）。
+// 实际生效：可用且已显式开启（默认关闭，v0.57 起口径；未存过该偏好一律按关）。
 export function autocompleteOn(): boolean {
-  return autocompleteAvailable() && useUserStore().prefs.autocomplete !== false
+  return autocompleteAvailable() && useUserStore().prefs.autocomplete === true
 }
 
 // ---- 偏好保存 ----
@@ -51,7 +51,7 @@ export function mergedPrefs(patch: Partial<UserPrefs>): UserPrefs {
   const merged: UserPrefs = {
     defaultLang: p.defaultLang ?? '',
     codeTemplates: p.codeTemplates ?? {},
-    autocomplete: p.autocomplete ?? true,
+    autocomplete: p.autocomplete ?? false,
     codeFont: p.codeFont ?? '',
     codeFontSize: p.codeFontSize ?? 0, // 0 = 未设置，后端按默认 14 处理
     mdEditMode: p.mdEditMode ?? '',

@@ -15,6 +15,7 @@ import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SelfTestPanel from '@/components/SelfTestPanel.vue'
 import { challengeApi, problemApi, raceApi, submissionApi } from '@/api'
 import { isQueueStatus } from '@/utils/format'
+import { autocompleteOn } from '@/utils/code'
 import { parseIOSamples } from '@/utils/md'
 import type { ClassRaceView, ProblemDetail } from '@/types'
 
@@ -36,6 +37,9 @@ const lastFailMsg = ref('')
 // ---------- 编辑器 ----------
 const language = ref('cpp')
 const code = ref('')
+// 自动补全与提交弹窗/在线编程同口径（utils/code.ts：等级 ≥ 门槛且用户已显式开启，
+// 默认关）——挑战模式此前漏接闸门恒开，v0.57 补账。
+const acOn = computed(() => autocompleteOn())
 
 // ---------- 递交与轮询 ----------
 const submitting = ref(false)
@@ -514,7 +518,7 @@ function swallow(e: Event) {
           @contextmenu.capture="swallow"
           @mouseup.capture="swallow"
         >
-          <CodeEditor v-model="code" :language="language" height="100%" :tab-indent="true" />
+          <CodeEditor v-model="code" :language="language" height="100%" :tab-indent="true" :autocomplete="acOn" />
         </div>
         <div class="chal-foot">
           <span class="chal-verdict" v-if="verdict">上次递交：{{ verdict }}</span>

@@ -742,7 +742,7 @@ func (s *SystemSettings) Mailer() mailer.Provider {
 	return mailer.Log{}
 }
 
-// AutocompleteMinLevel 自动补全解锁等级：未设置/越界回默认 5。
+// AutocompleteMinLevel 自动补全解锁等级：未设置/越界回默认 4。
 func (s *SystemSettings) MinAutocompleteLevel() int {
 	if s.AutocompleteMinLevel == nil || *s.AutocompleteMinLevel < 1 || *s.AutocompleteMinLevel > 10 {
 		return DefaultAutocompleteMinLevel

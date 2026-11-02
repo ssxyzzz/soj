@@ -277,7 +277,7 @@ func (h *Handlers) UpdateMyProfile(c *gin.Context) {
 			prefs.CodeTemplates = m
 		}
 		if req.Prefs.Autocomplete != nil {
-			// 等级门槛（v0.11）：开启需等级 ≥ 系统设置阈值（默认 Lv.5）；关闭不受限
+			// 等级门槛（v0.11）：开启需等级 ≥ 系统设置阈值（默认 Lv.4）；关闭不受限
 			if *req.Prefs.Autocomplete && !h.autocompleteAllowed(c, uid) {
 				min := repo.DefaultAutocompleteMinLevel
 				if s, err := h.repo.GetSystemSettings(c.Request.Context()); err == nil {

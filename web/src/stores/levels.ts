@@ -61,9 +61,9 @@ export const useLevelsStore = defineStore('levels', () => {
     return c.effects_enabled && (c.effects_tiers[tier - 1] ?? true)
   }
 
-  // 代码自动补全解锁等级（缺省 5）
+  // 代码自动补全解锁等级（缺省 4，与后端 DefaultAutocompleteMinLevel 同口径）
   function autocompleteMinLevel(): number {
-    return cfg.value?.autocomplete_min_level ?? 5
+    return cfg.value?.autocomplete_min_level ?? 4
   }
 
   return { cfg, ensure, reload, nameOf, difficultyNameOf, difficultyNoteOf, effectsOn, autocompleteMinLevel }
