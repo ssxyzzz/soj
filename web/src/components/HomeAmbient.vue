@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // 首页专属光效（2026-10-25 重设计）：跟随光晕（520px 柔青斑 lerp 惯性拖尾，0.28 紧跟）
 // + 移动时的低频涟漪环。网格显影与静态画布撤下由全站 AmbientGrid（MainLayout 挂载）
-// 负责——本组件只叠首页的光，仅 HomeView 挂载；prefers-reduced-motion 时不启用。
+// 负责——本组件只叠页面的光；2026-11-02 用户拍板登录页鼠标特效与首页一致，登录页同挂。
+// prefers-reduced-motion 时不启用。
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 const layer = ref<HTMLElement>()

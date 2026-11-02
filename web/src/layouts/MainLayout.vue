@@ -15,10 +15,9 @@ import FeastOverlay from '@/components/game/FeastOverlay.vue'
 import { gameApi } from '@/api'
 import { isMuted, setMuted, playLevelUp } from '@/utils/gameSounds'
 import { pickWelcome } from '@/utils/gameText'
-import { applyTheme, initTheme, type ThemeName } from '@/utils/theme'
 import { applySWUpdate, swUpdateReady } from '@/utils/swClient'
-import { APP_VERSION as appVersion } from '@/utils/version'
 import { fmtRel } from '@/utils/format'
+import SiteFooterLine from '@/components/SiteFooterLine.vue'
 import type { NotificationItem } from '@/types'
 
 const route = useRoute()
@@ -183,22 +182,6 @@ async function readAllRecent() {
     /* 静默 */
   }
 }
-
-// 站点主题（2026-10-26）：v5 新案（默认）/ 原版 · 深海军蓝，页脚切换、localStorage 持久化
-const theme = ref<ThemeName>(initTheme())
-function switchTheme(t: ThemeName) {
-  applyTheme(t)
-  theme.value = t
-}
-
-// 公安网备查询链接（2026-11-02）：备案号中的连续数字即查询 code（如 皖公网安备
-// 34010000000001号 → 34010000000001）；提不出数字时退回查询页首页
-const mpsLink = computed(() => {
-  const code = (site.mpsNumber || '').replace(/\D/g, '')
-  return code
-    ? `https://beian.mps.gov.cn/#/query/webSearch?code=${code}`
-    : 'https://beian.mps.gov.cn/'
-})
 
 // 头像首字（v3 .avatar：渐变圆 + 昵称首字；昵称为空兜底「我」）
 const avatarChar = computed(() => {
@@ -397,33 +380,9 @@ function onCommand(command: string) {
         <router-link to="/diff" class="ftool">代码对比</router-link>
       </div>
       <div class="footer-line">
-        <!-- 页脚版本与仓库链接（2026-10-26）：SOJ+版本整体外链仓库，竖线分段；版本号发版时改 utils/version.ts 一处 -->
-        <a class="flink" href="https://github.com/ssxyzzz/soj" target="_blank" rel="noopener noreferrer">SOJ · {{ appVersion }}</a>
-        <span class="fsep">|</span>
-        <span>Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
-        <span class="fsep">|</span>
-        <!-- 主题切换（2026-10-26）：v5 版（默认）/ 原版，data-theme 整站变量换血 -->
-        <span class="theme-switch">
-          <span class="ts-label">主题    </span>
-          <button type="button" :class="{ on: theme === 'v5' }" @click="switchTheme('v5')">v5 版</button>
-          <button type="button" :class="{ on: theme === 'navy' }" @click="switchTheme('navy')">原版</button>
-        </span>
-        <!-- ICP 备案号（v0.13）：后台「系统设置」配置，空 = 不展示；法规要求链接工信部备案系统 -->
-        <a
-          v-if="site.icpNumber"
-          class="icp"
-          href="https://beian.miit.gov.cn/"
-          target="_blank"
-          rel="noopener noreferrer"
-        >{{ site.icpNumber }}</a>
-        <!-- 公安网备号（2026-11-02）：同后台配置；备案号中数字即查询 code，链接公安部备案查询 -->
-        <a
-          v-if="site.mpsNumber"
-          class="icp"
-          :href="mpsLink"
-          target="_blank"
-          rel="noopener noreferrer"
-        >{{ site.mpsNumber }}</a>
+        <!-- 页脚信息行（2026-11-02 单行化 + 主题 popover 向上选择）：SiteFooterLine 共用组件，
+             登录页页脚同款；代码对比工具行仍在上方独立一行 -->
+        <SiteFooterLine />
       </div>
     </el-footer>
     <!-- 首登改密提醒（批量建号/管理员建号/重置密码的账号）：登录后与刷新后各弹一次。
@@ -436,7 +395,7 @@ function onCommand(command: string) {
       align-center
     >
       <p style="margin: 0 0 8px">你的账号正在使用初始密码，建议尽快修改，以保证账号安全。</p>
-      <p style="margin: 0; color: var(--el-text-color-secondary); font-size: 13px">
+      <p style="margin: 0; color: var(--el-text-color-secondary); font-size: var(--soj-fs-13)">
         修改密码后本次提醒自动解除；你也可以选择跳过。
       </p>
       <template #footer>
@@ -452,15 +411,15 @@ function onCommand(command: string) {
   min-height: 100vh;
 }
 
-/* v3-full 玻璃顶栏：半透明白 + backdrop blur，sticky 悬浮于画布之上（底边 .07） */
+/* v3-full 玻璃顶栏：半透明白 + backdrop blur，sticky 悬浮于画布之上（底边 --soj-line） */
 .header {
   position: sticky;
   top: 0;
   z-index: 50;
-  background: rgba(251, 253, 255, 0.72);
+  background: color-mix(in srgb, var(--soj-bg-top) 72%, transparent);
   -webkit-backdrop-filter: blur(16px) saturate(1.5);
   backdrop-filter: blur(16px) saturate(1.5);
-  border-bottom: 1px solid rgba(11, 31, 69, 0.07);
+  border-bottom: 1px solid var(--soj-line);
   padding: 0;
   height: 64px;
 }
@@ -473,16 +432,16 @@ function onCommand(command: string) {
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 24px;
-  gap: 6px;
+  padding: 0 var(--soj-sp-24);
+  gap: var(--soj-sp-6);
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   cursor: pointer;
-  margin-right: 18px;
+  margin-right: var(--soj-sp-16);
   white-space: nowrap;
 }
 
@@ -494,7 +453,7 @@ function onCommand(command: string) {
 }
 
 .brand-word {
-  font-size: 24px;
+  font-size: var(--soj-fs-brand);
   font-weight: var(--soj-fw-heavy);
   letter-spacing: 1px;
   /* 斜向单向流彩（2026-10-27 终版三）：真正的坑不是渐变周期，而是背景图的「盒子平铺」——
@@ -506,10 +465,10 @@ function onCommand(command: string) {
      循环首末帧全等，linear infinite 逐帧无缝 */
   background: repeating-linear-gradient(
     120deg,
-    #16a7d2 0,
-    #1557b8 17.3205px,
-    #2c5de0 34.641px,
-    #16a7d2 51.9615px
+    var(--soj-brand-a) 0,
+    var(--soj-brand-b) 17.3205px,
+    var(--soj-brand-c) 34.641px,
+    var(--soj-brand-a) 51.9615px
   );
   background-size: 60px 103.923px;
   background-position: 0 0;
@@ -539,22 +498,22 @@ function onCommand(command: string) {
   height: 100%;
 }
 
-/* v3-full 菜单胶囊（.nav-links a：8px 15px、15px 字号，hover/on 浅蓝底）：项高自适应居中 */
+/* v3-full 菜单胶囊（.nav-links a：--soj-sp-8/--soj-sp-16、--soj-fs-body 字号，hover/on 浅蓝底）：项高自适应居中 */
 .nav-links {
   display: flex;
   align-items: center;
 }
 
-/* v3-full 菜单胶囊（v0.39 链接化：el-menu → RouterLink，参数同源 8px 15px / 999 / soft 底） */
+/* v3-full 菜单胶囊（v0.39 链接化：el-menu → RouterLink，参数同源 --soj-sp-8/--soj-sp-16 / 999 / soft 底） */
 .nav-links a {
   align-self: center;
   height: auto;
   line-height: 1.2;
-  padding: 8px 15px;
+  padding: var(--soj-sp-8) var(--soj-sp-16);
   border-radius: 999px;
-  margin: 0 1px;
+  margin: 0 var(--soj-sp-2);
   border-bottom: none;
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   color: inherit;
   text-decoration: none;
   transition: background-color 0.18s, color 0.18s;
@@ -577,7 +536,7 @@ function onCommand(command: string) {
   font-size: var(--soj-fs-14);
   font-weight: var(--soj-fw-emphasis);
   color: var(--soj-ink-2);
-  padding: 7px 14px;
+  padding: var(--soj-sp-8) var(--soj-sp-14);
   border-radius: 999px;
   border: 1px solid var(--soj-line-2);
   text-decoration: none;
@@ -622,12 +581,12 @@ function onCommand(command: string) {
   right: -6px;
   min-width: 17px;
   height: 17px;
-  padding: 0 4px;
+  padding: 0 var(--soj-sp-4);
   border-radius: 999px;
-  background: var(--el-color-danger, #f56c6c);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  background: var(--el-color-danger);
+  color: var(--soj-white);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
   line-height: 17px;
   text-align: center;
 }
@@ -640,20 +599,20 @@ function onCommand(command: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 6px 8px;
+  padding: var(--soj-sp-2) var(--soj-sp-6) var(--soj-sp-8);
   border-bottom: 1px solid var(--soj-line);
 }
 
 .bh-title {
   font-weight: var(--soj-fw-emphasis);
-  font-size: 14px;
+  font-size: var(--soj-fs-14);
 }
 
 .bell-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  padding: 8px 6px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-8) var(--soj-sp-6);
   border-radius: 8px;
   cursor: pointer;
 }
@@ -667,7 +626,7 @@ function onCommand(command: string) {
 }
 
 .bi-icon {
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   line-height: 1.5;
 }
 
@@ -677,14 +636,14 @@ function onCommand(command: string) {
 }
 
 .bi-title {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .bi-text {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -692,7 +651,7 @@ function onCommand(command: string) {
 }
 
 .bi-time {
-  font-size: 11px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
   white-space: nowrap;
   flex-shrink: 0;
@@ -700,7 +659,7 @@ function onCommand(command: string) {
 
 .bell-foot {
   border-top: 1px solid var(--soj-line);
-  padding-top: 6px;
+  padding-top: var(--soj-sp-6);
   text-align: center;
 }
 
@@ -711,18 +670,18 @@ function onCommand(command: string) {
 .jade-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   min-width: 200px;
 }
 
 .jade-item .jade-glyph {
-  color: #0f9b8e;
-  font-size: 14px;
+  color: var(--soj-teal-deep);
+  font-size: var(--soj-fs-14);
   line-height: 1;
 }
 
 .jade-item .jade-num {
-  color: #0f9b8e;
+  color: var(--soj-teal-deep);
   font-weight: var(--soj-fw-bold);
   font-variant-numeric: tabular-nums;
 }
@@ -734,9 +693,9 @@ function onCommand(command: string) {
 
 .jade-item .jade-hint {
   margin-left: auto;
-  padding-left: 16px;
-  color: var(--soj-ink-3, #5b6b85);
-  font-size: 12px;
+  padding-left: var(--soj-sp-16);
+  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-12);
 }
 
 .user-dropdown {
@@ -749,13 +708,13 @@ function onCommand(command: string) {
 .user-chip {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 5px 14px 5px 5px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-4) var(--soj-sp-14) var(--soj-sp-4) var(--soj-sp-4);
   border-radius: 999px;
   border: 1px solid var(--soj-line);
   background: var(--el-fill-color-blank);
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(11, 31, 69, 0.05);
+  box-shadow: 0 1px 2px var(--soj-line);
   transition: box-shadow 0.18s, border-color 0.18s;
   outline: none;
   white-space: nowrap;
@@ -763,7 +722,7 @@ function onCommand(command: string) {
 
 .user-chip:hover {
   border-color: var(--soj-blue-line);
-  box-shadow: 0 2px 8px rgba(11, 31, 69, 0.09);
+  box-shadow: 0 2px 8px var(--soj-line-2);
 }
 
 .avatar {
@@ -774,7 +733,7 @@ function onCommand(command: string) {
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
-  color: #fff;
+  color: var(--soj-white);
   font-weight: var(--soj-fw-bold);
   font-size: var(--soj-fs-14);
 }
@@ -783,7 +742,7 @@ function onCommand(command: string) {
 .avatar-img {
   object-fit: cover;
   border: 1px solid var(--soj-line);
-  background: #fff;
+  background: var(--soj-white);
 }
 
 .uname {
@@ -805,11 +764,12 @@ function onCommand(command: string) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  /* 工具行与信息行的行距（2026-11-02 用户反馈增大）：8 → 14 */
+  gap: var(--soj-sp-14);
   /* el-footer 默认固定高 60px 会裁掉双行内容，双行页脚需放开高度自撑 */
   height: auto;
-  padding: 12px 20px 14px;
-  font-size: 12.5px;
+  padding: var(--soj-sp-12) var(--soj-sp-20) var(--soj-sp-14);
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
   background: transparent;
   /* v3 页脚：hairline 顶边收束页面 */
@@ -821,7 +781,7 @@ function onCommand(command: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: var(--soj-sp-16);
   flex-wrap: wrap;
 }
 
@@ -829,10 +789,12 @@ function onCommand(command: string) {
 .footer-tools {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--soj-sp-14);
 }
 
 .ftool {
+  /* 工具行字号（2026-11-02 用户反馈调大）：随页脚 12px → 14px 界面基线 */
+  font-size: var(--soj-fs-14);
   color: var(--soj-ink-3);
   text-decoration: none;
 }
@@ -840,78 +802,19 @@ function onCommand(command: string) {
 .ftool:hover {
   color: var(--soj-blue);
 }
-
-/* 主题切换（2026-10-26）：页脚弱化文案钮，选中态走主蓝浅底胶囊 */
-.theme-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ts-label {
-  color: var(--soj-ink-3);
-}
-
-.theme-switch button {
-  border: 1px solid transparent;
-  background: transparent;
-  border-radius: 999px;
-  padding: 3px 10px;
-  font: inherit;
-  font-size: 12px;
-  color: var(--soj-ink-3);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.theme-switch button:hover {
-  color: var(--soj-blue);
-}
-
-.theme-switch button.on {
-  color: var(--soj-blue);
-  background: var(--soj-blue-soft);
-  border-color: var(--soj-blue-line);
-  font-weight: 600;
-}
-
-/* 页脚版本与仓库链接：整体外链不加粗，悬停提主蓝 */
-.flink {
-  color: var(--soj-ink-3);
-  text-decoration: none;
-}
-
-.flink:hover {
-  color: var(--soj-blue);
-}
-
-/* 竖线分段：弱化 */
-.fsep {
-  color: var(--soj-ink-3);
-  opacity: 0.55;
-}
-
-/* 备案号外链：弱化为页脚次要信息，悬停才提色 */
-.icp {
-  color: var(--soj-ink-3);
-  text-decoration: none;
-}
-
-.icp:hover {
-  color: var(--soj-blue);
-}
 </style>
 
 <style scoped>
 /* 升维祝福徽章（v0.40）：玉余额旁的小闪电 */
 .bless-chip {
-  margin-left: 6px;
-  padding: 0 6px;
+  margin-left: var(--soj-sp-6);
+  padding: 0 var(--soj-sp-6);
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #b45309;
-  background: linear-gradient(135deg, #fde68a, #fbbf24);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-warning-deep);
+  /* 金渐变高光停 = warning 向白提亮（v0.57 收编：原野生 #fbbf24，随主题换血） */
+  background: linear-gradient(135deg, var(--soj-tle-bg), color-mix(in srgb, var(--soj-warning) 70%, var(--soj-white)));
   animation: blessPulse 1.6s ease-in-out infinite;
 }
 
@@ -937,8 +840,8 @@ function onCommand(command: string) {
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 16px;
-  padding: 4px 6px;
+  font-size: var(--soj-fs-16);
+  padding: var(--soj-sp-4) var(--soj-sp-6);
   border-radius: 8px;
   line-height: 1;
 }
@@ -956,21 +859,21 @@ function onCommand(command: string) {
   z-index: 2600;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 22px;
+  gap: var(--soj-sp-4);
+  padding: var(--soj-sp-8) var(--soj-sp-20);
   border-radius: 999px;
-  background: rgba(31, 73, 186, 0.92);
-  color: #fff;
-  font-size: 14px;
-  box-shadow: 0 8px 28px rgba(31, 73, 186, 0.4);
+  background: color-mix(in srgb, var(--soj-blue) 92%, transparent);
+  color: var(--soj-white);
+  font-size: var(--soj-fs-14);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--soj-blue) 40%, transparent);
 }
 
 .herald-banner.gold {
-  background: linear-gradient(135deg, #b45309, #f59e0b);
+  background: linear-gradient(135deg, var(--soj-warning-deep), var(--soj-warning));
 }
 
 .herald-line b {
-  margin: 0 2px;
+  margin: 0 var(--soj-sp-2);
 }
 
 .herald-slide-enter-active,
@@ -1000,23 +903,23 @@ function onCommand(command: string) {
   z-index: 2600;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 8px 6px 18px;
+  gap: var(--soj-sp-12);
+  padding: var(--soj-sp-6) var(--soj-sp-8) var(--soj-sp-6) var(--soj-sp-16);
   border-radius: 999px;
-  background: rgba(31, 73, 186, 0.92);
-  color: #fff;
-  font-size: 14px;
-  box-shadow: 0 8px 28px rgba(31, 73, 186, 0.4);
+  background: color-mix(in srgb, var(--soj-blue) 92%, transparent);
+  color: var(--soj-white);
+  font-size: var(--soj-fs-14);
+  box-shadow: 0 8px 28px color-mix(in srgb, var(--soj-blue) 40%, transparent);
 }
 
 .sw-refresh-btn {
   border: none;
   border-radius: 999px;
-  padding: 4px 14px;
-  background: #fff;
-  color: #1f49ba;
-  font-size: 13px;
-  font-weight: 600;
+  padding: var(--soj-sp-4) var(--soj-sp-14);
+  background: var(--soj-white);
+  color: var(--soj-blue);
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
   cursor: pointer;
 }
 
@@ -1027,14 +930,14 @@ function onCommand(command: string) {
 .sw-dismiss {
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 16px;
+  color: color-mix(in srgb, var(--soj-white) 75%, transparent);
+  font-size: var(--soj-fs-16);
   line-height: 1;
-  padding: 2px 8px;
+  padding: var(--soj-sp-2) var(--soj-sp-8);
   cursor: pointer;
 }
 
 .sw-dismiss:hover {
-  color: #fff;
+  color: var(--soj-white);
 }
 </style>

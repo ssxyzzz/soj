@@ -2,7 +2,8 @@
 // 全站网格氛围（2026-10-25 修复⑯）：静态青网格与双光晕退役（挂载时 body 加 ambient-on
 // 撤下，冷白渐变底保留），改为「图纸在灯下显影」的网格层——radial mask 圆心跟随光斑
 // （rAF 同步 --gx/--gy CSS 变量，mask 走合成层），网格只在鼠标周围显现、越远越淡。
-// 全站常驻：MainLayout 挂载，路由切换不卸载。光斑与涟漪仅首页（HomeAmbient）。
+// 常驻页面挂载：MainLayout 全站 + 登录页（2026-11-02 随「登录特效与首页一致」同挂），
+// 路由切换不卸载。光斑与涟漪由 HomeAmbient 提供（首页/登录页）。
 // prefers-reduced-motion 时整套不启用（body 类也不加，保留原静态画布）。
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 

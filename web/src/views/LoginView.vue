@@ -5,6 +5,9 @@ import { ElMessage } from 'element-plus'
 
 import { authApi } from '@/api'
 import { verifyApi } from '@/api/verify'
+import AmbientGrid from '@/components/AmbientGrid.vue'
+import HomeAmbient from '@/components/HomeAmbient.vue'
+import SiteFooterLine from '@/components/SiteFooterLine.vue'
 import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 
@@ -45,14 +48,6 @@ const regCd = useCountdown()
 const fpCd = useCountdown()
 
 const emailMode = computed(() => site.registerVerifyMode === 'email')
-
-// 公安网备查询链接：备案号中的连续数字即查询 code；提不出退查询页首页（与 MainLayout 同口径）
-const mpsLink = computed(() => {
-  const code = (site.mpsNumber || '').replace(/\D/g, '')
-  return code
-    ? `https://beian.mps.gov.cn/#/query/webSearch?code=${code}`
-    : 'https://beian.mps.gov.cn/'
-})
 
 async function sendRegisterCode() {
   if (!form.email.trim()) {
@@ -148,9 +143,12 @@ async function submitForgot() {
 </script>
 
 <template>
-  <!-- v3-full 登录页：全屏居中白卡、无导航；页面自带独立画布（spot 中心偏上 + 网格 mask 38%），
-       覆盖全局 body 网格层（自有渐变底不透）；左上返回首页胶囊 -->
+  <!-- v3-full 登录页：全屏居中白卡、无导航；画布 = 全局冷白底 + AmbientGrid（首页同款
+       「网格在鼠标处显影」，2026-11-02 用户拍板替换原自带青晕+网格 mask）；结构 = 列弹性：
+       stage 吃满剩余空间居中卡片，页脚钉在页面底部，整页恰满一屏无滚动条 -->
   <div class="login-page">
+    <AmbientGrid />
+    <HomeAmbient />
     <button class="login-back" type="button" @click="router.push('/')">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 6l-6 6 6 6" /></svg>
       返回首页
@@ -204,16 +202,10 @@ async function submitForgot() {
           </p>
         </el-form>
       </div>
-      <div class="login-foot">
-        SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统<br />
-        <a v-if="site.icpNumber" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ site.icpNumber }}</a>
-        <a
-          v-if="site.mpsNumber"
-          :href="mpsLink"
-          target="_blank"
-          rel="noopener noreferrer"
-        >{{ site.mpsNumber }}</a>
-      </div>
+    </div>
+    <div class="login-foot">
+      <!-- 页脚信息行（2026-11-02）：SiteFooterLine 共用组件，与登录后主布局页脚同款单行 -->
+      <SiteFooterLine />
     </div>
 
     <!-- 忘记密码：用户名/邮箱 → 发码（防枚举统一提示）→ 验证码 + 新密码×2 -->
@@ -246,27 +238,16 @@ async function submitForgot() {
 </template>
 
 <style scoped>
-/* v3-full #scr-login：独立画布——冷白渐变（不透，盖住全局 body 网格层）+ 中心偏上青光晕；
-   网格层在 ::after（mask 椭圆 90% 70% at 50% 38%，与全局 50% 0% 版区分） */
+/* 画布（2026-11-02 用户拍板）：撤掉自带冷白渐变+青晕+网格 mask（旧版盖住全局画布，
+   顶部青晕在宽视口下呈截断色块），改为挂载 AmbientGrid —— 首页同款「网格在鼠标处
+   显影」（组件自管 body.ambient-on 撤全局静态光晕/网格）；reduced-motion 时组件
+   不启用，回落全局静态画布，与其余页面一致。布局 = 列弹性恰满一屏：stage 吃剩余
+   空间居中卡片，页脚钉在底部，常规视口无滚动条 */
 .login-page {
   position: relative;
   min-height: 100vh;
-  background:
-    radial-gradient(520px 340px at 50% 16%, rgb(var(--soj-teal-soft-rgb) / 0.14), transparent 62%),
-    linear-gradient(var(--soj-bg-top), var(--soj-bg-bottom));
-}
-
-.login-page::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(rgb(var(--soj-teal-soft-rgb) / 0.11) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(var(--soj-teal-soft-rgb) / 0.11) 1px, transparent 1px);
-  background-size: 44px 44px;
-  -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 38%, #000 26%, transparent 80%);
-  mask-image: radial-gradient(ellipse 90% 70% at 50% 38%, #000 26%, transparent 80%);
+  display: flex;
+  flex-direction: column;
 }
 
 /* v3 .login-back：左上返回首页胶囊（白.8 + blur） */
@@ -277,12 +258,12 @@ async function submitForgot() {
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--soj-sp-8);
   font: inherit;
   font-size: var(--soj-fs-13);
   font-weight: var(--soj-fw-emphasis);
   color: var(--soj-ink-2);
-  padding: 8px 16px;
+  padding: var(--soj-sp-8) var(--soj-sp-16);
   border: 1px solid var(--soj-line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.8);
@@ -297,23 +278,21 @@ async function submitForgot() {
 }
 
 .login-stage {
-  position: relative;
-  z-index: 1;
-  min-height: 100vh;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 20px;
+  padding: var(--soj-sp-32) var(--soj-sp-20);
 }
 
 .login-card {
   width: 400px;
   max-width: 100%;
-  background: #fff;
+  background: var(--soj-white);
   border: 1px solid var(--soj-line);
-  border-radius: 20px;
-  padding: 36px 34px 30px;
+  border-radius: var(--soj-radius-dialog); /* 登录卡 = 弹窗档圆角 20 */
+  padding: var(--soj-sp-32) var(--soj-sp-32) var(--soj-sp-32);
   box-shadow:
     0 1px 2px rgba(11, 31, 69, 0.04),
     0 18px 48px rgba(11, 31, 69, 0.1);
@@ -323,8 +302,8 @@ async function submitForgot() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 26px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-24);
   text-align: center;
 }
 
@@ -336,16 +315,17 @@ async function submitForgot() {
 }
 
 .brand-word {
-  font-size: 30px;
+  font-size: var(--soj-fs-30);
   font-weight: var(--soj-fw-heavy);
   letter-spacing: 1px;
+  /* 品牌渐变三停走 :root token（与 MainLayout 装饰条同源，v0.57 收口） */
   background: linear-gradient(
     90deg,
-    #16a7d2 0%,
-    #1557b8 25%,
-    #2c5de0 50%,
-    #16a7d2 75%,
-    #1557b8 100%
+    var(--soj-brand-a) 0%,
+    var(--soj-brand-b) 25%,
+    var(--soj-brand-c) 50%,
+    var(--soj-brand-a) 75%,
+    var(--soj-brand-b) 100%
   );
   background-size: 220% 100%;
   -webkit-background-clip: text;
@@ -396,7 +376,7 @@ async function submitForgot() {
   align-items: center;
   justify-content: space-between;
   font-size: var(--soj-fs-13);
-  margin: 2px 0 14px;
+  margin: var(--soj-sp-2) 0 var(--soj-sp-14);
 }
 
 /* v3 .login-btn：48 高胶囊渐变主钮 */
@@ -407,7 +387,7 @@ async function submitForgot() {
 }
 
 .login-alt {
-  margin: 18px 0 0;
+  margin: var(--soj-sp-16) 0 0;
   text-align: center;
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
@@ -423,27 +403,17 @@ async function submitForgot() {
   text-decoration: underline;
 }
 
-/* v3 .login-foot：卡片下方两行 12px 页脚 */
+/* v3 .login-foot：钉在页面底部的页脚（列弹性布局的最末元素）；信息行由
+   SiteFooterLine 共用组件渲染（与登录后主布局页脚同款单行），此处只管钉底与字号 */
 .login-foot {
-  margin-top: 26px;
+  padding: 0 var(--soj-sp-20) 22px;
   font-size: var(--soj-fs-12);
-  color: var(--soj-ink-3);
   text-align: center;
-  line-height: 2;
-}
-
-.login-foot a {
-  color: var(--soj-ink-3);
-  text-decoration: none;
-}
-
-.login-foot a:hover {
-  color: var(--soj-blue);
 }
 
 .code-row {
   display: flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   width: 100%;
 }
 </style>
