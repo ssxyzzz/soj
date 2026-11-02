@@ -16,20 +16,17 @@ const DRAW_BASE = '/drawio'
 const DRAW_UI = 'sketch'
 
 // 编辑器内定制 CSS（configure 动作注入，官方通道）：①主菜单卡紧贴左上角；②绘图工具
-// 条横排、置于主菜单与「形状/格式」卡之后的第二格（同一顶行，用户拍板）；③图标纯黑
-// （第 2 项黄色便签例外不涂黑——brightness(0.25) 对浅灰描边件仍显灰，拉满）。类名对
-// sketch UI 恒定。
+// 条横排、置于主菜单（含注入的形状/格式钮）之后的第二格（同一顶行，用户拍板）；③灰源
+// 根治 = 只修 mxDisabled 半透明（opacity:1），原生图标色/悬停态原样保留——brightness
+// 滤镜绷带已撤（悬停态被压成全黑，用户否决）。类名对 sketch UI 恒定。
 const DRAW_CUSTOM_CSS = `
 .geToolbarContainer.geSketchMainMenu { top: 0 !important; left: 0 !important; }
-/* 灰源实锤：drawio 给工具钮挂 mxDisabled 类做半透明置灰（filter 黑了仍显灰）——强制不透明；
-   内部 handler 语义不受影响（点击仍走 drawio 自查） */
 .geVerticalToolbar > a { opacity: 1 !important; }
-.geVerticalToolbar > a:not(:nth-child(2)) { filter: brightness(0); }
 .geToolbarContainer.geVerticalToolbar {
   flex-direction: row !important;
   top: 0 !important;
   bottom: auto !important;
-  left: 330px !important;
+  left: 260px !important;
   transform: none !important;
   width: auto !important;
   height: auto !important;
@@ -225,10 +222,10 @@ function collapsePanelsOnLoad() {
   }, 500)
 }
 
-// 顶行「形状/格式」卡注入（用户拍板：主菜单右侧第一格，按 drawio 内置风格）——同源后
-// 往编辑器 DOM 注入与主菜单卡同款的白底圆角卡（阴影/悬停态照搬 sketch 头部按钮），
-// 两个文本钮触发官方快捷键。重挂 iframe（丢弃）后随 init 重注入；跨域回退时 document
-// 访问抛 SecurityError，静默跳过（面板开关随跨域失效，见 DRAW_BASE 注释）。
+// 「形状/格式」钮并入主菜单卡（用户拍板：☰ 之后、🗑 之前，同卡同款）——同源后往
+// geSketchMainMenu 注入两个原生 geButton（类名即内置风格，悬停/内边距自动继承），
+// 点击触发官方快捷键。重挂 iframe（丢弃）后随 init 重注入；跨域回退时 document 访问
+// 抛 SecurityError 静默跳过（面板开关随跨域失效，见 DRAW_BASE 注释）。
 function injectHeaderButtons(attempt = 0) {
   let doc: Document | undefined
   try {
@@ -240,28 +237,22 @@ function injectHeaderButtons(attempt = 0) {
     if (attempt < 10) setTimeout(() => injectHeaderButtons(attempt + 1), 300)
     return
   }
-  if (doc.getElementById('soj-panel-toggles')) return
-  const bar = doc.createElement('div')
-  bar.id = 'soj-panel-toggles'
-  bar.style.cssText = [
-    'position:absolute', 'top:0', 'left:186px', 'z-index:10',
-    'display:flex', 'gap:2px', 'align-items:center',
-    'background:#ffffff', 'border-radius:12px', 'padding:6px 10px',
-    'box-shadow:0 1px 3px rgba(0,0,0,0.12)',
-  ].join(';')
-  const mk = (label: string, code: number) => {
-    const b = doc.createElement('button')
-    b.textContent = label
-    b.style.cssText =
-      'border:none;background:transparent;padding:5px 14px;font-family:inherit;font-size:14px;color:#3f3f3f;cursor:pointer;border-radius:8px;white-space:nowrap;'
-    b.addEventListener('mouseenter', () => { b.style.background = '#f2f5f9' })
-    b.addEventListener('mouseleave', () => { b.style.background = 'transparent' })
-    b.addEventListener('click', () => sendShortcut(code))
-    return b
+  const menu = doc.querySelector('.geSketchMainMenu')
+  if (!menu || doc.getElementById('soj-shapes-toggle')) return
+  const mk = (id: string, label: string, code: number) => {
+    const a = doc.createElement('a')
+    a.id = id
+    a.className = 'geButton'
+    a.textContent = label
+    a.addEventListener('click', () => sendShortcut(code))
+    return a
   }
-  bar.appendChild(mk('形状', 75))
-  bar.appendChild(mk('格式', 80))
-  doc.body.appendChild(bar)
+  const shapes = mk('soj-shapes-toggle', '形状', 75)
+  const format = mk('soj-format-toggle', '格式', 80)
+  const first = menu.children[0] // ☰ 主菜单钮
+  if (!first) return
+  menu.insertBefore(format, first.nextSibling) // 先插格式（落 ☰ 后）
+  menu.insertBefore(shapes, format) // 再插形状（☰ 与格式之间）——终序：☰ 形状 格式 🗑 ↺ ↻
 }
 
 onMounted(() => {
