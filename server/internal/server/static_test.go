@@ -11,6 +11,10 @@ func TestCacheControl(t *testing.T) {
 	}{
 		{"assets/index-BwZDfCAb.js", "public, max-age=31536000, immutable"},
 		{"assets/ProblemDetailView-DeVkCRQr.css", "public, max-age=31536000, immutable"},
+		// 哈希含 - / _（base64url 字母表，约 12% 文件命中）也必须 immutable：
+		// 曾因字符类漏 - 导致这些 chunk 不吃长缓存、也不进 SW 预缓存清单
+		{"assets/DiffView-NIMh-nfR.js", "public, max-age=31536000, immutable"},
+		{"assets/TagFilter-By7PiP-_.js", "public, max-age=31536000, immutable"},
 		{"index.html", "no-cache"},
 		// vditor/<semver>/ 版本化路径随 v0.53 渲染收口退役：前端已无 /vditor 子资源，
 		// 该前缀回落普通 no-cache（历史标签页的旧请求 404 后前端自然刷新到新版）

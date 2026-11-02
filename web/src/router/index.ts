@@ -170,6 +170,13 @@ const router = createRouter({
           meta: { title: '我的玉', requiresAuth: true },
         },
         {
+          path: 'diff',
+          name: 'code-diff',
+          // 代码对比工具（v0.47）：双栏贴代码 + 过滤注释 diff，页脚入口；登录后可用
+          component: () => import('@/views/DiffView.vue'),
+          meta: { title: '代码对比', requiresAuth: true },
+        },
+        {
           path: 'admin',
           name: 'admin',
           component: () => import('@/views/AdminView.vue'),

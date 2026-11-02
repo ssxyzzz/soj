@@ -30,8 +30,9 @@ function sojPrecache(): Plugin {
         this.error(`sw.js 占位符 __SOJ_SW_BUILD__ 应恰好出现 1 次，实际 ${hits} 次`)
       }
       writeFileSync(swPath, sw.replace('__SOJ_SW_BUILD__', build))
-      // 与服务端 static.go hashedAsset 同口径的 8 位哈希判定
-      const hashed = /-[0-9A-Za-z_$]{8}\.[0-9A-Za-z]+$/
+      // 与服务端 static.go hashedAsset 同口径的 8 位哈希判定（base64url 字母表，含 - 与 _：
+      // 漏 - 曾让约 12% 的 chunk 不进预缓存清单——哈希带连字符的路由 JS 冷载通道重新打开）
+      const hashed = /-[0-9A-Za-z_$-]{8}\.[0-9A-Za-z]+$/
       const assets = readdirSync(join(dist, 'assets'))
         .filter((f) => hashed.test(f))
         .map((f) => 'assets/' + f)

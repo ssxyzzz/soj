@@ -1,0 +1,252 @@
+<script setup lang="ts">
+// 代码对比工具页（v0.47）：双栏贴代码 → @codemirror/merge 分屏/上下 diff，页脚「代码对比」入口。
+// 登录后可用（requiresAuth）；「过滤注释」= 喂 diff 前先过 utils/codeDiff.ts 剥注释——纯注释
+// 差异不算差异，且换行保留、行号与原代码严格对齐。观感与站内代码查看器同源：CM6 高亮 +
+// 只读态（readOnly + editable:false）+ Consolas 主题，CodeEditor.vue 同款链路全量动态 import。
+import { nextTick, onUnmounted, ref, watch } from 'vue'
+
+import { ElMessage } from 'element-plus'
+
+import CodeEditor from '@/components/CodeEditor.vue'
+import { languageOptions } from '@/utils/code'
+import { prepareForDiff } from '@/utils/codeDiff'
+
+const lang = ref('cpp')
+const filterComments = ref(true)
+const mode = ref<'split' | 'unified'>('split')
+const srcA = ref('') // 参考代码（标程 / 正确版本）
+const srcB = ref('') // 待比代码（学生 / 待查版本）
+const compared = ref(false) // 首次「开始对比」后展示结果卡
+const resultEl = ref<HTMLDivElement>()
+const resultCard = ref<HTMLDivElement>()
+
+// 视图实例用 import type 持有类型（纯类型引用不产生静态 import，懒加载分包不受影响）
+let splitView: import('@codemirror/merge').MergeView | null = null
+let unifiedView: import('codemirror').EditorView | null = null
+
+// 语言包懒加载（与 CodeEditor.vue 同款：C 与 C++ 共用 cpp 高亮）
+async function langExt(language: string) {
+  if (language === 'python3') {
+    const { python } = await import('@codemirror/lang-python')
+    return python()
+  }
+  const { cpp } = await import('@codemirror/lang-cpp')
+  return cpp()
+}
+
+// 主题与 CodeEditor.buildTheme 同款（结果区只读，字号字体固定 14/Consolas）
+function buildTheme(vm: typeof import('@codemirror/view')) {
+  return vm.EditorView.theme({
+    '&': { fontSize: '14px' },
+    '.cm-content': { fontFamily: '"Consolas", Menlo, Monaco, monospace' },
+    '.cm-gutters': { fontFamily: '"Consolas", Menlo, monospace' },
+    '.cm-line': { lineHeight: '1.6' },
+  })
+}
+
+function destroyViews() {
+  splitView?.destroy()
+  splitView = null
+  unifiedView?.destroy()
+  unifiedView = null
+}
+
+async function rebuild() {
+  if (!compared.value || !resultEl.value) return
+  const textA = prepareForDiff(srcA.value, lang.value, filterComments.value)
+  const textB = prepareForDiff(srcB.value, lang.value, filterComments.value)
+  destroyViews()
+  const [cm, state, vm, merge, language] = await Promise.all([
+    import('codemirror'),
+    import('@codemirror/state'),
+    import('@codemirror/view'),
+    import('@codemirror/merge'),
+    langExt(lang.value),
+  ])
+  if (!resultEl.value) return // chunk 加载期间组件已卸载或已清空
+  const theme = buildTheme(vm)
+  // 只读态同 CodeEditor：readOnly 挡编辑命令，editable:false 去光标，仍可选中复制
+  const readOnly = [state.EditorState.readOnly.of(true), vm.EditorView.editable.of(false)]
+  if (mode.value === 'split') {
+    splitView = new merge.MergeView({
+      a: { doc: textA, extensions: [cm.basicSetup, language, theme, ...readOnly] },
+      b: { doc: textB, extensions: [cm.basicSetup, language, theme, ...readOnly] },
+      gutter: true,
+      highlightChanges: true,
+      // 相同段落折叠：长代码只展开差异段附近
+      collapseUnchanged: { margin: 3, minSize: 4 },
+    })
+    resultEl.value.replaceChildren(splitView.dom)
+  } else {
+    unifiedView = new cm.EditorView({
+      doc: textB,
+      extensions: [cm.basicSetup, language, theme, ...readOnly, merge.unifiedMergeView({ original: textA })],
+      parent: resultEl.value,
+    })
+  }
+}
+
+function compare() {
+  if (!srcA.value.trim() || !srcB.value.trim()) {
+    ElMessage.warning('两侧代码都要填写')
+    return
+  }
+  compared.value = true
+  void nextTick()
+    .then(rebuild)
+    .then(() => resultCard.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+}
+
+function swap() {
+  ;[srcA.value, srcB.value] = [srcB.value, srcA.value]
+  if (compared.value) void nextTick().then(rebuild)
+}
+
+function clearAll() {
+  srcA.value = ''
+  srcB.value = ''
+  compared.value = false
+  destroyViews()
+}
+
+// 语言/过滤/模式变化：已出结果则即时重比（输入文本是唯一真源，结果区不回写）
+watch([lang, filterComments, mode], () => {
+  if (compared.value) void nextTick().then(rebuild)
+})
+
+onUnmounted(destroyViews)
+</script>
+
+<template>
+  <div class="page">
+    <div class="page-head">
+      <div class="kicker">CODE DIFF</div>
+      <h1 class="page-title">代码对比<small>贴入两份代码查看差异；过滤注释后纯注释差异不再干扰</small></h1>
+    </div>
+
+    <!-- 输入卡：工具栏 + 双栏编辑器 -->
+    <div class="card tool-card">
+      <div class="toolbar">
+        <el-select v-model="lang" class="lang-sel">
+          <el-option v-for="o in languageOptions" :key="o.value" :label="o.label" :value="o.value" />
+        </el-select>
+        <el-switch v-model="filterComments" active-text="过滤注释" />
+        <el-radio-group v-model="mode">
+          <el-radio-button value="split">分屏对比</el-radio-button>
+          <el-radio-button value="unified">上下对比</el-radio-button>
+        </el-radio-group>
+        <span class="tb-spacer"></span>
+        <el-button @click="swap">交换左右</el-button>
+        <el-button @click="clearAll">清空</el-button>
+        <el-button type="primary" @click="compare">开始对比</el-button>
+      </div>
+      <div class="inputs">
+        <div class="input-col">
+          <div class="input-label">参考代码（标程 / 正确版本）</div>
+          <CodeEditor v-model="srcA" :language="lang" height="300px" :autocomplete="false" placeholder="贴入参考代码…" />
+        </div>
+        <div class="input-col">
+          <div class="input-label">待比代码（学生 / 待查版本）</div>
+          <CodeEditor v-model="srcB" :language="lang" height="300px" :autocomplete="false" placeholder="贴入待比代码…" />
+        </div>
+      </div>
+    </div>
+
+    <!-- 结果卡：首次对比后出现；高度收口，长代码靠相同段折叠 + 区内滚动 -->
+    <div v-if="compared" ref="resultCard" class="card tool-card result-card">
+      <div class="result-head">
+        <span class="result-title">差异结果</span>
+        <span class="result-hint">{{
+          filterComments ? '已过滤注释：纯注释差异不显示，行号与原代码对齐' : '原文对比：注释差异同样标出'
+        }}</span>
+      </div>
+      <div ref="resultEl" class="diff-result"></div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.tool-card {
+  padding: 20px 22px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px 18px;
+}
+
+.lang-sel {
+  width: 128px;
+}
+
+.tb-spacer {
+  flex: 1;
+}
+
+.inputs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.input-label {
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-ink-2);
+  margin-bottom: 8px;
+}
+
+/* <992px 折单列（与 PageShell 双列折叠同断点口径） */
+@media (max-width: 992px) {
+  .inputs {
+    grid-template-columns: 1fr;
+  }
+}
+
+.result-card {
+  margin-top: 16px;
+}
+
+.result-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.result-title {
+  font-size: var(--soj-fs-16);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
+}
+
+.result-hint {
+  font-size: var(--soj-fs-small);
+  color: var(--soj-ink-3);
+}
+
+/* 结果区高度链：容器定高 → mergeView 双编辑器铺满；上下模式为单 .cm-editor */
+.diff-result {
+  height: calc(100vh - 260px);
+  min-height: 380px;
+  border: 1px solid var(--el-border-color);
+  border-radius: var(--el-border-radius-base);
+  overflow: hidden;
+}
+
+.diff-result :deep(.cm-mergeView),
+.diff-result :deep(.cm-mergeView-editor) {
+  height: 100%;
+}
+
+.diff-result :deep(.cm-editor) {
+  height: 100%;
+}
+
+.diff-result :deep(.cm-editor.cm-focused) {
+  outline: none;
+}
+</style>

@@ -23,8 +23,9 @@ const BUILD = '__SOJ_SW_BUILD__'
 const CACHE = 'soj-v-' + BUILD
 const MANIFEST_URL = '/asset-manifest.json'
 
-// 与服务端 static.go 的 hashedAsset 同口径：assets/index-BwZDfCAb.js（8 位构建哈希）
-const HASHED = /-[0-9A-Za-z_$]{8}\.[0-9A-Za-z]+$/
+// 与服务端 static.go 的 hashedAsset 同口径：assets/index-BwZDfCAb.js（8 位构建哈希，
+// base64url 字母表含 - 与 _——漏 - 约一成文件不吃 cache-first，冷载通道重新打开）
+const HASHED = /-[0-9A-Za-z_$-]{8}\.[0-9A-Za-z]+$/
 
 self.addEventListener('install', (event) => {
   // 后台预热新版资产。首装时页面刚经网络加载过全部资源，immutable 哈希件直接命中

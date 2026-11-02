@@ -43,7 +43,9 @@ func registerStatic(r *gin.Engine) {
 }
 
 // vite 构建产物形如 assets/index-BwZDfCAb.js：文件名带 8 位构建哈希，同名必同内容。
-var hashedAsset = regexp.MustCompile(`-[0-9A-Za-z_$]{8}\.[0-9A-Za-z]+$`)
+// 哈希字母表为 base64url（含 - 与 _，实测约 12% 文件名含 -）；vite.config.ts 预缓存
+// 清单与 web/public/sw.js 的 HASHED 判定必须保持同一口径，漏 - 即漏缓存。
+var hashedAsset = regexp.MustCompile(`-[0-9A-Za-z_$-]{8}\.[0-9A-Za-z]+$`)
 
 // vite 构建产物固定输出在 assets/ 且文件名带 8 位哈希（assets/index-BwZDfCAb.js），
 // 同名必同内容，可缓存一年；其余文件（index.html、public/ 直拷件）不带哈希——

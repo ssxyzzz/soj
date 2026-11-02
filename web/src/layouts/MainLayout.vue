@@ -383,25 +383,31 @@ function onCommand(command: string) {
       <router-view />
     </el-main>
     <el-footer class="footer">
-      <!-- 页脚版本与仓库链接（2026-10-26）：SOJ+版本整体外链仓库，竖线分段；版本号发版时改 utils/version.ts 一处 -->
-      <a class="flink" href="https://github.com/ssxyzzz/soj" target="_blank" rel="noopener noreferrer">SOJ · {{ appVersion }}</a>
-      <span class="fsep">|</span>
-      <span>Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
-      <span class="fsep">|</span>
-      <!-- 主题切换（2026-10-26）：v5 版（默认）/ 原版，data-theme 整站变量换血 -->
-      <span class="theme-switch">
-        <span class="ts-label">主题    </span>
-        <button type="button" :class="{ on: theme === 'v5' }" @click="switchTheme('v5')">v5 版</button>
-        <button type="button" :class="{ on: theme === 'navy' }" @click="switchTheme('navy')">原版</button>
-      </span>
-      <!-- ICP 备案号（v0.13）：后台「系统设置」配置，空 = 不展示；法规要求链接工信部备案系统 -->
-      <a
-        v-if="site.icpNumber"
-        class="icp"
-        href="https://beian.miit.gov.cn/"
-        target="_blank"
-        rel="noopener noreferrer"
-      >{{ site.icpNumber }}</a>
+      <!-- 代码对比工具入口（v0.47）：独立工具页，置于页脚信息行上方一行 -->
+      <div class="footer-tools">
+        <router-link to="/diff" class="ftool">代码对比</router-link>
+      </div>
+      <div class="footer-line">
+        <!-- 页脚版本与仓库链接（2026-10-26）：SOJ+版本整体外链仓库，竖线分段；版本号发版时改 utils/version.ts 一处 -->
+        <a class="flink" href="https://github.com/ssxyzzz/soj" target="_blank" rel="noopener noreferrer">SOJ · {{ appVersion }}</a>
+        <span class="fsep">|</span>
+        <span>Gin + Vue 3 + MongoDB + go-judge 在线判题系统</span>
+        <span class="fsep">|</span>
+        <!-- 主题切换（2026-10-26）：v5 版（默认）/ 原版，data-theme 整站变量换血 -->
+        <span class="theme-switch">
+          <span class="ts-label">主题    </span>
+          <button type="button" :class="{ on: theme === 'v5' }" @click="switchTheme('v5')">v5 版</button>
+          <button type="button" :class="{ on: theme === 'navy' }" @click="switchTheme('navy')">原版</button>
+        </span>
+        <!-- ICP 备案号（v0.13）：后台「系统设置」配置，空 = 不展示；法规要求链接工信部备案系统 -->
+        <a
+          v-if="site.icpNumber"
+          class="icp"
+          href="https://beian.miit.gov.cn/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >{{ site.icpNumber }}</a>
+      </div>
     </el-footer>
     <!-- 首登改密提醒（批量建号/管理员建号/重置密码的账号）：登录后与刷新后各弹一次。
          仅「跳过」清除服务端标志（不再提醒）；「去修改密码」只关弹窗不落库——未真改密
@@ -780,15 +786,42 @@ function onCommand(command: string) {
 
 .footer {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 18px;
-  flex-wrap: wrap;
+  gap: 8px;
+  /* el-footer 默认固定高 60px 会裁掉双行内容，双行页脚需放开高度自撑 */
+  height: auto;
+  padding: 12px 20px 14px;
   font-size: 12.5px;
   color: var(--soj-ink-3);
   background: transparent;
   /* v3 页脚：hairline 顶边收束页面 */
   border-top: 1px solid var(--soj-line);
+}
+
+/* 原页脚信息行（版本/说明/主题/备案）：排布口径不变 */
+.footer-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+/* 工具入口行：弱化灰、hover 提主蓝，与 .flink 同口径 */
+.footer-tools {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.ftool {
+  color: var(--soj-ink-3);
+  text-decoration: none;
+}
+
+.ftool:hover {
+  color: var(--soj-blue);
 }
 
 /* 主题切换（2026-10-26）：页脚弱化文案钮，选中态走主蓝浅底胶囊 */
