@@ -377,7 +377,6 @@ function onCommand(command: string) {
     <el-footer class="footer">
       <!-- 代码对比工具入口（v0.47）：独立工具页，置于页脚信息行上方一行 -->
       <div class="footer-tools">
-        <router-link to="/draw" class="ftool">画板</router-link>
         <router-link to="/diff" class="ftool">代码对比</router-link>
       </div>
       <div class="footer-line">

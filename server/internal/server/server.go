@@ -117,23 +117,6 @@ func Run(ctx context.Context, deps *Deps) {
 
 	// 题面图片公开读取（v0.5.1）：非 /api 前缀，随机文件名 + immutable 缓存
 	r.GET("/uploads/:file", h.ServeUpload)
-	// 画板自托管静态资源（v0.56）：drawio webapp 纯静态（deploy/drawio 挂载卷），
-	// 同源后宿主可控制编辑器内部（面板开关/样式）；目录未配置或不存在则不启用该路由，
-	// DrawView 回退官方 embed.diagrams.net（DRAW_BASE 单点切换）
-	if cfg.DrawioDir != "" {
-		// http.FileServer + http.Dir 自带路径清洗（Clean 后无法以 .. 逃逸根目录）
-		drawioFS := http.FileServer(http.Dir(cfg.DrawioDir))
-		r.GET("/drawio/*filepath", func(c *gin.Context) {
-			// webapp 文件无哈希版本号：缓存一天平衡首载与更新失效
-			c.Header("Cache-Control", "public, max-age=86400")
-			if c.Request.URL.Path == "/drawio" {
-				c.Redirect(http.StatusMovedPermanently, "/drawio/")
-				return
-			}
-			http.StripPrefix("/drawio", drawioFS).ServeHTTP(c.Writer, c.Request)
-		})
-		slog.Info("drawio 自托管静态资源已启用", "component", "web", "dir", cfg.DrawioDir)
-	}
 	// 题面资产公开读取（v0.31）：同 uploads 先例挂根路径——题面里引用的
 	// `/problems/:id/assets/<名>` 即此形（挂 /api 下会与该 URL 形不一致、落 SPA 回退）
 	r.GET("/problems/:id/assets/:file", AuthOptional(h), h.ServeProblemAsset)

@@ -26,25 +26,9 @@ soj.example.com {
 	# HSTS：强制浏览器后续一律走 HTTPS（上线确认稳定后再放开，见手册）
 	header Strict-Transport-Security "max-age=31536000"
 
-	# 压缩必开（2026-11-02 实锤）：漏配 encode 时 drawio 资产裸传（app.min.js 10.8MB
-	# 一字不压），叠加 VPS 带宽顶（按带宽计费实例常见 3Mbps≈0.4MB/s）→ 画板首载 35s；
-	# 开压缩后传输量降 ~4 倍。zstd 优先（压缩率与解压速度双优，现代浏览器全支持），回退 gzip
+	# 压缩必开（2026-11-02 实锤教训：漏配 encode 时大静态文件裸传，叠加 VPS 带宽顶
+	# 即 35s 级事故）。zstd 优先（压缩率与解压速度双优，现代浏览器全支持），回退 gzip
 	encode zstd gzip
-
-	# 画板 drawio webapp 静态直出（v0.56 自托管同源画板）：webapp 由开发机直接 rsync 到
-	# 本机 /var/www/soj-drawio（sync 脚本目标是家里生产机不是 VPS；见 deploy/drawio/README.md
-	# 生产段）——VPS 本地盘直供，不走 frp 隧道回源（消掉每文件隧道 RTT 瀑布与家宽上行
-	# 占用，全班并发首载风险随之消除）。
-	handle_path /drawio/* {
-		root * /var/www/soj-drawio
-		# 资产 30 天（用户拍板）；HTML 入口 1 天——drawio 文件名无哈希版本号，入口短缓存
-		# 保证升级 webapp 后次日入口即换新（资产混用窗口见 deploy/drawio/README.md 升级须知）
-		@html path *.html
-		@assets not path *.html
-		header @html Cache-Control "public, max-age=86400"
-		header @assets Cache-Control "public, max-age=2592000"
-		file_server
-	}
 
 	# 反代到本机 frps 的 remotePort（frp 配置不动）。
 	# Caddy 在此注入 X-Forwarded-For（学生真实 IP），经 frp 纯 TCP 隧道原样到达 SOJ，
