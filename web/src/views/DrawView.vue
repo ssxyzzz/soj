@@ -33,8 +33,6 @@ const DRAW_CUSTOM_CSS = `
 .geToolbarContainer:has(.geEmbedBtn) { display: none !important; }
 /* 形状面板弹出位：贴左缘、主菜单下方留距（用户拍板） */
 .mxWindow:has(.geSidebarContainer:not(.geFormatContainer)) { left: 0 !important; top: 64px !important; }
-/* 自由绘图窗口：右上钉位（用户图三位置）；格式面板默认 docked 右缘不另加 */
-.mxWindow:not(:has(.geSidebarContainer)) { left: auto !important; right: 16px !important; top: 0 !important; }
 .geToolbarContainer.geVerticalToolbar {
   flex-direction: row !important;
   top: 0 !important;
@@ -112,6 +110,7 @@ function onMessage(e: MessageEvent) {
       restored.value = !!draft
       collapsePanelsOnLoad()
       injectHeaderButtons()
+      watchFreehandWindow()
       break
     }
     case 'autosave':
@@ -235,6 +234,38 @@ function collapsePanelsOnLoad() {
   }, 500)
 }
 
+// 自由绘图窗口初始定位（用户拍板蓝标位：格式面板左侧、顶行高度）——初始只定一次，
+// 之后 drawio 原生拖拽自由调整。挂 MutationObserver 监听窗口出现（每次弹出重定位）；
+// 格式面板开着时贴其左侧，未开时回退视口右侧。
+let freehandObserver: MutationObserver | null = null
+
+function watchFreehandWindow() {
+  const win = frameEl.value?.contentWindow
+  const doc = win?.document
+  if (!win || !doc) return
+  freehandObserver?.disconnect()
+  freehandObserver = new MutationObserver(() => {
+    const fhWin = Array.from(doc.querySelectorAll('.mxWindow')).find(
+      (w) =>
+        /^自由绘图$/.test((w.querySelector('.mxWindowTitle')?.textContent || '').trim()) &&
+        w.getBoundingClientRect().width > 5 &&
+        !(w as HTMLElement).dataset.sojPlaced,
+    ) as HTMLElement | undefined
+    if (!fhWin) return
+    fhWin.dataset.sojPlaced = '1'
+    const fmtWin = Array.from(doc.querySelectorAll('.mxWindow')).find(
+      (w) => /^(Format|格式)$/.test((w.querySelector('.mxWindowTitle')?.textContent || '').trim()) && w.getBoundingClientRect().width > 5,
+    )
+    const fmtRect = fmtWin?.getBoundingClientRect()
+    const vw = doc.documentElement.clientWidth
+    const fhWidth = 182
+    const left = fmtRect && fmtRect.width > 5 ? Math.max(0, Math.round(fmtRect.left) - fhWidth - 12) : Math.max(0, vw - fhWidth - 300)
+    fhWin.style.left = `${left}px`
+    fhWin.style.top = '84px'
+  })
+  freehandObserver.observe(doc.body, { childList: true, subtree: true })
+}
+
 // 「形状/格式」钮并入主菜单卡（用户拍板：☰ 之后、🗑 之前，同卡同款）——同源后往
 // geSketchMainMenu 注入两个原生 geButton（类名即内置风格，悬停/内边距自动继承），
 // 点击触发官方快捷键。重挂 iframe（丢弃）后随 init 重注入；跨域回退时 document 访问
@@ -273,6 +304,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.removeEventListener('message', onMessage)
+  freehandObserver?.disconnect()
 })
 </script>
 
