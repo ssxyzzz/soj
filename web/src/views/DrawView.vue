@@ -21,6 +21,10 @@ const DRAW_UI = 'sketch'
 // 滤镜绷带已撤（悬停态被压成全黑，用户否决）。类名对 sketch UI 恒定。
 const DRAW_CUSTOM_CSS = `
 .geToolbarContainer.geSketchMainMenu { top: 0 !important; left: 0 !important; }
+/* 折叠/展开箭头语义翻转（用户拍板）：drawio 原生展开态显 ⌄、折叠态显 ⌃，与直觉相反——
+   旋转 180° 一步完成两态互换（展开显 ⌃ = 点击收起；折叠显 ⌄ = 点击展开）。折叠态容器
+   同受上方 left/top 钉位，原地缩成小卡不飘移 */
+.geVerticalToolbar > a[title*="折叠"] { transform: rotate(180deg); }
 .geVerticalToolbar > a { opacity: 1 !important; }
 .geToolbarContainer.geVerticalToolbar {
   flex-direction: row !important;
