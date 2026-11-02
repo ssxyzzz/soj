@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// 系统设置 · 基础页（2026-10-28 拆分）：判题限速 / 数据下载限额 / 补全等级 / 批量导入限额 / ICP。
+// 系统设置 · 基础页（2026-10-28 拆分）：判题限速 / 数据下载限额 / 补全等级 / 批量导入限额 / ICP / 页脚自定义。
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { ArrowDown, ArrowUp, X } from 'lucide-vue-next'
 
 import { adminApi } from '@/api'
 import { useSiteStore } from '@/stores/site'
@@ -15,6 +16,23 @@ const autocompleteMinLevel = ref(5)
 const icpNumber = ref('')
 // 公安网备号（2026-11-02）：同页脚悬挂，备案号中数字即公安部备案查询 code；空 = 不展示
 const mpsNumber = ref('')
+// 页脚自定义内容（v0.55）：附加文案 + 自定义链接（顺序即展示序，渲染在备案号之后，空 = 不渲染）
+const footerText = ref('')
+const footerLinks = ref<{ text: string; url: string }[]>([])
+
+function addFooterLink() {
+  if (footerLinks.value.length >= 10) return
+  footerLinks.value.push({ text: '', url: '' })
+}
+function removeFooterLink(i: number) {
+  footerLinks.value.splice(i, 1)
+}
+function moveFooterLink(i: number, dir: -1 | 1) {
+  const j = i + dir
+  if (j < 0 || j >= footerLinks.value.length) return
+  const arr = footerLinks.value
+  ;[arr[i], arr[j]] = [arr[j], arr[i]]
+}
 // 批量导入限额（v0.15）：单题数据 / 整包 zip（MB）
 const batchProblemMB = ref(100)
 const batchZipMB = ref(2048)
@@ -46,6 +64,8 @@ onMounted(async () => {
     autocompleteMinLevel.value = s.autocomplete_min_level
     icpNumber.value = s.icp_number || ''
     mpsNumber.value = s.mps_number || ''
+    footerText.value = s.footer_text || ''
+    footerLinks.value = (s.footer_links ?? []).map((l) => ({ text: l.text, url: l.url }))
     batchProblemMB.value = s.batch_import_problem_mb
     batchZipMB.value = s.batch_import_zip_mb
     problemSeqStart.value = s.problem_seq_start ?? 1001
@@ -66,6 +86,18 @@ onMounted(async () => {
 })
 
 async function save() {
+  // 页脚自定义链接前置校验（后端 NormalizeFooterLinks 同口径硬校验）：整行空忽略、成对、scheme、条数
+  const links = footerLinks.value
+    .map((l) => ({ text: l.text.trim(), url: l.url.trim() }))
+    .filter((l) => l.text !== '' || l.url !== '')
+  if (links.some((l) => !l.text || !l.url)) {
+    ElMessage.warning('页脚链接的文字与 URL 需成对填写')
+    return
+  }
+  if (links.some((l) => !/^https?:\/\//.test(l.url))) {
+    ElMessage.warning('页脚链接 URL 仅支持 http/https')
+    return
+  }
   saving.value = true
   try {
     await adminApi.updateSettings({
@@ -74,6 +106,8 @@ async function save() {
       autocomplete_min_level: autocompleteMinLevel.value,
       icp_number: icpNumber.value.trim(),
       mps_number: mpsNumber.value.trim(),
+      footer_text: footerText.value.trim(),
+      footer_links: links,
       batch_import_problem_mb: batchProblemMB.value,
       batch_import_zip_mb: batchZipMB.value,
       problem_seq_start: problemSeqStart.value,
@@ -112,29 +146,29 @@ async function save() {
       </el-form-item>
       <el-form-item label="每日可下载数据的题目数">
         <el-input-number v-model="dataDownloadLimit" :min="0" :max="1000" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           0 为不限制；限定拥有「下载数据」权限位的用户每天最多下载几道题的数据包（同题重复下载不重复计数）
         </span>
       </el-form-item>
       <el-form-item label="代码自动补全解锁等级">
         <el-input-number v-model="autocompleteMinLevel" :min="1" :max="10" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           学生等级达到该档后才能在设置里开启代码自动补全（1–10）
         </span>
       </el-form-item>
       <el-form-item label="批量导入单题数据上限（MB）">
         <el-input-number v-model="batchProblemMB" :min="1" :max="4096" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           后台「导入题目」页单道题数据的体积上限，超限该题跳过（v0.15）
         </span>
       </el-form-item>
       <el-form-item label="批量导入整包上限（MB）">
         <el-input-number v-model="batchZipMB" :min="1" :max="8192" />
-        <span class="dim" style="margin-left: 8px">单次上传题包 zip 的体积上限；题多请分批传</span>
+        <span class="dim" style="margin-left: var(--soj-sp-8)">单次上传题包 zip 的体积上限；题多请分批传</span>
       </el-form-item>
       <el-form-item label="自动题号起点">
         <el-input-number v-model="problemSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           无前缀自动取号的最小题号（默认 1001）；1~起点-1 的保留段留给带题号的导入题包；调大即时生效、只前进不回退；导入/建题指定题号不受此限
         </span>
       </el-form-item>
@@ -145,31 +179,31 @@ async function save() {
           maxlength="6"
           style="width: 120px"
         />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           做题奖励货币的名称（1–6 个字，如：玉 / 金币 / 钻石 / 奖励币），导航栏、流水、商店等全站文案统一显示
         </span>
       </el-form-item>
       <el-form-item label="比赛奖池获奖比例（%）">
         <el-input-number v-model="jadeAwardRatePct" :min="1" :max="100" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           真正参赛（得分 &gt; 0）人数 × 该比例 = 名次奖名额（向上取整，至少 1 人），名次奖按线性递减瓜分名次奖池
         </span>
       </el-form-item>
       <el-form-item label="玉折扣阶梯（Lv5–10）">
-        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
-          <span v-for="(label, i) in ['Lv5', 'Lv6', 'Lv7', 'Lv8', 'Lv9', 'Lv10']" :key="label" style="display: inline-flex; align-items: center; gap: 4px">
+        <div style="display: flex; gap: var(--soj-sp-8); align-items: center; flex-wrap: wrap">
+          <span v-for="(label, i) in ['Lv5', 'Lv6', 'Lv7', 'Lv8', 'Lv9', 'Lv10']" :key="label" style="display: inline-flex; align-items: center; gap: var(--soj-sp-4)">
             {{ label }}
             <el-input-number v-model="jadeDiscount[i]" :min="10" :max="100" size="small" style="width: 90px" />
             %
           </span>
         </div>
-        <span class="dim" style="display: block; margin-top: 4px">
+        <span class="dim" style="display: block; margin-top: var(--soj-sp-4)">
           消费折扣只作用于题解解锁与 AI 助教（悬赏是玉流转、实物一律原价）；Lv5 起生效，越高越便宜，逐档不能高于上一档（保存时自动校正）
         </span>
       </el-form-item>
       <el-form-item label="题解解锁价系数">
         <el-input-number v-model="unlockMult" :min="1" :max="100" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           解锁价 = 题目难度 × 系数（默认 5，D10 = 50 玉）；首次通过后免费
         </span>
       </el-form-item>
@@ -177,28 +211,28 @@ async function save() {
         <el-input-number v-model="bountyMin" :min="1" :max="100000" style="width: 130px" />
           ～
         <el-input-number v-model="bountyMax" :min="1" :max="1000000" style="width: 140px" />
-        <span class="dim" style="margin-left: 8px">发帖挂悬赏的范围（默认 5～500，另受余额约束）</span>
+        <span class="dim" style="margin-left: var(--soj-sp-8)">发帖挂悬赏的范围（默认 5～500，另受余额约束）</span>
       </el-form-item>
       <el-form-item label="开放实物兑换">
         <el-switch v-model="shopEnabled" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           开启后在「玉」页面右列显示实物兑换区（物品目录与学生订单）</span>
       </el-form-item>
       <el-form-item label="连击玉加成">
-        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+        <div style="display: flex; gap: var(--soj-sp-8); align-items: center; flex-wrap: wrap">
           每满
           <el-input-number v-model="jadeComboStep" :min="1" :max="1000" size="small" style="width: 90px" />
           连击 +<el-input-number v-model="jadeComboPct" :min="1" :max="100" size="small" style="width: 80px" />
           %，封顶 +<el-input-number v-model="jadeComboCapPct" :min="0" :max="900" size="small" style="width: 90px" />%
         </div>
-        <span class="dim" style="display: block; margin-top: 4px">
+        <span class="dim" style="display: block; margin-top: var(--soj-sp-4)">
           连续 AC 跨日累计（WA/断更清零、同题重交不涨）；默认每 10 连击 +10%、100 连击 ×2.0 封顶。
           与升维祝福/每日一题/复仇/PK 名次同为倍率，发放时只取最高一项，不连乘（峰值 ×2）
         </span>
       </el-form-item>
       <el-form-item label="每日复仇窗口（小时）">
         <el-input-number v-model="jadeRevengeHours" :min="1" :max="720" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           最早一次错误提交距今满该时长才可复仇（默认 24 = 隔夜订正；当日顺路做对无加成）；每日仅 1 个复仇名额
         </span>
       </el-form-item>
@@ -209,7 +243,7 @@ async function save() {
           maxlength="64"
           style="max-width: 320px"
         />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           备案通过后填入，页脚展示并链接工信部备案系统；留空不展示
         </span>
       </el-form-item>
@@ -220,18 +254,46 @@ async function save() {
           maxlength="64"
           style="max-width: 320px"
         />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           备案通过后填入，页脚展示；号内数字自动生成公安部备案查询链接；留空不展示
         </span>
+      </el-form-item>
+      <el-form-item label="页脚附加文案">
+        <el-input
+          v-model="footerText"
+          type="textarea"
+          :rows="2"
+          maxlength="200"
+          show-word-limit
+          placeholder="页脚附加文案（留空不展示）"
+          style="max-width: 480px"
+        />
+        <span class="dim" style="display: block; margin-top: var(--soj-sp-4)">
+          展示在主布局与登录页页脚备案号之后；纯文本
+        </span>
+      </el-form-item>
+      <el-form-item label="页脚自定义链接">
+        <div style="width: 100%; max-width: 680px">
+          <div
+            v-for="(l, i) in footerLinks"
+            :key="i"
+            style="display: flex; gap: var(--soj-sp-8); align-items: center; margin-bottom: var(--soj-sp-8)"
+          >
+            <el-input v-model="l.text" placeholder="文字" maxlength="32" style="width: 160px" />
+            <el-input v-model="l.url" placeholder="https://…" maxlength="512" style="flex: 1" />
+            <el-button-group>
+              <el-button :icon="ArrowUp" :disabled="i === 0" @click="moveFooterLink(i, -1)" />
+              <el-button :icon="ArrowDown" :disabled="i === footerLinks.length - 1" @click="moveFooterLink(i, 1)" />
+              <el-button :icon="X" @click="removeFooterLink(i)" />
+            </el-button-group>
+          </div>
+          <el-button size="small" :disabled="footerLinks.length >= 10" @click="addFooterLink">添加链接</el-button>
+          <span class="dim" style="margin-left: var(--soj-sp-8)">
+            外链按此顺序展示在备案号之后（最多 10 条）；URL 仅支持 http/https
+          </span>
+        </div>
       </el-form-item>
     </el-form>
   </el-card>
 </template>
 
-<style scoped>
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-</style>

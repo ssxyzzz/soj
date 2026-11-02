@@ -10,6 +10,9 @@ export const useSiteStore = defineStore('site', () => {
   const registerOpen = ref(true)
   const icpNumber = ref('')
   const mpsNumber = ref('')
+  // 页脚自定义内容（v0.55）：后台「系统设置」配置，附加文案 + 自定义链接，空 = 不渲染
+  const footerText = ref('')
+  const footerLinks = ref<{ text: string; url: string }[]>([])
   // 注册验证方式与找回开关（v0.16）：登录页注册表单出邮箱+验证码、忘记密码入口显隐
   const registerVerifyMode = ref<'none' | 'email'>('none')
   const passwordResetEnabled = ref(false)
@@ -31,6 +34,8 @@ export const useSiteStore = defineStore('site', () => {
           registerOpen.value = r.register_open
           icpNumber.value = r.icp_number || ''
           mpsNumber.value = r.mps_number || ''
+          footerText.value = r.footer_text || ''
+          footerLinks.value = Array.isArray(r.footer_links) ? r.footer_links : []
           registerVerifyMode.value = r.register_verify_mode ?? 'none'
           passwordResetEnabled.value = !!r.password_reset_enabled
           discussGlobalEnabled.value = r.discuss_global_enabled ?? true
@@ -54,7 +59,7 @@ export const useSiteStore = defineStore('site', () => {
   }
 
   return {
-    registerOpen, icpNumber, mpsNumber, registerVerifyMode, passwordResetEnabled,
+    registerOpen, icpNumber, mpsNumber, footerText, footerLinks, registerVerifyMode, passwordResetEnabled,
     discussGlobalEnabled, discussProblemEnabled, discussContestEnabled, jadeShopEnabled,
     ensure, refresh,
   }
