@@ -17,6 +17,24 @@ rm -rf deploy/drawio/WEB-INF deploy/drawio/META-INF   # Java servlet 段静态�
 要求：`index.html` 必须在本目录根部。drawio 版本更新时重跑一遍上述命令即可（静态文件无
 哈希版本号，前端静态缓存 1 天自动过期）。
 
+## 生产（VPS 直出，不走隧道）
+
+sync 会把本目录随仓库 rsync 到 VPS `~/soj/deploy/drawio`。让 VPS 上的 Caddy 对
+`/drawio/*` 本地发文件（不走 frp 隧道回源）：消掉每文件隧道 RTT（首载 10s 级→2-3s 级）
+与家宽上行占用，全班并发首载由 VPS 云带宽承担。deploy/https/Caddyfile 已含现成块：
+
+```
+handle_path /drawio/* {
+    root * /home/<部署用户>/soj/deploy/drawio
+    header Cache-Control "public, max-age=604800"
+    file_server
+}
+```
+
+上线两步：①把块抄进 VPS `/etc/caddy/Caddyfile`（替换 `<部署用户>` 为 rsync 登录用户），
+必要时 `sudo chmod -R a+rX ~/soj/deploy/drawio` 供 caddy 用户读取；②`sudo systemctl reload caddy`。
+同源不变（同域名），DrawView 零改动。浏览器缓存 7 天：第二次起近零拉取。
+
 ## 回退
 
 `SOJ_DRAWIO_DIR` 留空或目录为空 → `/drawio` 返回 404，DrawView 的 `DRAW_BASE` 改回

@@ -28,6 +28,16 @@ soj.example.com {
 
 	encode gzip
 
+	# 画板 drawio webapp 静态直出（v0.56 自托管同源画板）：sync 已把 deploy/drawio 推到
+	# 本机 ~/soj/deploy/drawio——VPS 本地盘直供，不走 frp 隧道回源（消掉每文件隧道 RTT
+	# 瀑布与家宽上行占用，全班并发首载风险随之消除）。
+	# 注意：caddy 服务用户需可读该目录，必要时 sudo chmod -R a+rX ~/soj/deploy/drawio
+	handle_path /drawio/* {
+		root * /home/<部署用户>/soj/deploy/drawio
+		header Cache-Control "public, max-age=604800"
+		file_server
+	}
+
 	# 反代到本机 frps 的 remotePort（frp 配置不动）。
 	# Caddy 在此注入 X-Forwarded-For（学生真实 IP），经 frp 纯 TCP 隧道原样到达 SOJ，
 	# SOJ 侧由 SOJ_TRUSTED_PROXIES 决定信任（docker-compose 已配好私网段）。
