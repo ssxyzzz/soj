@@ -70,8 +70,6 @@ import type {
   DiscussTopicDetail,
   NotificationItem,
   NotifyPrefsResult,
-  AdminPagesResult,
-  PageItem,
 } from '@/types'
 
 const client = axios.create({ baseURL: '/api', timeout: 20000 })
@@ -938,15 +936,4 @@ export const discussAdminApi = {
   addMute: (body: { uid: number; days: number; reason: string }) => post<{ muted: number }>('/admin/discuss/mutes', body),
   liftMute: (id: number) => del<{ lifted: number }>(`/admin/discuss/mutes/${id}`),
   broadcast: (title: string, body: string) => post<{ count: number }>('/admin/broadcast', { title, body }),
-}
-
-// ---------- 自定义页面（v0.56）：后台直配零代码小页（外链/内嵌/Markdown） ----------
-
-export const pagesApi = {
-  // 可见清单（登录后）：导航/页脚入口与 /p/:slug 壳页渲染共用；后台改后 refresh() 即时生效
-  list: () => get<{ pages: PageItem[] }>('/pages'),
-  adminList: () => get<AdminPagesResult>('/admin/pages'),
-  adminCreate: (body: Partial<PageItem> & { slug: string }) => post<{ slug: string }>('/admin/pages', body),
-  adminUpdate: (slug: string, body: Partial<PageItem>) => put<{ slug: string }>(`/admin/pages/${slug}`, body),
-  adminDelete: (slug: string) => del<{ deleted: boolean }>(`/admin/pages/${slug}`),
 }

@@ -18,7 +18,6 @@ import { pickWelcome } from '@/utils/gameText'
 import { applySWUpdate, swUpdateReady } from '@/utils/swClient'
 import { fmtRel } from '@/utils/format'
 import SiteFooterLine from '@/components/SiteFooterLine.vue'
-import { usePagesStore } from '@/stores/pages'
 import type { NotificationItem } from '@/types'
 
 const route = useRoute()
@@ -26,15 +25,13 @@ const router = useRouter()
 const userStore = useUserStore()
 const levels = useLevelsStore()
 const site = useSiteStore()
-const pagesStore = usePagesStore()
 
 const active = computed(() => route.path)
 
 // URL 即状态（v0.39）：顶栏导航自绘 RouterLink 胶囊（原 el-menu router 模式渲染
-// <li> 非 <a>——中键/Ctrl+点/右键新开全不可用）；视觉沿用 v3 胶囊样式。
-// 自定义入口（v0.56）：后台「自定义页面」配置的导航页尾随；link 型 = 站外新开，其余走 /p/:slug
+// <li> 非 <a>——中键/Ctrl+点/右键新开全不可用）；视觉沿用 v3 胶囊样式
 const navItems = computed(() => {
-  const items: { to: string; label: string; ext?: boolean }[] = [
+  const items: { to: string; label: string }[] = [
     { to: '/', label: '首页' },
     { to: '/problems', label: '题库' },
     { to: '/lists', label: '题单' },
@@ -45,9 +42,6 @@ const navItems = computed(() => {
   // 实物兑换（v0.41 调整）：不再占导航栏，入口在「玉」页右列
   items.push({ to: '/rank', label: '排名' })
   if (userStore.can('submission.view.all')) items.push({ to: '/submissions', label: '提交记录' })
-  for (const p of pagesStore.navPages) {
-    items.push({ to: p.type === 'link' ? p.url : `/p/${p.slug}`, label: p.title, ext: p.type === 'link' })
-  }
   return items
 })
 
@@ -285,24 +279,16 @@ function onCommand(command: string) {
           {{ soundOff ? '🔇' : '🔊' }}
         </button>
         <nav class="menu nav-links" aria-label="主导航">
-          <template v-for="item in navItems" :key="item.to">
-            <a
-              v-if="item.ext"
-              :href="item.to"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="nav-a"
-            >{{ item.label }}</a>
-            <RouterLink
-              v-else
-              :to="item.to"
-              class="nav-a"
-              :class="{ on: navActive(item.to) }"
-              :aria-current="navActive(item.to) ? 'page' : undefined"
-            >
-              {{ item.label }}
-            </RouterLink>
-          </template>
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="nav-a"
+            :class="{ on: navActive(item.to) }"
+            :aria-current="navActive(item.to) ? 'page' : undefined"
+          >
+            {{ item.label }}
+          </RouterLink>
         </nav>
         <router-link v-if="userStore.canAdmin" to="/admin" class="admin-link" :class="{ on: adminActive }">
           管理后台
@@ -391,6 +377,7 @@ function onCommand(command: string) {
     <el-footer class="footer">
       <!-- 代码对比工具入口（v0.47）：独立工具页，置于页脚信息行上方一行 -->
       <div class="footer-tools">
+        <router-link to="/draw" class="ftool">画板</router-link>
         <router-link to="/diff" class="ftool">代码对比</router-link>
       </div>
       <div class="footer-line">

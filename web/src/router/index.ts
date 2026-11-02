@@ -189,12 +189,12 @@ const router = createRouter({
           meta: { title: '导入题目', requiresPerm: 'problem.create' },
         },
         {
-          path: '/p/:slug',
-          name: 'custom-page',
-          // 自定义页面壳（v0.56）：iframe 内嵌（drawio 画板协议壳）/ Markdown 说明页；
-          // 后台「自定义页面」直配，登录后可用
-          component: () => import('@/views/CustomPageView.vue'),
-          meta: { title: '自定义页面', requiresAuth: true },
+          path: 'draw',
+          name: 'draw',
+          // 画板工具页（v0.56）：drawio embed 协议壳，画稿不出浏览器（自动暂存/导出/丢弃）；
+          // 页脚工具行入口，登录后可用
+          component: () => import('@/views/DrawView.vue'),
+          meta: { title: '画板', requiresAuth: true },
         },
       ],
     },

@@ -1127,32 +1127,6 @@ export interface NotifyPrefsResult {
   has_email: boolean
 }
 
-/** 自定义页面（v0.56）：后台直配零代码小页（外链/内嵌/Markdown）。
- * 查看端（/api/pages）不含 enabled/sort/roles/content 源；后台管理端（/admin/pages）全量。 */
-export interface PageItem {
-  slug: string
-  title: string
-  type: 'link' | 'iframe' | 'markdown'
-  url: string
-  /** 仅 iframe 型：'' = 普通内嵌；drawio = 画板协议壳（导出/暂存/丢弃） */
-  proto: '' | 'drawio'
-  content_html: string
-  nav_show: boolean
-  footer_show: boolean
-  enabled: boolean
-  sort: number
-  visibility: 'login' | 'roles'
-  roles: string[]
-  /** 仅 admin 列表下发：markdown 源（编辑回显用） */
-  content?: string
-}
-
-/** 后台页面清单（GET /admin/pages）：全量页 + 角色候选（可见性下拉用，免额外权限） */
-export interface AdminPagesResult {
-  pages: PageItem[]
-  roles: { id: string; name: string }[]
-}
-
 /** 后台系统设置（GET/PUT /admin/settings 全量视图）。v0.29 收敛：原 api/index.ts 三份
  * 手抄内联类型已漂移（put 返回漏 v0.24 讨论区/通知字段）——单一事实源在此，
  * 局部保存用 Partial&lt;AdminSettings&gt;。 */

@@ -19,7 +19,6 @@ import RolesPanel from '@/components/admin/RolesPanel.vue'
 import SecurityLogsPanel from '@/components/admin/SecurityLogsPanel.vue'
 import SeedProblemsPanel from '@/components/admin/SeedProblemsPanel.vue'
 import SettingsPanel from '@/components/admin/SettingsPanel.vue'
-import PagesPanel from '@/components/admin/PagesPanel.vue'
 import ShopPanel from '@/components/admin/ShopPanel.vue'
 import AiPanel from '@/components/admin/AiPanel.vue'
 import TagsPanel from '@/components/admin/TagsPanel.vue'
@@ -32,7 +31,7 @@ const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
 
-const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'discuss', 'shop', 'ai', 'settings', 'backup', 'pages'] as const
+const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'discuss', 'shop', 'ai', 'settings', 'backup'] as const
 type Section = (typeof sections)[number]
 // 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描 / 种子题四面板同页 tab 切换（2026-10-25 双树）；
 // tags/sources 旧深链值映射到 problems 的对应子页
@@ -82,7 +81,6 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'problems', label: '题库维护' },
       { key: 'notice', label: '公告发布' },
-      { key: 'pages', label: '自定义页面' },
       { key: 'discuss', label: '讨论区管理', badge: 'reports' },
     ],
   },
@@ -111,8 +109,6 @@ const visibleGroups = computed(() => {
     roles: userStore.role === 'root',
     problems: canProblemManage,
     notice: true,
-    // 自定义页面（v0.56）：与系统设置同权限位
-    pages: userStore.can('admin.settings'),
     discuss: userStore.can('discussion.manage'),
     shop: userStore.role === 'root',
     ai: userStore.role === 'root',
@@ -227,7 +223,6 @@ onMounted(loadTodo)
       </div>
       <LevelPanel v-else-if="section === 'levels'" />
       <NoticePanel v-else-if="section === 'notice'" />
-      <PagesPanel v-else-if="section === 'pages'" />
       <DiscussPanel v-else-if="section === 'discuss'" />
       <ShopPanel v-else-if="section === 'shop' && userStore.role === 'root'" />
       <AiPanel v-else-if="section === 'ai' && userStore.role === 'root'" />

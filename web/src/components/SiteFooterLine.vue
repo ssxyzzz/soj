@@ -1,16 +1,14 @@
 <script setup lang="ts">
 // 页脚信息行（2026-11-02 用户拍板单行化 + 主题改「点击向上选择」）：主布局与登录页共用。
-// 顺序 = SOJ·版本（外链仓库）| 主题（popover 向上弹出 v5/原版）| 技术栈行 | ICP | 公安网备
-// | 自定义页面入口（v0.56，后台「自定义页面」配置）。备案号空 = 不展示。
+// 顺序 = SOJ·版本（外链仓库）| 主题（popover 向上弹出 v5/原版）| 技术栈行 | ICP | 公安网备。
+// 备案号空 = 不展示。
 import { computed, ref } from 'vue'
 
 import { applyTheme, initTheme, type ThemeName } from '@/utils/theme'
 import { APP_VERSION } from '@/utils/version'
 import { useSiteStore } from '@/stores/site'
-import { usePagesStore } from '@/stores/pages'
 
 const site = useSiteStore()
-const pagesStore = usePagesStore()
 
 // 主题（2026-10-26）：v5 版（默认）/ 原版，data-theme 整站变量换血；popover 向上弹（用户拍板）
 const theme = ref<ThemeName>(initTheme())
@@ -81,18 +79,6 @@ const mpsLink = computed(() => {
       target="_blank"
       rel="noopener noreferrer"
     ><img class="ghs" src="/ghs.png" alt="公安备案" />{{ site.mpsNumber }}</a>
-    <!-- 自定义页面入口（v0.56）：后台「自定义页面」配置；link 型站外新开，其余走 /p/:slug -->
-    <template v-for="p in pagesStore.footerPages" :key="p.slug">
-      <span class="fsep">|</span>
-      <a
-        v-if="p.type === 'link'"
-        :href="p.url"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="icp"
-      >{{ p.title }}</a>
-      <router-link v-else :to="`/p/${p.slug}`" class="icp">{{ p.title }}</router-link>
-    </template>
   </div>
 </template>
 
