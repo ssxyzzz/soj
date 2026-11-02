@@ -10,6 +10,9 @@ import { Download, Trash2 } from 'lucide-vue-next'
 // drawio 服务地址（课堂网络拉不动官方 CDN 时改这一处即可切自托管）
 const DRAW_BASE = 'https://embed.diagrams.net'
 
+// ui=sketch：手绘风工具栏——左侧默认带自由绘图笔 / 形状库 / 表格等图标（用户拍板默认可见）
+const DRAW_UI = 'sketch'
+
 const frameEl = ref<HTMLIFrameElement>()
 const frameKey = ref(0) // 丢弃后换 key 重挂 iframe 回白板态（比发空稿更确定，不赌协议行为）
 const frameReady = ref(false) // init 握手完成后协议动作才可用
@@ -19,7 +22,7 @@ let pendingExport: '' | 'png' | 'svg' = ''
 
 const DRAFT_KEY = 'soj.draw'
 
-const frameSrc = DRAW_BASE + (DRAW_BASE.includes('?') ? '&' : '?') + 'embed=1&proto=json&ui=min&spin=1'
+const frameSrc = DRAW_BASE + (DRAW_BASE.includes('?') ? '&' : '?') + `embed=1&proto=json&ui=${DRAW_UI}&spin=1`
 
 // 画板消息来源校验：只信 iframe 自身 origin（防其它窗口注入消息）
 const frameOrigin = (() => {
