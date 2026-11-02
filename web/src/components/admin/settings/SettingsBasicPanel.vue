@@ -13,6 +13,8 @@ const dataDownloadLimit = ref(5)
 const autocompleteMinLevel = ref(5)
 // ICP 备案号（v0.13）：备案下来后填入，页脚悬挂并链接工信部备案系统；空 = 不展示
 const icpNumber = ref('')
+// 公安网备号（2026-11-02）：同页脚悬挂，备案号中数字即公安部备案查询 code；空 = 不展示
+const mpsNumber = ref('')
 // 批量导入限额（v0.15）：单题数据 / 整包 zip（MB）
 const batchProblemMB = ref(100)
 const batchZipMB = ref(2048)
@@ -43,6 +45,7 @@ onMounted(async () => {
     dataDownloadLimit.value = s.data_download_daily_limit
     autocompleteMinLevel.value = s.autocomplete_min_level
     icpNumber.value = s.icp_number || ''
+    mpsNumber.value = s.mps_number || ''
     batchProblemMB.value = s.batch_import_problem_mb
     batchZipMB.value = s.batch_import_zip_mb
     problemSeqStart.value = s.problem_seq_start ?? 1001
@@ -70,6 +73,7 @@ async function save() {
       data_download_daily_limit: dataDownloadLimit.value,
       autocomplete_min_level: autocompleteMinLevel.value,
       icp_number: icpNumber.value.trim(),
+      mps_number: mpsNumber.value.trim(),
       batch_import_problem_mb: batchProblemMB.value,
       batch_import_zip_mb: batchZipMB.value,
       problem_seq_start: problemSeqStart.value,
@@ -207,6 +211,17 @@ async function save() {
         />
         <span class="dim" style="margin-left: 8px">
           备案通过后填入，页脚展示并链接工信部备案系统；留空不展示
+        </span>
+      </el-form-item>
+      <el-form-item label="公安网备号">
+        <el-input
+          v-model="mpsNumber"
+          placeholder="如 皖公网安备34010000000001号（留空不展示）"
+          maxlength="64"
+          style="max-width: 320px"
+        />
+        <span class="dim" style="margin-left: 8px">
+          备案通过后填入，页脚展示；号内数字自动生成公安部备案查询链接；留空不展示
         </span>
       </el-form-item>
     </el-form>

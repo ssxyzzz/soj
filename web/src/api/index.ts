@@ -248,6 +248,7 @@ export const siteApi = {
     get<{
       register_open: boolean
       icp_number: string
+      mps_number: string
       register_verify_mode: 'none' | 'email'
       password_reset_enabled: boolean
       discuss_global_enabled: boolean

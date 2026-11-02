@@ -348,6 +348,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
+		"mps_number":                s.MpsNumber,
 		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
 		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
 		// 邮箱通道（v0.16）
@@ -415,6 +416,7 @@ func (h *Handlers) GetSiteInfo(c *gin.Context) {
 	ok(c, gin.H{
 		"register_open": s.RegistrationOpen(),
 		"icp_number":    s.IcpNumber,
+		"mps_number":    s.MpsNumber,
 		// 注册验证方式与找回开关（v0.16）：登录页注册表单出邮箱验证码、忘记密码入口显隐
 		"register_verify_mode":   s.RegisterVerifyModeVal(),
 		"password_reset_enabled": s.PasswordResetOpen(),
@@ -446,6 +448,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		AutocompleteMinLevel   *int    `json:"autocomplete_min_level"`
 		AllowRegister          *bool   `json:"allow_register"`
 		IcpNumber              *string `json:"icp_number"`
+		MpsNumber              *string `json:"mps_number"`
 		BatchImportProblemMB   *int    `json:"batch_import_problem_mb"` // 批量导入单题数据上限 MB（v0.15）
 		BatchImportZipMB       *int    `json:"batch_import_zip_mb"`     // 批量导入整包 zip 上限 MB（v0.15）
 		// 邮箱通道（v0.16）
@@ -535,6 +538,14 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.IcpNumber = icp
+	}
+	if req.MpsNumber != nil {
+		mps := strings.TrimSpace(*req.MpsNumber)
+		if len(mps) > 64 {
+			fail(c, http.StatusBadRequest, "公安网备号过长（上限 64 字符）")
+			return
+		}
+		s.MpsNumber = mps
 	}
 	if req.BatchImportProblemMB != nil {
 		if *req.BatchImportProblemMB < 1 || *req.BatchImportProblemMB > 4096 {
@@ -795,6 +806,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
+		"mps_number":                s.MpsNumber,
 		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
 		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
 		// 邮箱通道（v0.16）

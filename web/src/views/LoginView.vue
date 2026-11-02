@@ -46,6 +46,14 @@ const fpCd = useCountdown()
 
 const emailMode = computed(() => site.registerVerifyMode === 'email')
 
+// 公安网备查询链接：备案号中的连续数字即查询 code；提不出退查询页首页（与 MainLayout 同口径）
+const mpsLink = computed(() => {
+  const code = (site.mpsNumber || '').replace(/\D/g, '')
+  return code
+    ? `https://beian.mps.gov.cn/#/query/webSearch?code=${code}`
+    : 'https://beian.mps.gov.cn/'
+})
+
 async function sendRegisterCode() {
   if (!form.email.trim()) {
     ElMessage.warning('请先输入邮箱')
@@ -199,6 +207,12 @@ async function submitForgot() {
       <div class="login-foot">
         SOJ · Gin + Vue 3 + MongoDB + go-judge 在线判题系统<br />
         <a v-if="site.icpNumber" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ site.icpNumber }}</a>
+        <a
+          v-if="site.mpsNumber"
+          :href="mpsLink"
+          target="_blank"
+          rel="noopener noreferrer"
+        >{{ site.mpsNumber }}</a>
       </div>
     </div>
 

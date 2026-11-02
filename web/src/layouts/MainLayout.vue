@@ -191,6 +191,15 @@ function switchTheme(t: ThemeName) {
   theme.value = t
 }
 
+// 公安网备查询链接（2026-11-02）：备案号中的连续数字即查询 code（如 皖公网安备
+// 34010000000001号 → 34010000000001）；提不出数字时退回查询页首页
+const mpsLink = computed(() => {
+  const code = (site.mpsNumber || '').replace(/\D/g, '')
+  return code
+    ? `https://beian.mps.gov.cn/#/query/webSearch?code=${code}`
+    : 'https://beian.mps.gov.cn/'
+})
+
 // 头像首字（v3 .avatar：渐变圆 + 昵称首字；昵称为空兜底「我」）
 const avatarChar = computed(() => {
   const n = userStore.nickname || '我'
@@ -407,6 +416,14 @@ function onCommand(command: string) {
           target="_blank"
           rel="noopener noreferrer"
         >{{ site.icpNumber }}</a>
+        <!-- 公安网备号（2026-11-02）：同后台配置；备案号中数字即查询 code，链接公安部备案查询 -->
+        <a
+          v-if="site.mpsNumber"
+          class="icp"
+          :href="mpsLink"
+          target="_blank"
+          rel="noopener noreferrer"
+        >{{ site.mpsNumber }}</a>
       </div>
     </el-footer>
     <!-- 首登改密提醒（批量建号/管理员建号/重置密码的账号）：登录后与刷新后各弹一次。

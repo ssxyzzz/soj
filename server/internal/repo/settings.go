@@ -28,6 +28,8 @@ type SystemSettings struct {
 	AllowRegister *bool `bson:"allowRegister,omitempty"`
 	// ICP 备案号（v0.13）：页脚悬挂并链接工信部备案系统；空 = 不展示（未备案部署不显示）。
 	IcpNumber string `bson:"icpNumber"`
+	// 公安网备号（2026-11-02）：页脚悬挂并链接公安部备案查询；空 = 不展示（未备案部署不显示）。
+	MpsNumber string `bson:"mpsNumber"`
 	// 批量导入限额（v0.15，MB）：单题数据上限 / 整包 zip 上限；nil = 未设置按默认（100 / 2048）。
 	BatchImportProblemMB *int `bson:"batchImportProblemMB,omitempty"`
 	BatchImportZipMB     *int `bson:"batchImportZipMB,omitempty"`
@@ -659,6 +661,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"autocompleteMinLevel":    s.MinAutocompleteLevel(),
 			"allowRegister":           s.RegistrationOpen(),
 			"icpNumber":               s.IcpNumber,
+			"mpsNumber":               s.MpsNumber,
 			"batchImportProblemMB":    s.BatchImportProblemMBVal(),
 			"batchImportZipMB":        s.BatchImportZipMBVal(),
 			"mailChannel":             s.MailChannel,
