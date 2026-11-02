@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 页脚信息行（2026-11-02 用户拍板单行化 + 主题改「点击向上选择」）：主布局与登录页共用。
-// 顺序 = SOJ·版本（外链仓库）| 主题（popover 向上弹出 v5/原版）| 技术栈行 | ICP | 公安网备
-// | 页脚自定义内容（v0.55，后台配置，附加文案 + 自定义链接）。备案号空 = 不展示。
+// 顺序 = SOJ·版本（外链仓库）| 主题（popover 向上弹出 v5/原版）| 技术栈行 | ICP | 公安网备。
+// 备案号空 = 不展示。
 import { computed, ref } from 'vue'
 
 import { applyTheme, initTheme, type ThemeName } from '@/utils/theme'
@@ -79,17 +79,6 @@ const mpsLink = computed(() => {
       target="_blank"
       rel="noopener noreferrer"
     ><img class="ghs" src="/ghs.png" alt="公安备案" />{{ site.mpsNumber }}</a>
-    <!-- 页脚自定义内容（v0.55）：后台「系统设置」配置，附加文案 + 自定义链接（顺序即展示序），
-         空 = 不渲染；样式沿用 .icp 弱化口径（次要信息，悬停提色） -->
-    <span v-if="site.footerText" class="icp">{{ site.footerText }}</span>
-    <a
-      v-for="(l, i) in site.footerLinks"
-      :key="`${l.url}-${i}`"
-      class="icp"
-      :href="l.url"
-      target="_blank"
-      rel="noopener noreferrer"
-    >{{ l.text }}</a>
   </div>
 </template>
 

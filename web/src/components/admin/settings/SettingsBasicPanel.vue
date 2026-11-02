@@ -1,8 +1,7 @@
 <script setup lang="ts">
-// 系统设置 · 基础页（2026-10-28 拆分）：判题限速 / 数据下载限额 / 补全等级 / 批量导入限额 / ICP / 页脚自定义。
+// 系统设置 · 基础页（2026-10-28 拆分）：判题限速 / 数据下载限额 / 补全等级 / 批量导入限额 / ICP。
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, ArrowUp, X } from 'lucide-vue-next'
 
 import { adminApi } from '@/api'
 import { useSiteStore } from '@/stores/site'
@@ -16,23 +15,6 @@ const autocompleteMinLevel = ref(5)
 const icpNumber = ref('')
 // 公安网备号（2026-11-02）：同页脚悬挂，备案号中数字即公安部备案查询 code；空 = 不展示
 const mpsNumber = ref('')
-// 页脚自定义内容（v0.55）：附加文案 + 自定义链接（顺序即展示序，渲染在备案号之后，空 = 不渲染）
-const footerText = ref('')
-const footerLinks = ref<{ text: string; url: string }[]>([])
-
-function addFooterLink() {
-  if (footerLinks.value.length >= 10) return
-  footerLinks.value.push({ text: '', url: '' })
-}
-function removeFooterLink(i: number) {
-  footerLinks.value.splice(i, 1)
-}
-function moveFooterLink(i: number, dir: -1 | 1) {
-  const j = i + dir
-  if (j < 0 || j >= footerLinks.value.length) return
-  const arr = footerLinks.value
-  ;[arr[i], arr[j]] = [arr[j], arr[i]]
-}
 // 批量导入限额（v0.15）：单题数据 / 整包 zip（MB）
 const batchProblemMB = ref(100)
 const batchZipMB = ref(2048)
@@ -64,8 +46,6 @@ onMounted(async () => {
     autocompleteMinLevel.value = s.autocomplete_min_level
     icpNumber.value = s.icp_number || ''
     mpsNumber.value = s.mps_number || ''
-    footerText.value = s.footer_text || ''
-    footerLinks.value = (s.footer_links ?? []).map((l) => ({ text: l.text, url: l.url }))
     batchProblemMB.value = s.batch_import_problem_mb
     batchZipMB.value = s.batch_import_zip_mb
     problemSeqStart.value = s.problem_seq_start ?? 1001
@@ -86,18 +66,6 @@ onMounted(async () => {
 })
 
 async function save() {
-  // 页脚自定义链接前置校验（后端 NormalizeFooterLinks 同口径硬校验）：整行空忽略、成对、scheme、条数
-  const links = footerLinks.value
-    .map((l) => ({ text: l.text.trim(), url: l.url.trim() }))
-    .filter((l) => l.text !== '' || l.url !== '')
-  if (links.some((l) => !l.text || !l.url)) {
-    ElMessage.warning('页脚链接的文字与 URL 需成对填写')
-    return
-  }
-  if (links.some((l) => !/^https?:\/\//.test(l.url))) {
-    ElMessage.warning('页脚链接 URL 仅支持 http/https')
-    return
-  }
   saving.value = true
   try {
     await adminApi.updateSettings({
@@ -106,8 +74,6 @@ async function save() {
       autocomplete_min_level: autocompleteMinLevel.value,
       icp_number: icpNumber.value.trim(),
       mps_number: mpsNumber.value.trim(),
-      footer_text: footerText.value.trim(),
-      footer_links: links,
       batch_import_problem_mb: batchProblemMB.value,
       batch_import_zip_mb: batchZipMB.value,
       problem_seq_start: problemSeqStart.value,
@@ -257,41 +223,6 @@ async function save() {
         <span class="dim" style="margin-left: var(--soj-sp-8)">
           备案通过后填入，页脚展示；号内数字自动生成公安部备案查询链接；留空不展示
         </span>
-      </el-form-item>
-      <el-form-item label="页脚附加文案">
-        <el-input
-          v-model="footerText"
-          type="textarea"
-          :rows="2"
-          maxlength="200"
-          show-word-limit
-          placeholder="页脚附加文案（留空不展示）"
-          style="max-width: 480px"
-        />
-        <span class="dim" style="display: block; margin-top: var(--soj-sp-4)">
-          展示在主布局与登录页页脚备案号之后；纯文本
-        </span>
-      </el-form-item>
-      <el-form-item label="页脚自定义链接">
-        <div style="width: 100%; max-width: 680px">
-          <div
-            v-for="(l, i) in footerLinks"
-            :key="i"
-            style="display: flex; gap: var(--soj-sp-8); align-items: center; margin-bottom: var(--soj-sp-8)"
-          >
-            <el-input v-model="l.text" placeholder="文字" maxlength="32" style="width: 160px" />
-            <el-input v-model="l.url" placeholder="https://…" maxlength="512" style="flex: 1" />
-            <el-button-group>
-              <el-button :icon="ArrowUp" :disabled="i === 0" @click="moveFooterLink(i, -1)" />
-              <el-button :icon="ArrowDown" :disabled="i === footerLinks.length - 1" @click="moveFooterLink(i, 1)" />
-              <el-button :icon="X" @click="removeFooterLink(i)" />
-            </el-button-group>
-          </div>
-          <el-button size="small" :disabled="footerLinks.length >= 10" @click="addFooterLink">添加链接</el-button>
-          <span class="dim" style="margin-left: var(--soj-sp-8)">
-            外链按此顺序展示在备案号之后（最多 10 条）；URL 仅支持 http/https
-          </span>
-        </div>
       </el-form-item>
     </el-form>
   </el-card>

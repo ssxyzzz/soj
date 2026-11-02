@@ -349,9 +349,6 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
 		"mps_number":                s.MpsNumber,
-		// 页脚自定义内容（v0.55）
-		"footer_text":  s.FooterText,
-		"footer_links": s.FooterLinksSafe(),
 		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
 		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
 		// 邮箱通道（v0.16）
@@ -420,9 +417,6 @@ func (h *Handlers) GetSiteInfo(c *gin.Context) {
 		"register_open": s.RegistrationOpen(),
 		"icp_number":    s.IcpNumber,
 		"mps_number":    s.MpsNumber,
-		// 页脚自定义内容（v0.55）：主布局与登录页页脚渲染
-		"footer_text":  s.FooterText,
-		"footer_links": s.FooterLinksSafe(),
 		// 注册验证方式与找回开关（v0.16）：登录页注册表单出邮箱验证码、忘记密码入口显隐
 		"register_verify_mode":   s.RegisterVerifyModeVal(),
 		"password_reset_enabled": s.PasswordResetOpen(),
@@ -455,9 +449,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		AllowRegister          *bool   `json:"allow_register"`
 		IcpNumber              *string `json:"icp_number"`
 		MpsNumber              *string `json:"mps_number"`
-		// 页脚自定义内容（v0.55）：附加文案 + 自定义链接（顺序即展示序）
-		FooterText  *string             `json:"footer_text"`
-		FooterLinks *[]repo.FooterLink  `json:"footer_links"`
 		BatchImportProblemMB   *int    `json:"batch_import_problem_mb"` // 批量导入单题数据上限 MB（v0.15）
 		BatchImportZipMB       *int    `json:"batch_import_zip_mb"`     // 批量导入整包 zip 上限 MB（v0.15）
 		// 邮箱通道（v0.16）
@@ -555,23 +546,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 			return
 		}
 		s.MpsNumber = mps
-	}
-	// ---- 页脚自定义内容（v0.55）----
-	if req.FooterText != nil {
-		ft := strings.TrimSpace(*req.FooterText)
-		if runes := []rune(ft); len(runes) > repo.MaxFooterTextLen {
-			fail(c, http.StatusBadRequest, fmt.Sprintf("页脚附加文案过长（上限 %d 字）", repo.MaxFooterTextLen))
-			return
-		}
-		s.FooterText = ft
-	}
-	if req.FooterLinks != nil {
-		links, err := repo.NormalizeFooterLinks(*req.FooterLinks)
-		if err != nil {
-			fail(c, http.StatusBadRequest, err.Error())
-			return
-		}
-		s.FooterLinks = links
 	}
 	if req.BatchImportProblemMB != nil {
 		if *req.BatchImportProblemMB < 1 || *req.BatchImportProblemMB > 4096 {
@@ -833,9 +807,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
 		"mps_number":                s.MpsNumber,
-		// 页脚自定义内容（v0.55）
-		"footer_text":  s.FooterText,
-		"footer_links": s.FooterLinksSafe(),
 		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
 		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
 		// 邮箱通道（v0.16）

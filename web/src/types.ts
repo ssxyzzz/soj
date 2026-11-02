@@ -1138,9 +1138,6 @@ export interface AdminSettings {
   allow_register: boolean
   icp_number: string
   mps_number: string
-  /** 页脚自定义内容（v0.55）：附加文案 + 自定义链接（顺序即展示序，空 = 不渲染） */
-  footer_text: string
-  footer_links: { text: string; url: string }[]
   batch_import_problem_mb: number
   batch_import_zip_mb: number
   /** 邮箱通道（v0.16） */

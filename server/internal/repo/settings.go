@@ -2,8 +2,6 @@ package repo
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -32,10 +30,6 @@ type SystemSettings struct {
 	IcpNumber string `bson:"icpNumber"`
 	// 公安网备号（2026-11-02）：页脚悬挂并链接公安部备案查询；空 = 不展示（未备案部署不显示）。
 	MpsNumber string `bson:"mpsNumber"`
-	// 页脚自定义内容（v0.55）：附加文案 + 自定义链接（顺序即展示序），渲染在主布局与
-	// 登录页两处页脚备案号之后；均空 = 页脚仅固定元素与备案号。
-	FooterText  string       `bson:"footerText"`
-	FooterLinks []FooterLink `bson:"footerLinks,omitempty"`
 	// 批量导入限额（v0.15，MB）：单题数据上限 / 整包 zip 上限；nil = 未设置按默认（100 / 2048）。
 	BatchImportProblemMB *int `bson:"batchImportProblemMB,omitempty"`
 	BatchImportZipMB     *int `bson:"batchImportZipMB,omitempty"`
@@ -127,20 +121,6 @@ type ProfileEditConfig struct {
 	School   bool `bson:"school" json:"school"`
 	Region   bool `bson:"region" json:"region"`
 }
-
-// FooterLink 页脚自定义链接（v0.55）：文字 + URL 对，数组顺序即展示序。
-type FooterLink struct {
-	Text string `bson:"text" json:"text"`
-	URL  string `bson:"url"  json:"url"`
-}
-
-// 页脚自定义内容上限（v0.55）：保存入口硬校验（NormalizeFooterLinks），读侧防御同口径。
-const (
-	MaxFooterTextLen     = 200 // 附加文案字符上限
-	MaxFooterLinks       = 10  // 链接条数上限
-	MaxFooterLinkTextLen = 32  // 链接文字字符上限
-	MaxFooterLinkURLLen  = 512 // 链接 URL 字节上限
-)
 
 // DefaultProfileEditConfig 全开（存量行为）。
 func DefaultProfileEditConfig() *ProfileEditConfig {
@@ -441,54 +421,6 @@ func (s *SystemSettings) NotifyBroadcastPerDayVal() int {
 	return *s.NotifyBroadcastPerDay
 }
 
-// FooterLinksSafe 页脚自定义链接读侧防御（v0.55）：剔除空行/缺字行与非 http(s) URL，
-// 顺序保持。保存入口已硬校验（NormalizeFooterLinks），此处兜底直接改库等旁路。
-func (s *SystemSettings) FooterLinksSafe() []FooterLink {
-	out := make([]FooterLink, 0, len(s.FooterLinks))
-	for _, l := range s.FooterLinks {
-		text, url := strings.TrimSpace(l.Text), strings.TrimSpace(l.URL)
-		if text == "" || url == "" || !isHTTPURL(url) {
-			continue
-		}
-		out = append(out, FooterLink{Text: text, URL: url})
-	}
-	return out
-}
-
-// isHTTPURL 页脚外链 scheme 白名单（防 javascript: 等内联 scheme 进页脚 href）。
-func isHTTPURL(url string) bool {
-	return strings.HasPrefix(url, "http://") || strings.HasPrefix(url, "https://")
-}
-
-// NormalizeFooterLinks 页脚自定义链接保存入口归一（v0.55）：trim、跳过整行空、
-// 缺字行/超限/scheme 非法报错（错误信息可直接展示）。
-func NormalizeFooterLinks(in []FooterLink) ([]FooterLink, error) {
-	out := make([]FooterLink, 0, len(in))
-	for _, l := range in {
-		text, url := strings.TrimSpace(l.Text), strings.TrimSpace(l.URL)
-		if text == "" && url == "" {
-			continue // 整行空 = 面板上未清理的空行，直接忽略
-		}
-		if text == "" || url == "" {
-			return nil, fmt.Errorf("页脚链接的文字与 URL 需成对填写")
-		}
-		if runes := []rune(text); len(runes) > MaxFooterLinkTextLen {
-			return nil, fmt.Errorf("页脚链接文字过长（上限 %d 字）", MaxFooterLinkTextLen)
-		}
-		if len(url) > MaxFooterLinkURLLen {
-			return nil, fmt.Errorf("页脚链接 URL 过长（上限 %d 字符）", MaxFooterLinkURLLen)
-		}
-		if !isHTTPURL(url) {
-			return nil, fmt.Errorf("页脚链接 URL 仅支持 http/https")
-		}
-		out = append(out, FooterLink{Text: text, URL: url})
-	}
-	if len(out) > MaxFooterLinks {
-		return nil, fmt.Errorf("页脚自定义链接最多 %d 条", MaxFooterLinks)
-	}
-	return out, nil
-}
-
 // UserSeqStartVal 注册取号起点（默认 100；越界回默认）。
 func (s *SystemSettings) UserSeqStartVal() int64 {
 	if s.UserSeqStart == nil || *s.UserSeqStart < 1 || *s.UserSeqStart > 1_000_000_000 {
@@ -730,9 +662,6 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"allowRegister":           s.RegistrationOpen(),
 			"icpNumber":               s.IcpNumber,
 			"mpsNumber":               s.MpsNumber,
-			// 页脚自定义内容（v0.55）：写侧同样过防御（旁路改库也落干净值）
-			"footerText":  s.FooterText,
-			"footerLinks": s.FooterLinksSafe(),
 			"batchImportProblemMB":    s.BatchImportProblemMBVal(),
 			"batchImportZipMB":        s.BatchImportZipMBVal(),
 			"mailChannel":             s.MailChannel,

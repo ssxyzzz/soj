@@ -249,9 +249,6 @@ export const siteApi = {
       register_open: boolean
       icp_number: string
       mps_number: string
-      // 页脚自定义内容（v0.55）：主布局与登录页页脚渲染
-      footer_text: string
-      footer_links: { text: string; url: string }[]
       register_verify_mode: 'none' | 'email'
       password_reset_enabled: boolean
       discuss_global_enabled: boolean
