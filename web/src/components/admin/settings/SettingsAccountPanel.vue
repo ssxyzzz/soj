@@ -98,7 +98,7 @@ function fmtNext(at: string | undefined) {
       <el-divider content-position="left">账号</el-divider>
       <el-form-item label="注册取号起点">
         <el-input-number v-model="userSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           自动分配的用户 ID 从该号起（默认 100）；调大即时生效、只前进不回退（计数器已超过起点时从计数器继续）；后台手动指定 ID 不受此限
         </span>
       </el-form-item>
@@ -147,44 +147,39 @@ function fmtNext(at: string | undefined) {
       <el-divider content-position="left">站内通知（v0.24）</el-divider>
       <el-form-item label="通知保留天数">
         <el-input-number v-model="notifyRetentionDays" :min="7" :max="365" />
-        <span class="dim" style="margin-left: 8px">站内通知过期自动清理（改动只影响新通知）</span>
+        <span class="dim" style="margin-left: var(--soj-sp-8)">站内通知过期自动清理（改动只影响新通知）</span>
       </el-form-item>
       <el-form-item label="全站广播每日上限">
         <el-input-number v-model="notifyBroadcastPerDay" :min="0" :max="100" />
-        <span class="dim" style="margin-left: 8px">root 全员公告的每日频次上限（0 = 不限制）</span>
+        <span class="dim" style="margin-left: var(--soj-sp-8)">root 全员公告的每日频次上限（0 = 不限制）</span>
       </el-form-item>
     </el-form>
   </el-card>
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
 
 .pe-switches {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 20px;
+  gap: var(--soj-sp-8) var(--soj-sp-20);
 }
 
 .pe-sw {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 14px;
+  gap: var(--soj-sp-6);
+  font-size: var(--soj-fs-14);
 }
 
 .grade-counts {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  gap: var(--soj-sp-4) var(--soj-sp-14);
 }
 
 .gc {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: var(--el-text-color-secondary);
 }
 </style>

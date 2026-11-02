@@ -253,56 +253,56 @@ onMounted(() => {
 .jade-balance {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: var(--soj-sp-10);
+  margin-bottom: var(--soj-sp-16);
 }
 
 .jade-balance b {
-  font-size: 44px;
-  font-weight: 800;
-  color: #0f766e;
+  font-size: 44px; /* 装饰档豁免：≥40px 主视觉大数字 */
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-teal-deep);
   line-height: 1;
 }
 
 .jade-balance .unit {
-  color: #0f766e;
-  font-size: 16px;
+  color: var(--soj-teal-deep);
+  font-size: var(--soj-fs-16);
 }
 
 .jcard {
-  padding: 20px 24px;
+  padding: var(--soj-sp-20) var(--soj-sp-24);
 }
 
 .jtip {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
 }
 
 .jade-pager {
-  margin-top: 14px;
+  margin-top: var(--soj-sp-14);
   display: flex;
   justify-content: center;
 }
 
 .jade-in {
-  color: #059669;
-  font-weight: 700;
+  color: var(--soj-success-deep);
+  font-weight: var(--soj-fw-bold);
 }
 
 .jade-out {
-  color: #dc2626;
-  font-weight: 700;
+  color: var(--soj-danger-deep);
+  font-weight: var(--soj-fw-bold);
 }
 
 /* 右列：玩法介绍 */
 .howto {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   line-height: 1.7;
   color: var(--el-text-color-regular);
 }
 
 .how-line {
-  margin: 10px 0 2px;
-  font-weight: 700;
+  margin: var(--soj-sp-10) 0 var(--soj-sp-2);
+  font-weight: var(--soj-fw-bold);
   color: var(--soj-blue);
 }
 
@@ -318,14 +318,14 @@ onMounted(() => {
 .shop-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .shop-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px;
+  gap: var(--soj-sp-10);
+  padding: var(--soj-sp-8);
   border-radius: 10px;
   border: 1px solid var(--soj-line);
 }
@@ -347,7 +347,7 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
+  font-size: var(--soj-fs-22);
   background: var(--soj-blue-soft);
   border-radius: 8px;
 }
@@ -357,47 +357,47 @@ onMounted(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--soj-sp-2);
 }
 
 .shop-name {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
 }
 
 .shop-meta {
-  font-size: 11px;
+  font-size: var(--soj-fs-12);
   color: var(--el-text-color-secondary);
 }
 
 .shop-price {
-  font-size: 12px;
-  color: #0f766e;
-  font-weight: 600;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-teal-deep);
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .shop-price b {
-  font-size: 14px;
+  font-size: var(--soj-fs-14);
 }
 
 .shop-orders-cap {
-  margin: 12px 0 4px;
-  font-size: 12px;
+  margin: var(--soj-sp-12) 0 var(--soj-sp-4);
+  font-size: var(--soj-fs-12);
   color: var(--el-text-color-secondary);
 }
 
 .my-orders {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 
 .my-order-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-  padding: 4px 0;
+  gap: var(--soj-sp-8);
+  font-size: var(--soj-fs-12);
+  padding: var(--soj-sp-4) 0;
   border-bottom: 1px dashed var(--el-border-color-lighter);
 }
 

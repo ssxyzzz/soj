@@ -216,15 +216,15 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-/* v3 wb-header：56 定高毛玻璃（白.9 + blur12） */
+/* v3 wb-header：56 定高毛玻璃（bg-top .9 + blur12） */
 .wb-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
+  gap: var(--soj-sp-14);
   height: 56px;
-  padding: 0 20px;
-  background: rgba(251, 253, 255, 0.9);
+  padding: 0 var(--soj-sp-20);
+  background: color-mix(in srgb, var(--soj-bg-top) 90%, transparent);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--soj-line);
@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
 .wb-title {
   font-weight: var(--soj-fw-heavy);
   color: var(--soj-navy);
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -246,7 +246,7 @@ onBeforeUnmount(() => {
 
 .wb-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex: none;
 }
 
@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
 }
 
 .wb-disabled {
-  padding: 8px 20px;
+  padding: var(--soj-sp-8) var(--soj-sp-20);
   background: var(--el-color-warning-light-9);
   color: var(--el-color-warning);
   flex: none;
@@ -271,7 +271,7 @@ onBeforeUnmount(() => {
 
 .wb-left {
   overflow: auto;
-  padding: 22px 28px;
+  padding: var(--soj-sp-20) var(--soj-sp-24);
   min-width: 0;
 }
 
@@ -299,7 +299,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   min-height: 0;
 }
 .wb-selftest {

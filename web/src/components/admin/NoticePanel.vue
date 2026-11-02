@@ -70,14 +70,14 @@ async function broadcast() {
 
   <!-- 全站通知广播（v0.24）：与首页公告互补——公告是挂首页的「墙」，广播是推到每个
        学生铃铛里的「信」；受 notify.broadcast 权限位与每日频次约束 -->
-  <el-card v-if="userStore.can('notify.broadcast')" style="margin-top: 16px">
+  <el-card v-if="userStore.can('notify.broadcast')" style="margin-top: var(--soj-sp-16)">
     <template #header>
       <div class="head">
         <span>全站通知广播（推送到全员消息中心，受每日频次限制）</span>
         <el-button type="primary" :loading="broadcasting" @click="broadcast">发送广播</el-button>
       </div>
     </template>
-    <el-input v-model="bcTitle" maxlength="60" show-word-limit placeholder="标题（60 字内，如：本周六晚 SVM 模拟赛报名开启）" style="margin-bottom: 12px" />
+    <el-input v-model="bcTitle" maxlength="60" show-word-limit placeholder="标题（60 字内，如：本周六晚 SVM 模拟赛报名开启）" style="margin-bottom: var(--soj-sp-12)" />
     <el-input
       v-model="bcBody"
       type="textarea"
@@ -90,9 +90,4 @@ async function broadcast() {
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
 </style>

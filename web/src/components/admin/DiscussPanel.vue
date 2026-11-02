@@ -148,7 +148,7 @@ onMounted(() => {
             {{ row.snippet || `#${row.target_id}` }}
           </el-link>
           <span v-else>{{ row.snippet || `#${row.target_id}（已删除）` }}</span>
-          <el-tag size="small" style="margin-left: 6px">{{ row.target_type === 'topic' ? '主楼' : '回复' }}</el-tag>
+          <el-tag size="small" style="margin-left: var(--soj-sp-6)">{{ row.target_type === 'topic' ? '主楼' : '回复' }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="理由" min-width="160" show-overflow-tooltip prop="reason" />
@@ -169,12 +169,12 @@ onMounted(() => {
       </el-table-column>
       <el-empty v-if="!loading && !list.length" description="没有举报记录" />
     </el-table>
-    <div v-if="total > list.length" style="display: flex; justify-content: center; margin-top: 10px">
+    <div v-if="total > list.length" style="display: flex; justify-content: center; margin-top: var(--soj-sp-10)">
       <el-pagination layout="prev, pager, next" :total="total" :page-size="20" :current-page="page" @current-change="(p: number) => { page = p; load() }" />
     </div>
   </el-card>
 
-  <el-card style="margin-top: 16px">
+  <el-card style="margin-top: var(--soj-sp-16)">
     <template #header>
       <div class="head">
         <span>禁言管理</span>
@@ -211,7 +211,7 @@ onMounted(() => {
       </el-form-item>
       <el-form-item label="天数">
         <el-input-number v-model="muteForm.days" :min="0" :max="3650" style="width: 100%" />
-        <span class="dim" style="margin-left: 8px">0 = 永久</span>
+        <span class="dim" style="margin-left: var(--soj-sp-8)">0 = 永久</span>
       </el-form-item>
       <el-form-item label="理由">
         <el-input v-model="muteForm.reason" type="textarea" :rows="2" placeholder="将通知当事人" />
@@ -225,17 +225,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-}
 .head-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
 }
 </style>

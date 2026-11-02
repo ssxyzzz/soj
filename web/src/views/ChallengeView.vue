@@ -593,53 +593,53 @@ function swallow(e: Event) {
   z-index: 50;
   display: flex;
   flex-direction: column;
-  background: var(--soj-canvas, #f6f8fb);
+  background: var(--soj-surface-2);
 }
 
 .chal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--soj-sp-16);
   height: 60px;
-  padding: 0 20px;
-  background: #fff;
-  border-bottom: 1px solid var(--soj-line, #e6eaf2);
+  padding: 0 var(--soj-sp-20);
+  background: var(--soj-white);
+  border-bottom: 1px solid var(--soj-line);
   flex: none;
 }
 .chal-head-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   min-width: 0;
 }
 .chal-brand {
-  padding: 3px 12px;
+  padding: var(--soj-sp-4) var(--soj-sp-12);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--soj-blue, #007bff) 12%, #fff);
-  color: var(--soj-blue, #007bff);
-  font-size: 13px;
-  font-weight: 700;
+  background: color-mix(in srgb, var(--soj-blue) 12%, var(--soj-white));
+  color: var(--soj-blue);
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-bold);
   white-space: nowrap;
 }
 .chal-title {
   margin: 0;
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--soj-ink, #0b1f45);
+  font-size: var(--soj-fs-18);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .chal-limit {
-  font-size: 13px;
-  color: var(--soj-ink-3, #64748b);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-mut);
   white-space: nowrap;
 }
 .chal-head-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   flex: none;
 }
 .chal-lang {
@@ -648,17 +648,17 @@ function swallow(e: Event) {
 .chal-timer {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   height: 40px;
-  padding: 0 16px;
+  padding: 0 var(--soj-sp-16);
   border-radius: 999px;
-  background: var(--soj-blue, #007bff);
-  color: #fff;
-  font-weight: 800;
+  background: var(--soj-blue);
+  color: var(--soj-white);
+  font-weight: var(--soj-fw-heavy);
 }
 .chal-timer.urgent {
   animation: chal-pulse 1s ease-in-out infinite;
-  background: var(--soj-danger, #ff6b6b);
+  background: var(--soj-danger);
 }
 @keyframes chal-pulse {
   50% {
@@ -667,7 +667,7 @@ function swallow(e: Event) {
 }
 .chal-timer-text {
   font-variant-numeric: tabular-nums;
-  font-size: 16px;
+  font-size: var(--soj-fs-16);
 }
 
 .chal-body {
@@ -679,16 +679,16 @@ function swallow(e: Event) {
   width: 44%;
   min-width: 380px;
   overflow-y: auto;
-  padding: 16px 20px;
-  background: #fff;
-  border-right: 1px solid var(--soj-line, #e6eaf2);
+  padding: var(--soj-sp-16) var(--soj-sp-20);
+  background: var(--soj-white);
+  border-right: 1px solid var(--soj-line);
 }
 .chal-editor-col {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 12px 14px 10px;
+  padding: var(--soj-sp-12) var(--soj-sp-14) var(--soj-sp-10);
 }
 .chal-editor-wrap {
   flex: 1;
@@ -701,7 +701,7 @@ function swallow(e: Event) {
 
 .chal-selftest {
   flex: none;
-  margin-bottom: 10px;
+  margin-bottom: var(--soj-sp-10);
   max-height: 40vh;
   overflow: auto;
 }
@@ -710,23 +710,23 @@ function swallow(e: Event) {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 10px;
+  gap: var(--soj-sp-12);
+  margin-top: var(--soj-sp-10);
 }
 .chal-verdict {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--soj-danger, #ff6b6b);
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-danger);
 }
 .chal-hint {
   flex: 1;
   text-align: right;
-  font-size: 12px;
-  color: var(--soj-ink-3, #64748b);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-mut);
 }
 .chal-submit {
   min-width: 132px;
-  font-weight: 800;
+  font-weight: var(--soj-fw-heavy);
 }
 
 /* 全屏遮罩（开场 / 结果） */
@@ -737,61 +737,61 @@ function swallow(e: Event) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--soj-canvas, #f6f8fb) 86%, #0b1f45 14%);
+  background: color-mix(in srgb, var(--soj-surface-2) 86%, var(--soj-navy) 14%);
   backdrop-filter: blur(3px);
 }
 .chal-overlay-card {
   width: 460px;
   max-width: calc(100vw - 48px);
-  padding: 32px 36px;
+  padding: var(--soj-sp-32) var(--soj-sp-32);
   border-radius: 20px;
-  background: #fff;
+  background: var(--soj-white);
   box-shadow: 0 18px 50px rgb(11 31 69 / 14%);
   text-align: center;
 }
 .chal-kicker {
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-heavy);
   letter-spacing: 0.2em;
-  color: var(--soj-blue, #007bff);
+  color: var(--soj-blue);
 }
 .chal-overlay-title {
-  margin: 8px 0 12px;
-  font-size: 26px;
-  font-weight: 800;
-  color: var(--soj-ink, #0b1f45);
+  margin: var(--soj-sp-8) 0 var(--soj-sp-12);
+  font-size: var(--soj-fs-28);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-ink);
 }
 .chal-overlay-desc {
-  margin: 0 0 6px;
-  font-size: 14.5px;
-  color: var(--soj-ink-2, #22334d);
+  margin: 0 0 var(--soj-sp-6);
+  font-size: var(--soj-fs-14);
+  color: var(--soj-ink-2);
 }
 .chal-overlay-desc.sub {
-  color: var(--soj-ink-3, #64748b);
-  font-size: 13.5px;
+  color: var(--soj-mut);
+  font-size: var(--soj-fs-13);
 }
 .chal-rules {
-  margin: 14px 0;
-  padding: 12px 16px 12px 30px;
+  margin: var(--soj-sp-14) 0;
+  padding: var(--soj-sp-12) var(--soj-sp-16) var(--soj-sp-12) var(--soj-sp-32);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--soj-blue, #007bff) 6%, #fff);
+  background: color-mix(in srgb, var(--soj-blue) 6%, var(--soj-white));
   text-align: left;
-  font-size: 13px;
-  color: var(--soj-ink-2, #22334d);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
 }
 .chal-rules li {
-  margin: 3px 0;
+  margin: var(--soj-sp-4) 0;
 }
 .chal-last {
-  font-size: 13px;
-  color: var(--soj-ink-3, #64748b);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-mut);
 }
 .chal-begin {
   width: 100%;
   height: 46px;
-  font-size: 16px;
-  font-weight: 800;
-  margin: 14px 0 8px;
+  font-size: var(--soj-fs-16);
+  font-weight: var(--soj-fw-heavy);
+  margin: var(--soj-sp-14) 0 var(--soj-sp-8);
 }
 .chal-result-emoji {
   font-size: 44px;
@@ -810,8 +810,8 @@ function swallow(e: Event) {
 }
 .chal-count-num {
   font-size: 120px;
-  font-weight: 900;
-  color: #fff;
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-white);
   animation: chal-count-in 1s ease-out;
 }
 @keyframes chal-count-in {
@@ -838,18 +838,18 @@ function swallow(e: Event) {
 /* 结算评级（v0.41）：S/A/B/C 大字 */
 .chal-rating {
   font-size: 84px;
-  font-weight: 900;
+  font-weight: var(--soj-fw-heavy);
   line-height: 1;
   animation: ratingIn 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
 
 .chal-rating.S {
-  color: #f59e0b;
+  color: var(--soj-warning);
   text-shadow: 0 0 30px rgba(245, 158, 11, 0.6);
 }
 
 .chal-rating.A { color: var(--soj-blue); }
-.chal-rating.B { color: #059669; }
+.chal-rating.B { color: var(--soj-success-deep); }
 .chal-rating.C { color: var(--el-text-color-secondary); }
 
 @keyframes ratingIn {
@@ -867,45 +867,45 @@ function swallow(e: Event) {
 .ghost-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  margin: 0 20px 8px;
+  gap: var(--soj-sp-10);
+  padding: var(--soj-sp-8) var(--soj-sp-16);
+  margin: 0 var(--soj-sp-20) var(--soj-sp-8);
   border-radius: 12px;
   background: var(--soj-blue-soft);
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
 }
 
 /* 课堂 PK 横幅（v0.42）：与幽灵条同族蓝软底，未截止时琥珀描边提「上榜线」 */
 .race-banner {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 16px;
-  margin: 0 20px 8px;
+  gap: var(--soj-sp-12);
+  padding: var(--soj-sp-8) var(--soj-sp-16);
+  margin: 0 var(--soj-sp-20) var(--soj-sp-8);
   border-radius: 12px;
   background: var(--soj-blue-soft);
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
 }
 
 .race-tag {
-  font-weight: 800;
-  color: var(--soj-navy, #0b1f45);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
 }
 
 .race-rank {
-  font-weight: 700;
-  color: var(--soj-blue, #2563eb);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-blue);
 }
 
 .race-clock {
   margin-left: auto;
-  color: #92400e;
-  font-weight: 700;
+  color: var(--soj-warning-deep);
+  font-weight: var(--soj-fw-bold);
   font-variant-numeric: tabular-nums;
 }
 
 .race-banner.done .race-rank {
-  color: var(--soj-dim, #64748b);
+  color: var(--soj-mut);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -931,7 +931,7 @@ function swallow(e: Event) {
 .ghost-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #9ca3af, #6b7280);
+  background: linear-gradient(90deg, var(--soj-ink-3), var(--soj-mut));
   transition: width 0.6s linear;
 }
 
@@ -939,17 +939,17 @@ function swallow(e: Event) {
   position: absolute;
   top: -4px;
   transform: translateX(-50%);
-  padding: 1px 8px;
+  padding: var(--soj-sp-2) var(--soj-sp-8);
   border-radius: 999px;
   background: var(--soj-blue);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
+  color: var(--soj-white);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
   transition: left 0.6s linear;
 }
 
 .ghost-bar.ahead .ghost-fill {
-  background: linear-gradient(90deg, #34d399, #059669);
+  background: linear-gradient(90deg, var(--soj-success), var(--soj-success-deep));
 }
 
 .ghost-pct {

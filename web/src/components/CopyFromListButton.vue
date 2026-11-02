@@ -117,12 +117,12 @@ async function confirm() {
 .cascade {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .hint {
-  margin: 10px 0 0;
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  margin: var(--soj-sp-10) 0 0;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 </style>

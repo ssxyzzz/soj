@@ -131,33 +131,33 @@ function doSubmit() {
 .obj-form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 
 .opt-list {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .opt-item {
   height: auto;
   margin-right: 0;
-  padding: 10px 14px;
+  padding: var(--soj-sp-10) var(--soj-sp-14);
   white-space: normal;
 }
 
 .opt-key {
   font-weight: var(--soj-fw-emphasis);
-  margin-right: 4px;
+  margin-right: var(--soj-sp-4);
 }
 
 .blank-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: var(--soj-sp-10);
+  margin-bottom: var(--soj-sp-10);
 }
 
 .blank-idx {
@@ -166,6 +166,6 @@ function doSubmit() {
 }
 
 .blank-tip {
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
 }
 </style>

@@ -215,6 +215,97 @@ html {
   --soj-code-cm: #5f7bb6;
   --soj-code-kw: #7eb3ff;
 
+  /* ---- v0.57 token 底座补全（唯一改值入口，下同）----
+     间距档位（值保留型：全站 padding/margin/gap 迁移取就近档，
+     野生奇数值 3/5/7/9/11/13px 归并到邻近偶数档，18→16 / 22→20 / 26·28→24 / 30·34+→32） */
+  --soj-sp-2: 2px;
+  --soj-sp-4: 4px;
+  --soj-sp-6: 6px;
+  --soj-sp-8: 8px;
+  --soj-sp-10: 10px;
+  --soj-sp-12: 12px;
+  --soj-sp-14: 14px;
+  --soj-sp-16: 16px;
+  --soj-sp-20: 20px;
+  --soj-sp-24: 24px;
+  --soj-sp-32: 32px;
+  --soj-sp-48: 48px;
+
+  /* 圆角：卡片 16 / 弹窗 20 / 胶囊 999（控件 12、小控件 5 仍以 --el-border-radius-base/small 为准） */
+  --soj-radius-card: 16px;
+  --soj-radius-dialog: 20px;
+  --soj-radius-pill: 999px;
+
+  /* 卡片双层柔影：el-card / .card / RailCard / .aside-card 四处同源（v0.57 卡片收口） */
+  --soj-shadow-card:
+    0 1px 2px rgba(11, 31, 69, 0.04),
+    0 12px 32px rgba(11, 31, 69, 0.06);
+  --soj-shadow-card-hover:
+    0 1px 2px rgba(11, 31, 69, 0.04),
+    0 16px 40px rgba(11, 31, 69, 0.1);
+
+  /* 布局常量：页容器 1440（hero/排名窄容器 960）/ 副列 320 / 顶栏高 64（el-header）/
+     吸顶偏移 84 = 顶栏 64 + 主区 padding-top 20（目录卡/表单卡 sticky top 用） */
+  --soj-container: 1440px;
+  --soj-narrow: 960px;
+  --soj-aside-w: 320px;
+  --soj-nav-h: 64px;
+  --soj-sticky-top: 84px;
+
+  /* 纯白（白卡底/彩底上的白字）：固定值不随主题，禁在组件里写裸 #fff */
+  --soj-white: #ffffff;
+
+  /* 色彩缺口收编（v0.57）：深文字档——浅底小字用，基色（--soj-warning 等）供大字/底色。
+     取代全站野生 amber/red/green/teal 散值（#b45309/#dc2626/#059669/#0f766e 等）；
+     半透明场景用 color-mix(in srgb, var(--soj-*) N%, transparent) 派生，随主题换血 */
+  --soj-warning-deep: #b45309;
+  --soj-danger-deep: #dc2626;
+  --soj-success-deep: #059669;
+  --soj-teal-deep: #0f766e;
+
+  /* 品牌渐变三停（MainLayout 装饰条 + LoginView 标题渐变共用，v0.57 收口）：
+     默认 v5 案 = teal→deep→primary 三 token 派生（2026-11-02 用户拍板随主题换色）；
+     navy 主题由 data-theme 块覆写为原版复古三停定值 */
+  --soj-brand-a: var(--soj-teal);
+  --soj-brand-b: var(--soj-blue-deep);
+  --soj-brand-c: var(--soj-blue);
+
+  /* ---- 难度色轴（十档）升为全局 token（v0.57）：原先只有 .diff-N 类内注入 --dc/--dct，
+     图表/图例等非 TierBadge 场景被迫硬编码同值 hex。现 :root 直发 --soj-dN/dNt，
+     .diff-N 类改引 token，图表场景直接 var(--soj-dN) 消费 */
+  --soj-d1: #b4793f;
+  --soj-d1t: #b4793f;
+  --soj-d2: #75868f;
+  --soj-d2t: #75868f;
+  --soj-d3: #d99141;
+  --soj-d3t: #d99141;
+  --soj-d4: #3358b8;
+  --soj-d4t: #2c4ea3;
+  --soj-d5: #237e6b;
+  --soj-d5t: #1d6b5b;
+  --soj-d6: #7c3aed;
+  --soj-d6t: #7c3aed;
+  --soj-d7: #ee7e1f;
+  --soj-d7t: #ee7e1f;
+  --soj-d8: #e63946;
+  --soj-d8t: #ce3845; /* 王者 · 绯玫红（v9 随色轴换色） */
+  --soj-d9: #d4af37;
+  --soj-d9t: #483c16; /* 传奇 · 黑金款（v9）：深墨金字 */
+  --soj-d10: #d4af37; /* 极境 · 轴值取其金 */
+  --soj-d10t: color-mix(in srgb, #7e3e9e 62%, #1f2d3d);
+
+  /* ---- 层级五色 token（标签五级 + 等级共用，2026-11-02 拍板）----
+     lv1 两案同为「主蓝」= var(--soj-blue) 随主题；
+     v5 案后四档 = 参照主蓝 #007bff 明快度重定的亮彩（青 #0891b2 / 绿 #16a34a / 橙 #d97706 /
+     紫 #9333ea，lv5 与难度轴 d6 #7c3aed 错开一档防撞色）；
+     navy 案保留原版五彩色定值（data-theme 块覆写）。
+     浅底/描边不再逐类写死 rgba：由 .lv-N 统一 color-mix 9%/26% 派生（与原定值等价） */
+  --soj-lv1: var(--soj-blue);
+  --soj-lv2: #0891b2;
+  --soj-lv3: #16a34a;
+  --soj-lv4: #d97706;
+  --soj-lv5: #9333ea;
+
   /* EP 五语义位换血 + color-mix 派生浅阶（EP 约定：light-N ≈ N×10% 向白，
      dark-2 ≈ 20% 向黑）；浅底场景（plain 按钮 / 浅 tag / 选中底）自动跟随。
      2026-10-26 起基色改引 --soj-blue/--soj-* token：双主题（v5/navy）整组自动换血 */
@@ -253,13 +344,13 @@ html {
   --el-color-error-light-8: color-mix(in srgb, var(--soj-danger) 20%, #ffffff);
   --el-color-error-light-9: color-mix(in srgb, var(--soj-danger) 10%, #ffffff);
   --el-color-error-dark-2: color-mix(in srgb, var(--soj-danger) 80%, #000000);
-  --el-color-info: #7a8ca6;
-  --el-color-info-light-3: color-mix(in srgb, #7a8ca6 70%, #ffffff);
-  --el-color-info-light-5: color-mix(in srgb, #7a8ca6 50%, #ffffff);
-  --el-color-info-light-7: color-mix(in srgb, #7a8ca6 30%, #ffffff);
-  --el-color-info-light-8: color-mix(in srgb, #7a8ca6 20%, #ffffff);
-  --el-color-info-light-9: color-mix(in srgb, #7a8ca6 10%, #ffffff);
-  --el-color-info-dark-2: color-mix(in srgb, #7a8ca6 80%, #000000);
+  --el-color-info: var(--soj-mut);
+  --el-color-info-light-3: color-mix(in srgb, var(--soj-mut) 70%, #ffffff);
+  --el-color-info-light-5: color-mix(in srgb, var(--soj-mut) 50%, #ffffff);
+  --el-color-info-light-7: color-mix(in srgb, var(--soj-mut) 30%, #ffffff);
+  --el-color-info-light-8: color-mix(in srgb, var(--soj-mut) 20%, #ffffff);
+  --el-color-info-light-9: color-mix(in srgb, var(--soj-mut) 10%, #ffffff);
+  --el-color-info-dark-2: color-mix(in srgb, var(--soj-mut) 80%, #000000);
 
   /* 画布基准色（真实三层画布见 body；此值供遮罩/回退等实底场景） */
   --el-bg-color-page: #f4f8fc;
@@ -321,6 +412,15 @@ html[data-theme='navy'] {
   --soj-tle-bg: #fcf3e3;
   --soj-run-bg: #eaf0fe;
   --soj-run: var(--soj-blue-lo);
+  /* 品牌渐变三停：navy 案保留原版复古定值（v5 案在 :root 走 token 派生） */
+  --soj-brand-a: #16a7d2;
+  --soj-brand-b: #1557b8;
+  --soj-brand-c: #2c5de0;
+  /* 层级五色后四档：navy 案保留原版五彩色定值（v5 案在 :root 走亮彩重定；lv1 同为主蓝不覆写） */
+  --soj-lv2: #0e7a9c;
+  --soj-lv3: #0b7a55;
+  --soj-lv4: #9a5b06;
+  --soj-lv5: #6d28d9;
 }
 
 body {
@@ -382,19 +482,16 @@ body.ambient-on::after {
   display: none;
 }
 
-/* v0.19 卡片：细 hairline 边 + 两层柔影（替换 Ant 扁平无边，卡片从画布浮出） */
+/* v0.19 卡片：细 hairline 边 + 两层柔影（替换 Ant 扁平无边，卡片从画布浮出）；
+   影走 --soj-shadow-card token（v0.57 卡片收口，与 .card 同源） */
 .el-card,
 .el-card.is-always-shadow {
-  box-shadow:
-    0 1px 2px rgba(11, 31, 69, 0.04),
-    0 12px 32px rgba(11, 31, 69, 0.06);
+  box-shadow: var(--soj-shadow-card);
 }
 
 .el-card.is-hover-shadow:hover,
 .el-card.is-hover-shadow:focus {
-  box-shadow:
-    0 1px 2px rgba(11, 31, 69, 0.04),
-    0 16px 40px rgba(11, 31, 69, 0.1);
+  box-shadow: var(--soj-shadow-card-hover);
 }
 
 /* ---- 表格 v0.19：表头浅蓝灰底 + 藏蓝 700；表体斑马纹走模板 stripe 属性
@@ -420,12 +517,12 @@ body.ambient-on::after {
 /* 卡片/弹窗/messagebox 圆角（v0.19：卡 16 / 弹窗 20 / 确认框 16；
    EP 自声明在组件类上，须在此覆盖） */
 .el-card {
-  --el-card-border-radius: 16px;
+  --el-card-border-radius: var(--soj-radius-card);
   --el-card-border-color: var(--soj-line);
 }
 
 .el-dialog {
-  --el-dialog-border-radius: 20px;
+  --el-dialog-border-radius: var(--soj-radius-dialog);
   box-shadow: 0 24px 80px rgba(11, 31, 69, 0.22);
 }
 
@@ -456,8 +553,9 @@ body.ambient-on::after {
 
 .page {
   /* 容器 1440：v0.19 曾收窄 1280（窄容器更精致，见 web-design-v3.md §4.4），
-     2026-10-25 回调 1440——题库等表格页主列装不下最小列宽和（scrollable-x），用户拍板 */
-  max-width: 1440px;
+     2026-10-25 回调 1440——题库等表格页主列装不下最小列宽和（scrollable-x），用户拍板；
+     v0.57 起走 --soj-container token（与 PageShell 同源） */
+  max-width: var(--soj-container);
   margin: 0 auto;
   /* 不留内边距（2026-10-26 页头对齐批）：纵向原先 16px 使 .page 页（排名/设置）
      比 PageShell 页低 16px；现在纵横都与 PageShell（1440 容器 + el-main 20px 内边距）对齐 */
@@ -473,10 +571,8 @@ body.ambient-on::after {
 .card {
   background: var(--el-bg-color);
   border: 1px solid var(--soj-line);
-  border-radius: 16px;
-  box-shadow:
-    0 1px 2px rgba(11, 31, 69, 0.04),
-    0 12px 32px rgba(11, 31, 69, 0.06);
+  border-radius: var(--soj-radius-card);
+  box-shadow: var(--soj-shadow-card);
 }
 
 /* ---- v0.19 二期：v3 结构性视觉全局件（页头 / 卡片头 / 表格贴边 / 状态胶囊）----
@@ -530,7 +626,7 @@ body.ambient-on::after {
    头部只给上/左右内边距（下间距由卡体承接）；复杂头（左标题右动作 .head）同样适用 */
 .el-card__header {
   padding: 16px 20px 0;
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
   border-bottom: 0;
@@ -692,40 +788,25 @@ strong {
   word-break: break-all;
 }
 
-/* ---- 标签五级层级色（v0.20 重设，青格蓝调同族浅色胶囊）----
-   标签树最多 5 级（前后端同限），每级一色；全部取自站内语义色族、字为深一档保证对比：
-   一级 主蓝（层级主色）/ 二级 青（品牌辅助）/ 三级 绿（success 族）/ 四级 橙（warning 族）/
-   五级 紫（等级星耀族）；底 ≈10% / 边 ≈26% / 字深色。--lv* 由 .lv-N 注入卡片，
+/* ---- 标签五级层级色（v0.20 立制；2026-11-02 拍板收口为 token）----
+   标签树最多 5 级（前后端同限），每级一色，与用户等级共用：
+   一级 主蓝 / 二级 青 / 三级 绿 / 四级 橙 / 五级 紫——字色走 :root 的 --soj-lv1…lv5
+   （v5 案亮彩 / navy 案原版五彩，见 token 区注释）；浅底/描边由 --lv 统一派生
+   （底 9% / 边 26%，与原逐类 rgba 定值等价）。--lv* 由 .lv-N 注入卡片，
    表格标签列、筛选面板、后台标签树、详情信息卡共用。 */
-.lv-1 {
-  --lv: var(--soj-blue);
-  --lv-bg: rgb(var(--soj-blue-rgb) / 0.08);
-  --lv-border: rgb(var(--soj-blue-rgb) / 0.26);
-}
+.lv-1 { --lv: var(--soj-lv1); }
+.lv-2 { --lv: var(--soj-lv2); }
+.lv-3 { --lv: var(--soj-lv3); }
+.lv-4 { --lv: var(--soj-lv4); }
+.lv-5 { --lv: var(--soj-lv5); }
 
-.lv-2 {
-  --lv: #0e7a9c;
-  /* 二级用自身青色锚点派生浅底/描边，不借 --soj-teal-rgb——v5 的 teal 挪绿后会与三级绿撞色 */
-  --lv-bg: rgba(14, 122, 156, 0.09);
-  --lv-border: rgba(14, 122, 156, 0.26);
-}
-
-.lv-3 {
-  --lv: #0b7a55;
-  --lv-bg: rgba(14, 159, 110, 0.1);
-  --lv-border: rgba(14, 159, 110, 0.28);
-}
-
-.lv-4 {
-  --lv: #9a5b06;
-  --lv-bg: rgba(217, 130, 7, 0.1);
-  --lv-border: rgba(217, 130, 7, 0.28);
-}
-
+.lv-1,
+.lv-2,
+.lv-3,
+.lv-4,
 .lv-5 {
-  --lv: #6d28d9;
-  --lv-bg: rgba(124, 58, 237, 0.09);
-  --lv-border: rgba(124, 58, 237, 0.26);
+  --lv-bg: color-mix(in srgb, var(--lv) 9%, transparent);
+  --lv-border: color-mix(in srgb, var(--lv) 26%, transparent);
 }
 
 /* ---- 布局工具类（原各视图 scoped 重复定义，收敛到全局） ---- */
@@ -734,7 +815,8 @@ strong {
   margin-top: 16px;
 }
 
-/* 右列纵向动作组（按钮逐个全宽堆叠） */
+/* 右列纵向动作组（按钮逐个全宽堆叠）；EP 相邻按钮 margin-left 会让纵向排列
+   第二个按钮右错位，全站统一复位（v0.57 从 ProblemForm scoped 收编） */
 .entry-actions {
   display: flex;
   flex-direction: column;
@@ -742,11 +824,39 @@ strong {
   gap: 8px;
 }
 
+.entry-actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+/* 上传拖拽区通栏（v0.57 从 ProblemForm/ImportView 各自 scoped 收编） */
+.el-upload-dragger {
+  width: 100%;
+}
+
 /* 卡片头：左标题右动作 */
 .head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--soj-sp-8);
+}
+
+/* 工具条（列表页过滤/操作行，v0.57 从 4 处本地定义收编：
+   ProblemListView/DiffView/ManualTidyPanel/ScoreBoardDialog） */
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--soj-sp-10);
+  margin-bottom: var(--soj-sp-16);
+}
+
+/* 区块小标题（后台面板分组标题，v0.57 从 2 处本地定义收编；
+   只定字形态，留白由调用方自理） */
+.section-title {
+  font-size: var(--soj-fs-section);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--el-text-color-primary);
 }
 
 .muted {
@@ -1226,7 +1336,7 @@ strong {
 }
 .vditor-task input {
   margin: 0 0.2em 0.25em -1.6em;
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   vertical-align: middle;
 }
 
@@ -1267,7 +1377,7 @@ strong {
   display: flex;
   align-items: center;
   padding: 9px 14px;
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-ink-2);
   border-bottom: 1px solid var(--soj-line);
@@ -1280,7 +1390,7 @@ strong {
   align-items: center;
   padding: 2px 8px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-emphasis);
   line-height: 18px;
   color: var(--soj-blue);
@@ -1981,16 +2091,16 @@ samp {
    高于本文件，字色必须走变量）。第 10 档极境 = 浅色彩虹款（2026-10-25 v5 预览拍板）：
    锚点取渐变末位星紫，底/边在 .diff-10.diff-tag 换双层渐变。
    旋转方块点缀（2026-10-25 拍板补齐）：7px 45° 同字色小方块，D1–D10 全档。 */
-.diff-1 { --dc: #b4793f; --dct: #b4793f; }
-.diff-2 { --dc: #75868f; --dct: #75868f; }
-.diff-3 { --dc: #d99141; --dct: #d99141; }
-.diff-4 { --dc: #3358b8; --dct: #2c4ea3; }
-.diff-5 { --dc: #237e6b; --dct: #1d6b5b; }
-.diff-6 { --dc: #7c3aed; --dct: #7c3aed; }
-.diff-7 { --dc: #ee7e1f; --dct: #ee7e1f; }
-.diff-8 { --dc: #e63946; --dct: #ce3845; } /* 王者 · 绯玫红（v9 随色轴换色） */
-.diff-9 { --dc: #d4af37; --dct: #483c16; } /* 传奇 · 黑金款（v9）：深墨金字，古铜金边见下方覆盖 */
-.diff-10 { --dc: #d4af37; --dct: color-mix(in srgb, #7e3e9e 62%, #1f2d3d); } /* 极境 · 轴值取其金 */
+.diff-1 { --dc: var(--soj-d1); --dct: var(--soj-d1t); }
+.diff-2 { --dc: var(--soj-d2); --dct: var(--soj-d2t); }
+.diff-3 { --dc: var(--soj-d3); --dct: var(--soj-d3t); }
+.diff-4 { --dc: var(--soj-d4); --dct: var(--soj-d4t); }
+.diff-5 { --dc: var(--soj-d5); --dct: var(--soj-d5t); }
+.diff-6 { --dc: var(--soj-d6); --dct: var(--soj-d6t); }
+.diff-7 { --dc: var(--soj-d7); --dct: var(--soj-d7t); }
+.diff-8 { --dc: var(--soj-d8); --dct: var(--soj-d8t); } /* 王者 · 绯玫红（v9 随色轴换色） */
+.diff-9 { --dc: var(--soj-d9); --dct: var(--soj-d9t); } /* 传奇 · 黑金款（v9）：深墨金字，古铜金边见下方覆盖 */
+.diff-10 { --dc: var(--soj-d10); --dct: var(--soj-d10t); } /* 极境 · 轴值取其金 */
 
 /* D9 传奇黑金款（v9）：底色沿用浅金（轴值即其金，底 11% 与 D1–D9 同形制），
    字与小方块（currentColor）改深墨金、边框加深为古铜金——黑字压金底，即「黑金」浅色形制 */
@@ -2449,7 +2559,7 @@ button.soj-inv-chip.is-clickable:focus-visible {
 }
 
 .panel-h .pt {
-  font-size: 15.5px;
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-heavy);
   color: var(--soj-navy);
 }
@@ -2502,7 +2612,7 @@ button.soj-inv-chip.is-clickable:focus-visible {
 
 .soj-ilog {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--soj-fs-12);
   line-height: 2;
   background: var(--soj-code-bg);
   color: var(--soj-code-fg);

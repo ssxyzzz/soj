@@ -270,7 +270,7 @@ function onCancel() {
               <el-button size="small" text type="primary" :loading="uploadingFunc === 'driver'">{{ problem.function?.has_driver ? '替换' : '上传' }} driver.cpp</el-button>
             </el-upload>
           </div>
-          <div class="checker-status" style="margin-top: 8px">
+          <div class="checker-status" style="margin-top: var(--soj-sp-8)">
             学生模板
             <el-tag v-if="problem.function?.has_template" size="small" type="success">已配置 template.cpp</el-tag>
             <el-tag v-else size="small" type="info">未配置（可选）</el-tag>
@@ -373,13 +373,13 @@ function onCancel() {
 
 <style scoped>
 .upload-progress {
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
 }
 
 .obj-tips p {
   font-size: var(--soj-fs-body);
   line-height: 1.7;
-  margin: 0 0 8px;
+  margin: 0 0 var(--soj-sp-8);
 }
 
 .obj-tips b {
@@ -393,12 +393,12 @@ function onCancel() {
 .checker-status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
 }
 
 .checker-hint {
-  padding: 12px 0;
+  padding: var(--soj-sp-12) 0;
   text-align: center;
 }
 
@@ -408,7 +408,7 @@ function onCancel() {
 
 .checker-actions {
   display: flex;
-  gap: 8px;
-  margin-top: 10px;
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-10);
 }
 </style>

@@ -313,10 +313,10 @@ onMounted(() => {
 /* v3 filterbar：搜索胶囊 250 定宽 + chips */
 .filterbar {
   display: flex;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 .search-pill {
@@ -335,18 +335,18 @@ onMounted(() => {
 /* chip 展开的候选行 */
 .panel-row {
   display: flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 16px;
-  padding: 12px 14px;
+  margin-bottom: var(--soj-sp-16);
+  padding: var(--soj-sp-12) var(--soj-sp-14);
   background: var(--el-fill-color-light);
   border-radius: 14px;
 }
 
 .soj-sel.opt {
   height: 30px;
-  padding: 0 13px;
+  padding: 0 var(--soj-sp-12);
 }
 
 /* 选手筛选下拉：与 chips 同高的紧凑档 */
@@ -362,19 +362,19 @@ onMounted(() => {
 .pager {
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
-  padding-bottom: 2px;
+  margin-top: var(--soj-sp-16);
+  padding-bottom: var(--soj-sp-2);
 }
 
 .sub-footer {
   display: flex;
   justify-content: center;
-  gap: 18px;
+  gap: var(--soj-sp-16);
   flex-wrap: wrap;
-  margin-top: 22px;
-  padding-top: 22px;
+  margin-top: var(--soj-sp-20);
+  padding-top: var(--soj-sp-20);
   border-top: 1px solid var(--soj-line);
-  font-size: 12.5px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 </style>

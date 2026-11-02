@@ -248,7 +248,7 @@ watch(
   <div v-loading="loading">
     <PageShell v-if="round && problem">
       <template #standalone>
-        <el-card class="standalone-card round-head" :body-style="{ padding: '14px 20px' }">
+        <el-card class="standalone-card round-head" :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }">
           <div class="sa-head">
             <div>
               <div class="sa-time">
@@ -446,7 +446,7 @@ watch(
 .crumbs {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
-  margin-bottom: 14px;
+  margin-bottom: var(--soj-sp-14);
 }
 
 .crumbs a {
@@ -462,28 +462,28 @@ watch(
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
-/* v3 .rt：赛名 17/800 */
+/* v3 .rt：赛名 --soj-fs-16/--soj-fw-heavy */
 .sa-title {
-  font-size: 17px;
+  font-size: var(--soj-fs-16);
   font-weight: var(--soj-fw-heavy);
   letter-spacing: -0.2px;
   color: var(--soj-navy);
 }
 
-/* v3 .rtime：12.5px 弱化说明 */
+/* v3 .rtime：--soj-fs-12 弱化说明 */
 .rtime {
-  font-size: 12.5px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 
 /* v3 .sw-btns：34x32 圆角 10 切题方块钮 */
 .sw-btns {
   display: flex;
-  gap: 6px;
-  margin-top: 10px;
+  gap: var(--soj-sp-6);
+  margin-top: var(--soj-sp-10);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -491,7 +491,7 @@ watch(
 .sw-lab {
   font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
-  margin-right: 2px;
+  margin-right: var(--soj-sp-2);
 }
 
 .sw-btn {
@@ -516,20 +516,20 @@ watch(
 .sw-btn.on {
   background: var(--soj-blue);
   border-color: var(--soj-blue);
-  color: #fff;
+  color: var(--soj-white);
 }
 
 .hint {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   line-height: 1.7;
-  margin: 10px 0 0;
+  margin: var(--soj-sp-10) 0 0;
 }
 
 .sa-time {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   flex-wrap: wrap;
 }
 
@@ -540,8 +540,8 @@ watch(
 .sa-switch {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-8);
 }
 
 .switch-btn {
@@ -554,6 +554,6 @@ watch(
 
 /* 我的提交弹窗脚注 */
 .mine-hint {
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
 }
 </style>

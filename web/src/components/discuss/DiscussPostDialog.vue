@@ -183,26 +183,26 @@ async function submit() {
 
 <style scoped>
 .post-tip {
-  margin-bottom: 12px;
+  margin-bottom: var(--soj-sp-12);
 }
 .post-row {
   display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: var(--soj-sp-10);
+  margin-bottom: var(--soj-sp-12);
 }
 .post-row > .el-input {
   flex: 1;
 }
 .post-hint {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
 }
 .bounty-row {
   align-items: center;
 }
 .bounty-label {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: var(--soj-ink-2);
   white-space: nowrap;
 }

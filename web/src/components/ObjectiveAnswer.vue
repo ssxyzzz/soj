@@ -149,14 +149,14 @@ function doSubmit() {
 
 <style scoped>
 .obj-answer-card {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 .obj-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   font-weight: var(--soj-fw-emphasis);
 }
 
@@ -165,7 +165,7 @@ function doSubmit() {
 }
 
 .obj-item {
-  padding: 14px 0;
+  padding: var(--soj-sp-14) 0;
   border-bottom: 1px dashed var(--el-border-color-lighter);
 }
 
@@ -176,8 +176,8 @@ function doSubmit() {
 .obj-item-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--soj-sp-8);
+  margin-bottom: var(--soj-sp-8);
 }
 
 .obj-idx {
@@ -189,7 +189,7 @@ function doSubmit() {
 }
 
 .obj-stem {
-  margin-bottom: 12px;
+  margin-bottom: var(--soj-sp-12);
 }
 
 /* 题干段落首行按中文排版缩进两格（语文式） */
@@ -201,31 +201,31 @@ function doSubmit() {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .opt-item {
   height: auto;
   margin-right: 0;
-  padding: 10px 14px;
+  padding: var(--soj-sp-10) var(--soj-sp-14);
   white-space: normal;
 }
 
 .opt-key {
   font-weight: var(--soj-fw-emphasis);
-  margin-right: 4px;
+  margin-right: var(--soj-sp-4);
 }
 
 .blank-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .blank-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .blank-idx {
@@ -237,9 +237,9 @@ function doSubmit() {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 12px;
+  gap: var(--soj-sp-12);
+  margin-top: var(--soj-sp-16);
+  padding-top: var(--soj-sp-12);
   border-top: 1px solid var(--el-border-color-lighter);
 }
 </style>

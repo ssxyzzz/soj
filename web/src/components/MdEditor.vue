@@ -68,13 +68,13 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   min-height: 96px;
-  padding: 12px;
+  padding: var(--soj-sp-12);
   border: 1px dashed var(--el-border-color);
   border-radius: var(--el-border-radius-base);
   color: var(--el-text-color-secondary);
-  font-size: var(--soj-fs-body, 14px);
+  font-size: var(--soj-fs-body);
 }
 
 .md-editor-async-fallback.is-error {

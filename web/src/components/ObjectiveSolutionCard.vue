@@ -57,21 +57,21 @@ const rows = computed(() =>
 
 <style scoped>
 .obj-solution-card {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 .sol-item + .sol-item {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: var(--soj-sp-16);
+  padding-top: var(--soj-sp-16);
   border-top: 1px dashed var(--el-border-color-lighter);
 }
 
 .sol-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: var(--soj-sp-8);
 }
 
 .sol-idx {

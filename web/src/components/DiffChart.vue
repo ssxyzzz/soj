@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 难度分布堆叠柱状图（v0.18.3；2026-10-26 三轮定稿口径）：
 // 柱高按各档题数**相对最大档等比例**拉伸——题目最多的档顶到满，其余按比例；
-// 柱内底部档位色段 = 已完成（AC）数占该档比例，上部 #F2F3F5 = 未完成；
+// 柱内底部档位色段 = 已完成（AC）数占该档比例，上部 --soj-surface-3 = 未完成；
 // 上下全圆角胶囊（8px），无题的档不画。配色同源 main.css .diff-* 十档 --dc。
 import { computed } from 'vue'
 
@@ -18,8 +18,8 @@ const props = withDefaults(
 
 const levels = useLevelsStore()
 
-// 同源十档色轴（main.css .diff-1..10 的 --dc）
-const COLORS = ['#b4793f', '#75868f', '#d99141', '#3358b8', '#237e6b', '#7c3aed', '#ee7e1f', '#e63946', '#d4af37', '#d4af37']
+// 同源十档色轴（main.css :root 的 --soj-dN，v0.57 升全局 token）
+const COLORS = ['var(--soj-d1)', 'var(--soj-d2)', 'var(--soj-d3)', 'var(--soj-d4)', 'var(--soj-d5)', 'var(--soj-d6)', 'var(--soj-d7)', 'var(--soj-d8)', 'var(--soj-d9)', 'var(--soj-d10)']
 
 const bars = computed(() => {
   const out: { d: number; name: string; total: number; solved: number }[] = []
@@ -41,7 +41,7 @@ const maxTotal = computed(() => Math.max(...props.total, 0))
 function barPct(total: number): number {
   return maxTotal.value ? Math.max(8, Math.round((total / maxTotal.value) * 100)) : 8
 }
-// 柱内已完成段占比（底部沉色，余下为 #F2F3F5 未完成）
+// 柱内已完成段占比（底部沉色，余下为 --soj-surface-3 未完成）
 function solvedPct(total: number, solved: number): number {
   return total ? Math.round((solved / total) * 100) : 0
 }
@@ -74,20 +74,20 @@ function solvedPct(total: number, solved: number): number {
 .diff-chart {
   display: flex;
   align-items: flex-end;
-  gap: 14px;
+  gap: var(--soj-sp-14);
 }
 
 .dc-col {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
   min-width: 38px;
 }
 
 .dc-count {
-  font-size: 11.5px;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-navy);
 }
 
 .dc-track {
@@ -104,11 +104,11 @@ function solvedPct(total: number, solved: number): number {
   overflow: hidden;
 }
 
-/* 未完成：#F2F3F5（拍板色） */
+/* 未完成：--soj-surface-3（拍板色） */
 .dc-rest {
   position: absolute;
   inset: 0;
-  background: #f2f3f5;
+  background: var(--soj-surface-3);
 }
 
 /* 已完成：档位色，沉底按比例 */
@@ -124,8 +124,8 @@ function solvedPct(total: number, solved: number): number {
 }
 
 .dc-name {
-  font-size: 10.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
   white-space: nowrap;
 }
 </style>

@@ -85,17 +85,17 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 
 <style scoped>
 .user-subs-detail {
-  padding: 8px 20px 16px;
+  padding: var(--soj-sp-8) var(--soj-sp-20) var(--soj-sp-16);
 }
 
 /* 「代码」小节标题（AllCodesDialog 详情同款） */
 .detail-sub {
   font-weight: var(--soj-fw-emphasis);
   color: var(--soj-navy);
-  margin-bottom: 8px;
+  margin-bottom: var(--soj-sp-8);
 }
 
 .user-subs-detail .sub-code {
-  margin-bottom: 12px;
+  margin-bottom: var(--soj-sp-12);
 }
 </style>

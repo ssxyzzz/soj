@@ -156,95 +156,95 @@ async function printPaper() {
 <style>
 .paper-view {
   min-height: 100vh;
-  padding: 24px 16px 48px;
-  background: #f3f4f6;
-  color: #1f2329;
+  padding: var(--soj-sp-24) var(--soj-sp-16) var(--soj-sp-32);
+  background: var(--soj-surface-3);
+  color: var(--soj-ink);
 }
 
 .paper-toolbar {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   max-width: 760px;
-  margin: 0 auto 16px;
+  margin: 0 auto var(--soj-sp-16);
 }
 
 .paper-btn {
-  padding: 7px 14px;
-  border: 1px solid #c9ced6;
+  padding: var(--soj-sp-8) var(--soj-sp-14);
+  border: 1px solid var(--soj-ink-3);
   border-radius: 6px;
-  background: #fff;
-  color: #1f2329;
+  background: var(--soj-white);
+  color: var(--soj-ink);
   font: inherit;
   cursor: pointer;
 }
 
 .paper-btn.is-primary {
-  border-color: #409eff;
-  background: #409eff;
-  color: #fff;
+  border-color: var(--soj-blue);
+  background: var(--soj-blue);
+  color: var(--soj-white);
 }
 
 .paper-sheet {
   box-sizing: border-box;
   max-width: 760px;
   margin: 0 auto;
-  padding: 36px 40px;
-  background: #fff;
+  padding: var(--soj-sp-32);
+  background: var(--soj-white);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
 
 .paper-head {
-  padding-bottom: 10px;
-  border-bottom: 2px solid #1f2329;
-  margin-bottom: 24px;
+  padding-bottom: var(--soj-sp-10);
+  border-bottom: 2px solid var(--soj-ink);
+  margin-bottom: var(--soj-sp-24);
 }
 
 .paper-head h1 {
-  margin: 0 0 6px;
-  font-size: 26px;
+  margin: 0 0 var(--soj-sp-6);
+  font-size: var(--soj-fs-28);
   line-height: 1.35;
 }
 
 .paper-sub {
-  color: #666;
-  font-size: 14px;
+  color: var(--soj-ink);
+  font-size: var(--soj-fs-14);
 }
 
 .paper-problem {
-  margin: 28px 0;
+  margin: var(--soj-sp-24) 0;
   break-inside: avoid;
   page-break-inside: avoid;
 }
 
 .paper-problem-title {
-  margin: 0 0 12px;
-  font-size: 26px;
+  margin: 0 0 var(--soj-sp-12);
+  font-size: var(--soj-fs-28);
   line-height: 1.4;
 }
 
 .paper-file-io {
-  margin: -4px 0 12px;
-  color: #333;
-  font-size: 14px;
+  margin: -4px 0 var(--soj-sp-12);
+  color: var(--soj-ink);
+  font-size: var(--soj-fs-14);
 }
 
 /* 标签行（v0.12 打印带来源，2026-11-01 更名「标签」）：题号标题下、文件 IO 上，弱化灰 */
 .paper-source {
-  margin: -4px 0 8px;
-  color: #555;
-  font-size: 14px;
+  margin: -4px 0 var(--soj-sp-8);
+  color: var(--soj-ink);
+  font-size: var(--soj-fs-14);
 }
 
 .paper-label {
-  margin-right: 8px;
-  color: #666;
+  margin-right: var(--soj-sp-8);
+  color: var(--soj-ink);
 }
 
 .paper-question {
-  margin: 18px 0;
+  margin: var(--soj-sp-16) 0;
   break-inside: avoid;
   page-break-inside: avoid;
 }
@@ -252,53 +252,53 @@ async function printPaper() {
 .paper-q-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  font-weight: 600;
+  gap: var(--soj-sp-8);
+  margin-bottom: var(--soj-sp-6);
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .paper-q-kind {
-  padding: 0 6px;
-  border: 1px solid #bbb;
+  padding: 0 var(--soj-sp-6);
+  border: 1px solid var(--soj-ink-3);
   border-radius: 4px;
-  color: #555;
-  font-size: 12px;
-  font-weight: 400;
+  color: var(--soj-ink);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-regular);
 }
 
 .paper-options {
-  margin: 8px 0 0;
+  margin: var(--soj-sp-8) 0 0;
   padding-left: 0;
   list-style: none;
 }
 
 .paper-options li {
-  margin: 4px 0;
+  margin: var(--soj-sp-4) 0;
 }
 
 .paper-blank {
-  margin: 10px 0;
+  margin: var(--soj-sp-10) 0;
 }
 
 .paper-blank-line {
   display: inline-block;
   width: 180px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--soj-ink);
   vertical-align: bottom;
 }
 
 .paper-status {
   max-width: 760px;
-  margin: 24px auto;
-  padding: 32px;
+  margin: var(--soj-sp-24) auto;
+  padding: var(--soj-sp-32);
   border-radius: 8px;
-  background: #fff;
-  color: #666;
+  background: var(--soj-white);
+  color: var(--soj-ink);
   text-align: center;
 }
 
 .paper-status.is-error {
-  color: #c03639;
+  color: var(--soj-danger-deep);
 }
 
 .paper-view .md-view {
@@ -323,7 +323,7 @@ async function printPaper() {
 
   .paper-view {
     padding: 0;
-    background: #fff;
+    background: var(--soj-white);
   }
 
   .paper-sheet {
@@ -333,7 +333,7 @@ async function printPaper() {
   }
 
   .paper-problem {
-    margin: 0 0 16px;
+    margin: 0 0 var(--soj-sp-16);
   }
 
   .paper-view pre,

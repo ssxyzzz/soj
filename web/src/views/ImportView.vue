@@ -382,22 +382,16 @@ const finishedIssues = computed(() =>
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .tip {
-  margin-bottom: 14px;
+  margin-bottom: var(--soj-sp-14);
   line-height: 1.7;
 }
 
 .source-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-14);
 }
 
 @media (max-width: 768px) {
@@ -408,9 +402,9 @@ const finishedIssues = computed(() =>
 
 /* v3 源卡片：14px 圆角、主蓝选中态（浅底 + 蓝边），标题藏蓝 700 */
 .source-card {
-  border: 1px solid rgba(11, 31, 69, 0.13);
+  border: 1px solid var(--soj-line-2);
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: var(--soj-sp-14) var(--soj-sp-16);
   cursor: pointer;
   transition: all 0.2s;
   background: var(--el-bg-color);
@@ -436,11 +430,11 @@ const finishedIssues = computed(() =>
   color: var(--soj-navy);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .source-hint {
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
   line-height: 1.6;
   font-size: var(--soj-fs-small);
 }
@@ -450,8 +444,8 @@ const finishedIssues = computed(() =>
 }
 
 .import-drop :deep(.el-upload-dragger) {
-  width: 100%;
-  --el-upload-dragger-padding-vertical: 18px;
+  /* 通栏已上收 main.css（v0.57）；此处只调纵向内距 */
+  --el-upload-dragger-padding-vertical: var(--soj-sp-16);
 }
 
 .drop-hint {
@@ -459,21 +453,21 @@ const finishedIssues = computed(() =>
 }
 
 .drop-hint p {
-  margin: 4px 0;
+  margin: var(--soj-sp-4) 0;
 }
 
 /* 大号上传图标块：浅蓝圆角方底 + 主蓝图标（对齐云上传参考样式），拖拽悬停微放大 */
 .drop-icon {
   width: 56px;
   height: 56px;
-  margin: 2px auto 10px;
+  margin: var(--soj-sp-2) auto var(--soj-sp-10);
   border-radius: 14px;
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 30px;
+  font-size: var(--soj-fs-30);
   transition: transform 0.15s;
 }
 
@@ -485,26 +479,26 @@ const finishedIssues = computed(() =>
 .switch-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-12);
 }
 
 .upload-progress {
-  margin-top: 14px;
+  margin-top: var(--soj-sp-14);
 }
 
 .actions {
   display: flex;
-  gap: 8px;
-  margin-top: 16px;
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-16);
 }
 
 .progress-block {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 .progress-line {
-  margin: 8px 0;
+  margin: var(--soj-sp-8) 0;
 }
 
 .progress-line b {
@@ -516,12 +510,12 @@ const finishedIssues = computed(() =>
   overflow-y: auto;
   border: 1px solid var(--el-border-color-lighter);
   border-radius: var(--el-border-radius-base);
-  padding: 8px 12px;
-  margin-top: 8px;
+  padding: var(--soj-sp-8) var(--soj-sp-12);
+  margin-top: var(--soj-sp-8);
 }
 
 .result-stream-head {
-  margin-bottom: 4px;
+  margin-bottom: var(--soj-sp-4);
   font-size: var(--soj-fs-small);
 }
 
@@ -543,7 +537,7 @@ const finishedIssues = computed(() =>
 }
 
 .fmt p {
-  margin: 0 0 10px;
+  margin: 0 0 var(--soj-sp-10);
   line-height: 1.7;
 }
 
@@ -554,11 +548,11 @@ const finishedIssues = computed(() =>
 /* ---- v3-full 导入页补充（2026-10-26 修复：本段原追加在样式块闭合标签之后、从未生效；
      容器限宽 1080 随全站页头对齐退役，导入页与各页统一 1440） ---- */
 .step-head {
-  padding: 0 0 14px;
+  padding: 0 0 var(--soj-sp-14);
 }
 
 .phase-two {
-  padding: 18px 0 10px;
+  padding: var(--soj-sp-16) 0 var(--soj-sp-10);
 }
 
 .pt-sm {
@@ -574,9 +568,9 @@ const finishedIssues = computed(() =>
 /* v3 .pstat：进度条下方三段状态行 */
 .pstat {
   display: flex;
-  gap: 14px;
+  gap: var(--soj-sp-14);
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
   font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
@@ -596,7 +590,7 @@ const finishedIssues = computed(() =>
 /* 日志窗内的行色由全局 .soj-ilog 定义；head 行弱化 */
 .soj-ilog .result-stream-head {
   color: var(--soj-code-cm);
-  margin-bottom: 4px;
+  margin-bottom: var(--soj-sp-4);
 }
 
 .soj-ilog .result-line {

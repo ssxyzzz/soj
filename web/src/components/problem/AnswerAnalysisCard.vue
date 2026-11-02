@@ -48,18 +48,18 @@ const embedSrc = computed(
   aspect-ratio: 16 / 9;
   border: 0;
   border-radius: 10px;
-  background: #000;
+  background: black;
 }
 .ans-link {
   display: block;
-  padding: 12px 14px;
+  padding: var(--soj-sp-12) var(--soj-sp-14);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--soj-blue) 7%, #fff);
+  background: color-mix(in srgb, var(--soj-blue) 7%, var(--soj-white));
   color: var(--soj-blue);
   font-weight: var(--soj-fw-emphasis);
   text-decoration: none;
 }
 .ans-link:hover {
-  background: color-mix(in srgb, var(--soj-blue) 13%, #fff);
+  background: color-mix(in srgb, var(--soj-blue) 13%, var(--soj-white));
 }
 </style>

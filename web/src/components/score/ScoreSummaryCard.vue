@@ -84,17 +84,10 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
   </RailCard>
 </template>
 <style scoped>
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .actions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 
 .list {
@@ -103,7 +96,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 }
 
 .empty {
-  padding: 8px 0;
+  padding: var(--soj-sp-8) 0;
   color: var(--el-text-color-secondary);
 }
 
@@ -111,15 +104,15 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
   display: grid;
   /* v3 .sum-li：排名 / 昵称(可截断) / 分数；圆角 10 hover 浅蓝 */
   grid-template-columns: 24px minmax(0, 1fr) 48px;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   align-items: center;
-  padding: 7px 10px;
+  padding: var(--soj-sp-8) var(--soj-sp-10); /* 7px→sp-8 就近归并 */
   border-radius: 10px;
   cursor: pointer;
 }
 
 .row + .row {
-  margin-top: 2px;
+  margin-top: var(--soj-sp-2);
 }
 
 .row:hover {
@@ -140,7 +133,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 }
 
 .rail-t-inherit {
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
 }

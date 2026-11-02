@@ -47,7 +47,7 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
   max-width: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   min-width: 0;
   vertical-align: middle;
   text-decoration: none;
@@ -55,7 +55,7 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
 
 /* 等级荣誉（v0.40）：Lv8+ 金色昵称，Lv10 极境再叠流光（reduced-motion 静止） */
 .unl-name.unl-gold {
-  background: linear-gradient(135deg, #b45309, #f59e0b 45%, #fde68a);
+  background: linear-gradient(135deg, var(--soj-warning-deep), var(--soj-warning) 45%, var(--soj-tle-bg));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -65,7 +65,14 @@ const fullText = computed(() => (props.level ? `${props.name} · ${tierText.valu
   /* 流光只换渐变图——必须用 background-image 长写：background 简写会把
      .unl-gold 已设的 background-clip:text 重置回 border-box，渐变铺满整盒、
      color:transparent 仍在 → 名字变纯色块（2026-10-31 榜单 Lv10 实锤） */
-  background-image: linear-gradient(135deg, #b45309, #f59e0b 30%, #fef3c7 50%, #f59e0b 70%, #b45309);
+  background-image: linear-gradient(
+    135deg,
+    var(--soj-warning-deep),
+    var(--soj-warning) 30%,
+    var(--soj-tle-bg) 50%,
+    var(--soj-warning) 70%,
+    var(--soj-warning-deep)
+  );
   background-size: 200% auto;
   animation: unlFlow 3s linear infinite;
 }

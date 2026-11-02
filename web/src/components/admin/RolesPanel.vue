@@ -222,11 +222,11 @@ onMounted(async () => {
 
 <style scoped>
 .role-alert {
-  margin-top: 4px;
+  margin-top: var(--soj-sp-4);
 }
 
 .perm-matrix {
-  margin-top: 12px;
+  margin-top: var(--soj-sp-12);
 }
 
 .perm-matrix :deep(.el-table__cell) {
@@ -251,15 +251,15 @@ onMounted(async () => {
   font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-primary);
   background: var(--el-color-primary-light-9);
-  margin: -8px -16px;
-  padding: 8px 16px;
+  margin: -8px -16px; /* 负边距外扩贴卡缘，与下方 padding 成对，量值同 sp-8/sp-16 */
+  padding: var(--soj-sp-8) var(--soj-sp-16);
 }
 
 .col-head {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: var(--soj-sp-2);
   line-height: 1.4;
 }
 
@@ -270,7 +270,7 @@ onMounted(async () => {
 .col-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--soj-sp-6);
 }
 
 .col-act {
@@ -300,19 +300,19 @@ onMounted(async () => {
 .perm-blocks {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   width: 100%;
 }
 
 .perm-block-title {
   font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-primary);
-  margin-bottom: 4px;
+  margin-bottom: var(--soj-sp-4);
 }
 
 .perm-group {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
+  gap: var(--soj-sp-4) var(--soj-sp-16);
 }
 </style>

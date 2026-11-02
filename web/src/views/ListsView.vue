@@ -190,16 +190,16 @@ async function create() {
 .cards {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--soj-sp-14);
 }
 
 .lhandle {
   flex: none;
   cursor: grab;
-  color: #b6c2d6;
-  font-size: 15px;
+  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-body);
   user-select: none;
-  padding: 0 2px;
+  padding: 0 var(--soj-sp-2);
 }
 
 .lhandle:hover {
@@ -207,19 +207,17 @@ async function create() {
 }
 
 .lcard {
-  padding: 22px 26px;
+  padding: var(--soj-sp-20) var(--soj-sp-24);
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: var(--soj-sp-24);
   transition: transform 0.15s, box-shadow 0.15s;
 }
 
 .lcard:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 2px 4px rgba(11, 31, 69, 0.04),
-    0 14px 36px rgba(11, 31, 69, 0.1);
+  box-shadow: var(--soj-shadow-card-hover);
 }
 
 /* 左信息块 */
@@ -228,7 +226,7 @@ async function create() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 /* 右难度分布柱状图：只画有题的档，底对齐 */
@@ -236,8 +234,8 @@ async function create() {
   flex: none;
   display: flex;
   align-items: flex-end;
-  gap: 14px;
-  padding: 0 6px;
+  gap: var(--soj-sp-14);
+  padding: 0 var(--soj-sp-6);
   align-self: stretch;
 }
 
@@ -245,13 +243,13 @@ async function create() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
   min-width: 34px;
 }
 
 .lbar-count {
-  font-size: 11.5px;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-navy);
 }
 
 .lbar-track {
@@ -268,14 +266,14 @@ async function create() {
 }
 
 .lbar-name {
-  font-size: 10.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
   white-space: nowrap;
 }
 
 .lhead {
   display: flex;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   align-items: center;
 }
 
@@ -286,9 +284,9 @@ async function create() {
   border-radius: 12px;
   display: grid;
   place-items: center;
-  font-size: 20px;
-  font-weight: 800;
-  color: #fff;
+  font-size: var(--soj-fs-20);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-white);
 }
 
 .grow {
@@ -299,29 +297,29 @@ async function create() {
 .ltitle-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .ltitle-row h3 {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-16);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .lmeta {
-  margin-top: 2px;
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  margin-top: var(--soj-sp-2);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 .lintro {
   margin: 0;
-  font-size: 13px;
-  color: var(--soj-ink-2, #22334d);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
   min-height: 36px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -333,14 +331,14 @@ async function create() {
 .lfoot {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .lpct {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   min-width: 0;
 }
 
@@ -348,7 +346,7 @@ async function create() {
   flex: 1 1 auto;
   height: 7px;
   border-radius: 999px;
-  background: #e8eef8;
+  background: var(--soj-surface-2);
   overflow: hidden;
 }
 
@@ -360,8 +358,8 @@ async function create() {
 
 .lpct-txt {
   flex: none;
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 .lacts {
@@ -371,16 +369,16 @@ async function create() {
 }
 
 .lacts .el-button + .el-button {
-  margin-left: 4px;
+  margin-left: var(--soj-sp-4);
 }
 
 .aside-card {
-  margin-bottom: 16px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 .hint {
-  margin: 10px 0 0;
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  margin: var(--soj-sp-10) 0 0;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 </style>

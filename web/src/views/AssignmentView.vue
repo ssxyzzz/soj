@@ -408,13 +408,13 @@ onMounted(() => {
 <style scoped>
 /* 「从题单复制」按钮行与下方选题器留出间距（2026-10-26：原贴在一起） */
 .copy-row {
-  margin-bottom: 10px;
+  margin-bottom: var(--soj-sp-10);
 }
 
 .title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
 }
 
@@ -436,13 +436,13 @@ onMounted(() => {
 }
 
 .intro {
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
   color: var(--el-text-color-regular);
   line-height: 1.7;
 }
 
 .block {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 

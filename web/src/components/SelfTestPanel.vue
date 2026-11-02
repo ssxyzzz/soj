@@ -170,27 +170,27 @@ async function runAll() {
 
 <style scoped>
 .stest {
-  padding: 10px 12px;
+  padding: var(--soj-sp-10) var(--soj-sp-12);
   border-radius: 12px;
-  background: #fff;
-  border: 1px solid var(--soj-line, #e6eaf2);
+  background: var(--soj-white);
+  border: 1px solid var(--soj-line);
 }
 .stest-group + .stest-group {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--soj-line, #e6eaf2);
+  margin-top: var(--soj-sp-10);
+  padding-top: var(--soj-sp-10);
+  border-top: 1px dashed var(--soj-line);
 }
 .stest-ghead {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 4px;
+  gap: var(--soj-sp-10);
+  margin-bottom: var(--soj-sp-4);
   min-height: 24px;
 }
 .stest-gtitle {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--soj-ink-2, #475569);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-ink-2);
 }
 .stest-del {
   margin-left: auto;
@@ -198,54 +198,54 @@ async function runAll() {
 .stest-io {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 .stest-block {
   min-width: 0;
 }
 .stest-label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--soj-ink-3, #64748b);
-  margin-bottom: 4px;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-ink-3);
+  margin-bottom: var(--soj-sp-4);
 }
 .stest-act {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  gap: var(--soj-sp-10);
+  margin-top: var(--soj-sp-10);
 }
 .stest-act-right {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 .stest-meta {
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #64748b);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 .stest-meta .pass {
-  color: var(--soj-success, #3cb371);
+  color: var(--soj-success);
 }
 .stest-meta .fail {
-  color: var(--soj-danger, #ff6b6b);
+  color: var(--soj-danger);
 }
 .stest-out,
 .stest-err {
-  margin: 8px 0 0;
-  padding: 8px 10px;
+  margin: var(--soj-sp-8) 0 0;
+  padding: var(--soj-sp-8) var(--soj-sp-10);
   max-height: 140px;
   overflow: auto;
   border-radius: 8px;
-  background: #f6f8fb;
+  background: var(--soj-surface-2);
   font-family: JetBrains Mono, Consolas, monospace;
-  font-size: 12.5px;
+  font-size: var(--soj-fs-12);
   white-space: pre-wrap;
   word-break: break-all;
 }
 .stest-err {
-  background: #fff4f4;
-  color: #b4443c;
+  background: var(--soj-wa-bg); /* 浅红底就近归并 wa-bg */
+  color: var(--soj-danger-deep);
 }
 </style>

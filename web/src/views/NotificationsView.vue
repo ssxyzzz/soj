@@ -162,19 +162,19 @@ onMounted(() => {
 .nc-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   flex-wrap: wrap;
 }
 .nc-item {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: var(--soj-sp-12);
+  padding: var(--soj-sp-12) var(--soj-sp-14);
   border: 1px solid var(--soj-line);
   border-radius: 10px;
-  margin-bottom: 8px;
+  margin-bottom: var(--soj-sp-8);
   cursor: pointer;
-  background: var(--el-bg-color, #fff);
+  background: var(--el-bg-color);
   transition: border-color 0.15s;
 }
 .nc-item:hover {
@@ -184,7 +184,7 @@ onMounted(() => {
   border-left: 3px solid var(--soj-blue);
 }
 .nc-icon {
-  font-size: 18px;
+  font-size: var(--soj-fs-18);
   line-height: 1.4;
 }
 .nc-body {
@@ -194,10 +194,10 @@ onMounted(() => {
 .nc-row1 {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 .nc-title-text {
-  font-weight: var(--soj-fw-emphasis, 600);
+  font-weight: var(--soj-fw-emphasis);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -210,21 +210,21 @@ onMounted(() => {
   flex-shrink: 0;
 }
 .nc-text {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
-  margin-top: 2px;
+  margin-top: var(--soj-sp-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .nc-time {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
   white-space: nowrap;
 }
 .nc-more {
   display: flex;
   justify-content: center;
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
 }
 </style>

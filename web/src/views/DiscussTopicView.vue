@@ -74,6 +74,6 @@ watch(
 
 <style scoped>
 .dtv-back {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 </style>

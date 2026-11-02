@@ -261,21 +261,21 @@ function openContest(c: ContestListItem) {
 <style scoped>
 /* 全局 .soj-seg 已接管形态，这里只补页面下边距 */
 .page-seg {
-  margin-bottom: 18px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 /* v3 横条卡片行 */
 .crowd {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 .crow {
   display: flex;
   align-items: center;
-  gap: 18px;
-  padding: 18px 22px;
+  gap: var(--soj-sp-16);
+  padding: var(--soj-sp-16) var(--soj-sp-20);
   cursor: pointer;
   transition:
     transform 0.18s,
@@ -284,22 +284,20 @@ function openContest(c: ContestListItem) {
 
 .crow:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 2px 4px rgba(11, 31, 69, 0.04),
-    0 16px 40px rgba(11, 31, 69, 0.1);
+  box-shadow: var(--soj-shadow-card-hover);
 }
 
 .crow h3 {
-  font-size: 16px;
+  font-size: var(--soj-fs-16);
   font-weight: var(--soj-fw-heavy);
   color: var(--soj-navy);
   letter-spacing: -0.2px;
 }
 
 .crow .meta {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
-  margin-top: 3px;
+  margin-top: var(--soj-sp-4);
 }
 
 .crow .grow {
@@ -309,26 +307,26 @@ function openContest(c: ContestListItem) {
 
 .crow .when {
   text-align: right;
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
   flex: none;
 }
 
 .crow .when b {
   display: block;
-  font-size: 14px;
+  font-size: var(--soj-fs-14);
   color: var(--soj-navy);
-  font-weight: 700;
+  font-weight: var(--soj-fw-bold);
 }
 
 /* 迷你状态点标（v3 mini-tag）：圆点 + 文字浅胶囊 */
 .mini-tag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 3px 11px;
+  gap: var(--soj-sp-6);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  padding: var(--soj-sp-4) var(--soj-sp-12);
   border-radius: 999px;
   white-space: nowrap;
   flex: none;
@@ -362,16 +360,16 @@ function openContest(c: ContestListItem) {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   line-height: 1.7;
-  margin: 10px 0 0;
+  margin: var(--soj-sp-10) 0 0;
 }
 
 .hint.center {
   text-align: center;
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
 }
 
 .rule-text p {
-  margin: 0 0 6px;
+  margin: 0 0 var(--soj-sp-6);
   line-height: 1.6;
 }
 

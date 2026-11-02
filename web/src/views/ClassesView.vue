@@ -307,23 +307,23 @@ onMounted(load)
 
 <style scoped>
 .card {
-  margin-bottom: 16px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 .name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
 }
 
 /* 置顶钮与六点手柄（2026-10-26 拍板）：各自锚定所在行右缘垂直居中——置顶对齐
    名称行、六点对齐信息行；同宽盒子（20px）同 right 锚点保证竖对齐同列。
-   行右侧预留 26px，长名称/长信息不钻到图标下面 */
+   行右侧预留 var(--soj-sp-24)，长名称/长信息不钻到图标下面 */
 .name-row,
 .meta {
   position: relative;
-  padding-right: 26px;
+  padding-right: var(--soj-sp-24);
 }
 
 /* 置顶钮（仅已入班）：置顶态全彩，未置顶灰度 */
@@ -339,7 +339,7 @@ onMounted(load)
   justify-content: center;
   border: 0;
   background: transparent;
-  font-size: 14px;
+  font-size: var(--soj-fs-14);
   line-height: 1;
   cursor: pointer;
   opacity: 0.35;
@@ -389,12 +389,12 @@ onMounted(load)
   transform: translateY(-2px);
 }
 
-/* v3 clcard：班级名藏蓝 17/800（2026-10-25 用户反馈关键信息偏小上调），hover 主蓝 */
+/* v3 clcard：班级名藏蓝 fs-16/heavy（2026-10-25 用户反馈关键信息偏小上调），hover 主蓝 */
 .name {
   margin: 0;
   cursor: pointer;
   color: var(--soj-navy);
-  font-size: 17px;
+  font-size: var(--soj-fs-16);
   font-weight: var(--soj-fw-heavy);
 }
 
@@ -406,10 +406,10 @@ onMounted(load)
 .cl-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
   font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
-  padding: 1px 9px;
+  padding: var(--soj-sp-2) var(--soj-sp-8);
   border-radius: 999px;
   flex: none;
 }
@@ -426,7 +426,7 @@ onMounted(load)
 
 .intro {
   color: var(--soj-ink-2);
-  margin: 6px 0 8px;
+  margin: var(--soj-sp-6) 0 var(--soj-sp-8);
   font-size: var(--soj-fs-14);
   line-height: 1.7;
   display: -webkit-box;
@@ -437,25 +437,25 @@ onMounted(load)
 
 .meta {
   display: flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   align-items: center;
   flex-wrap: wrap;
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-2);
-  margin-top: 2px;
+  margin-top: var(--soj-sp-2);
 }
 
 .hint {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   line-height: 1.7;
-  margin: 10px 0 0;
+  margin: var(--soj-sp-10) 0 0;
 }
 
 .top-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   margin-left: auto;
   flex-shrink: 0;
 }

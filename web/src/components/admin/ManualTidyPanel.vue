@@ -239,14 +239,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
-}
-
 .search {
   width: 240px;
 }
@@ -258,12 +250,12 @@ onMounted(() => {
 .pager-row {
   display: flex;
   justify-content: center;
-  margin-top: 12px;
+  margin-top: var(--soj-sp-12);
 }
 
 .note {
-  margin-top: 10px;
-  font-size: var(--soj-fs-secondary, 13px);
+  margin-top: var(--soj-sp-10);
+  font-size: var(--soj-fs-13); /* --soj-fs-secondary 未定义，原兜底 13px 即 fs-13 */
 }
 
 .muted {

@@ -404,8 +404,8 @@ defineExpose({ validate, blankDraft })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-12);
 }
 
 .obj-editor-title {
@@ -415,23 +415,23 @@ defineExpose({ validate, blankDraft })
 .obj-editor-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .obj-q {
-  margin-bottom: 14px;
+  margin-bottom: var(--soj-sp-14);
   border: 1px solid var(--el-border-color-lighter);
 }
 
 .obj-q :deep(.el-card__header) {
-  padding: 10px 14px;
+  padding: var(--soj-sp-10) var(--soj-sp-14);
   background: var(--el-fill-color-lighter);
 }
 
 .obj-q-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   flex-wrap: wrap;
 }
 
@@ -443,7 +443,7 @@ defineExpose({ validate, blankDraft })
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 
 .obj-score-input {
@@ -459,8 +459,8 @@ defineExpose({ validate, blankDraft })
 .obj-blank-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--soj-sp-8);
+  margin-bottom: var(--soj-sp-8);
   width: 100%;
 }
 
@@ -470,6 +470,6 @@ defineExpose({ validate, blankDraft })
 }
 
 .obj-hint {
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
 }
 </style>

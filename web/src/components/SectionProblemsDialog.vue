@@ -287,8 +287,8 @@ function removeAt(i: number) {
 .spd-nav {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-10);
 }
 
 .spd-pos {
@@ -297,13 +297,13 @@ function removeAt(i: number) {
 }
 
 .spd-search {
-  margin-bottom: 10px;
+  margin-bottom: var(--soj-sp-10);
 }
 
 .spd-cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: var(--soj-sp-14);
   min-width: 0;
 }
 
@@ -314,14 +314,14 @@ function removeAt(i: number) {
 .col-head {
   color: var(--el-text-color-secondary);
   font-size: var(--soj-fs-small);
-  margin-bottom: 6px;
+  margin-bottom: var(--soj-sp-6);
 }
 
 .spd-cand-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .spd-list {
@@ -335,8 +335,8 @@ function removeAt(i: number) {
 .spd-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 12px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-8) var(--soj-sp-12);
   cursor: pointer;
   border-bottom: 1px solid var(--el-fill-color);
 }
@@ -368,7 +368,7 @@ function removeAt(i: number) {
   color: var(--el-text-color-secondary);
   background: var(--el-fill-color);
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: var(--soj-sp-2) var(--soj-sp-8);
 }
 
 .drag {

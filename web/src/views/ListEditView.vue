@@ -11,6 +11,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import MdEditor from '@/components/MdEditor.vue'
 import InlineEdit from '@/components/InlineEdit.vue'
+import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import SectionProblemsDialog from '@/components/SectionProblemsDialog.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
@@ -369,8 +370,8 @@ async function removeList() {
       <h1 class="page-title">编辑题单<small>章节最多两层 · 单章不混挂 · 点小节行管理题目</small></h1>
     </div>
 
-    <div class="edit-layout">
-      <div class="edit-main">
+    <PageShell>
+      <div>
         <div class="card meta-card">
           <el-input v-model="title" maxlength="64" placeholder="题单名（1-64 字）" class="title-input" />
           <div class="intro-wrap">
@@ -481,7 +482,8 @@ async function removeList() {
         </div>
       </div>
 
-      <aside class="edit-aside">
+      <template #aside>
+        <div class="edit-aside">
         <RailCard ov="管理" title="题单管理" class="aside-card">
           <div class="mgmt-actions">
             <el-button type="primary" :loading="saving" @click="save">
@@ -514,8 +516,9 @@ async function removeList() {
             </button>
           </div>
         </RailCard>
-      </aside>
-    </div>
+        </div>
+      </template>
+    </PageShell>
 
     <SectionProblemsDialog
       :chs="chs"
@@ -528,56 +531,35 @@ async function removeList() {
 
 <style scoped>
 .meta-card {
-  padding: 16px 20px;
-  margin-bottom: 16px;
+  padding: var(--soj-sp-16) var(--soj-sp-20);
+  margin-bottom: var(--soj-sp-16);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
-.edit-layout {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-}
-
-.edit-main {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
+/* 副列吸顶（PageShell side-col 内；窄屏折叠由 PageShell 自理，此处只复位吸附） */
 .edit-aside {
-  flex: 0 0 320px;
-  width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
   position: sticky;
-  top: 84px;
+  top: var(--soj-sticky-top);
 }
 
 @media (max-width: 992px) {
-  .edit-layout {
-    flex-direction: column;
-  }
-
   .edit-aside {
-    width: auto;
-    flex: 1 1 auto;
     position: static;
   }
 }
 
 /* ---- 章节大纲 ---- */
 .outline-card {
-  padding: 16px 20px;
+  padding: var(--soj-sp-16) var(--soj-sp-20);
 }
 
 .outline-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: var(--soj-sp-10);
+  margin-bottom: var(--soj-sp-12);
 }
 
 .outline-head b {
@@ -591,8 +573,8 @@ async function removeList() {
 .ol-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 12px;
+  gap: var(--soj-sp-10);
+  padding: var(--soj-sp-8) var(--soj-sp-12);
   border: 1px solid transparent;
   border-radius: var(--el-border-radius-base);
   cursor: pointer;
@@ -632,7 +614,7 @@ async function removeList() {
 }
 
 .ol-row.sec-row {
-  margin-left: 34px;
+  margin-left: var(--soj-sp-32);
 }
 
 .drag {
@@ -689,11 +671,11 @@ async function removeList() {
 }
 
 .ol-acts .el-button + .el-button {
-  margin-left: 8px;
+  margin-left: var(--soj-sp-8);
 }
 
 .outline-hint {
-  margin: 12px 2px 0;
+  margin: var(--soj-sp-12) var(--soj-sp-2) 0;
   font-size: var(--soj-fs-13);
 }
 
@@ -701,7 +683,7 @@ async function removeList() {
 .mgmt-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .mgmt-actions .el-button {
@@ -711,7 +693,7 @@ async function removeList() {
 
 .save-state {
   min-height: 18px;
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
   font-size: var(--soj-fs-13);
   text-align: center;
 }
@@ -721,8 +703,8 @@ async function removeList() {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #fff;
-  margin-left: 6px;
+  background: var(--soj-white);
+  margin-left: var(--soj-sp-6);
   vertical-align: middle;
 }
 
@@ -733,14 +715,14 @@ async function removeList() {
 .aside-divider {
   height: 1px;
   background: var(--soj-line);
-  margin: 12px 0;
+  margin: var(--soj-sp-12) 0;
 }
 
 /* 章节目录（迷你导航） */
 .toc {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--soj-sp-2);
   max-height: 420px;
   overflow-y: auto;
 }
@@ -748,11 +730,11 @@ async function removeList() {
 .toc-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   border: none;
   background: transparent;
   text-align: left;
-  padding: 6px 8px;
+  padding: var(--soj-sp-6) var(--soj-sp-8);
   border-radius: var(--el-border-radius-base);
   cursor: pointer;
   font-size: var(--soj-fs-13);
@@ -764,7 +746,7 @@ async function removeList() {
 }
 
 .toc-row.d-1 {
-  margin-left: 18px;
+  margin-left: var(--soj-sp-16);
 }
 
 .toc-no {

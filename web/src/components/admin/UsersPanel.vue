@@ -589,7 +589,7 @@ defineExpose({ refresh: () => load() })
 
     <!-- 批量建号·中文花名册（v0.34 两段式）：上传识别 → 预览确认（id/用户名可改）→ 建号导出 -->
     <el-dialog v-model="showImport" title="批量导入用户" width="920" @closed="resetImport">
-      <el-steps :active="importStep" align-finish style="margin-bottom: 16px">
+      <el-steps :active="importStep" align-finish style="margin-bottom: var(--soj-sp-16)">
         <el-step title="上传花名册" />
         <el-step title="预览确认" />
         <el-step title="建号完成" />
@@ -601,9 +601,9 @@ defineExpose({ refresh: () => load() })
           title="下载模板 → 填写花名册（id、姓名必填；性别/年级/学校/地区/角色选填）→ 上传识别"
           type="info"
           :closable="false"
-          style="margin-bottom: 14px"
+          style="margin-bottom: var(--soj-sp-14)"
         />
-        <p class="dim" style="margin: 0 0 10px">
+        <p class="dim" style="margin: 0 0 var(--soj-sp-10)">
           用户名默认 = 姓名拼音 + id（张三 1001 → zhangsan1001，多音字可在预览里改）；初始密码每人随机生成
           （密码列填了用填的），建号后导出表格发放；id 即站内用户 ID，可留空自动顺延分配（预览表可见可改，与已占用号冲突会标红提示）。
           支持 GBK/UTF-8 编码（Excel 直接另存的 CSV 可用）。
@@ -637,7 +637,7 @@ defineExpose({ refresh: () => load() })
           <el-table-column label="ID" width="130">
             <template #default="{ row }">
               <el-input v-model.number="row.id" size="small" :disabled="!!row.problems?.length" style="width: 78px" />
-              <el-tag v-if="row.auto_id" size="small" type="info" style="margin-left: 4px">自动</el-tag>
+              <el-tag v-if="row.auto_id" size="small" type="info" style="margin-left: var(--soj-sp-4)">自动</el-tag>
             </template>
           </el-table-column>
           <el-table-column label="姓名" prop="name" width="90" show-overflow-tooltip />
@@ -653,7 +653,7 @@ defineExpose({ refresh: () => load() })
           <el-table-column label="初始密码" prop="password" width="110" />
           <el-table-column label="问题" min-width="150">
             <template #default="{ row }">
-              <el-tag v-for="p in row.problems" :key="p" type="danger" size="small" style="margin-right: 4px">
+              <el-tag v-for="p in row.problems" :key="p" type="danger" size="small" style="margin-right: var(--soj-sp-4)">
                 {{ p }}
               </el-tag>
             </template>
@@ -671,7 +671,7 @@ defineExpose({ refresh: () => load() })
         <el-button type="success" :disabled="!importResult?.success" @click="exportAccounts">
           ⬇ 导出已建账号（用户名 / ID / 姓名 / 初始密码）
         </el-button>
-        <el-table v-if="importResult?.failed.length" :data="importResult.failed" size="small" max-height="240" style="margin-top: 10px">
+        <el-table v-if="importResult?.failed.length" :data="importResult.failed" size="small" max-height="240" style="margin-top: var(--soj-sp-10)">
           <el-table-column label="表格行号" prop="row" width="90" />
           <el-table-column label="用户名" prop="username" width="180" show-overflow-tooltip />
           <el-table-column label="失败原因" prop="reason" min-width="200" show-overflow-tooltip />
@@ -709,7 +709,7 @@ defineExpose({ refresh: () => load() })
             placeholder="留空自动分配"
             style="width: 240px"
           />
-          <span class="dim" style="margin-left: 8px">留空自动分配（起点见系统设置）；手动指定后后续自动取号会避开该号</span>
+          <span class="dim" style="margin-left: var(--soj-sp-8)">留空自动分配（起点见系统设置）；手动指定后后续自动取号会避开该号</span>
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="createForm.role" style="width: 100%">
@@ -850,13 +850,13 @@ defineExpose({ refresh: () => load() })
 <style scoped>
 /* v3 panel-h 头部：标题 + 计数 + 右侧动作（搜索胶囊 + 新建） */
 .panel-head {
-  padding: 16px 20px;
+  padding: var(--soj-sp-16) var(--soj-sp-20);
 }
 
 .head-search {
   height: 36px;
   width: 260px;
-  padding: 0 14px;
+  padding: 0 var(--soj-sp-14);
 }
 
 .count {
@@ -871,9 +871,9 @@ defineExpose({ refresh: () => load() })
 .group-h {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   width: 100%;
-  padding: 10px 6px;
+  padding: var(--soj-sp-10) var(--soj-sp-6);
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -907,22 +907,21 @@ defineExpose({ refresh: () => load() })
 .xp-current {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-14);
 }
 
 /* 编辑弹窗账号字段两列排（加宽后用满 720） */
 .edit-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  column-gap: 18px;
-}
+  column-gap: var(--soj-sp-16); /* 18px→sp-16 就近 */}
 
 /* 经验/玉调整行：数值 | 原因 | 提交，一行放下 */
 .adj-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .adj-row .el-input {
@@ -930,8 +929,8 @@ defineExpose({ refresh: () => load() })
 }
 
 .adj-hint {
-  margin: 6px 0 0;
-  font-size: 12px;
+  margin: var(--soj-sp-6) 0 0;
+  font-size: var(--soj-fs-12);
 }
 
 /* 绑定信息行（v0.16）：信息在左、root 解绑按钮在右 */
@@ -939,7 +938,7 @@ defineExpose({ refresh: () => load() })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   width: 100%;
 }
 
@@ -955,12 +954,12 @@ defineExpose({ refresh: () => load() })
 .import-actions {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 .import-summary {
-  font-size: 14px;
-  margin: 0 0 10px;
+  font-size: var(--soj-fs-14);
+  margin: 0 0 var(--soj-sp-10);
 }
 
 .import-summary .ok {

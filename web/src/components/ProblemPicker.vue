@@ -145,7 +145,7 @@ onMounted(search)
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  padding: 8px 12px;
+  padding: var(--soj-sp-8) var(--soj-sp-12);
   background: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
 }
@@ -160,14 +160,14 @@ onMounted(search)
 }
 
 .picker-search {
-  margin-bottom: 8px;
+  margin-bottom: var(--soj-sp-8);
 }
 
 .picker-cols {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-top: 8px;
+  gap: var(--soj-sp-12);
+  margin-top: var(--soj-sp-8);
   min-width: 0;
 }
 
@@ -178,7 +178,7 @@ onMounted(search)
 .col-head {
   color: var(--el-text-color-secondary);
   font-size: var(--soj-fs-small);
-  margin-bottom: 6px;
+  margin-bottom: var(--soj-sp-6);
 }
 
 .cand-list,
@@ -193,8 +193,8 @@ onMounted(search)
 .cand-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-6) var(--soj-sp-12);
   cursor: pointer;
   border-bottom: 1px solid var(--el-fill-color);
 }
@@ -218,8 +218,8 @@ onMounted(search)
 .adjust-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
+  gap: var(--soj-sp-10);
+  padding: var(--soj-sp-6) var(--soj-sp-12);
   border-bottom: 1px solid var(--el-fill-color);
   cursor: grab;
   background: var(--el-bg-color);

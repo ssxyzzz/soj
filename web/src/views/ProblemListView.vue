@@ -590,14 +590,7 @@ onMounted(() => {
   transform: scale(1.35);
 }
 
-/* v3 toolbar：搜索胶囊撑满剩余宽 + chips 一排 */
-.toolbar {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
+/* toolbar 形态收编全局 .toolbar（flex/wrap/gap/mb），本地只留增量 */
 
 .search-pill {
   flex: 1;
@@ -625,8 +618,8 @@ onMounted(() => {
 
 /* chip 展开面板（难度胶囊行 / 知识点卡片流 / 标签卡片流） */
 .panel-row {
-  margin-bottom: 16px;
-  padding: 12px 14px;
+  margin-bottom: var(--soj-sp-16);
+  padding: var(--soj-sp-12) var(--soj-sp-14);
   background: var(--el-fill-color-light);
   border-radius: 14px;
 }
@@ -646,7 +639,7 @@ onMounted(() => {
 }
 
 .tag-col-toggle .slash {
-  padding: 0 1px;
+  padding: 0 var(--soj-sp-2);
   opacity: 0.45;
 }
 
@@ -673,7 +666,7 @@ onMounted(() => {
 .diff-panel {
   display: flex;
   align-items: center;
-  gap: 4px 12px;
+  gap: var(--soj-sp-4) var(--soj-sp-12);
   width: fit-content;
   max-width: 100%;
 }
@@ -684,7 +677,7 @@ onMounted(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .diff-chip {
@@ -701,7 +694,7 @@ onMounted(() => {
 }
 
 .diff-chip.sel.diff-tag {
-  background: color-mix(in srgb, var(--dc) 20%, #ffffff);
+  background: color-mix(in srgb, var(--dc) 20%, var(--soj-white));
   border-color: var(--dc);
   box-shadow: inset 0 0 0 1px var(--dc);
 }
@@ -710,7 +703,7 @@ onMounted(() => {
 .state-panel {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .state-chip {
@@ -721,7 +714,7 @@ onMounted(() => {
 .adv-inline {
   display: flex;
   align-items: center;
-  gap: 8px 10px;
+  gap: var(--soj-sp-8) var(--soj-sp-10);
   flex-wrap: wrap;
 }
 
@@ -748,9 +741,9 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-  padding-bottom: 2px;
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-16);
+  padding-bottom: var(--soj-sp-2);
 }
 
 /* 自拼的首页/末页按钮：对齐 EP 分页按钮的盒子——32px 圆角方块（radius 10px 同
@@ -777,7 +770,7 @@ onMounted(() => {
 
 .pager-meta {
   text-align: center;
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
 }
 
 /* v3 .hint：副列卡说明文字 */
@@ -785,36 +778,36 @@ onMounted(() => {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   line-height: 1.7;
-  margin: 10px 0 0;
+  margin: var(--soj-sp-10) 0 0;
 }
 
 /* 难度说明逐档行：徽章 + 文案基线对齐（徽章随首行，文案折行不拽偏徽章） */
 .diff-note {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  margin-top: 10px;
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-10);
 }
 
 .diff-note .hint {
   margin: 0;
 }
 
-/* 卡内二级标题「关于题库」：字体同卡片标题 .rail-t（15/700 藏蓝） */
+/* 卡内二级标题「关于题库」：字体同卡片标题 .rail-t（fs-body/bold 藏蓝） */
 .about-t {
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 /* v3 .spark：七天提交柱状（18% 主蓝柱，峰值格渐变高亮） */
 .spark {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   height: 44px;
-  margin-top: 14px;
+  margin-top: var(--soj-sp-14);
 }
 
 .spark i {
@@ -830,14 +823,14 @@ onMounted(() => {
 }
 
 .spark-hint {
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
 }
 
-/* 常用标签 chips 换行间距（v3 tagchip margin 2px 4px 2px 0） */
+/* 常用标签 chips 换行间距（v3 tagchip margin sp-2 sp-4 sp-2 0） */
 /* 常用标签：五级层级色与题库列表统一（修复⑰，--lv 由全局 .lv-N 注入）；
    .on 选中态沿用筛选 chips 口径（主蓝底白字），优先级压过层级色 */
 .tagwrap {
-  margin: 2px 4px 2px 0;
+  margin: var(--soj-sp-2) var(--soj-sp-4) var(--soj-sp-2) 0;
   color: var(--lv);
   background: var(--lv-bg);
   border-color: var(--lv-border);
@@ -850,7 +843,7 @@ onMounted(() => {
 }
 
 .tagwrap.on {
-  color: #fff;
+  color: var(--soj-white);
   background: var(--soj-blue);
   border-color: var(--soj-blue);
 }

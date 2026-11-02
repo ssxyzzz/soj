@@ -167,30 +167,23 @@ function diffChipClass(i: number): Record<string, boolean> {
 <style scoped>
 /* 双页签（用户等级/难度等级）：形制同题目管理的知识树/标签树切换 */
 .levels-tabs {
-  margin-bottom: 12px;
-}
-
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  margin-bottom: var(--soj-sp-12);
 }
 
 .section-title {
-  font-weight: var(--soj-fw-emphasis);
-  margin: 18px 0 10px;
+  margin: var(--soj-sp-16) 0 var(--soj-sp-10);
 }
 
 .names-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px 14px;
+  gap: var(--soj-sp-10) var(--soj-sp-14);
 }
 
 .name-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 /* 预览 chip：v3-full 静态浅色胶囊（底/边/字由全局 ulv、diff 两族注入），仅定形制 */
@@ -201,7 +194,7 @@ function diffChipClass(i: number): Record<string, boolean> {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 10px;
+  padding: var(--soj-sp-2) var(--soj-sp-10);
   border-radius: 999px;
   font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
@@ -210,32 +203,32 @@ function diffChipClass(i: number): Record<string, boolean> {
 .thresholds-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px 14px;
+  gap: var(--soj-sp-10) var(--soj-sp-14);
 }
 
 /* 与名称区 name-cell 同构：色块 chip（Lv.2–10）+ 输入框一行排布 */
 .threshold-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .decay-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 /* 逐档难度说明：色块 chip + 单行输入，一行一档 */
 .notes-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .note-cell {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 </style>

@@ -36,12 +36,12 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .label-with-tip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 </style>

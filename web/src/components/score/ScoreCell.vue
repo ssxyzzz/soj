@@ -45,10 +45,10 @@ function onClick() {
   justify-content: center;
   min-width: 36px;
   height: 26px;
-  padding: 0 7px;
+  padding: 0 var(--soj-sp-8); /* 7px→sp-8 就近归并 */
   border-radius: 8px;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
   line-height: 1;
   text-align: center;
@@ -89,7 +89,7 @@ function onClick() {
   right: 4px;
   bottom: 2px;
   color: var(--soj-wa);
-  font-size: 10px;
+  font-size: var(--soj-fs-9); /* 语义档：分数错误角标专用 */
   font-weight: var(--soj-fw-bold);
   line-height: 1;
   pointer-events: none;

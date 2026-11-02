@@ -158,19 +158,19 @@ const particles = computed(() => {
   text-shadow: none;
 }
 
-/* sm = v3 .tier 基准档（12px/700，2px 10px）——表格/榜单/顶栏通用 */
+/* sm = v3 .tier 基准档（--soj-fs-12/--soj-fw-bold，--soj-sp-2/--soj-sp-10）——表格/榜单/顶栏通用 */
 .tier-sm {
   font-size: var(--soj-fs-12);
-  padding: 2px 10px;
+  padding: var(--soj-sp-2) var(--soj-sp-10);
 }
 
 .tier-md {
   font-size: var(--soj-fs-13);
-  padding: 3px 11px;
+  padding: var(--soj-sp-4) var(--soj-sp-12);
 }
 
 .tier-lg {
-  font-size: 15px;
-  padding: 4px 14px;
+  font-size: var(--soj-fs-body);
+  padding: var(--soj-sp-4) var(--soj-sp-14);
 }
 </style>

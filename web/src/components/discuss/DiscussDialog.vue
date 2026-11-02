@@ -102,6 +102,6 @@ function onPosted(id: number) {
 
 <style scoped>
 .dlg-back {
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
 }
 </style>

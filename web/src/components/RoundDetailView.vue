@@ -281,7 +281,7 @@ onMounted(() => {
   <div v-loading="loading">
     <PageShell v-if="round">
       <!-- 名称卡：名称 20px + 说明（说明不再单独成卡） -->
-      <el-card :body-style="{ padding: '22px 26px' }">
+      <el-card :body-style="{ padding: 'var(--soj-sp-20) var(--soj-sp-24)' }">
         <div class="round-body">
           <div class="title-row">
             <span class="big-title">{{ round.title }}</span>
@@ -377,7 +377,7 @@ onMounted(() => {
         <!-- 时间卡（v3：countdown 浅底虚线框 + 渐变进度条 + 起止行） -->
         <RailCard ov="时间" title="剩余时间" class="aside-card">
           <div class="soj-countdown">{{ countdownLabel }}</div>
-          <div class="soj-pbar" style="margin-top: 10px"><i :style="{ width: `${progressPct}%` }" /></div>
+          <div class="soj-pbar" style="margin-top: var(--soj-sp-10)"><i :style="{ width: `${progressPct}%` }" /></div>
           <div class="range dim">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }} · {{ progressHint }}</div>
         </RailCard>
 
@@ -451,7 +451,7 @@ onMounted(() => {
 .title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
 }
 
@@ -469,23 +469,23 @@ onMounted(() => {
 }
 
 .intro {
-  margin: 12px 0 4px;
+  margin: var(--soj-sp-12) 0 var(--soj-sp-4);
   color: var(--el-text-color-regular);
 }
 
 .meta {
   display: flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
 }
 
 .block {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 .mt8 {
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
 }
 
 /* v3 .tc-range：起止时间行 */
@@ -493,6 +493,6 @@ onMounted(() => {
   font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
   text-align: center;
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
 }
 </style>

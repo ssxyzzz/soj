@@ -15,6 +15,7 @@ import { downloadFile } from '@/api/download'
 
 import MdEditor from '@/components/MdEditor.vue'
 import ObjectiveEditor from '@/components/ObjectiveEditor.vue'
+import PageShell from '@/components/PageShell.vue'
 import TierBadge from '@/components/TierBadge.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import { useLevelsStore } from '@/stores/levels'
@@ -306,9 +307,10 @@ function onSubmitClick() {
 </script>
 
 <template>
-  <!-- 单 el-form 跨主/右两列：卡片只是字段分组容器，校验与 payload 统一 -->
+  <!-- 单 el-form 跨主/右两列：卡片只是字段分组容器，校验与 payload 统一
+      （el-form 校验上下文走 provide/inject，跨 PageShell 插槽不断） -->
   <el-form v-loading="saving" class="pf" label-position="top">
-    <div class="pf-layout">
+    <PageShell>
       <div class="pf-main">
         <!-- ① 题目身份 -->
         <el-card class="form-card">
@@ -409,8 +411,8 @@ function onSubmitClick() {
           <div class="cat-summary">
             <span class="dim">已选：</span>
             <span v-if="form.tag_ids.length" class="sum-item"><i class="sum-dot" style="background: var(--el-color-primary)" />知识点：{{ knowledgeNames.join(' · ') }}</span>
-            <span v-if="form.meta_tag_ids.length" class="sum-item"><i class="sum-dot" style="background: #0e7a9c" />标签：{{ metaNames.join(' · ') }}</span>
-            <span class="sum-item"><i class="sum-dot" style="background: #d99141" />难度：{{ difficultyName }}</span>
+            <span v-if="form.meta_tag_ids.length" class="sum-item"><i class="sum-dot" style="background: var(--soj-teal-deep)" />标签：{{ metaNames.join(' · ') }}</span>
+            <span class="sum-item"><i class="sum-dot" style="background: var(--soj-d3)" />难度：{{ difficultyName }}</span>
           </div>
         </el-card>
 
@@ -447,7 +449,8 @@ function onSubmitClick() {
         </el-card>
       </div>
 
-      <div class="pf-aside">
+      <template #aside>
+        <div class="pf-aside">
         <!-- 发布 -->
         <el-card class="form-card">
           <div class="card-head">
@@ -727,7 +730,8 @@ function onSubmitClick() {
 
         <slot name="aside-bottom" />
       </div>
-    </div>
+      </template>
+    </PageShell>
   </el-form>
 </template>
 
@@ -741,8 +745,8 @@ function onSubmitClick() {
 .obj-blank-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--soj-sp-8);
+  margin-bottom: var(--soj-sp-8);
   width: 100%;
 }
 
@@ -754,7 +758,7 @@ function onSubmitClick() {
 .obj-blank-ops {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--soj-sp-16);
 }
 
 /* 表单标签不加粗（Ant：标签与正文同字重 400，颜色不降档） */
@@ -763,44 +767,30 @@ function onSubmitClick() {
   color: var(--el-text-color-primary);
 }
 
-/* 主/右两列：结构对齐 PageShell（1440 + 右列 320）；el-form 跨列保统一校验 */
-.pf-layout {
-  max-width: 1440px;
-  margin: 0 auto;
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-}
-
+/* 主/右两列骨架走 PageShell（容器 1440 + 右列 320 + 窄屏折叠全由它管）；
+   这里只管列内排布与副列吸顶 */
 .pf-main {
-  flex: 1 1 auto;
-  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--soj-sp-20);
 }
 
 .pf-aside {
-  flex: 0 0 320px;
-  width: 320px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--soj-sp-20);
   position: sticky;
-  top: 84px;
+  top: var(--soj-sticky-top);
 }
 
-/* 纵向按钮组：EP 默认给相邻按钮 margin-left: 12px，纵向排列会把下面的按钮顶离中线 */
-.pf :deep(.entry-actions .el-button + .el-button) {
-  margin-left: 0;
-}
+/* 纵向按钮组 margin 复位已上收 main.css .entry-actions（v0.57） */
 
 /* ---- 卡片头（图标 + 标题 + 副标题，preview 基准样式）---- */
 .card-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-16);
 }
 
 .card-ico {
@@ -837,25 +827,25 @@ function onSubmitClick() {
 .cat-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
+  gap: var(--soj-sp-2);
   background: var(--el-fill-color-light);
   border: 1px solid var(--soj-line);
   border-radius: 999px;
-  padding: 3px;
-  margin-bottom: 14px;
+  padding: var(--soj-sp-4);
+  margin-bottom: var(--soj-sp-14);
 }
 
 .cat-tab {
   border: none;
   background: transparent;
-  padding: 7px 16px;
+  padding: var(--soj-sp-8) var(--soj-sp-16);
   border-radius: 999px;
   font-size: var(--soj-fs-14);
   color: var(--el-text-color-regular);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--soj-sp-8);
   transition: background 0.15s, color 0.15s;
 }
 
@@ -865,7 +855,7 @@ function onSubmitClick() {
 
 .cat-tab.on {
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-blue-lo));
-  color: #fff;
+  color: var(--soj-white);
   font-weight: var(--soj-fw-emphasis);
   box-shadow: 0 2px 8px rgb(var(--soj-blue-rgb) / 0.28);
 }
@@ -873,14 +863,14 @@ function onSubmitClick() {
 .cat-tab .n {
   font-size: var(--soj-fs-small);
   border-radius: 999px;
-  padding: 1px 8px;
+  padding: var(--soj-sp-2) var(--soj-sp-8);
   font-weight: var(--soj-fw-bold);
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
 }
 
 .cat-tab.on .n {
-  background: rgba(255, 255, 255, 0.85);
+  background: color-mix(in srgb, var(--soj-white) 85%, transparent);
   color: var(--el-color-primary);
 }
 
@@ -890,24 +880,24 @@ function onSubmitClick() {
 
 /* 卡底已选摘要：三路状态常驻可见 */
 .cat-summary {
-  margin-top: 14px;
-  padding-top: 12px;
+  margin-top: var(--soj-sp-14);
+  padding-top: var(--soj-sp-12);
   border-top: 1px dashed var(--soj-line-2);
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   font-size: var(--soj-fs-13);
 }
 
 .sum-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   background: var(--el-fill-color-light);
   border: 1px solid var(--soj-line);
   border-radius: 999px;
-  padding: 3px 11px;
+  padding: var(--soj-sp-4) var(--soj-sp-12);
   color: var(--el-text-color-regular);
 }
 
@@ -924,7 +914,7 @@ function onSubmitClick() {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .diff-chip {
@@ -941,7 +931,7 @@ function onSubmitClick() {
 }
 
 .diff-chip.sel.diff-tag {
-  background: color-mix(in srgb, var(--dc) 20%, #ffffff);
+  background: color-mix(in srgb, var(--dc) 20%, var(--soj-white));
   border-color: var(--dc);
   box-shadow: inset 0 0 0 1px var(--dc);
 }
@@ -949,21 +939,21 @@ function onSubmitClick() {
 .hint {
   font-size: var(--soj-fs-small);
   color: var(--el-text-color-secondary);
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
   line-height: 1.6;
 }
 
 /* 发布卡完成度清单 */
 .pub-check {
-  margin: 14px 0 2px;
+  margin: var(--soj-sp-14) 0 var(--soj-sp-2);
   display: grid;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .pub-check .row {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--soj-sp-8);
   font-size: var(--soj-fs-13);
   color: var(--el-text-color-regular);
 }
@@ -976,7 +966,7 @@ function onSubmitClick() {
   color: var(--el-color-success);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
   flex: none;
 }
@@ -989,7 +979,7 @@ function onSubmitClick() {
   color: var(--el-text-color-secondary);
   display: grid;
   place-items: center;
-  font-size: 10px;
+  font-size: var(--soj-fs-12);
   flex: none;
 }
 
@@ -997,7 +987,7 @@ function onSubmitClick() {
 .tag-bar {
   box-sizing: border-box;
   width: 100%;
-  padding: 8px 12px;
+  padding: var(--soj-sp-8) var(--soj-sp-12);
   background: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
 }
@@ -1012,10 +1002,10 @@ function onSubmitClick() {
 .field-label {
   font-weight: var(--soj-fw-regular);
   color: var(--el-text-color-primary);
-  margin-bottom: 8px;
+  margin-bottom: var(--soj-sp-8);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 
 /* 文件名输入限宽（右列单列排布） */
@@ -1026,13 +1016,13 @@ function onSubmitClick() {
 .fileio-now {
   white-space: nowrap; /* 防止提示文字换行 */
   font-size: var(--soj-fs-small);
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
 }
 
 .limits {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: nowrap; /* 时限与内存一行排布 */
 }
 
@@ -1045,8 +1035,8 @@ function onSubmitClick() {
   width: 100%;
 }
 
+/* 通栏已上收 main.css .el-upload-dragger（v0.57）；虚线加深是本组件特例 */
 .zip-upload :deep(.el-upload-dragger) {
-  width: 100%;
   /* 虚线加深到可见（EP 默认太淡）+ 悬停主蓝 */
   border: 1.5px dashed rgb(var(--soj-blue-rgb) / 0.38);
 }
@@ -1059,7 +1049,7 @@ function onSubmitClick() {
 .zip-badge {
   width: 40px;
   height: 40px;
-  margin: 0 auto 8px;
+  margin: 0 auto var(--soj-sp-8);
   border-radius: 10px;
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
@@ -1068,7 +1058,7 @@ function onSubmitClick() {
 }
 
 .zip-badge .el-icon {
-  font-size: 24px;
+  font-size: var(--soj-fs-22);
 }
 
 .zip-hint p:first-of-type {
@@ -1080,10 +1070,10 @@ function onSubmitClick() {
 .data-status {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--soj-sp-8);
   font-size: var(--soj-fs-13);
   color: var(--el-text-color-regular);
-  margin-bottom: 12px;
+  margin-bottom: var(--soj-sp-12);
 }
 
 .data-status .ok {
@@ -1094,7 +1084,7 @@ function onSubmitClick() {
   color: var(--el-color-success);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
   flex: none;
 }
@@ -1106,7 +1096,7 @@ function onSubmitClick() {
 /* ---- 题目身份：标题 + 类型下拉同一行（标题吃剩余宽度，类型定宽）---- */
 .identity-row {
   display: flex;
-  gap: 16px;
+  gap: var(--soj-sp-16);
 }
 
 .identity-title {
@@ -1127,7 +1117,7 @@ function onSubmitClick() {
    此处对齐主档，min-height 撑高、文字垂直居中 */
 .identity-type-select :deep(.el-select__wrapper) {
   min-height: var(--el-component-size);
-  font-size: var(--el-font-size-base);
+  font-size: var(--soj-fs-body);
 }
 
 @media (max-width: 640px) {
@@ -1141,17 +1131,12 @@ function onSubmitClick() {
 .label-with-tip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 
 @media (max-width: 992px) {
-  .pf-layout {
-    flex-direction: column;
-  }
-
+  /* 列折叠由 PageShell 自理；此处只复位副列吸顶 */
   .pf-aside {
-    width: auto;
-    flex: 1 1 auto;
     position: static;
   }
 }

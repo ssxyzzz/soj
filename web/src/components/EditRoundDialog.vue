@@ -217,13 +217,13 @@ watch(
         <template v-if="canJade">
           <el-form-item label="玉奖池 · 名次奖池">
             <el-input-number v-model="jadePool" :min="0" :max="1000000" :step="50" style="width: 180px" />
-            <span class="dim" style="margin-left: 8px">
+            <span class="dim" style="margin-left: var(--soj-sp-8)">
               成绩发布时按最终榜单结算：真正参赛（得分&gt;0）人数 × 获奖比例 = 名次名额，线性递减瓜分本池（0 = 不发）
             </span>
           </el-form-item>
           <el-form-item label="玉奖池 · 参与奖池">
             <el-input-number v-model="jadePartPool" :min="0" :max="1000000" :step="10" style="width: 180px" />
-            <span class="dim" style="margin-left: 8px">
+            <span class="dim" style="margin-left: var(--soj-sp-8)">
               得分&gt;0 但未获名次奖的参赛者均分本池；无人可领时自动滚入名次奖池
             </span>
           </el-form-item>
@@ -251,7 +251,7 @@ watch(
 .dialog-footer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   width: 100%;
 }
 

@@ -98,8 +98,8 @@ function doSubmit() {
 .bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-12);
 }
 
 /* v3 frow 语言行：13/600 标签列 */
@@ -110,7 +110,7 @@ function doSubmit() {
 }
 
 .hint {
-  margin: 12px 0 0;
+  margin: var(--soj-sp-12) 0 0;
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   line-height: 1.7;

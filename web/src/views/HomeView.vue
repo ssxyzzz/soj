@@ -260,9 +260,9 @@ onMounted(async () => {
 .announce {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 20px;
-  margin-bottom: 30px;
+  gap: var(--soj-sp-12);
+  padding: var(--soj-sp-12) var(--soj-sp-20);
+  margin-bottom: var(--soj-sp-32);
   border-radius: 14px;
   background: linear-gradient(90deg, rgb(var(--soj-blue-rgb) / 0.07), rgb(var(--soj-teal-rgb) / 0.05));
   border: 1px solid rgb(var(--soj-blue-rgb) / 0.16);
@@ -271,10 +271,10 @@ onMounted(async () => {
 
 .announce-tag {
   flex: 0 0 auto;
-  padding: 2px 10px;
+  padding: var(--soj-sp-2) var(--soj-sp-10);
   border-radius: 999px;
   background: var(--soj-blue);
-  color: #fff;
+  color: var(--soj-white);
   font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
   letter-spacing: 0.1em;
@@ -297,14 +297,14 @@ onMounted(async () => {
 /* ---- hero：开放式居中区块，画布网格即背景 ---- */
 .hero {
   text-align: center;
-  padding: 52px 0 8px;
+  padding: var(--soj-sp-32) 0 var(--soj-sp-8);
   max-width: 760px;
   margin: 0 auto;
 }
 
 /* hero 居中版 kicker：左右对称短线（全局 .kicker 只有左线） */
 .hero-kicker {
-  margin-bottom: 10px;
+  margin-bottom: var(--soj-sp-10);
 }
 
 .hero-kicker::after {
@@ -315,9 +315,9 @@ onMounted(async () => {
   background: linear-gradient(90deg, var(--soj-teal), var(--soj-blue-hi));
 }
 
-/* v3 hero 标题：56px 藏蓝 800 + -2.2 负字距；「成长」青蓝渐变点睛 */
+/* v3 hero 标题：--soj-fs-hero 藏蓝 800 + -2.2 负字距；「成长」青蓝渐变点睛 */
 .title {
-  margin: 0 0 18px;
+  margin: 0 0 var(--soj-sp-16);
   font-size: var(--soj-fs-hero);
   font-weight: var(--soj-fw-heavy);
   letter-spacing: -2.2px;
@@ -335,7 +335,7 @@ onMounted(async () => {
 
 .subtitle {
   color: var(--soj-ink-2);
-  margin: 0 0 32px;
+  margin: 0 0 var(--soj-sp-32);
   max-width: 560px;
   margin-left: auto;
   margin-right: auto;
@@ -347,20 +347,20 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 .searchbar {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   width: min(480px, 100%);
   height: 56px;
-  padding-left: 22px;
+  padding-left: var(--soj-sp-20);
   background: var(--el-bg-color);
-  border: 1px solid rgba(11, 31, 69, 0.13);
+  border: 1px solid color-mix(in srgb, var(--soj-navy) 13%, transparent);
   border-radius: 999px;
-  padding: 0 8px 0 20px;
+  padding: 0 var(--soj-sp-8) 0 var(--soj-sp-20);
   color: var(--el-text-color-secondary);
   transition: border-color 0.15s, box-shadow 0.15s;
   cursor: text;
@@ -384,7 +384,7 @@ onMounted(async () => {
   outline: 0;
   background: transparent;
   font: inherit;
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   color: var(--el-text-color-primary);
 }
 
@@ -401,7 +401,7 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--soj-white);
   background: linear-gradient(180deg, var(--soj-blue-hi), var(--soj-blue-lo));
   box-shadow: 0 8px 18px rgb(var(--soj-blue-rgb) / 0.32);
   transition: transform 0.18s;
@@ -419,16 +419,16 @@ onMounted(async () => {
 .actions {
   display: flex;
   justify-content: center;
-  gap: 12px;
-  margin-top: 18px;
+  gap: var(--soj-sp-12);
+  margin-top: var(--soj-sp-16);
 }
 
-/* ---- 统计行：36px 藏蓝数字 + 竖线分隔 ---- */
+/* ---- 统计行：--soj-fs-stat 藏蓝数字 + 竖线分隔 ---- */
 .statline {
   display: flex;
   justify-content: center;
   max-width: 820px;
-  margin: 44px auto 6px;
+  margin: var(--soj-sp-32) auto var(--soj-sp-6);
 }
 
 .statline .cell {
@@ -445,7 +445,7 @@ onMounted(async () => {
   transform: translateY(-50%);
   width: 1px;
   height: 44px;
-  background: rgba(11, 31, 69, 0.13);
+  background: color-mix(in srgb, var(--soj-navy) 13%, transparent);
 }
 
 .statline b {
@@ -458,14 +458,14 @@ onMounted(async () => {
 }
 
 .statline b small {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: var(--soj-fs-body);
+  font-weight: var(--soj-fw-bold);
   color: var(--el-text-color-secondary);
-  margin-left: 2px;
+  margin-left: var(--soj-sp-2);
 }
 
 .statline span {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
 }
 
@@ -473,8 +473,8 @@ onMounted(async () => {
 .game-sec {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin: 26px 0 6px;
+  gap: var(--soj-sp-12);
+  margin: var(--soj-sp-24) 0 var(--soj-sp-6);
 }
 
 /* 每日一句横条：与卡片同宽同半径，弱一级（蓝软底） */
@@ -482,22 +482,22 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 11px 18px;
+  gap: var(--soj-sp-12);
+  padding: var(--soj-sp-12) var(--soj-sp-16);
   border-radius: 14px;
   background: var(--soj-blue-soft);
 }
 
 .gq-text {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--soj-blue);
 }
 
 .gq-flame {
-  font-size: 13px;
-  font-weight: 800;
-  color: #b45309;
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-warning-deep);
   white-space: nowrap;
 }
 
@@ -505,23 +505,19 @@ onMounted(async () => {
 .gcard {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 16px 22px;
+  gap: var(--soj-sp-20);
+  padding: var(--soj-sp-16) var(--soj-sp-20);
   border-radius: 16px;
-  border: 1px solid rgba(11, 31, 69, 0.07);
+  border: 1px solid var(--soj-line);
   background: var(--el-bg-color);
-  box-shadow:
-    0 1px 2px rgba(11, 31, 69, 0.04),
-    0 10px 28px rgba(11, 31, 69, 0.06);
+  box-shadow: var(--soj-shadow-card);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .gcard:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 2px 4px rgba(11, 31, 69, 0.05),
-    0 16px 36px rgba(11, 31, 69, 0.09);
+  box-shadow: var(--soj-shadow-card-hover);
 }
 
 .gc-block {
@@ -532,33 +528,33 @@ onMounted(async () => {
 .gc-cap {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .gc-title {
-  font-size: 14px;
-  font-weight: 800;
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-heavy);
   color: var(--soj-navy);
 }
 
 .gc-date {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 
 .gc-name {
-  font-size: 18px;
-  font-weight: 800;
+  font-size: var(--soj-fs-18);
+  font-weight: var(--soj-fw-heavy);
   letter-spacing: -0.3px;
   color: var(--soj-navy);
-  margin: 5px 0 4px;
+  margin: var(--soj-sp-4) 0 var(--soj-sp-4);
 }
 
 .gc-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 12px;
+  gap: var(--soj-sp-10);
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 
@@ -571,15 +567,15 @@ onMounted(async () => {
 .gc-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 10px;
+  gap: var(--soj-sp-6);
+  margin-top: var(--soj-sp-10);
 }
 
 .gc-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 9px 12px;
+  gap: var(--soj-sp-12);
+  padding: var(--soj-sp-8) var(--soj-sp-12);
   border: none;
   border-radius: 10px;
   background: var(--el-fill-color-lighter);
@@ -593,20 +589,20 @@ onMounted(async () => {
 }
 
 .gc-row-name {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
 }
 
 .gc-row-meta {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 
 .gc-row-go {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
   color: var(--soj-blue);
   opacity: 0;
   transform: translateX(-4px);
@@ -631,26 +627,26 @@ onMounted(async () => {
 
 /* ---- 首页分区（最近赛事 / 我的班级）：区块头 + 三列卡 ---- */
 .home-sec {
-  margin-top: 38px;
+  margin-top: var(--soj-sp-32);
 }
 
 .sec-head {
   display: flex;
   align-items: baseline;
-  gap: 14px;
-  margin-bottom: 16px;
+  gap: var(--soj-sp-14);
+  margin-bottom: var(--soj-sp-16);
 }
 
 .sec-head h2 {
-  font-size: 22px;
+  font-size: var(--soj-fs-22);
   font-weight: var(--soj-fw-heavy);
   letter-spacing: -0.5px;
   color: var(--soj-navy);
 }
 
 .sec-head a {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--soj-blue);
   margin-left: auto;
   cursor: pointer;
@@ -663,14 +659,14 @@ onMounted(async () => {
 .cgrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: var(--soj-sp-16);
 }
 
 .ccard {
-  padding: 22px;
+  padding: var(--soj-sp-20);
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: var(--soj-sp-8);
   transition:
     transform 0.18s,
     box-shadow 0.18s;
@@ -678,13 +674,11 @@ onMounted(async () => {
 
 .ccard:hover {
   transform: translateY(-3px);
-  box-shadow:
-    0 2px 4px rgba(11, 31, 69, 0.04),
-    0 18px 44px rgba(11, 31, 69, 0.11);
+  box-shadow: var(--soj-shadow-card-hover);
 }
 
 .ccard h3 {
-  font-size: 16px;
+  font-size: var(--soj-fs-16);
   font-weight: var(--soj-fw-heavy);
   color: var(--soj-navy);
   letter-spacing: -0.2px;
@@ -715,20 +709,20 @@ onMounted(async () => {
   line-height: 1.75;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
-  margin-top: 2px;
+  margin-top: var(--soj-sp-2);
 }
 
 .clname-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
 }
 
 .clintro {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: var(--el-text-color-regular);
   line-height: 1.7;
   margin: 0;
@@ -742,10 +736,10 @@ onMounted(async () => {
 .mini-tag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 3px 11px;
+  gap: var(--soj-sp-6);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  padding: var(--soj-sp-4) var(--soj-sp-12);
   border-radius: 999px;
   white-space: nowrap;
   align-self: flex-start;
@@ -793,7 +787,7 @@ onMounted(async () => {
 
   .statline {
     flex-wrap: wrap;
-    gap: 18px;
+    gap: var(--soj-sp-16);
   }
 
   .statline .cell + .cell::before {

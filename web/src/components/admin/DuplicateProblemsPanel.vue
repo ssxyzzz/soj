@@ -127,21 +127,21 @@ onMounted(scan)
 }
 
 .scan-hint {
-  margin-bottom: 12px;
+  margin-bottom: var(--soj-sp-12);
 }
 
 .dup-group {
   border: 1px solid var(--el-border-color-lighter);
   border-radius: var(--el-border-radius-base);
-  padding: 12px;
-  margin-bottom: 12px;
+  padding: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-12);
 }
 
 .dup-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: var(--soj-sp-8);
+  margin-bottom: var(--soj-sp-6);
 }
 
 .dup-name {
@@ -150,7 +150,7 @@ onMounted(scan)
 
 .dup-preview {
   font-size: var(--soj-fs-small);
-  margin-bottom: 8px;
+  margin-bottom: var(--soj-sp-8);
   word-break: break-all;
 }
 

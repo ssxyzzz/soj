@@ -125,6 +125,6 @@ async function onSubmit(p: ProblemFormPayload) {
 
 <style scoped>
 .upload-progress {
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
 }
 </style>

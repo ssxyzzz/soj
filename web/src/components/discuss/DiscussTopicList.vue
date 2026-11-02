@@ -118,34 +118,34 @@ onMounted(() => load(props.syncQuery ? lq.num('page') : 1))
   min-height: 200px;
 }
 .dt-banner {
-  margin-bottom: 10px;
+  margin-bottom: var(--soj-sp-10);
 }
 .dt-row {
-  padding: 11px 12px;
+  padding: var(--soj-sp-12);
   border: 1px solid var(--soj-line);
   border-radius: 10px;
-  margin-bottom: 8px;
+  margin-bottom: var(--soj-sp-8);
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
-  background: var(--el-bg-color, #fff);
+  background: var(--el-bg-color);
 }
 .dt-row:hover {
   border-color: var(--soj-blue);
-  box-shadow: 0 2px 10px rgb(31 73 186 / 8%);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--soj-blue) 8%, transparent);
 }
 .dt-tags {
   display: flex;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   flex-wrap: wrap;
-  margin-bottom: 6px;
+  margin-bottom: var(--soj-sp-6);
 }
 .dt-title {
-  font-size: 15px;
-  font-weight: var(--soj-fw-emphasis, 600);
+  font-size: var(--soj-fs-body);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--soj-ink);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 .dt-title .t {
   overflow: hidden;
@@ -153,28 +153,28 @@ onMounted(() => load(props.syncQuery ? lq.num('page') : 1))
   white-space: nowrap;
 }
 .dt-title .solved {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--soj-ok, #16a34a);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-success-deep);
   white-space: nowrap;
 }
 .dt-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 6px;
-  font-size: 12px;
+  gap: var(--soj-sp-12);
+  margin-top: var(--soj-sp-6);
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 .dt-meta .grow {
   flex: 1;
 }
 .dt-meta .author {
-  font-weight: 500;
+  font-weight: var(--soj-fw-medium);
 }
 .dt-more {
   display: flex;
   justify-content: center;
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
 }
 </style>

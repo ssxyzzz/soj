@@ -925,7 +925,7 @@ async function unbind(row?: TagRefProblem) {
 
 <style scoped>
 .caret {
-  margin-left: 4px;
+  margin-left: var(--soj-sp-4);
   font-size: var(--soj-fs-small);
   opacity: 0.55;
 }
@@ -939,7 +939,7 @@ async function unbind(row?: TagRefProblem) {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .import-input {
@@ -947,22 +947,22 @@ async function unbind(row?: TagRefProblem) {
 }
 
 .howto {
-  margin-bottom: 12px;
+  margin-bottom: var(--soj-sp-12);
 }
 
 .howto p {
-  margin: 2px 0;
+  margin: var(--soj-sp-2) 0;
 }
 
 .tag-search {
   width: 240px;
-  margin-bottom: 16px; /* 与首行标签留出空隙（原 10px 比行距 14 还小，显挤） */
+  margin-bottom: var(--soj-sp-16); /* 与首行标签留出空隙（原 10px 比行距 14 还小，显挤） */
 }
 
 .tag-board {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 /* 底部一行缓冲垫片：末级展开后鼠标习惯性继续下移查找，若移出容器会触发
@@ -973,18 +973,18 @@ async function unbind(row?: TagRefProblem) {
 
 /* 每级一行独立滚动：行内不换行，超出本行宽度即横移（无滚动条，滚轮驱动见 onWheel）；
    每行各持独立 scrollLeft——滚哪行动哪行，其余行不受影响。
-   padding/margin 成对：把裁剪盒上下各扩 6px（拖起卡片的放大与阴影不被行盒裁掉），
-   视觉行距保持 gap 的 14px */
+   padding/margin 成对：把裁剪盒上下各扩 sp-6（拖起卡片的放大与阴影不被行盒裁掉），
+   视觉行距保持 gap 的 sp-14 */
 .tag-row {
   display: flex;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   align-items: flex-start;
   width: 100%;
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none; /* Firefox：隐藏滚动条 */
-  padding-block: 6px;
+  padding-block: var(--soj-sp-6);
   margin-block: -6px;
 }
 
@@ -996,10 +996,10 @@ async function unbind(row?: TagRefProblem) {
 .tag-canvas {
   display: flex;
   flex-direction: column;
-  gap: 14px; /* 层级行距（一级/二级……之间） */
+  gap: var(--soj-sp-14); /* 层级行距（一级/二级……之间） */
   min-width: 0;
-  padding: 8px 12px; /* 与题库筛选区 .tag-row 同内距；顶部同时保留拖起卡片余量 */
-  background: var(--el-fill-color-light); /* #f5f5f5 */
+  padding: var(--soj-sp-8) var(--soj-sp-12); /* 与题库筛选区 .tag-row 同内距；顶部同时保留拖起卡片余量 */
+  background: var(--el-fill-color-light);
   border-radius: var(--el-border-radius-base);
 }
 
@@ -1009,7 +1009,7 @@ async function unbind(row?: TagRefProblem) {
   display: inline-flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 
 .tag-card {
@@ -1018,7 +1018,7 @@ async function unbind(row?: TagRefProblem) {
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  padding: 4px 12px;
+  padding: var(--soj-sp-4) var(--soj-sp-12);
   line-height: 20px; /* 显式行高，防宿主容器（EP 表单 32px）渗入 */
   /* 层级色只来自全局 .lv-1~.lv-5（main.css）：不可写 --lv 兜底，scoped 特异度
      会压过全局把层级吞成一级蓝；新增白卡（add-card）不用 --lv，自带显式底色/边框 */
@@ -1069,7 +1069,7 @@ async function unbind(row?: TagRefProblem) {
   min-width: 16px;
   height: 16px;
   line-height: 16px;
-  padding: 0 4px;
+  padding: 0 var(--soj-sp-4);
   border-radius: 8px;
   background: var(--el-color-info);
   color: var(--el-color-white);
@@ -1086,13 +1086,13 @@ async function unbind(row?: TagRefProblem) {
    原 lv-bg 反转是 8% 透明底，叠在实底卡上与卡面同色致角标看不清（2026-10-25 用户反馈）；
    描边用 lv-border，兜住激活卡渲染为浅底的场景；计数 0 的灰角标同样被本规则覆盖 */
 .tag-card.active .count-badge {
-  background: var(--el-bg-color, #fff);
+  background: var(--el-bg-color);
   color: var(--lv);
   box-shadow: 0 0 0 1px var(--lv-border);
 }
 
 .del-x {
-  margin-left: 8px;
+  margin-left: var(--soj-sp-8);
   width: 18px;
   height: 18px;
   line-height: 16px;
@@ -1126,12 +1126,12 @@ async function unbind(row?: TagRefProblem) {
 }
 
 .empty-tip {
-  padding: 4px 0;
+  padding: var(--soj-sp-4) 0;
 }
 
 .tag-problems {
-  margin-top: 14px;
-  padding-top: 10px;
+  margin-top: var(--soj-sp-14);
+  padding-top: var(--soj-sp-10);
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
@@ -1139,14 +1139,14 @@ async function unbind(row?: TagRefProblem) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-6);
 }
 
 .tp-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
+  gap: var(--soj-sp-4) var(--soj-sp-16);
 }
 
 .tp-links a {
@@ -1162,8 +1162,8 @@ async function unbind(row?: TagRefProblem) {
 .blocked-row {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-top: 12px;
+  gap: var(--soj-sp-12);
+  margin-top: var(--soj-sp-12);
 }
 
 .blocked-row .blocked-alert {
@@ -1172,7 +1172,7 @@ async function unbind(row?: TagRefProblem) {
 }
 
 .tag-gap {
-  margin: 0 6px 4px 0;
+  margin: 0 var(--soj-sp-6) var(--soj-sp-4) 0;
 }
 </style>
 

@@ -312,7 +312,7 @@ watch(
 
 <style scoped>
 .obj-answer {
-  padding: 10px 14px;
+  padding: var(--soj-sp-10) var(--soj-sp-14);
   background: var(--el-fill-color-lighter);
   border-radius: var(--el-border-radius-base);
   line-height: 1.8;
@@ -329,14 +329,14 @@ watch(
 }
 
 .desc-grid .dcell {
-  padding: 11px 16px;
+  padding: var(--soj-sp-12) var(--soj-sp-16);
   border-left: 1px solid var(--soj-line);
   border-top: 1px solid var(--soj-line);
-  font-size: 13.5px;
+  font-size: var(--soj-fs-13);
   color: var(--soj-ink-2);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
   flex-wrap: wrap;
 }
 
@@ -351,7 +351,7 @@ watch(
 .desc-grid b {
   color: var(--soj-navy);
   font-weight: var(--soj-fw-bold);
-  margin-left: 6px;
+  margin-left: var(--soj-sp-6);
 }
 
 /* 状态格的「说明 / 重测 / 取消评测」小链接 */
@@ -360,11 +360,11 @@ watch(
   cursor: help;
   font-weight: var(--soj-fw-emphasis);
   font-size: var(--soj-fs-12);
-  margin-left: 8px;
+  margin-left: var(--soj-sp-8);
 }
 
 .lk-btn {
-  margin-left: 8px;
+  margin-left: var(--soj-sp-8);
 }
 
 .lk-danger {
@@ -372,7 +372,7 @@ watch(
 }
 
 .foot-hint {
-  margin: 12px 0 0;
+  margin: var(--soj-sp-12) 0 0;
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
 }

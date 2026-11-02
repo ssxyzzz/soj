@@ -19,6 +19,7 @@ import RolesPanel from '@/components/admin/RolesPanel.vue'
 import SecurityLogsPanel from '@/components/admin/SecurityLogsPanel.vue'
 import SeedProblemsPanel from '@/components/admin/SeedProblemsPanel.vue'
 import SettingsPanel from '@/components/admin/SettingsPanel.vue'
+import PagesPanel from '@/components/admin/PagesPanel.vue'
 import ShopPanel from '@/components/admin/ShopPanel.vue'
 import AiPanel from '@/components/admin/AiPanel.vue'
 import TagsPanel from '@/components/admin/TagsPanel.vue'
@@ -31,7 +32,7 @@ const userStore = useUserStore()
 const route = useRoute()
 const router = useRouter()
 
-const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'discuss', 'shop', 'ai', 'settings', 'backup'] as const
+const sections = ['users', 'roles', 'problems', 'levels', 'security', 'notice', 'discuss', 'shop', 'ai', 'settings', 'backup', 'pages'] as const
 type Section = (typeof sections)[number]
 // 题目管理（v0.18.1 聚合）：知识树 / 标签树 / 重复题扫描 / 种子题四面板同页 tab 切换（2026-10-25 双树）；
 // tags/sources 旧深链值映射到 problems 的对应子页
@@ -81,6 +82,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'problems', label: '题库维护' },
       { key: 'notice', label: '公告发布' },
+      { key: 'pages', label: '自定义页面' },
       { key: 'discuss', label: '讨论区管理', badge: 'reports' },
     ],
   },
@@ -109,6 +111,8 @@ const visibleGroups = computed(() => {
     roles: userStore.role === 'root',
     problems: canProblemManage,
     notice: true,
+    // 自定义页面（v0.56）：与系统设置同权限位
+    pages: userStore.can('admin.settings'),
     discuss: userStore.can('discussion.manage'),
     shop: userStore.role === 'root',
     ai: userStore.role === 'root',
@@ -223,6 +227,7 @@ onMounted(loadTodo)
       </div>
       <LevelPanel v-else-if="section === 'levels'" />
       <NoticePanel v-else-if="section === 'notice'" />
+      <PagesPanel v-else-if="section === 'pages'" />
       <DiscussPanel v-else-if="section === 'discuss'" />
       <ShopPanel v-else-if="section === 'shop' && userStore.role === 'root'" />
       <AiPanel v-else-if="section === 'ai' && userStore.role === 'root'" />
@@ -243,7 +248,7 @@ onMounted(loadTodo)
 
 .admin-layout {
   display: flex;
-  gap: 22px;
+  gap: var(--soj-sp-20);
   /* stretch：主列卡片随左列高度拉伸，两列上沿与下沿对齐；
      不用 sticky——切换分区时内容高度变化会让吸附列来回跳动 */
   align-items: stretch;
@@ -256,43 +261,41 @@ onMounted(loadTodo)
   width: 320px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 10px;
+  gap: var(--soj-sp-4);
+  padding: var(--soj-sp-10);
   background: var(--el-bg-color);
   border: 1px solid var(--soj-line);
   border-radius: 16px;
-  box-shadow:
-    0 1px 2px rgba(11, 31, 69, 0.04),
-    0 12px 32px rgba(11, 31, 69, 0.06);
+  box-shadow: var(--soj-shadow-card);
 }
 
 .nav-group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--soj-sp-4);
 }
 
-/* v3 分组眉题：11px 大写（中文组名只吃字距），组间距靠后续组眉题的加高 padding */
+/* v3 分组眉题：--soj-fs-12 大写（中文组名只吃字距），组间距靠后续组眉题的加高 padding */
 .anav-eyebrow {
   font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
   letter-spacing: 0.16em;
   color: var(--soj-ink-3);
   text-transform: uppercase;
-  padding: 4px 13px 2px;
+  padding: var(--soj-sp-4) var(--soj-sp-12) var(--soj-sp-2);
 }
 
 .nav-group + .nav-group .anav-eyebrow {
-  padding-top: 12px;
+  padding-top: var(--soj-sp-12);
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   border: 1px solid transparent;
   border-radius: 10px;
-  padding: 8px 13px;
+  padding: var(--soj-sp-8) var(--soj-sp-12);
   cursor: pointer;
   transition: all 0.15s;
   background: none;
@@ -322,7 +325,7 @@ onMounted(loadTodo)
 .nav-title {
   font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
-  font-size: 14px;
+  font-size: var(--soj-fs-14);
   white-space: nowrap;
 }
 
@@ -332,12 +335,12 @@ onMounted(loadTodo)
   flex: 0 0 auto;
   min-width: 18px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 var(--soj-sp-4);
   border-radius: 999px;
-  background: var(--el-color-danger, #f56c6c);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  background: var(--el-color-danger);
+  color: var(--soj-white);
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
   line-height: 18px;
   text-align: center;
 }
@@ -383,10 +386,10 @@ onMounted(loadTodo)
     flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 6px;
+    gap: var(--soj-sp-6);
     overflow-x: auto;
     scrollbar-width: none;
-    padding: 8px;
+    padding: var(--soj-sp-8);
   }
 
   .admin-nav::-webkit-scrollbar {
@@ -399,14 +402,14 @@ onMounted(loadTodo)
 
   .nav-group {
     flex-direction: row;
-    gap: 6px;
+    gap: var(--soj-sp-6);
   }
 
   /* 白卡上无边框的纯文字可点性弱，chips 形态补 hairline 描边 */
   .nav-item {
     flex: 0 0 auto;
     width: auto;
-    padding: 7px 14px;
+    padding: var(--soj-sp-8) var(--soj-sp-14);
     border-radius: 999px;
     border-color: var(--soj-line);
     white-space: nowrap;

@@ -604,7 +604,7 @@ onUnmounted(stopPolling)
 .crumbs {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
-  margin-bottom: 14px;
+  margin-bottom: var(--soj-sp-14);
 }
 
 .crumbs a {
@@ -620,7 +620,7 @@ onUnmounted(stopPolling)
 .dlg-lang {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .dlg-label {
@@ -629,14 +629,14 @@ onUnmounted(stopPolling)
 }
 
 .dlg-editor {
-  margin-top: 12px;
+  margin-top: var(--soj-sp-12);
 }
 
 .hint {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   line-height: 1.7;
-  margin: 10px 0 0;
+  margin: var(--soj-sp-10) 0 0;
 }
 
 .hint.link {
@@ -647,28 +647,28 @@ onUnmounted(stopPolling)
 
 /* 挑战模式入口（v0.23）：暖橙渐变在评测卡五连中一眼可辨；无资格态降灰 */
 .btn-challenge {
-  --el-button-text-color: #b45309;
-  --el-button-border-color: color-mix(in srgb, #f59e0b 45%, #fff);
-  --el-button-bg-color: color-mix(in srgb, #f59e0b 12%, #fff);
-  --el-button-hover-text-color: #92400e;
-  --el-button-hover-border-color: #f59e0b;
-  --el-button-hover-bg-color: color-mix(in srgb, #f59e0b 22%, #fff);
+  --el-button-text-color: var(--soj-warning-deep);
+  --el-button-border-color: color-mix(in srgb, var(--soj-warning) 45%, var(--soj-white));
+  --el-button-bg-color: color-mix(in srgb, var(--soj-warning) 12%, var(--soj-white));
+  --el-button-hover-text-color: var(--soj-warning-deep);
+  --el-button-hover-border-color: var(--soj-warning);
+  --el-button-hover-bg-color: color-mix(in srgb, var(--soj-warning) 22%, var(--soj-white));
   font-weight: var(--soj-fw-emphasis);
 }
 .btn-challenge.off {
   --el-button-text-color: var(--soj-ink-3);
   --el-button-border-color: var(--soj-line);
-  --el-button-bg-color: var(--soj-bg, #f6f8fb);
+  --el-button-bg-color: var(--soj-surface-2);
   --el-button-hover-text-color: var(--soj-ink-3);
   --el-button-hover-border-color: var(--soj-line);
-  --el-button-hover-bg-color: var(--soj-bg, #f6f8fb);
+  --el-button-hover-bg-color: var(--soj-surface-2);
   filter: grayscale(1);
   cursor: not-allowed;
 }
 
 .center {
   text-align: center;
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
 }
 
 .soj-mini-li {
@@ -677,7 +677,7 @@ onUnmounted(stopPolling)
 
 /* AI 助教并入答案解析卡（v0.33-④ 验收调整）：面板与解析入口之间留间距 */
 .ai-in-solution {
-  margin-bottom: 12px;
+  margin-bottom: var(--soj-sp-12);
 }
 
 /* AI 让位卡标题时头部只剩 kicker：不再画卡头横线（线由小玉头行承担，2026-10-30 反馈） */
@@ -688,11 +688,11 @@ onUnmounted(stopPolling)
 /* 答案解析小节标题（2026-10-30 草案）：横线画法对齐卡头——贴卡缘、EP 卡头同色；
    线紧贴标题（对齐卡头标题距线间距，2026-10-30 反馈压高度） */
 .sol-sec-h {
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
-  margin: 0 -20px 12px;
-  padding: 0 20px 4px;
+  margin: 0 -20px var(--soj-sp-12);
+  padding: 0 var(--soj-sp-20) var(--soj-sp-4);
   border-bottom: 1px solid var(--el-card-border-color, var(--el-border-color-light));
 }
 
@@ -700,7 +700,7 @@ onUnmounted(stopPolling)
 .entry-actions.pill-btns {
   flex-direction: column;
   align-items: stretch;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 .entry-actions.pill-btns .el-button {
@@ -708,7 +708,7 @@ onUnmounted(stopPolling)
   height: 46px;
   margin: 0;
   border-radius: 999px;
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
   --el-button-hover-text-color: var(--soj-navy);

@@ -191,11 +191,11 @@ onMounted(load)
         </el-form-item>
         <el-form-item label="库存">
           <el-input-number v-model="itemForm.stock" :min="-1" :max="1000000" />
-          <span class="dim" style="margin-left: 8px">-1 = 不限量</span>
+          <span class="dim" style="margin-left: var(--soj-sp-8)">-1 = 不限量</span>
         </el-form-item>
         <el-form-item label="每人限购">
           <el-input-number v-model="itemForm.per_user_limit" :min="0" :max="1000" />
-          <span class="dim" style="margin-left: 8px">0 = 不限购</span>
+          <span class="dim" style="margin-left: var(--soj-sp-8)">0 = 不限购</span>
         </el-form-item>
         <el-form-item label="上架">
           <el-switch v-model="itemForm.active" />
@@ -211,20 +211,20 @@ onMounted(load)
 
 <style scoped>
 .panel-head {
-  padding: 16px 20px;
+  padding: var(--soj-sp-16) var(--soj-sp-20);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 .acts {
   margin-left: auto;
 }
 .order-filter {
-  margin-bottom: 10px;
+  margin-bottom: var(--soj-sp-10);
 }
 .order-pager {
   display: flex;
   justify-content: flex-end;
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
 }
 </style>

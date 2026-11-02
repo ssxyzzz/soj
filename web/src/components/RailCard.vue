@@ -25,10 +25,10 @@ withDefaults(
 
 <style scoped>
 .rail-card :deep(.el-card__header) {
-  padding: 16px 20px 0;
+  padding: var(--soj-sp-16) var(--soj-sp-20) 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--soj-sp-2);
 }
 
 /* v3 .ov：11px/700 teal 大写 eyebrow */
@@ -40,9 +40,9 @@ withDefaults(
   text-transform: uppercase;
 }
 
-/* v3 .card-t：15/700 藏蓝 */
+/* v3 .card-t：fs-body + fw-bold 藏蓝 */
 .rail-t {
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-navy);
 }

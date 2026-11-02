@@ -139,18 +139,15 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
 </template>
 
 <style scoped>
+/* 全局 .toolbar 之上的增量：两端对齐（不换行工具条） */
 .toolbar {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
 }
 
 .actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 /* T1/T2 默认不铺下划线，悬停再提示可点（密集表头降低视觉噪音） */
@@ -166,17 +163,17 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
    分数药丸（及我的行 2px 描边）上下沿裁平——放开行高并给上下内距，行高随内容走 */
 .score-table :deep(.el-table .cell) {
   line-height: normal;
-  padding-top: 5px;
-  padding-bottom: 5px;
+  padding-top: var(--soj-sp-4); /* 5px→sp-4 就近归并 */
+  padding-bottom: var(--soj-sp-4);
 }
 
 /* 题目列横向空间（2026-10-27）：.cell 默认左右内距 12px 把 52px 列宽吃到只剩 28px——
    「T11」表头挤出省略点、36px 分数药丸两侧被裁、右下角错误次数角标整块落在裁切区外。
-   题目列内距收到 6px（64px 列宽 = 52px 内容，表头/药丸/角标全部放得下），行内看 26+ 列
+   题目列内距收到 sp-6（64px 列宽 = 52px 内容，表头/药丸/角标全部放得下），行内看 26+ 列
    依旧走表格横向滚动 */
 .score-table :deep(.prob-col .cell) {
-  padding-left: 6px;
-  padding-right: 6px;
+  padding-left: var(--soj-sp-6);
+  padding-right: var(--soj-sp-6);
 }
 
 .total {
@@ -186,7 +183,7 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
 }
 
 .legend {
-  margin: 12px 0 0;
+  margin: var(--soj-sp-12) 0 0;
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
 }

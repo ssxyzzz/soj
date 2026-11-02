@@ -339,9 +339,9 @@ defineExpose({ refresh: loadMine })
 }
 
 .dlg-title {
-  font-size: 16px;
+  font-size: var(--soj-fs-16);
   font-weight: var(--soj-fw-bold);
-  color: var(--soj-navy, #0b1f45);
+  color: var(--soj-navy);
 }
 
 .dlg-acts {

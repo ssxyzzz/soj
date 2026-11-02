@@ -99,6 +99,7 @@ function flyStyle(i: number) {
 </script>
 
 <style scoped>
+/* 游戏皮肤定值，v0.57 豁免 token 化（金棕/玉青/琥珀等美术资产色不随主题；尺寸字号仍走 token） */
 .feast-root {
   position: fixed;
   inset: 0;
@@ -115,7 +116,7 @@ function flyStyle(i: number) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
   animation: stampIn 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
 
@@ -127,7 +128,7 @@ function flyStyle(i: number) {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 40px rgba(31, 73, 186, 0.35);
+  box-shadow: 0 0 40px color-mix(in srgb, var(--soj-blue) 35%, transparent);
 }
 
 .feast-epic .stamp-ring,
@@ -141,8 +142,9 @@ function flyStyle(i: number) {
 }
 
 .stamp-text {
+  /* 40px：装饰图形大字（游戏美术），字号豁免不迁移 */
   font-size: 40px;
-  font-weight: 900;
+  font-weight: var(--soj-fw-heavy);
   color: var(--soj-blue);
   letter-spacing: 4px;
 }
@@ -153,28 +155,28 @@ function flyStyle(i: number) {
 }
 
 .stamp-sub {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: #b45309;
-  font-weight: 700;
+  font-weight: var(--soj-fw-bold);
 }
 
 .stamp-jade {
-  font-size: 20px;
-  font-weight: 800;
+  font-size: var(--soj-fs-20);
+  font-weight: var(--soj-fw-heavy);
   color: #047857;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   animation: jadePop 0.5s 0.25s both;
 }
 
 .mini-tag {
-  font-size: 11px;
-  padding: 1px 8px;
+  font-size: var(--soj-fs-12);
+  padding: var(--soj-sp-2) var(--soj-sp-8);
   border-radius: 999px;
   background: #d1fae5;
   color: #065f46;
-  font-weight: 700;
+  font-weight: var(--soj-fw-bold);
 }
 
 .mini-tag.bless {
@@ -183,8 +185,8 @@ function flyStyle(i: number) {
 }
 
 .stamp-combo {
-  font-size: 22px;
-  font-weight: 900;
+  font-size: var(--soj-fs-22);
+  font-weight: var(--soj-fw-heavy);
   color: #dc2626;
   text-shadow: 0 0 12px rgba(220, 38, 38, 0.3);
   animation: jadePop 0.4s 0.35s both;

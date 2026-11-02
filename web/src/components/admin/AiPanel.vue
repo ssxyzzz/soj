@@ -124,7 +124,7 @@ onMounted(() => {
   <el-card v-loading="loading">
     <div class="panel-h panel-head">
       <span class="pt">AI 助教</span>
-      <div class="acts" style="margin-left: auto; display: flex; gap: 8px">
+      <div class="acts" style="margin-left: auto; display: flex; gap: var(--soj-sp-8)">
         <el-button @click="addProvider('GLM')">+ GLM</el-button>
         <el-button @click="addProvider('DeepSeek')">+ DeepSeek</el-button>
         <el-button @click="addProvider()">+ 自定义</el-button>
@@ -134,7 +134,7 @@ onMounted(() => {
 
     <el-alert
       title="未配置可用的供应商时，学生端 AI 入口整体隐藏。Key 只写不回显：已配置的档位留空 Key 即保留原值。"
-      type="info" :closable="false" style="margin-bottom: 14px"
+      type="info" :closable="false" style="margin-bottom: var(--soj-sp-14)"
     />
 
     <el-table :data="providers" size="small" empty-text="还没有供应商——用上方 GLM / DeepSeek 预设快速添加">
@@ -171,17 +171,17 @@ v-model="row.api_key" type="password" show-password
     <el-form label-position="left" label-width="190px" style="max-width: 720px">
       <el-form-item label="AI 名字">
         <el-input v-model="tutorName" maxlength="12" style="width: 180px" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           学生端 AI 助教的称呼（1–12 字，默认「小玉」；面板、找 bug 按钮等文案统一显示）
         </span>
       </el-form-item>
       <el-form-item label="每日每人调用上限（次）">
         <el-input-number v-model="dailyLimit" :min="1" :max="100" />
-        <span class="dim" style="margin-left: 8px">提示 + 找 bug 合计；学生档（默认 5）</span>
+        <span class="dim" style="margin-left: var(--soj-sp-8)">提示 + 找 bug 合计；学生档（默认 5）</span>
       </el-form-item>
       <el-form-item label="特权层每日上限（次）">
         <el-input-number v-model="staffDailyLimit" :min="0" :max="1000" />
-        <span class="dim" style="margin-left: 8px">
+        <span class="dim" style="margin-left: var(--soj-sp-8)">
           教师 / 管理员免费但计次（默认 20）；0 = 不限；root 恒不限次
         </span>
       </el-form-item>
@@ -211,12 +211,12 @@ v-model="row.api_key" type="password" show-password
         <template #default="{ row }">
           <el-tag v-if="row.ok" type="success" size="small" effect="plain">成功</el-tag>
           <el-tag v-else type="danger" size="small" effect="plain">失败</el-tag>
-          <span v-if="row.err" class="dim" style="margin-left: 6px">{{ row.err }}</span>
+          <span v-if="row.err" class="dim" style="margin-left: var(--soj-sp-6)">{{ row.err }}</span>
         </template>
       </el-table-column>
     </el-table>
-    <div v-if="callTotal > 20" style="display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px">
-      <span style="color: var(--soj-ink-2, #666); font-size: 13px">共 {{ callTotal }} 条</span>
+    <div v-if="callTotal > 20" style="display: flex; justify-content: flex-end; align-items: center; gap: var(--soj-sp-8); margin-top: var(--soj-sp-10)">
+      <span style="color: var(--soj-ink-2); font-size: var(--soj-fs-13)">共 {{ callTotal }} 条</span>
       <el-button size="small" :disabled="pageIdx === 0" @click="loadCalls(pageIdx - 1)">上一页</el-button>
       <el-button size="small" :disabled="!nextCursor" @click="loadCalls(pageIdx + 1)">下一页</el-button>
     </div>
@@ -225,9 +225,9 @@ v-model="row.api_key" type="password" show-password
 
 <style scoped>
 .panel-head {
-  padding: 16px 20px;
+  padding: var(--soj-sp-16) var(--soj-sp-20);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 </style>

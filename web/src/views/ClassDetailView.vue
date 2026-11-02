@@ -967,7 +967,7 @@ onMounted(load)
 .title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
 }
 
@@ -980,25 +980,25 @@ onMounted(load)
 }
 
 .intro {
-  margin: 10px 0 4px;
+  margin: var(--soj-sp-10) 0 var(--soj-sp-4);
   color: var(--el-text-color-regular);
 }
 
 .join-bar {
   display: flex;
-  gap: 12px;
-  margin-top: 16px;
+  gap: var(--soj-sp-12);
+  margin-top: var(--soj-sp-16);
 }
 
 .section-switch {
-  margin: 16px 0;
+  margin: var(--soj-sp-16) 0;
 }
 
 .hint {
   font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   line-height: 1.7;
-  margin: 8px 0 0;
+  margin: var(--soj-sp-8) 0 0;
 }
 
 /* 作业选题区：复制按钮行 + 选题器 */
@@ -1006,7 +1006,7 @@ onMounted(load)
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   align-items: flex-start;
 }
 
@@ -1021,12 +1021,12 @@ onMounted(load)
 .info-line {
   display: flex;
   justify-content: space-between;
-  padding: 4px 0;
+  padding: var(--soj-sp-4) 0;
   color: var(--el-text-color-regular);
 }
 
 .tip {
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
 }
 
 /* 编辑班级弹窗危险区：转让/解散行，左说明右动作 */
@@ -1034,8 +1034,8 @@ onMounted(load)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
+  gap: var(--soj-sp-12);
+  padding: var(--soj-sp-10) 0;
 }
 
 .danger-row + .danger-row {
@@ -1049,14 +1049,14 @@ onMounted(load)
 .danger-act {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .import {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
   display: flex;
   align-items: flex-end;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 /* 文本域吃满剩余宽、导入成员钮钉右侧末行——联想弹层向下展开不再盖钮 */
@@ -1066,8 +1066,8 @@ onMounted(load)
 
 /* ---- 课堂 PK 卡（v0.42）：与作业长条卡同族白底卡（soj-line + 双层影）---- */
 .pk-card {
-  padding: 12px 20px;
-  margin-bottom: 12px;
+  padding: var(--soj-sp-12) var(--soj-sp-20);
+  margin-bottom: var(--soj-sp-12);
 }
 
 .pk-card.celebrating {
@@ -1077,59 +1077,59 @@ onMounted(load)
 @keyframes pk-flash {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--soj-warning) 0%, transparent);
   }
   40% {
-    box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.35);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--soj-warning) 35%, transparent);
   }
 }
 
 .pk-top {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   min-width: 0;
 }
 
 .pk-badge {
-  font-size: 14px;
-  font-weight: 800;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
   white-space: nowrap;
 }
 
 .pk-state {
-  padding: 1px 10px;
+  padding: var(--soj-sp-2) var(--soj-sp-10);
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-emphasis);
   white-space: nowrap;
 }
 
 .pk-state.live {
-  color: #067a55;
-  background: rgba(16, 185, 129, 0.12);
+  color: var(--soj-success-deep);
+  background: color-mix(in srgb, var(--soj-success) 12%, transparent);
 }
 
 .pk-state.soon {
-  color: #92400e;
-  background: rgba(245, 158, 11, 0.14);
+  color: var(--soj-warning-deep);
+  background: color-mix(in srgb, var(--soj-warning) 14%, transparent);
 }
 
 .pk-state.done {
-  color: var(--soj-dim, #64748b);
-  background: rgba(100, 116, 139, 0.1);
+  color: var(--soj-mut);
+  background: color-mix(in srgb, var(--soj-mut) 10%, transparent);
 }
 
 .pk-state.off {
-  color: var(--soj-dim, #64748b);
-  background: rgba(100, 116, 139, 0.06);
+  color: var(--soj-mut);
+  background: color-mix(in srgb, var(--soj-mut) 6%, transparent);
 }
 
 .pk-clock {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-body);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1140,16 +1140,16 @@ onMounted(load)
 .pk-body {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-top: 8px;
+  gap: var(--soj-sp-10);
+  margin-top: var(--soj-sp-8);
   min-width: 0;
   flex-wrap: wrap;
 }
 
 .pk-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-body);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1158,43 +1158,43 @@ onMounted(load)
 }
 
 .pk-title:hover {
-  color: var(--soj-blue, #2563eb);
+  color: var(--soj-blue);
 }
 
 .pk-meta {
-  font-size: 12px;
-  color: var(--soj-dim, #64748b);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-mut);
   white-space: nowrap;
 }
 
 .pk-board {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin-top: 8px;
+  gap: var(--soj-sp-2);
+  margin-top: var(--soj-sp-8);
 }
 
 .pk-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 3px 8px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-4) var(--soj-sp-8);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   min-width: 0;
 }
 
 .pk-row.me {
-  background: rgba(37, 99, 235, 0.08);
+  background: color-mix(in srgb, var(--soj-blue) 8%, transparent);
 }
 
 .pk-medal {
   width: 34px;
   flex: none;
   text-align: center;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--soj-dim, #64748b);
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-mut);
 }
 
 .pk-name {
@@ -1203,33 +1203,33 @@ onMounted(load)
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--soj-ink, #1e293b);
+  color: var(--soj-ink);
 }
 
 .pk-ms {
   flex: none;
-  font-size: 13px;
-  color: var(--soj-dim, #64748b);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-mut);
   font-variant-numeric: tabular-nums;
 }
 
 .pk-hint {
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--soj-dim, #64748b);
+  margin-top: var(--soj-sp-8);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-mut);
 }
 
 .pk-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  gap: var(--soj-sp-10);
+  margin-top: var(--soj-sp-10);
 }
 
 .pk-winner {
-  font-size: 14px;
-  font-weight: 700;
-  color: #92400e;
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-warning-deep);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1242,14 +1242,14 @@ onMounted(load)
 .strip-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 .strip-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 20px;
+  gap: var(--soj-sp-14);
+  padding: var(--soj-sp-16) var(--soj-sp-20);
   cursor: pointer;
   transition:
     transform 0.15s,
@@ -1258,14 +1258,12 @@ onMounted(load)
 
 /* 作业卡更紧凑（2026-10-28 反馈）：压上下内边距，日期字号同步收小 */
 .strip-card.a-card {
-  padding: 10px 20px;
+  padding: var(--soj-sp-10) var(--soj-sp-20);
 }
 
 .strip-card:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 2px 4px rgba(11, 31, 69, 0.04),
-    0 14px 36px rgba(11, 31, 69, 0.1);
+  box-shadow: var(--soj-shadow-card-hover);
 }
 
 /* 首字色块：作业按 id 轮换色；考试随状态（进行中绿 / 未开始橙 / 已结束灰） */
@@ -1276,33 +1274,33 @@ onMounted(load)
   border-radius: 12px;
   display: grid;
   place-items: center;
-  font-size: 20px;
-  font-weight: 800;
-  color: #fff;
-  background: #75868f;
+  font-size: var(--soj-fs-20);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-white);
+  background: var(--soj-d2);
 }
 
 .strip-av.st-running {
-  background: #237e6b;
+  background: var(--soj-d5);
 }
 
 .strip-av.st-scheduled {
-  background: #d99141;
+  background: var(--soj-d3);
 }
 
 /* 作业卡日期行（2026-10-27 拍板草图）：日期大字｜竖线｜说明/题数纵排 */
 .a-body {
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin-top: 5px;
+  gap: var(--soj-sp-16);
+  margin-top: var(--soj-sp-4);
 }
 
 .a-date {
   flex: none;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-16);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -1321,7 +1319,7 @@ onMounted(load)
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--soj-sp-2);
   line-height: 1.35;
 }
 
@@ -1334,7 +1332,7 @@ onMounted(load)
   flex: none;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   margin-left: auto;
 }
 
@@ -1342,7 +1340,7 @@ onMounted(load)
   width: 150px;
   height: 7px;
   border-radius: 999px;
-  background: #e8eef8;
+  background: var(--soj-surface-2);
   overflow: hidden;
 }
 
@@ -1357,8 +1355,8 @@ onMounted(load)
   flex: none;
   min-width: 34px;
   text-align: right;
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 /* 六点拖拽手柄（仅班级管理员可见）：grab 光标，hover 主蓝 */
@@ -1367,12 +1365,12 @@ onMounted(load)
   width: 10px;
   height: 18px;
   cursor: grab;
-  background-image: radial-gradient(circle, var(--soj-ink-3, #5b6b85) 1.2px, transparent 1.3px);
+  background-image: radial-gradient(circle, var(--soj-ink-3) 1.2px, transparent 1.3px);
   background-size: 5px 6px;
 }
 
 .strip-card > .drag-handle:hover {
-  background-image: radial-gradient(circle, var(--soj-blue, #2455da) 1.2px, transparent 1.3px);
+  background-image: radial-gradient(circle, var(--soj-blue) 1.2px, transparent 1.3px);
 }
 
 .strip-card.dragging {
@@ -1387,32 +1385,32 @@ onMounted(load)
 .strip-title-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   min-width: 0;
 }
 
 .strip-title-row h3 {
   margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-body);
+  font-weight: var(--soj-fw-bold);
+  color: var(--soj-navy);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .strip-intro {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--soj-ink-2, #22334d);
+  margin: var(--soj-sp-4) 0 0;
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .strip-meta {
-  margin-top: 2px;
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  margin-top: var(--soj-sp-2);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 </style>

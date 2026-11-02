@@ -51,6 +51,6 @@ onMounted(() => {
 <style scoped>
 /* 与等级设置双页签同款形制（LevelPanel .levels-tabs） */
 .settings-tabs {
-  margin-bottom: 14px;
+  margin-bottom: var(--soj-sp-14);
 }
 </style>

@@ -707,8 +707,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
+  gap: var(--soj-sp-2);
+  padding: var(--soj-sp-4) var(--soj-sp-6);
   border-bottom: 1px solid var(--el-border-color-lighter);
   line-height: normal;
 }
@@ -716,7 +716,7 @@ onBeforeUnmount(() => {
 .md-toolbar-sep {
   width: 1px;
   height: 16px;
-  margin: 0 4px;
+  margin: 0 var(--soj-sp-4);
   background: var(--el-border-color-light);
 }
 
@@ -749,9 +749,9 @@ onBeforeUnmount(() => {
 }
 
 .md-upload-hint {
-  margin-left: 6px;
+  margin-left: var(--soj-sp-6);
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
 }
 
 /* 主体：编辑/预览双栏，分栏宽可拖（20%–80% 钳制在 JS） */
@@ -789,7 +789,7 @@ onBeforeUnmount(() => {
   flex: 1 1 0; /* 占据 basis 之外的全部剩余宽度 */
   min-width: 0;
   overflow-y: auto;
-  padding: 12px 16px;
+  padding: var(--soj-sp-12) var(--soj-sp-16);
   border-left: 1px solid var(--el-border-color-lighter);
   background: var(--el-fill-color-blank);
 }
@@ -801,9 +801,9 @@ onBeforeUnmount(() => {
 .md-preview-state {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   color: var(--el-text-color-secondary);
-  font-size: var(--soj-fs-body, 14px);
+  font-size: var(--soj-fs-body);
 }
 
 .md-preview-state.is-error {
@@ -835,10 +835,10 @@ onBeforeUnmount(() => {
 .md-editor-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-12);
   color: var(--el-text-color-secondary);
-  font-size: var(--soj-fs-body, 14px);
+  font-size: var(--soj-fs-body);
 }
 
 .md-editor-status.is-error {

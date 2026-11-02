@@ -571,13 +571,13 @@ async function submitBind() {
 }
 
 .fcard {
-  margin-bottom: 16px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 /* 我的玉迁至独立页 /jade（2026-10-30） */
 
 .fcard :deep(.el-card__body) {
-  padding: 8px 26px 14px;
+  padding: var(--soj-sp-8) var(--soj-sp-24) var(--soj-sp-14);
 }
 
 /* frow 内边距收紧（全局 .frow 基础上适配卡体内距） */
@@ -589,15 +589,15 @@ async function submitBind() {
 .fctrl-line {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: var(--soj-sp-24);
   flex-wrap: wrap;
 }
 
 .vis-sw {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--soj-sp-8);
+  font-size: var(--soj-fs-13);
   color: var(--soj-ink-3);
   cursor: pointer;
   white-space: nowrap;
@@ -611,7 +611,7 @@ async function submitBind() {
 .fctrl {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -626,20 +626,20 @@ async function submitBind() {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .email-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   width: 100%;
 }
 
 @media (max-width: 640px) {
   .fbody .frow {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: var(--soj-sp-8);
   }
 }
 </style>

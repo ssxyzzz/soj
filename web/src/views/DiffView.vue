@@ -167,15 +167,10 @@ onUnmounted(destroyViews)
 
 <style scoped>
 .tool-card {
-  padding: 20px 22px;
+  padding: var(--soj-sp-20);
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 14px 18px;
-}
+/* toolbar 形态收编全局 .toolbar（flex/wrap/gap/mb），本地只留增量 */
 
 .lang-sel {
   width: 128px;
@@ -188,15 +183,15 @@ onUnmounted(destroyViews)
 .inputs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-top: 16px;
+  gap: var(--soj-sp-16);
+  margin-top: var(--soj-sp-16);
 }
 
 .input-label {
   font-size: var(--soj-fs-14);
   font-weight: var(--soj-fw-emphasis);
   color: var(--soj-ink-2);
-  margin-bottom: 8px;
+  margin-bottom: var(--soj-sp-8);
 }
 
 /* <992px 折单列（与 PageShell 双列折叠同断点口径） */
@@ -207,14 +202,14 @@ onUnmounted(destroyViews)
 }
 
 .result-card {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 .result-head {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-12);
 }
 
 .result-title {

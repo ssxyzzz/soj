@@ -116,21 +116,15 @@ onMounted(load)
 </template>
 
 <style scoped>
-.head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
 .filters {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--soj-sp-8);
+  margin-bottom: var(--soj-sp-12);
 }
 
 .pager {
   display: flex;
   justify-content: flex-end;
-  margin-top: 12px;
+  margin-top: var(--soj-sp-12);
 }
 </style>

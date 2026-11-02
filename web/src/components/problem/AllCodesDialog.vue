@@ -382,8 +382,8 @@ function openOthersDetail(s: Submission) {
 .dlg-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-12);
 }
 
 /* 提交者筛选下拉 */
@@ -392,13 +392,13 @@ function openOthersDetail(s: Submission) {
 }
 
 .board-tabs :deep(.el-tabs__header) {
-  margin-bottom: 14px;
+  margin-bottom: var(--soj-sp-14);
 }
 
 .board-user {
   color: var(--soj-ink);
   text-decoration: none;
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 .board-user:hover {
   color: var(--soj-blue);
@@ -411,35 +411,35 @@ function openOthersDetail(s: Submission) {
   justify-content: center;
   min-width: 24px;
   height: 24px;
-  padding: 0 6px;
+  padding: 0 var(--soj-sp-6);
   border-radius: 8px;
-  font-weight: 800;
-  font-size: 13px;
+  font-weight: var(--soj-fw-heavy);
+  font-size: var(--soj-fs-13);
   color: var(--soj-ink-2);
-  background: var(--soj-bg, #f2f4f8);
+  background: var(--soj-surface-2);
 }
 .rk-1 {
-  color: #92400e;
-  background: color-mix(in srgb, #f59e0b 22%, #fff);
+  color: var(--soj-warning-deep);
+  background: color-mix(in srgb, var(--soj-warning) 22%, var(--soj-white));
 }
 .rk-2 {
-  color: #475569;
-  background: color-mix(in srgb, #94a3b8 26%, #fff);
+  color: var(--soj-ink-2);
+  background: color-mix(in srgb, var(--soj-mut) 26%, var(--soj-white));
 }
 .rk-3 {
-  color: #7c2d12;
-  background: color-mix(in srgb, #b45309 16%, #fff);
+  color: var(--soj-warning-deep);
+  background: color-mix(in srgb, var(--soj-warning-deep) 16%, var(--soj-white));
 }
 
 .board-locked {
-  padding: 42px 0;
+  padding: var(--soj-sp-48) 0;
   text-align: center;
   color: var(--soj-ink-3);
-  font-size: 14px;
+  font-size: var(--soj-fs-14);
 }
 
 .dim {
-  font-size: 12.5px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 </style>

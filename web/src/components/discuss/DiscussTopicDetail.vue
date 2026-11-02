@@ -426,76 +426,76 @@ onMounted(load)
 }
 .dtd-tags {
   display: flex;
-  gap: 6px;
+  gap: var(--soj-sp-6);
   flex-wrap: wrap;
-  margin-bottom: 6px;
+  margin-bottom: var(--soj-sp-6);
 }
 .dtd-title {
-  font-size: 19px;
-  margin: 4px 0 8px;
+  font-size: var(--soj-fs-18);
+  margin: var(--soj-sp-4) 0 var(--soj-sp-8);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 .dtd-title .solved {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--soj-ok, #16a34a);
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-success-deep);
 }
 .dtd-meta {
   display: flex;
-  gap: 12px;
-  font-size: 12px;
+  gap: var(--soj-sp-12);
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
-  margin-bottom: 10px;
+  margin-bottom: var(--soj-sp-10);
 }
 .dtd-meta .author {
-  font-weight: var(--soj-fw-emphasis, 600);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--soj-ink);
 }
 .dtd-content {
   border-top: 1px solid var(--soj-line);
-  padding-top: 12px;
+  padding-top: var(--soj-sp-12);
 }
 .dtd-deleted-hint {
   color: var(--soj-ink-3);
-  font-size: 13px;
-  padding: 8px 0;
+  font-size: var(--soj-fs-13);
+  padding: var(--soj-sp-8) 0;
 }
 .dtd-deleted-hint.sm {
-  padding: 2px 0;
+  padding: var(--soj-sp-2) 0;
 }
 .dtd-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-top: 12px;
+  gap: var(--soj-sp-4);
+  margin-top: var(--soj-sp-12);
   flex-wrap: wrap;
 }
 .dtd-replies {
-  margin-top: 18px;
+  margin-top: var(--soj-sp-16);
   border-top: 1px solid var(--soj-line);
-  padding-top: 14px;
+  padding-top: var(--soj-sp-14);
 }
 .dtd-replies-head {
-  font-weight: var(--soj-fw-emphasis, 600);
-  margin-bottom: 12px;
+  font-weight: var(--soj-fw-emphasis);
+  margin-bottom: var(--soj-sp-12);
 }
 .dtd-replies-head .n {
   color: var(--soj-ink-3);
-  font-weight: 400;
+  font-weight: var(--soj-fw-regular);
 }
 .lock-hint {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
-  font-weight: 400;
-  margin-left: 8px;
+  font-weight: var(--soj-fw-regular);
+  margin-left: var(--soj-sp-8);
 }
 .dtd-reply {
   border: 1px solid var(--soj-line);
   border-radius: 10px;
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  padding: var(--soj-sp-10) var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-10);
 }
 /* 主楼分页器：钉死宽度防 flex 祖先被撑开（与全站定宽列同款三件套） */
 .dtd-pager {
@@ -503,62 +503,62 @@ onMounted(load)
   min-width: 0;
   box-sizing: border-box;
   justify-content: center;
-  margin-top: 4px;
+  margin-top: var(--soj-sp-4);
 }
 .dtd-reply-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--soj-sp-8);
+  font-size: var(--soj-fs-13);
 }
 .dtd-reply-head .author {
-  font-weight: var(--soj-fw-emphasis, 600);
+  font-weight: var(--soj-fw-emphasis);
 }
 .dtd-reply-head .time,
 .dtd-reply-head .edited {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 .dtd-reply-head .grow {
   flex: 1;
 }
 .dtd-reply-content {
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
 }
 .dtd-reply-actions {
   display: flex;
-  gap: 2px;
-  margin-top: 2px;
+  gap: var(--soj-sp-2);
+  margin-top: var(--soj-sp-2);
 }
 .dtd-nested {
-  margin-top: 8px;
+  margin-top: var(--soj-sp-8);
   border-left: 2px solid var(--soj-line);
-  padding-left: 12px;
+  padding-left: var(--soj-sp-12);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 .dtd-nested-item {
   background: color-mix(in srgb, var(--soj-line) 28%, transparent);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: var(--soj-sp-8) var(--soj-sp-10);
 }
 .dtd-nested-content {
-  margin-top: 4px;
+  margin-top: var(--soj-sp-4);
 }
 .dtd-editor {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 .dtd-editor-tip {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
-  margin-bottom: 6px;
+  margin-bottom: var(--soj-sp-6);
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 .dtd-editor-foot {
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
   display: flex;
   justify-content: flex-end;
 }

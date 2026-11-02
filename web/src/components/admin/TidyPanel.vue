@@ -470,7 +470,7 @@ onUnmounted(stopPoll)
         <el-table-column label="通过率参考" width="150">
           <template #default="{ row }">
             <span class="mono">D{{ row.rate_difficulty }}</span>
-            <span class="muted" style="margin-left: 6px">
+            <span class="muted" style="margin-left: var(--soj-sp-6)">
               {{ row.attempted ? `${Math.round((row.pass_rate ?? 0) * 100)}% · ${row.attempted}人` : '无人做过' }}
             </span>
           </template>
@@ -579,7 +579,7 @@ onUnmounted(stopPoll)
         如需全量重跑：点右上角「发起新整理」→ 勾选「重新整理已整理过的题」→ 重新开始。
       </span>
     </el-alert>
-    <div v-else-if="done && !suggestionTotal" class="muted" style="padding: 12px 0">
+    <div v-else-if="done && !suggestionTotal" class="muted" style="padding: var(--soj-sp-12) 0">
       本次任务没有产出任何建议（{{ status?.error || (rangeLabel ? `${rangeLabel} 内没有待整理的题` : '题库为空，或在产出第一条建议前被取消') }}）。
     </div>
   </el-card>
@@ -587,35 +587,33 @@ onUnmounted(stopPoll)
 
 <style scoped>
 .head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: var(--soj-sp-12); /* 全局 .head 之上的增量：行距 sp-12（全局默认 sp-8） */
 }
 
 .kind-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 /* 模式卡（v0.49）：AI整理 / 手动整理 两列，嵌在任务卡上方 */
 .mode-cards {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-12);
 }
 
 .pager-row {
   display: flex;
   justify-content: center;
-  margin-top: 12px;
+  margin-top: var(--soj-sp-12);
 }
 
 .kind-card {
   border: 1px solid var(--el-border-color);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: var(--soj-sp-12) var(--soj-sp-14);
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -627,27 +625,27 @@ onUnmounted(stopPoll)
 
 .kc-title {
   font-weight: var(--soj-fw-emphasis);
-  margin-bottom: 6px;
+  margin-bottom: var(--soj-sp-6);
 }
 
 .kc-desc {
   color: var(--el-text-color-secondary);
-  font-size: var(--soj-fs-secondary, 13px);
+  font-size: var(--soj-fs-13); /* --soj-fs-secondary 未定义，原兜底 13px 即 fs-13 */
   line-height: 1.6;
 }
 
 .run-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-top: 14px;
+  gap: var(--soj-sp-14);
+  margin-top: var(--soj-sp-14);
   flex-wrap: wrap;
 }
 
 .range-box {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--soj-sp-6);
 }
 
 .range-input {
@@ -657,7 +655,7 @@ onUnmounted(stopPoll)
 .progress-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--soj-sp-14);
 }
 
 .prog {
@@ -665,15 +663,15 @@ onUnmounted(stopPoll)
 }
 
 .state-alert {
-  margin: 12px 0;
+  margin: var(--soj-sp-12) 0;
 }
 
 .result-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   flex-wrap: wrap;
-  margin: 14px 0 10px;
+  margin: var(--soj-sp-14) 0 var(--soj-sp-10);
 }
 
 .spacer {
@@ -681,7 +679,7 @@ onUnmounted(stopPoll)
 }
 
 .tag-gap {
-  margin: 0 4px 4px 0;
+  margin: 0 var(--soj-sp-4) var(--soj-sp-4) 0;
 }
 
 .warn-text {
@@ -689,7 +687,7 @@ onUnmounted(stopPoll)
 }
 
 .mono {
-  font-family: var(--soj-font-mono, monospace);
+  font-family: var(--font-mono);
 }
 
 .muted {

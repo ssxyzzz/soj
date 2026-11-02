@@ -167,15 +167,15 @@ onMounted(load)
 
 .panel-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .seed-hint {
-  margin-bottom: 12px;
+  margin-bottom: var(--soj-sp-12);
 }
 
 .seed-mark {
-  margin: 0 4px;
+  margin: 0 var(--soj-sp-4);
 }
 
 .pid-link {

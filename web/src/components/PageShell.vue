@@ -22,18 +22,19 @@
 </template>
 
 <style scoped>
+/* 布局常量走 :root token（--soj-container/-aside-w 等，v0.57 唯一改值入口） */
 .page-shell {
-  max-width: 1440px;
+  max-width: var(--soj-container);
   margin: 0 auto;
 }
 
 .standalone {
-  margin-bottom: 16px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 .cols {
   display: flex;
-  gap: 24px;
+  gap: var(--soj-sp-24);
   align-items: flex-start;
 }
 
@@ -45,8 +46,8 @@
 }
 
 .side-col {
-  flex: 0 0 320px;
-  width: 320px;
+  flex: 0 0 var(--soj-aside-w);
+  width: var(--soj-aside-w);
 }
 
 /* 右列纵向堆叠的按钮组居中；重置 Element Plus 相邻按钮的默认左移

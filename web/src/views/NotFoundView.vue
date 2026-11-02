@@ -22,7 +22,7 @@ const router = useRouter()
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   text-align: center;
 }
 

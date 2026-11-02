@@ -185,7 +185,7 @@ onMounted(() => {
           {{ { level: '🏆 等级榜', solve: '⚔️ 刷题榜', combo: '🔥 连击榜', streak: '📅 坚持榜' }[b] }}
         </button>
       </div>
-      <div v-if="board === 'combo'" class="board-tabs" style="margin-top: 8px">
+      <div v-if="board === 'combo'" class="board-tabs" style="margin-top: var(--soj-sp-8)">
         <button class="board-tab" :class="{ on: comboBy === 'best' }" @click="switchComboBy('best')">🏆 历史连击</button>
         <button class="board-tab" :class="{ on: comboBy === 'cur' }" @click="switchComboBy('cur')">🔥 当前连击</button>
       </div>
@@ -269,27 +269,25 @@ onMounted(() => {
 .podium {
   display: grid;
   grid-template-columns: 1fr 1.22fr 1fr; /* 冠军居中列加宽（配合 2-1-3 顺序） */
-  gap: 16px;
-  margin-bottom: 22px;
+  gap: var(--soj-sp-16);
+  margin-bottom: var(--soj-sp-20);
   align-items: end;
 }
 
 .pcard {
-  padding: 22px;
+  padding: var(--soj-sp-20);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   cursor: pointer;
   transition: transform 0.18s, box-shadow 0.18s;
 }
 
 .pcard:hover {
   transform: translateY(-3px);
-  box-shadow:
-    0 2px 4px rgba(11, 31, 69, 0.04),
-    0 18px 44px rgba(11, 31, 69, 0.11);
+  box-shadow: var(--soj-shadow-card-hover);
 }
 
 /* 单人领奖台：独占中列（冠军位） */
@@ -298,7 +296,7 @@ onMounted(() => {
 }
 
 .pcard.p1 {
-  padding: 38px 22px 32px;
+  padding: var(--soj-sp-32) var(--soj-sp-20) var(--soj-sp-32);
   background:
     radial-gradient(300px 120px at 50% 0%, rgb(var(--soj-blue-rgb) / 0.08), transparent 70%), var(--el-bg-color);
   border-color: rgb(var(--soj-blue-rgb) / 0.22);
@@ -308,7 +306,7 @@ onMounted(() => {
 .pcard.p1 .pav {
   width: 66px;
   height: 66px;
-  font-size: 25px;
+  font-size: var(--soj-fs-22);
 }
 
 .pcard.p1 .rank-no {
@@ -317,19 +315,19 @@ onMounted(() => {
 
 .pcard.p2 .rank-no,
 .pcard.p3 .rank-no {
-  font-size: 32px;
+  font-size: var(--soj-fs-32);
 }
 
 .pcard.p2 .pav,
 .pcard.p3 .pav {
   width: 48px;
   height: 48px;
-  font-size: 18px;
+  font-size: var(--soj-fs-18);
 }
 
 .pcard.p2 .pname,
 .pcard.p3 .pname {
-  font-size: 14px;
+  font-size: var(--soj-fs-14);
 }
 
 .rank-no {
@@ -355,18 +353,18 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: var(--soj-fs-20);
   font-weight: var(--soj-fw-heavy);
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
   background: var(--soj-surface-3);
-  color: #fff;
-  box-shadow: 0 8px 18px rgba(11, 31, 69, 0.16);
+  color: var(--soj-white);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--soj-navy) 16%, transparent);
 }
 
 .p1 .pav {
   width: 66px;
   height: 66px;
-  font-size: 24px;
+  font-size: var(--soj-fs-22);
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
 }
 
@@ -377,7 +375,7 @@ onMounted(() => {
 }
 
 .psolved {
-  font-size: 12.5px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 
@@ -390,7 +388,7 @@ onMounted(() => {
 .player {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   min-width: 0;
   text-decoration: none;
   max-width: 100%;
@@ -414,12 +412,12 @@ onMounted(() => {
 .rank-footer {
   display: flex;
   justify-content: center;
-  gap: 18px;
+  gap: var(--soj-sp-16);
   flex-wrap: wrap;
-  margin-top: 22px;
-  padding-top: 22px;
+  margin-top: var(--soj-sp-20);
+  padding-top: var(--soj-sp-20);
   border-top: 1px solid var(--soj-line);
-  font-size: 12.5px;
+  font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
 }
 
@@ -427,14 +425,14 @@ onMounted(() => {
 .pager {
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
-  padding-bottom: 2px;
+  margin-top: var(--soj-sp-16);
+  padding-bottom: var(--soj-sp-2);
 }
 
 @media (max-width: 900px) {
   .podium {
     grid-template-columns: 1fr;
-    gap: 12px;
+    gap: var(--soj-sp-12);
   }
 }
 </style>
@@ -443,17 +441,17 @@ onMounted(() => {
 /* 多榜制（v0.41）：四榜切换胶囊 */
 .board-tabs {
   display: flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: var(--soj-sp-14);
 }
 
 .board-tab {
   border: 1px solid var(--el-border-color);
   background: transparent;
   border-radius: 999px;
-  padding: 6px 16px;
-  font-size: 14px;
+  padding: var(--soj-sp-6) var(--soj-sp-16);
+  font-size: var(--soj-fs-14);
   cursor: pointer;
   color: var(--el-text-color-regular);
 }
@@ -461,19 +459,19 @@ onMounted(() => {
 .board-tab.on {
   background: var(--soj-blue);
   border-color: var(--soj-blue);
-  color: #fff;
-  font-weight: 700;
+  color: var(--soj-white);
+  font-weight: var(--soj-fw-bold);
 }
 
 .my-game-rank {
-  margin-bottom: 10px;
-  font-size: 14px;
+  margin-bottom: var(--soj-sp-10);
+  font-size: var(--soj-fs-14);
   color: var(--el-text-color-secondary);
 }
 
 .game-val {
-  font-weight: 800;
+  font-weight: var(--soj-fw-heavy);
   color: var(--soj-blue);
-  font-size: 16px;
+  font-size: var(--soj-fs-16);
 }
 </style>

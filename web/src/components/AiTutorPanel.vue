@@ -245,7 +245,7 @@ defineExpose({ refresh: load })
 .ai-tutor {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 /* 头行（徽章 + 今日剩余）：细线画法对齐卡头（提交本题/题目维护那种）——
@@ -256,17 +256,17 @@ defineExpose({ refresh: load })
   align-items: center;
   justify-content: space-between;
   margin: -12px -20px 0;
-  padding: 0 20px 4px;
+  padding: 0 var(--soj-sp-20) var(--soj-sp-4);
   border-bottom: 1px solid var(--el-card-border-color, var(--el-border-color-light));
 }
 
 .ai-badge {
-  font-weight: 600;
-  color: #6a5acd;
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-d6); /* AI 徽标紫归并难度轴紫档（v0.57，原野生石板紫 #6a5acd） */
 }
 
 .ai-daily {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
 }
 
 /* 两级大胶囊钮（2026-10-30 草案）：白底细边、藏蓝粗字居中，状态图标浮右 */
@@ -280,10 +280,10 @@ defineExpose({ refresh: load })
   width: 100%;
   height: 46px;
   border-radius: 999px;
-  color: var(--soj-navy, #0b1f45);
+  color: var(--soj-navy);
   --el-button-bg-color: var(--el-fill-color-blank);
   --el-button-border-color: var(--soj-line);
-  --el-button-hover-text-color: var(--soj-navy, #0b1f45);
+  --el-button-hover-text-color: var(--soj-navy);
   --el-button-hover-bg-color: var(--el-fill-color-blank);
   --el-button-hover-border-color: var(--soj-blue-line, var(--soj-line));
 }
@@ -291,7 +291,7 @@ defineExpose({ refresh: load })
 .ai-btn .ai-btn-label {
   flex: 1;
   text-align: center;
-  font-size: 15px;
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-bold);
 }
 
@@ -300,7 +300,7 @@ defineExpose({ refresh: load })
   right: 18px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--soj-ink-3, #5b6b85);
+  color: var(--soj-ink-3);
 }
 
 .ai-btn .ai-btn-state.ok {
@@ -308,7 +308,7 @@ defineExpose({ refresh: load })
 }
 
 .ai-foot {
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   margin: 0;
 }
 
@@ -317,18 +317,18 @@ defineExpose({ refresh: load })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--soj-sp-12);
 }
 
 .dlg-title {
-  font-size: 16px;
+  font-size: var(--soj-fs-16);
   font-weight: var(--soj-fw-bold);
-  color: var(--soj-navy, #0b1f45);
+  color: var(--soj-navy);
 }
 
 .dlg-acts {
   display: inline-flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .dlg-body {
@@ -340,6 +340,6 @@ defineExpose({ refresh: load })
 .dlg-empty {
   margin: 0;
   text-align: center;
-  padding: 40px 0;
+  padding: var(--soj-sp-32) 0;
 }
 </style>

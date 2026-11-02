@@ -161,30 +161,30 @@ onBeforeUnmount(close)
 .usuggest-pop {
   position: fixed;
   z-index: 20;
-  background: #fff;
-  border: 1px solid var(--soj-line, #e3eaf6);
+  background: var(--soj-white);
+  border: 1px solid var(--soj-line);
   border-radius: 10px;
-  box-shadow: 0 10px 28px rgba(11, 31, 69, 0.14);
-  padding: 4px;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--soj-navy) 14%, transparent);
+  padding: var(--soj-sp-4);
 }
 
 .usug-item {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 7px 10px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-8) var(--soj-sp-10);
   border-radius: 7px;
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: var(--soj-fs-13);
 }
 
 .usug-item.on,
 .usug-item:hover {
-  background: #f0f5fc;
+  background: var(--soj-surface-3);
 }
 
 .usug-item .nick {
-  color: var(--soj-ink-3, #5b6b85);
-  font-size: 12.5px;
+  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-12);
 }
 </style>

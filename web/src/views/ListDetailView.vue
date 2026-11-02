@@ -431,31 +431,31 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
 </template>
 
 <style scoped>
-/* 名称卡（比赛详情同款）：26px 大标题 + meta + 简介 + 进度/难度分布 */
+/* 名称卡（比赛详情同款）：entity-detail 大标题 + meta + 简介 + 进度/难度分布 */
 .name-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   flex-wrap: wrap;
 }
 
 .big-title {
-  font-size: var(--soj-fs-entity-detail, 28px);
-  font-weight: var(--soj-fw-heavy, 800);
+  font-size: var(--soj-fs-entity-detail);
+  font-weight: var(--soj-fw-heavy);
   letter-spacing: -0.5px;
-  color: var(--soj-navy, #0b1f45);
+  color: var(--soj-navy);
 }
 
 .meta-line {
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--soj-ink-3, #5b6b85);
+  margin-top: var(--soj-sp-6);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
 }
 
 .intro {
-  margin-top: 12px;
-  font-size: 13.5px;
-  color: var(--soj-ink-2, #22334d);
+  margin-top: var(--soj-sp-12);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
 }
 
 .intro :deep(p) {
@@ -465,7 +465,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
 /* 名称卡左右双列：左 = 名字/说明/进度，右 = 难度堆叠柱（淡竖线分隔） */
 .name-cols {
   display: flex;
-  gap: 26px;
+  gap: var(--soj-sp-24);
   align-items: center;
 }
 
@@ -475,31 +475,31 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
 }
 
 .progress-block {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 .progress-txt {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: var(--soj-sp-6);
+  margin-bottom: var(--soj-sp-8);
 }
 
 .progress-txt b {
-  font-size: 22px;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-22);
+  color: var(--soj-navy);
 }
 
 .progress-txt span {
-  font-size: 14px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-14);
+  color: var(--soj-ink-3);
 }
 
 .progress-txt em {
   font-style: normal;
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
-  margin-left: 4px;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+  margin-left: var(--soj-sp-4);
 }
 
 .diff-block {
@@ -507,12 +507,12 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
   display: flex;
   align-items: center;
   align-self: stretch;
-  padding-left: 26px;
-  border-left: 1px solid var(--soj-line, #e3eaf6);
+  padding-left: var(--soj-sp-24);
+  border-left: 1px solid var(--soj-line);
 }
 
 .ltabs {
-  margin-top: 6px;
+  margin-top: var(--soj-sp-6);
 }
 
 /* 题目 Tab */
@@ -520,25 +520,25 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: var(--soj-sp-12);
+  margin-bottom: var(--soj-sp-10);
 }
 
 .ptools .hint {
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 .chapters {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .chapter {
-  border: 1px solid var(--soj-line, #e3eaf6);
+  border: 1px solid var(--soj-line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--soj-white);
   overflow: hidden;
 }
 
@@ -547,8 +547,8 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 20px 16px;
+  gap: var(--soj-sp-10);
+  padding: var(--soj-sp-20) var(--soj-sp-16);
   min-height: 70px;
   background: linear-gradient(90deg, rgb(var(--soj-blue-hi-rgb) / 0.12), rgb(var(--soj-teal-rgb) / 0.06));
   border: none;
@@ -564,27 +564,27 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
 .cno {
   flex: none;
   min-width: 30px;
-  font-weight: 700;
+  font-weight: var(--soj-fw-bold);
   color: var(--soj-blue);
-  font-size: 14px;
+  font-size: var(--soj-fs-14);
 }
 
 .ctitle {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-body);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .cdesc {
-  font-weight: 400;
-  color: var(--soj-ink-3, #5b6b85);
-  margin-left: 8px;
-  font-size: 12.5px;
+  font-weight: var(--soj-fw-regular);
+  color: var(--soj-ink-3);
+  margin-left: var(--soj-sp-8);
+  font-size: var(--soj-fs-12);
 }
 
 .cbar {
@@ -592,7 +592,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
   width: 110px;
   height: 6px;
   border-radius: 999px;
-  background: #e8eef8;
+  background: var(--soj-surface-2);
   overflow: hidden;
 }
 
@@ -605,8 +605,8 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
 
 .ccount {
   flex: none;
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
   min-width: 44px;
   text-align: right;
 }
@@ -614,20 +614,20 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
 /* 组头右侧两字开关（拍板 2：不要超小图标） */
 .tg {
   flex: none;
-  font-size: 12.5px;
-  font-weight: 700;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
   color: var(--soj-blue);
   min-width: 26px;
   text-align: right;
 }
 
 .cbody {
-  padding: 0 0 2px;
+  padding: 0 0 var(--soj-sp-2);
 }
 
 /* 表格内题目链接与内联标签 */
 .ptitle {
-  color: var(--soj-navy, #22334d);
+  color: var(--soj-navy);
   text-decoration: none;
 }
 
@@ -636,7 +636,7 @@ a.ptitle:hover {
 }
 
 .ptitle.locked {
-  color: var(--soj-ink-3, #5b6b85);
+  color: var(--soj-ink-3);
   cursor: not-allowed;
 }
 
@@ -659,15 +659,15 @@ a.ptitle:hover {
 .sec-block + .sec-block,
 .ptable + .sec-block,
 .sec-block + .ptable {
-  margin-top: 2px;
+  margin-top: var(--soj-sp-2);
 }
 
 .sbar {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
+  gap: var(--soj-sp-10);
+  padding: var(--soj-sp-12) var(--soj-sp-16);
   min-height: 48px;
   background: rgb(var(--soj-blue-hi-rgb) / 0.06);
   border: none;
@@ -689,34 +689,34 @@ a.ptitle:hover {
 .stitle {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 14.5px;
-  font-weight: 800;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .sec-table {
-  padding-bottom: 2px;
+  padding-bottom: var(--soj-sp-2);
 }
 
 .sempty,
 .cempty {
   margin: 0;
-  padding: 12px 16px;
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  padding: var(--soj-sp-12) var(--soj-sp-16);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 .cdesc {
-  font-weight: 400;
-  color: var(--soj-ink-3, #5b6b85);
-  font-size: 12.5px;
+  font-weight: var(--soj-fw-regular);
+  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-12);
 }
 
 .dim {
-  color: var(--soj-ink-3, #5b6b85);
+  color: var(--soj-ink-3);
 }
 
 /* 排名 Tab */
@@ -727,26 +727,26 @@ a.ptitle:hover {
 .rank-me {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  margin-bottom: 12px;
-  font-size: 14px;
-  color: var(--soj-navy, #22334d);
+  gap: var(--soj-sp-10);
+  margin-bottom: var(--soj-sp-12);
+  font-size: var(--soj-fs-14);
+  color: var(--soj-navy);
 }
 
 .rank-me b {
-  font-size: 18px;
+  font-size: var(--soj-fs-18);
   color: var(--soj-blue);
 }
 
 .rank-me .dim {
-  color: var(--soj-ink-3, #5b6b85);
-  font-size: 12.5px;
+  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-12);
 }
 
 .rpct {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .rpct-bar {
@@ -754,7 +754,7 @@ a.ptitle:hover {
   max-width: 180px;
   height: 6px;
   border-radius: 999px;
-  background: #e8eef8;
+  background: var(--soj-surface-2);
   overflow: hidden;
 }
 
@@ -765,39 +765,39 @@ a.ptitle:hover {
 }
 
 .rpct .dim {
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 .pager {
   display: flex;
   justify-content: center;
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
 }
 
 /* TOC */
 .toc {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--soj-sp-2);
 }
 
 .toc-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   border: none;
   background: none;
-  padding: 7px 8px;
+  padding: var(--soj-sp-8) var(--soj-sp-8);
   border-radius: 8px;
   cursor: pointer;
   text-align: left;
-  font-size: 14.5px;
-  color: var(--soj-navy, #22334d);
+  font-size: var(--soj-fs-14);
+  color: var(--soj-navy);
 }
 
 .toc-row:hover {
-  background: #f0f5fc;
+  background: var(--soj-surface-3);
 }
 
 .toc-title {
@@ -808,7 +808,7 @@ a.ptitle:hover {
 }
 
 .aside-card {
-  margin-bottom: 16px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 /* 目录卡吸顶：随滚动跟随。sticky 需要父列有行程——
@@ -819,17 +819,17 @@ a.ptitle:hover {
 
 .toc-card {
   position: sticky;
-  top: 84px;
+  top: var(--soj-sticky-top);
 }
 
 .toc-group + .toc-group {
-  margin-top: 2px;
+  margin-top: var(--soj-sp-2);
 }
 
 .toc-chap {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--soj-sp-4);
 }
 
 /* 组级小节列表收起/展开的旋转箭头 */
@@ -840,7 +840,7 @@ a.ptitle:hover {
   border: none;
   background: none;
   color: var(--soj-blue);
-  font-size: 16px;
+  font-size: var(--soj-fs-16);
   cursor: pointer;
   transition: transform 0.2s;
   transform: rotate(90deg);
@@ -853,17 +853,17 @@ a.ptitle:hover {
 }
 
 .toc-sub {
-  margin-left: 30px;
+  margin-left: var(--soj-sp-32);
 }
 
 .toc-row.sub {
-  font-size: 13px;
-  color: var(--soj-ink-2, #22334d);
-  padding: 5px 8px;
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
+  padding: var(--soj-sp-4) var(--soj-sp-8);
 }
 
 .toc-row.sub .cno {
-  color: var(--soj-ink-3, #5b6b85);
+  color: var(--soj-ink-3);
 }
 
 .aside-card .el-button {
@@ -871,8 +871,8 @@ a.ptitle:hover {
 }
 
 .hint {
-  margin: 10px 0 0;
-  font-size: 12.5px;
-  color: var(--soj-ink-3, #5b6b85);
+  margin: var(--soj-sp-10) 0 0;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 </style>

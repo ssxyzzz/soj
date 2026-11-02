@@ -395,9 +395,9 @@ function openDetail(id: number) {
 /* 头部资料卡：头像首字 + 昵称行 + 资料 meta + 等级进度 + 四格统计 */
 .hero {
   display: flex;
-  gap: 20px;
+  gap: var(--soj-sp-20);
   align-items: flex-start;
-  padding: 22px 24px;
+  padding: var(--soj-sp-20) var(--soj-sp-24);
 }
 
 .avatar {
@@ -407,9 +407,9 @@ function openDetail(id: number) {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 28px;
-  font-weight: 800;
-  color: #fff;
+  font-size: var(--soj-fs-28);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-white);
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-blue-lo));
 }
 
@@ -417,7 +417,7 @@ function openDetail(id: number) {
 .avatar-img {
   object-fit: cover;
   border: 1px solid var(--soj-line);
-  background: #fff;
+  background: var(--soj-white);
 }
 
 .who {
@@ -428,38 +428,38 @@ function openDetail(id: number) {
 .name-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .name-row h2 {
   margin: 0;
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-20);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
 }
 
 .meta {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline; /* @root 是等宽字体，度量与正文不同，需显式按基线对齐 */
-  gap: 4px 14px;
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--soj-ink-3, #5b6b85);
+  gap: var(--soj-sp-4) var(--soj-sp-14);
+  margin-top: var(--soj-sp-6);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-3);
 }
 
 .lv-progress {
-  margin-top: 12px;
+  margin-top: var(--soj-sp-12);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .lv-bar {
   flex: 0 1 320px;
   height: 8px;
   border-radius: 999px;
-  background: #e8eef8;
+  background: var(--soj-surface-2);
   overflow: hidden;
 }
 
@@ -471,8 +471,8 @@ function openDetail(id: number) {
 }
 
 .lv-txt {
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
   white-space: nowrap;
 }
 
@@ -480,40 +480,40 @@ function openDetail(id: number) {
   flex: none;
   display: grid;
   grid-template-columns: repeat(4, minmax(72px, auto));
-  gap: 8px 22px;
+  gap: var(--soj-sp-8) var(--soj-sp-20);
   text-align: center;
   align-self: center;
 }
 
 .stat b {
   display: block;
-  font-size: 20px;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-20);
+  color: var(--soj-navy);
 }
 
 .stat span {
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 /* 按难度完成卡 */
 .done-card {
-  padding: 20px 24px;
+  padding: var(--soj-sp-20) var(--soj-sp-24);
 }
 
 .done-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   flex-wrap: wrap;
 }
 
 .done-head h3 {
   margin: 0;
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-16);
+  font-weight: var(--soj-fw-heavy);
+  color: var(--soj-navy);
 }
 
 .seg {
@@ -522,10 +522,10 @@ function openDetail(id: number) {
 
 /* 柱状图（难度完成图，2026-10-26）：柱色走 .diff-N 的 --dc 色轴，点柱切换下方题目列表 */
 .dchart {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
   display: flex;
   align-items: stretch;
-  gap: 10px;
+  gap: var(--soj-sp-10);
 }
 
 .dbar {
@@ -534,10 +534,10 @@ function openDetail(id: number) {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--soj-sp-8);
   border: 0;
   background: transparent;
-  padding: 6px 2px;
+  padding: var(--soj-sp-6) var(--soj-sp-2);
   font: inherit;
   color: var(--dc, var(--soj-blue));
   cursor: pointer;
@@ -545,9 +545,9 @@ function openDetail(id: number) {
 
 .dbar .v {
   min-height: 18px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--soj-navy, #0b1f45);
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-navy);
 }
 
 .dbar .bar {
@@ -573,7 +573,7 @@ function openDetail(id: number) {
 }
 
 .dbar.zero .bar {
-  background: #e3eaf6;
+  background: var(--soj-surface-2);
   opacity: 1;
 }
 
@@ -583,32 +583,32 @@ function openDetail(id: number) {
 
 /* 选中档题目列表 */
 .dlist {
-  margin-top: 14px;
+  margin-top: var(--soj-sp-14);
 }
 
 .dlist-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 2px 10px;
+  gap: var(--soj-sp-10);
+  padding: 0 var(--soj-sp-2) var(--soj-sp-10);
 }
 
 .dcount {
-  color: var(--soj-ink-3, #5b6b85);
-  font-size: 12px;
+  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-12);
 }
 
 .glist {
-  padding: 2px 6px;
+  padding: var(--soj-sp-2) var(--soj-sp-6);
 }
 
 .prow {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 10px;
-  border-bottom: 1px dashed #edf2fa;
-  font-size: 14px;
+  gap: var(--soj-sp-10);
+  padding: var(--soj-sp-8) var(--soj-sp-10);
+  border-bottom: 1px dashed var(--soj-surface-2);
+  font-size: var(--soj-fs-14);
 }
 
 .prow:last-child {
@@ -621,7 +621,7 @@ function openDetail(id: number) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--soj-navy, #22334d);
+  color: var(--soj-navy);
   text-decoration: none;
 }
 
@@ -630,9 +630,9 @@ function openDetail(id: number) {
 }
 
 .pid {
-  color: var(--soj-ink-3, #5b6b85);
-  font-size: 12px;
-  margin-right: 2px;
+  color: var(--soj-ink-3);
+  font-size: var(--soj-fs-12);
+  margin-right: var(--soj-sp-2);
 }
 
 .hid {
@@ -641,36 +641,36 @@ function openDetail(id: number) {
 
 .when {
   flex: none;
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 /* 副列 */
 .aside-card {
-  margin-bottom: 16px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 .rtitle {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
 }
 
 .hint {
-  margin: 10px 0 0;
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
+  margin: var(--soj-sp-10) 0 0;
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 /* 比赛历史行 */
 .crow {
   display: flex;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   align-items: center;
 }
 
 .ctitle {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--soj-navy, #22334d);
+  font-size: var(--soj-fs-14);
+  font-weight: var(--soj-fw-emphasis);
+  color: var(--soj-navy);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -679,32 +679,34 @@ function openDetail(id: number) {
 .cmeta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--soj-ink-3, #5b6b85);
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-4);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 /* 迷你状态胶囊（比赛时段/结果） */
 .mini-tag {
   display: inline-flex;
   align-items: center;
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  padding: var(--soj-sp-2) var(--soj-sp-8);
   border-radius: 999px;
   white-space: nowrap;
 }
 
 .mini-tag.running {
-  color: #157347;
-  background: rgba(76, 175, 80, 0.12);
+  color: var(--soj-success-deep);
+  background: color-mix(in srgb, var(--soj-success) 12%, transparent);
 }
 
+/* stylelint-disable color-no-hex -- 琥珀金状态胶囊定值，v0.57 豁免（无就近 token，暂缓归并） */
 .mini-tag.scheduled {
   color: #8a6d1a;
   background: rgba(233, 201, 99, 0.16);
 }
+/* stylelint-enable color-no-hex */
 
 .mini-tag.ended {
   color: var(--soj-blue-lo);
@@ -718,13 +720,13 @@ function openDetail(id: number) {
 
 .rank-cell b {
   display: block;
-  font-size: 16px;
+  font-size: var(--soj-fs-16);
   color: var(--soj-blue);
 }
 
 .rank-cell span {
-  font-size: 11px;
-  color: var(--soj-ink-3, #5b6b85);
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
 }
 
 /* 窄屏：计数卡 5×2 折行、统计下沉整行 */
@@ -748,20 +750,20 @@ function openDetail(id: number) {
 .ach-card,
 .star-card,
 .wb-card {
-  margin-bottom: 16px;
+  margin-bottom: var(--soj-sp-16);
 }
 
 .ach-card,
 .star-card,
 .wb-card {
-  padding: 20px 24px;
+  padding: var(--soj-sp-20) var(--soj-sp-24);
 }
 
 /* 成就进度条：细线计量，钩住不施压 */
 .ach-meter {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--soj-sp-10);
   min-width: 180px;
 }
 
@@ -776,12 +778,12 @@ function openDetail(id: number) {
 .ach-meter-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--soj-blue), #5b8def);
+  background: linear-gradient(90deg, var(--soj-blue), var(--soj-blue-hi));
   transition: width 0.6s ease;
 }
 
 .ach-meter .mono {
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: var(--el-text-color-secondary);
 }
 
@@ -789,16 +791,16 @@ function openDetail(id: number) {
 .ach-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  gap: var(--soj-sp-12);
+  margin-top: var(--soj-sp-16);
 }
 
 .ach-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 14px 10px 12px;
+  gap: var(--soj-sp-4);
+  padding: var(--soj-sp-14) var(--soj-sp-10) var(--soj-sp-12);
   border-radius: 12px;
   border: 1px dashed var(--el-border-color-lighter);
   text-align: center;
@@ -810,20 +812,20 @@ function openDetail(id: number) {
 }
 
 .ach-tile .ach-icon {
-  font-size: 24px;
+  font-size: var(--soj-fs-22);
   line-height: 1.2;
   filter: grayscale(1);
   opacity: 0.55;
 }
 
 .ach-tile .ach-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
   color: var(--el-text-color-secondary);
 }
 
 .ach-tile .ach-state {
-  font-size: 11px;
+  font-size: var(--soj-fs-12);
   color: var(--el-text-color-placeholder);
 }
 
@@ -842,29 +844,31 @@ function openDetail(id: number) {
 
 .ach-tile.on .ach-state {
   color: var(--soj-blue);
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
-/* 四档配色（解锁后）：铜/银/金/彩 */
+/* stylelint-disable color-no-hex -- 成就奖章四档皮肤定值（铜/金/彩），v0.57 豁免 token 化；
+   可就近归并的银/金底已迁 token，余值成套保留不拆色组 */
 .ach-tile.on.bronze {
   border-color: #dcb58a;
   background: #fdf8f1;
 }
 
 .ach-tile.on.silver {
-  border-color: #aeb9c6;
-  background: #f6f8fa;
+  border-color: var(--soj-ink-3);
+  background: var(--soj-surface-2);
 }
 
 .ach-tile.on.gold {
   border-color: #e7c268;
-  background: #fffbef;
+  background: var(--soj-tle-bg);
 }
 
 .ach-tile.on.color {
   border-color: #c4b5fd;
   background: #f7f4ff;
 }
+/* stylelint-enable color-no-hex */
 
 .ach-tile.on.gold .ach-icon,
 .ach-tile.on.color .ach-icon {
@@ -875,18 +879,18 @@ function openDetail(id: number) {
 .star-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
+  gap: var(--soj-sp-10);
+  margin-top: var(--soj-sp-16);
 }
 
 .star {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-8) var(--soj-sp-14);
   border-radius: 999px;
   border: 1px dashed var(--el-border-color);
-  font-size: 13px;
+  font-size: var(--soj-fs-13);
   color: var(--el-text-color-secondary);
 }
 
@@ -894,29 +898,29 @@ function openDetail(id: number) {
   border: 1px solid var(--soj-blue);
   background: var(--soj-blue-soft);
   color: var(--soj-blue);
-  font-weight: 600;
+  font-weight: var(--soj-fw-emphasis);
 }
 
 .star.lit .star-dot {
-  text-shadow: 0 0 8px rgba(31, 73, 186, 0.5);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--soj-blue) 50%, transparent);
 }
 
-.star-dot { font-size: 14px; }
-.star-n { font-size: 12px; opacity: 0.75; }
+.star-dot { font-size: var(--soj-fs-14); }
+.star-n { font-size: var(--soj-fs-12); opacity: 0.75; }
 
 /* 错题本：宽行 + 难度徽章 + 悬停浮出「去复仇」 */
 .wb-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 16px;
+  gap: var(--soj-sp-4);
+  margin-top: var(--soj-sp-16);
 }
 
 .wb-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
+  gap: var(--soj-sp-12);
+  padding: var(--soj-sp-12) var(--soj-sp-14);
   border-radius: 10px;
   text-decoration: none;
   color: var(--el-text-color-primary);
@@ -928,25 +932,25 @@ function openDetail(id: number) {
 }
 
 .wb-title {
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: var(--soj-fw-emphasis);
+  font-size: var(--soj-fs-14);
 }
 
 .wb-row .pid {
   color: var(--el-text-color-secondary);
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
 }
 
 .wb-score {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--soj-fs-12);
   color: var(--el-text-color-secondary);
   white-space: nowrap;
 }
 
 .wb-go {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
   color: var(--soj-blue);
   opacity: 0;
   transform: translateX(-4px);

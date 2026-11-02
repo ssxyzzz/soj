@@ -381,7 +381,7 @@ onMounted(loadBackup)
         show-icon
         title="数据备/全量备动辄数百 MB，在线下载会长时间占满站点公网管道（学生会全站变卡）——在服务器上执行下面的命令取包，秒级完成"
       />
-      <div class="cmd-line" style="margin-top: 10px">
+      <div class="cmd-line" style="margin-top: var(--soj-sp-10)">
         <code>{{ fetchCmd }}</code>
         <el-button size="small" link type="primary" @click="copyText(fetchCmd)">复制</el-button>
       </div>
@@ -432,12 +432,12 @@ onMounted(loadBackup)
 .status-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: var(--soj-sp-14);
   flex-wrap: wrap;
 }
 
 .backup-desc {
-  margin: 12px 0;
+  margin: var(--soj-sp-12) 0;
   color: var(--el-text-color-regular);
 }
 
@@ -445,24 +445,24 @@ onMounted(loadBackup)
 .job-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--soj-sp-12);
   flex-wrap: wrap;
-  margin-top: 10px;
+  margin-top: var(--soj-sp-10);
 }
 
 .backup-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--soj-sp-8);
 }
 
 .cmd-line {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
+  gap: var(--soj-sp-8);
+  padding: var(--soj-sp-6) var(--soj-sp-10);
   background: var(--el-fill-color-light);
   border-radius: 6px;
-  margin-bottom: 6px;
+  margin-bottom: var(--soj-sp-6);
 }
 
 .cmd-line code {
@@ -477,8 +477,8 @@ onMounted(loadBackup)
 .key-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-10);
 }
 
 .key-warning {
@@ -488,14 +488,14 @@ onMounted(loadBackup)
 
 /* 使用说明折叠区：标题行去掉手型箭头区的突兀感，编辑按钮不触发展开 */
 .guide-collapse {
-  margin-top: 16px;
+  margin-top: var(--soj-sp-16);
   border-top: 1px solid var(--el-border-color-lighter);
   border-bottom: none;
 }
 
 .guide-collapse :deep(.el-collapse-item__header) {
   height: auto;
-  padding: 10px 0;
+  padding: var(--soj-sp-10) 0;
   border-bottom: none;
 }
 
@@ -503,10 +503,4 @@ onMounted(loadBackup)
   border-bottom: none;
 }
 
-/* 分区标题：区块小标题标准档（16/600） */
-.section-title {
-  font-size: var(--soj-fs-section);
-  font-weight: var(--soj-fw-emphasis);
-  color: var(--el-text-color-primary);
-}
 </style>
