@@ -35,6 +35,9 @@ web_build() {
 sync_embed() {
   rm -rf "$ROOT/server/internal/webui/dist"
   cp -r "$ROOT/web/dist" "$ROOT/server/internal/webui/dist"
+  # .gitkeep 必须常驻：go:embed all:dist 在干净检出（CI/新 clone）无匹配文件时编译
+  # 失败——曾随 rm -rf 消失并被 git add -A 扫进 c58530a 误删，CI 断绿 78 提交才暴露
+  touch "$ROOT/server/internal/webui/dist/.gitkeep"
 }
 go_build() {
   cd "$ROOT/server"
