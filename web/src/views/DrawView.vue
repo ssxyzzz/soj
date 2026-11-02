@@ -26,6 +26,12 @@ const DRAW_CUSTOM_CSS = `
    同受上方 left/top 钉位，原地缩成小卡不飘移 */
 .geVerticalToolbar > a[title*="折叠"] { transform: rotate(180deg); }
 .geVerticalToolbar > a { opacity: 1 !important; }
+/* 保存/退出卡整体隐藏（v0.56 用户拍板：autosave + 宿主导出/丢弃已覆盖其职责） */
+.geToolbarContainer:has(.geEmbedBtn) { display: none !important; }
+/* 形状面板弹出位：贴左缘、主菜单下方留距（用户拍板） */
+.mxWindow:has(.geSidebarContainer:not(.geFormatContainer)) { left: 0 !important; top: 64px !important; }
+/* 自由绘图窗口：右上钉位（用户图三位置）；格式面板默认 docked 右缘不另加 */
+.mxWindow:not(:has(.geSidebarContainer)) { left: auto !important; right: 16px !important; top: 0 !important; }
 .geToolbarContainer.geVerticalToolbar {
   flex-direction: row !important;
   top: 0 !important;
