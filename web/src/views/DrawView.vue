@@ -21,18 +21,7 @@ const DRAW_UI = 'sketch'
 // 滤镜绷带已撤（悬停态被压成全黑，用户否决）。类名对 sketch UI 恒定。
 const DRAW_CUSTOM_CSS = `
 .geToolbarContainer.geSketchMainMenu { top: 0 !important; left: 0 !important; }
-/* 折叠/展开箭头语义翻转（用户拍板）：drawio 原生展开态显 ⌄、折叠态显 ⌃，与直觉相反——
-   旋转 180° 一步完成两态互换（展开显 ⌃ = 点击收起；折叠显 ⌄ = 点击展开）。折叠态容器
-   同受上方 left/top 钉位，原地缩成小卡不飘移 */
-.geVerticalToolbar > a[title*="折叠"] { transform: rotate(180deg); }
-.geVerticalToolbar > a { opacity: 1 !important; }
-/* 折叠态小卡钉到展开态折叠钮所在位（条右端 ~540），两态按钮位置统一（用户拍板）；
-   规则置于通用钉位之后，双类特异性同高靠后序胜出 */
-.geToolbarContainer.geVerticalToolbar.geCollapsedToolbar { left: 532px !important; top: 10px !important; }
-/* 保存/退出卡整体隐藏（v0.56 用户拍板：autosave + 宿主导出/丢弃已覆盖其职责） */
-.geToolbarContainer:has(.geEmbedBtn) { display: none !important; }
-/* 形状面板弹出位：贴左缘、主菜单下方留距（用户拍板） */
-.mxWindow:has(.geSidebarContainer:not(.geFormatContainer)) { left: 0 !important; top: 64px !important; }
+/* 尺寸/高度统一主菜单卡（44 高；快捷键角标 A/S/D 是撑高元凶，隐藏） */
 .geToolbarContainer.geVerticalToolbar {
   flex-direction: row !important;
   top: 0 !important;
@@ -40,9 +29,27 @@ const DRAW_CUSTOM_CSS = `
   left: 260px !important;
   transform: none !important;
   width: auto !important;
-  height: auto !important;
-  padding: 6px 10px !important;
+  height: 44px !important;
+  padding: 0 10px !important;
+  align-items: center !important;
 }
+.geVerticalToolbar .geShortcutKey { display: none !important; }
+/* 折叠钮挪最左 + «/» 双箭头（用户拍板图二风格）：展开显 « = 点击收起、折叠显 » = 点击
+   展开；drawio 内联 background-image 需 !important 覆盖 */
+.geVerticalToolbar > a[title*="折叠"] {
+  order: -1;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M11.5 7 6.5 12l5 5M16.5 7l-5 5 5 5' fill='none' stroke='%233f3f3f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 20px no-repeat !important;
+}
+.geCollapsedToolbar > a[title*="折叠"] {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12.5 7l5 5-5 5M7.5 7l5 5-5 5' fill='none' stroke='%233f3f3f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 20px no-repeat !important;
+}
+.geVerticalToolbar > a { opacity: 1 !important; }
+/* 折叠态小卡钉回工具条起点（钮在最左 = 两态同位） */
+.geToolbarContainer.geVerticalToolbar.geCollapsedToolbar { left: 262px !important; top: 0 !important; }
+/* 保存/退出卡整体隐藏（v0.56 用户拍板：autosave + 宿主导出/丢弃已覆盖其职责） */
+.geToolbarContainer:has(.geEmbedBtn) { display: none !important; }
+/* 形状面板弹出位：贴左缘、主菜单下方留距（用户拍板） */
+.mxWindow:has(.geSidebarContainer:not(.geFormatContainer)) { left: 0 !important; top: 64px !important; }
 `
 
 const frameEl = ref<HTMLIFrameElement>()
