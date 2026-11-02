@@ -26,6 +26,9 @@ const DRAW_CUSTOM_CSS = `
    同受上方 left/top 钉位，原地缩成小卡不飘移 */
 .geVerticalToolbar > a[title*="折叠"] { transform: rotate(180deg); }
 .geVerticalToolbar > a { opacity: 1 !important; }
+/* 折叠态小卡钉到展开态折叠钮所在位（条右端 ~540），两态按钮位置统一（用户拍板）；
+   规则置于通用钉位之后，双类特异性同高靠后序胜出 */
+.geToolbarContainer.geVerticalToolbar.geCollapsedToolbar { left: 532px !important; top: 10px !important; }
 /* 保存/退出卡整体隐藏（v0.56 用户拍板：autosave + 宿主导出/丢弃已覆盖其职责） */
 .geToolbarContainer:has(.geEmbedBtn) { display: none !important; }
 /* 形状面板弹出位：贴左缘、主菜单下方留距（用户拍板） */
