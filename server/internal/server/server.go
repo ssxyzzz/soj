@@ -231,6 +231,8 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.POST("/me/pwd-remind-skip", h.SkipPwdRemind) // 首登改密提醒·跳过（跳过=不再提醒）
 			// 题面图片上传（v0.5.1）：能打开编辑器的人群（题面编辑/系统设置权限位）
 			authed.POST("/uploads", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn, repo.PermAdminSettings), h.UploadImages)
+			// 自定义页面清单（v0.56）：登录后拉可见页（导航/页脚入口与 /p/:slug 渲染共用）
+			authed.GET("/pages", h.ListVisiblePages)
 
 			// 网页建题（v0.5.2-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
 			authed.POST("/problems", RequirePerm(repo.PermProblemCreate), h.CreateProblem)
@@ -378,6 +380,11 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.DELETE("/users/:id/email", RequireRoot(), h.AdminUnbindEmail)
 				adminG.GET("/settings", RequirePerm(repo.PermAdminSettings), h.GetSettings)
 				adminG.PUT("/settings", RequirePerm(repo.PermAdminSettings), h.UpdateSettings)
+				// 自定义页面（v0.56）：后台直配零代码小页（外链/内嵌/Markdown）；与系统设置同权限位
+				adminG.GET("/pages", RequirePerm(repo.PermAdminSettings), h.AdminListPages)
+				adminG.POST("/pages", RequirePerm(repo.PermAdminSettings), h.AdminCreatePage)
+				adminG.PUT("/pages/:slug", RequirePerm(repo.PermAdminSettings), h.AdminUpdatePage)
+				adminG.DELETE("/pages/:slug", RequirePerm(repo.PermAdminSettings), h.AdminDeletePage)
 				// 角色读取放宽到用户管理员（改角色下拉需要角色清单）；增删改硬编码 root 不下放
 				adminG.GET("/roles", RequirePerm(repo.PermAdminUserManage), h.AdminListRoles)
 				adminG.POST("/roles", RequireRoot(), h.AdminCreateRole)

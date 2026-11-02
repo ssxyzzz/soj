@@ -32,6 +32,7 @@ type RepoAPI interface {
 	AddDiscussReport(ctx context.Context, targetType string, targetID, reporterUID int64, reason string, foldThreshold int64) (count int64, folded bool, err error)
 	AddSecurityLog(ctx context.Context, e repo.SecurityLog) error
 	AddXpAdjust(ctx context.Context, uid, delta int64, reason string, operatorUID int64) error
+	AllPages(ctx context.Context) ([]*repo.Page, error)
 	AllUserIDs(ctx context.Context) ([]int64, error)
 	AssignmentProgress(ctx context.Context, a *repo.Assignment, memberUIDs []int64) ([]*repo.ProgressRow, error)
 	AttachChallengeSubmission(ctx context.Context, cid, sid int64, langName string, codeLen int, changelog []repo.ChallengeDelta) (bool, error)
@@ -55,6 +56,7 @@ type RepoAPI interface {
 	CreateAssignment(ctx context.Context, classID int64, title, intro string) (*repo.Assignment, error)
 	CreateClass(ctx context.Context, name, intro string, private bool, ownerID int64, ownerUname string) (*repo.Class, error)
 	CreateObjectiveSubmission(ctx context.Context, uid int64, uname string, p *repo.Problem, answers []repo.ObjectiveAnswer, contest *repo.Contest, exam *repo.Exam) (int64, error)
+	CreatePage(ctx context.Context, p *repo.Page) error
 	CreateProblemList(ctx context.Context, l *repo.ProblemList) error
 	CreateRole(ctx context.Context, role repo.Role) error
 	CreateRound(ctx context.Context, kind string, c *repo.Contest) error
@@ -91,6 +93,7 @@ type RepoAPI interface {
 	ExistingUsernames(ctx context.Context, names []string) (map[string]bool, error)
 	DeleteAssignment(ctx context.Context, id int64) error
 	DeleteClass(ctx context.Context, classID int64) error
+	DeletePage(ctx context.Context, slug string) error
 	DeleteProblemList(ctx context.Context, id int64) error
 	DeleteRole(ctx context.Context, id string) error
 	DeleteRound(ctx context.Context, kind string, id int64) error
@@ -104,6 +107,7 @@ type RepoAPI interface {
 	GetDiscussTopic(ctx context.Context, tid int64) (*repo.DiscussTopic, error)
 	GetLevelConfig(ctx context.Context) (*repo.LevelConfig, error)
 	GetMetaTagTree(ctx context.Context) ([]repo.TagNode, error)
+	GetPage(ctx context.Context, slug string) (*repo.Page, error)
 	GetProblem(ctx context.Context, id int64) (*repo.Problem, error)
 	GetProblemList(ctx context.Context, id int64) (*repo.ProblemList, error)
 	GetProblemMeta(ctx context.Context, id int64) (*repo.Problem, error)
@@ -280,6 +284,7 @@ type RepoAPI interface {
 	UpdateDiscussTopicContent(ctx context.Context, tid int64, title, content, kind string, relatedPids []int64, listID, tagID int64) error
 	UpdateLevelConfig(ctx context.Context, cfg *repo.LevelConfig) error
 	UpdateNotifyEmailPrefs(ctx context.Context, id int64, cats []string) error
+	UpdatePage(ctx context.Context, slug string, p *repo.Page) error
 	UpdatePassword(ctx context.Context, uid int64, passwordHash string) error
 	UpdateProblemList(ctx context.Context, id int64, p repo.ListPatch) error
 	UpdateProblemMeta(ctx context.Context, pid int64, p repo.ProblemMetaPatch) error
@@ -298,6 +303,8 @@ type RepoAPI interface {
 	UserSubmissionStats(ctx context.Context, uid int64) (total, accepted int64, err error)
 	ValidateMetaTagRefs(ctx context.Context, ids []int64) error
 	ValidateTagRefs(ctx context.Context, ids []int64) error
+	PageRolesValid(ctx context.Context, ids []string) (bool, error)
+	VisiblePages(ctx context.Context, role string) ([]*repo.Page, error)
 	VisibleProblemAt(ctx context.Context, difficulty int, skip int64) (*repo.FeaturedRow, error)
 }
 

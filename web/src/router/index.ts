@@ -188,6 +188,14 @@ const router = createRouter({
           component: () => import('@/views/ImportView.vue'),
           meta: { title: '导入题目', requiresPerm: 'problem.create' },
         },
+        {
+          path: '/p/:slug',
+          name: 'custom-page',
+          // 自定义页面壳（v0.56）：iframe 内嵌（drawio 画板协议壳）/ Markdown 说明页；
+          // 后台「自定义页面」直配，登录后可用
+          component: () => import('@/views/CustomPageView.vue'),
+          meta: { title: '自定义页面', requiresAuth: true },
+        },
       ],
     },
     {
