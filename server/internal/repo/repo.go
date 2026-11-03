@@ -364,11 +364,6 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 		return err
 	}
 
-	// 注册取号起点守卫（v0.24 小批）：user 计数器 $max 到 99，首个注册号 = 100
-	if err := r.SeedUserCounter(ctx); err != nil {
-		return err
-	}
-
 	// 自动题号起点守卫：problem 计数器 $max 到起点-1（默认 1000），首个自动题号 = 1001
 	if err := r.SeedProblemCounter(ctx); err != nil {
 		return err

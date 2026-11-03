@@ -225,7 +225,7 @@ function resetImport() {
   importStep.value = 1
 }
 
-// ---- 编辑弹窗：账号字段（用户名/昵称/密码/资料/角色）+ 改 ID 段（v0.59 并入） ----
+// ---- 编辑弹窗：账号字段（网格首行改 ID + 角色，v0.59；用户名/昵称/密码/资料随行序排列）----
 // 用户名是登录身份标识：持有 user.username.edit 权限位（默认仅 root）才可改，其余只读展示
 const canRename = computed(() => userStore.can('user.username.edit'))
 // 绑定邮箱解绑（v0.16）：root 硬编码（后端 RequireRoot）
@@ -234,7 +234,7 @@ const showEdit = ref(false)
 const editSaving = ref(false)
 const unbinding = ref(false)
 // email/phone：绑定信息（v0.16），后端用户列表下发；AdminUser 类型不含，就地扩展
-// role/originRole：角色（v0.59 并入编辑弹窗，后端 PATCH role 通道就绪）；newId：改 ID 段输入
+// role/originRole：角色（v0.59 并入编辑弹窗，后端 PATCH role 通道就绪）；newId：改 ID 字段输入
 const editForm = reactive({
   id: 0,
   username: '',
@@ -355,7 +355,7 @@ async function submitEdit() {
 
 // ---- 改 ID（v0.50）：uid 是全站身份主键，改 ID = 服务端事务内跨集合引用搬家 ----
 // 与改用户名正交（改名走 user.username.edit 位）；权限复用 admin.user.manage（用户拍板）。
-// v0.59 并入编辑弹窗（独立弹窗/操作列链接退役）：root 账号不显示该段，后端 ErrChangeIDRoot 兜底
+// v0.59 并入编辑弹窗（独立弹窗/操作列链接退役）：root 账号该格只读展示，后端 ErrChangeIDRoot 兜底
 const canChangeId = computed(() => userStore.can('admin.user.manage'))
 const changing = ref(false)
 
@@ -578,7 +578,7 @@ defineExpose({ refresh: () => load() })
         />
         <p class="dim" style="margin: 0 0 var(--soj-sp-10)">
           用户名默认 = 姓名拼音 + id（张三 1001 → zhangsan1001，多音字可在预览里改）；初始密码每人随机生成
-          （密码列填了用填的），建号后导出表格发放；id 即站内用户 ID，可留空自动顺延分配（预览表可见可改，与已占用号冲突会标红提示）。
+          （密码列填了用填的），建号后导出表格发放；id 即站内用户 ID，可留空自动补空分配（从注册起点起按序回填未占用号；预览表可见可改，与已占用号冲突会标红提示）。
           支持 GBK/UTF-8 编码（Excel 直接另存的 CSV 可用）。
         </p>
         <div class="import-actions">
@@ -682,7 +682,7 @@ defineExpose({ refresh: () => load() })
             placeholder="留空自动分配"
             style="width: 240px"
           />
-          <span class="dim" style="margin-left: var(--soj-sp-8)">留空自动分配（起点见系统设置）；手动指定后后续自动取号会避开该号</span>
+          <span class="dim" style="margin-left: var(--soj-sp-8)">留空自动分配：从注册起点起按序补未占用的号（起点见系统设置）；手动指定/改 ID 占用的号自动跳过</span>
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="createForm.role" style="width: 100%">
@@ -701,7 +701,7 @@ defineExpose({ refresh: () => load() })
       </template>
     </el-dialog>
 
-    <!-- 编辑弹窗（2026-10-30 拍板加宽 520→720）：账号信息（含角色，v0.59）+ 经验调整 + 玉调整（root）+ 改 ID（v0.59 并入）多段合一 -->
+    <!-- 编辑弹窗（2026-10-30 拍板加宽 520→720）：账号信息网格（首行改 ID + 角色，v0.59）+ 经验调整 + 玉调整（root）分段合一 -->
     <el-dialog v-model="showEdit" :title="`编辑 · ${editForm.originUsername}`" width="720">
       <el-form label-position="top">
         <el-form-item label="绑定信息">
@@ -721,6 +721,35 @@ defineExpose({ refresh: () => load() })
           </div>
         </el-form-item>
         <div class="edit-grid">
+          <!-- 改 ID（v0.50，v0.59 并入编辑弹窗网格首格）：uid 是全站身份主键，跨集合引用搬家；
+               独立危险按钮 + 二次确认；root 账号 ID 受保护（后端 ErrChangeIDRoot 兜底）只读展示 -->
+          <el-form-item label="改 ID">
+            <template v-if="canChangeId && editForm.originRole !== 'root'">
+              <div class="id-row">
+                <span class="mono dim">#{{ editForm.id }}</span>
+                <el-input-number
+                  v-model="editForm.newId"
+                  :min="1"
+                  :max="1000000000"
+                  :controls="false"
+                  placeholder="新 ID"
+                  style="width: 110px"
+                />
+                <el-button type="danger" :loading="changing" @click="submitChangeId">确认改 ID</el-button>
+              </div>
+            </template>
+            <template v-else>
+              <span class="mono">#{{ editForm.id }}</span>
+              <span class="dim" style="margin-left: var(--soj-sp-8)">ID 受保护，不可修改</span>
+            </template>
+          </el-form-item>
+          <!-- 角色（v0.59 并入编辑弹窗）：选项与建号弹窗同源；初始管理员 ID=1 的 root 受保护禁改（后端兜底） -->
+          <el-form-item label="角色">
+            <el-select v-model="editForm.role" :disabled="editForm.id === 1" style="width: 200px">
+              <el-option v-for="r in roleStore.roles" :key="r.id" :value="r.id" :label="`${r.name}（${r.id}）`" />
+            </el-select>
+            <span v-if="editForm.id === 1" class="dim" style="margin-left: var(--soj-sp-8)">初始管理员 root 受保护</span>
+          </el-form-item>
           <el-form-item label="用户名">
             <el-input
               v-model="editForm.username"
@@ -731,12 +760,22 @@ defineExpose({ refresh: () => load() })
           <el-form-item label="昵称">
             <el-input v-model="editForm.nickname" maxlength="6" placeholder="用于榜单、题解等公开页面展示（6 字以内）" />
           </el-form-item>
-          <!-- 角色（v0.59 并入编辑弹窗）：选项与建号弹窗同源；初始管理员 ID=1 的 root 受保护禁改（后端兜底） -->
-          <el-form-item label="角色">
-            <el-select v-model="editForm.role" :disabled="editForm.id === 1" style="width: 160px">
-              <el-option v-for="r in roleStore.roles" :key="r.id" :value="r.id" :label="`${r.name}（${r.id}）`" />
+          <el-form-item label="性别">
+            <el-select v-model="editForm.gender" clearable placeholder="未填写" style="width: 160px">
+              <el-option value="男" label="男" />
+              <el-option value="女" label="女" />
             </el-select>
-            <span v-if="editForm.id === 1" class="dim" style="margin-left: var(--soj-sp-8)">初始管理员 root 受保护</span>
+          </el-form-item>
+          <el-form-item label="地区">
+            <el-input v-model="editForm.region" maxlength="32" placeholder="选填" />
+          </el-form-item>
+          <el-form-item label="学校">
+            <el-input v-model="editForm.school" maxlength="64" placeholder="选填" />
+          </el-form-item>
+          <el-form-item label="年级">
+            <el-select v-model="editForm.grade" clearable placeholder="未设置" style="width: 160px">
+              <el-option v-for="g in GRADE_OPTIONS" :key="g" :value="g" :label="g" />
+            </el-select>
           </el-form-item>
           <el-form-item label="新密码">
             <el-input
@@ -749,26 +788,10 @@ defineExpose({ refresh: () => load() })
           <el-form-item label="确认新密码">
             <el-input v-model="editForm.confirm" type="password" show-password placeholder="再次输入新密码" />
           </el-form-item>
-          <el-form-item label="性别">
-            <el-select v-model="editForm.gender" clearable placeholder="未填写" style="width: 160px">
-              <el-option value="男" label="男" />
-              <el-option value="女" label="女" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="年级">
-            <el-select v-model="editForm.grade" clearable placeholder="未设置" style="width: 160px">
-              <el-option v-for="g in GRADE_OPTIONS" :key="g" :value="g" :label="g" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="学校">
-            <el-input v-model="editForm.school" maxlength="64" placeholder="选填" />
-          </el-form-item>
-          <el-form-item label="地区">
-            <el-input v-model="editForm.region" maxlength="32" placeholder="选填" />
-          </el-form-item>
         </div>
         <p class="dim" style="margin: -6px 0 0">
-          资料修改不受学生端「资料自改开关」限制；年级每年 9 月 1 日自动晋级（高一升高二…高三→已毕业）。
+          资料修改不受学生端「资料自改开关」限制；年级每年 9 月 1 日自动晋级（高一升高二…高三→已毕业）；
+          改 ID 走独立二次确认（全部记录跨集合迁移、旧登录态失效），角色变更即时生效并留安全审计。
         </p>
       </el-form>
 
@@ -817,24 +840,6 @@ defineExpose({ refresh: () => load() })
           <el-button type="success" :loading="jadeSaving" @click="submitJade">调整玉</el-button>
         </div>
         <p class="adj-hint dim">正数增加、负数减少（扣减不透支）</p>
-      </template>
-
-      <!-- 改 ID（v0.50，v0.59 并入编辑弹窗）：uid 是全站身份主键，跨集合引用搬家；独立危险按钮 + 二次确认 -->
-      <template v-if="canChangeId && editForm.originRole !== 'root'">
-        <el-divider content-position="left">改 ID</el-divider>
-        <div class="adj-row">
-          <span class="xp-nums">当前 ID <b class="mono">#{{ editForm.id }}</b></span>
-          <el-input-number
-            v-model="editForm.newId"
-            :min="1"
-            :max="1000000000"
-            :controls="false"
-            placeholder="新 ID（正整数，不得与现有用户冲突）"
-            style="width: 220px"
-          />
-          <el-button type="danger" :loading="changing" @click="submitChangeId">确认改 ID</el-button>
-        </div>
-        <p class="adj-hint dim">全部提交、玉、帖子、班级记录将一并迁移到新号；旧登录态立即失效，操作不可撤销，请谨慎执行</p>
       </template>
 
       <template #footer>
@@ -914,6 +919,13 @@ defineExpose({ refresh: () => load() })
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: var(--soj-sp-16); /* 18px→sp-16 就近 */}
+
+/* 改 ID 字段行（v0.59 并入网格首格）：当前 ID | 新 ID 输入 | 危险按钮一行放下 */
+.id-row {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-8);
+}
 
 /* 经验/玉调整行：数值 | 原因 | 提交，一行放下 */
 .adj-row {

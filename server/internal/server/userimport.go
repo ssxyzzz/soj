@@ -147,9 +147,10 @@ type userImportRow struct {
 }
 
 // userImportParse 上传文件 → 识别行集合（两段共用）：表头定位 + 逐行解析生成与
-// 静态校验（格式/表内重复）；DB 占用查重由调用方批量补标。autoIDStart > 0 时，
-// id 留空的行按其顺延预分配（0 = 无预分配来源，id 留空且未显式给用户名则报错）。
-func userImportParse(records [][]string, autoIDStart int64) (rows []userImportRow, err error) {
+// 静态校验（格式/表内重复）；DB 占用查重由调用方批量补标。autoIDs 非空时，
+// id 留空的行按队列逐个预分配（v0.61 按序补空号；空队列 = 无预分配来源，
+// id 留空且未显式给用户名则报错）。
+func userImportParse(records [][]string, autoIDs []int64) (rows []userImportRow, err error) {
 	col := map[string]int{}
 	headerSeen := false
 	start := 0
@@ -190,7 +191,7 @@ func userImportParse(records [][]string, autoIDStart int64) (rows []userImportRo
 
 	seenID := map[int64]bool{}
 	seenUname := map[string]bool{}
-	autoNext := autoIDStart
+	autoIdx := 0 // autoIDs 队列游标
 	rowNo := start
 	for _, rec := range records[start:] {
 		rowNo++
@@ -213,8 +214,8 @@ func userImportParse(records [][]string, autoIDStart int64) (rows []userImportRo
 			continue // 全空行
 		}
 
-		// id：留空 = 预分配顺延号（预览可见可改，建号即按此号）；填了校验正整数。
-		// 无预分配来源（autoIDStart=0）且未显式给用户名时才报必填错。
+		// id：留空 = 预分配补空号（v0.61 按序回填已占用号之间的空缺，预览可见可改，
+		// 建号即按此号）；填了校验正整数。无预分配来源（队列空）且未显式给用户名时才报必填错。
 		if idStr := get(rec, "id"); idStr != "" {
 			id, perr := strconv.ParseInt(idStr, 10, 64)
 			if perr != nil || id < 1 || id > 1_000_000_000 {
@@ -222,10 +223,10 @@ func userImportParse(records [][]string, autoIDStart int64) (rows []userImportRo
 			} else {
 				row.ID = id
 			}
-		} else if autoNext > 0 {
-			row.ID = autoNext
+		} else if autoIdx < len(autoIDs) {
+			row.ID = autoIDs[autoIdx]
 			row.AutoID = true
-			autoNext++
+			autoIdx++
 		} else if row.Username == "" {
 			row.Problems = append(row.Problems, "id 必填（拼音用户名由它拼接）")
 		}
@@ -341,8 +342,8 @@ func readImportUploadFile(c *gin.Context) ([]byte, string, bool) {
 
 // AdminUserImportPreview POST /api/admin/users/import-preview —— 第一段：上传识别。
 // 返回逐行识别结果（含生成的用户名/密码与问题清单），前端预览表展示、可改后确认。
-// id 留空的行按计数器预读顺延预分配（PeekUserSeq 不消耗计数器；真正建号按预览号
-// 指定创建，计数器随 CreateUserWithProfile 的 $max 对齐）。
+// id 留空的行按「注册起点起的前 n 个空缺号」预分配（PeekUserSeqs 只读不落库；
+// 真正建号按预览号指定创建，预览与建号之间的并发抢占由唯一索引兜底、行失败如实展示）。
 func (h *Handlers) AdminUserImportPreview(c *gin.Context) {
 	raw, _, okFile := readImportUploadFile(c)
 	if !okFile {
@@ -353,11 +354,12 @@ func (h *Handlers) AdminUserImportPreview(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "CSV 解析失败："+err.Error())
 		return
 	}
-	autoStart, perr := h.repo.PeekUserSeq(c.Request.Context())
+	// 队列长度按记录行数上界给足（PeekUserSeqs 恒返回足量：洞不足尾部 max+1 顺延）
+	autoIDs, perr := h.repo.PeekUserSeqs(c.Request.Context(), int64(len(records))+1)
 	if perr != nil {
-		autoStart = 0 // 预读失败降级：id 留空且未显式给用户名的行按必填报错
+		autoIDs = nil // 预读失败降级：id 留空且未显式给用户名的行按必填报错
 	}
-	rows, err := userImportParse(records, autoStart)
+	rows, err := userImportParse(records, autoIDs)
 	if err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return

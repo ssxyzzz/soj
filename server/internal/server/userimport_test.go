@@ -72,7 +72,7 @@ func TestUserImportParsePasswordColumn(t *testing.T) {
 		{"李四", "1002", ""},
 		{"王五", "1003", "12345678"},
 		{"赵六", "1004", "short"},
-	}, 0)
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestUserImportParseRoster(t *testing.T) {
 		{"赵六", "1001", "", "", "", ""},        // 表内 id 重复
 		{"张三", "1001", "", "", "", ""},        // 表内用户名重复（拼音相同）
 	}
-	rows, err := userImportParse(records, 0)
+	rows, err := userImportParse(records, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,14 +205,14 @@ func TestUserImportParseRoster(t *testing.T) {
 	}
 
 	// 表头缺「姓名」列且无 username → 报错（id 列现在可整个不填）
-	if _, err := userImportParse([][]string{{"性别", "学校"}, {"男", "x"}}, 0); err == nil {
+	if _, err := userImportParse([][]string{{"性别", "学校"}, {"男", "x"}}, nil); err == nil {
 		t.Error("缺姓名列应报错")
 	}
 	// 老英文模板路径：username 手填时 id 可留空
 	rows, err = userImportParse([][]string{
 		{"username", "password", "nickname", "role"},
 		{"lisi", "Passw0rd!", "李四", ""},
-	}, 0)
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,25 +222,25 @@ func TestUserImportParseRoster(t *testing.T) {
 }
 
 func TestUserImportParseAutoID(t *testing.T) {
-	// id 留空：按预读顺延号预分配（auto_id 标记），用户名 = 拼音 + 预分配号
+	// id 留空：按预读补空号队列预分配（auto_id 标记），用户名 = 拼音 + 预分配号
 	records := [][]string{
 		{"姓名", "年级"},
 		{"张三", "初一"},
 		{"李四", ""},
 		{"", "高二"}, // 姓名空且无用户名来源 → 问题行
 	}
-	rows, err := userImportParse(records, 500)
+	rows, err := userImportParse(records, []int64{104, 106, 107})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rows) != 3 {
 		t.Fatalf("识别行数 = %d，期望 3", len(rows))
 	}
-	if rows[0].ID != 500 || !rows[0].AutoID || rows[0].Username != "zhangsan500" {
-		t.Errorf("张三应预分配 500 并生成 zhangsan500：%+v", rows[0])
+	if rows[0].ID != 104 || !rows[0].AutoID || rows[0].Username != "zhangsan104" {
+		t.Errorf("张三应预分配 104 并生成 zhangsan104：%+v", rows[0])
 	}
-	if rows[1].ID != 501 || !rows[1].AutoID || rows[1].Username != "lisi501" {
-		t.Errorf("李四应预分配 501：%+v", rows[1])
+	if rows[1].ID != 106 || !rows[1].AutoID || rows[1].Username != "lisi106" {
+		t.Errorf("李四应预分配 106（跳过已占用的 105 之类由队列承载）：%+v", rows[1])
 	}
 	if len(rows[2].Problems) == 0 || !containsProblem(rows[2], "姓名必填") {
 		t.Errorf("空姓名行应报必填错：%+v", rows[2])
@@ -249,13 +249,13 @@ func TestUserImportParseAutoID(t *testing.T) {
 	rows, err = userImportParse([][]string{
 		{"姓名", "id"},
 		{"张三", ""},
-		{"李四", "500"},
-	}, 500)
+		{"李四", "104"},
+	}, []int64{104})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !containsProblem(rows[1], "表内 id 重复") {
-		t.Errorf("显式 500 与预分配 500 相撞应报重复：%+v", rows[1])
+		t.Errorf("显式 104 与预分配 104 相撞应报重复：%+v", rows[1])
 	}
 }
 

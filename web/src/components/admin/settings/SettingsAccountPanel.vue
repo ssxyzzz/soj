@@ -99,7 +99,7 @@ function fmtNext(at: string | undefined) {
       <el-form-item label="注册取号起点">
         <el-input-number v-model="userSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
         <span class="dim" style="margin-left: var(--soj-sp-8)">
-          自动分配的用户 ID 从该号起（默认 100）；调大即时生效、只前进不回退（计数器已超过起点时从计数器继续）；后台手动指定 ID 不受此限
+          自动分配的用户 ID 从该号起按序补空（默认 100，随机注册/手动指定/改 ID 留下的空缺按序回填）；起点以下号段不参与；调大即时生效，调小按新起点重扫；手动指定 ID 不受此限
         </span>
       </el-form-item>
 

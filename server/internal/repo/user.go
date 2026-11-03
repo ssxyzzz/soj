@@ -3,7 +3,6 @@ package repo
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -179,103 +178,112 @@ func (r *Repo) ClearLoginFailures(ctx context.Context, uid int64) error {
 }
 
 func (r *Repo) CreateUser(ctx context.Context, username, passwordHash, nickname, role string) (int64, error) {
-	uid, err := r.nextUserSeq(ctx)
-	if err != nil {
-		return 0, err
-	}
-	_, err = r.users.InsertOne(ctx, bson.M{
-		"_id": uid, "uname": username, "pwdHash": passwordHash,
-		"nickname": nickname, "role": role, "createdAt": time.Now(),
+	return r.insertAutoUser(ctx, username, func(uid int64) bson.M {
+		return bson.M{
+			"_id": uid, "uname": username, "pwdHash": passwordHash,
+			"nickname": nickname, "role": role, "createdAt": time.Now(),
+		}
 	})
-	if err != nil {
-		return 0, err
-	}
-	return uid, nil
 }
 
 // DefaultUserSeqStart 注册取号起点默认值（后台「注册取号起点」可调，见 SystemSettings.UserSeqStart）。
 const DefaultUserSeqStart int64 = 100
 
-// nextUserSeq 自动分配用户 ID：计数器低于后台设定的「注册取号起点」时垫到 start-1 重取
-// ——管理员运行期调大起点即时生效（首个注册号 = 起点）；计数器已超起点（或起点调小）
-// 时从计数器继续，只前进不回退。手动指定 ID 走 CreateUserWithID，不经过此处。
+// nextUserSeq 自动分配用户 ID（v0.61 按序补空）：从后台设定的「注册取号起点」起
+// 扫描 users 实际占用，返回最小空缺号——随机注册、手动指定 ID、改 ID 留下的空洞
+// 按序回填（100,101,103 → 下一个 102），号段连满则取 max+1。起点以下号段（root 等
+// 种子号）永不参与分配；起点调大即时生效，调小按新起点重扫（自动号下界语义不变）。
 func (r *Repo) nextUserSeq(ctx context.Context) (int64, error) {
 	start := DefaultUserSeqStart
 	if s, err := r.GetSystemSettings(ctx); err == nil {
 		start = s.UserSeqStartVal()
 	}
-	uid, err := r.nextSeq(ctx, "user")
+	ids, err := r.peekUserSeqs(ctx, start, 1)
 	if err != nil {
 		return 0, err
 	}
-	if uid < start {
+	return ids[0], nil
+}
+
+// peekUserSeqs 一次升序投影扫描返回前 want 个空缺号：洞不足（号段连满）时尾部以
+// max+1 顺延补足，恒返回 want 个。自动取号与批量导入预览同一事实源同一口径。
+func (r *Repo) peekUserSeqs(ctx context.Context, start, want int64) ([]int64, error) {
+	if want <= 0 {
+		return nil, nil
+	}
+	cursor, err := r.users.Find(ctx,
+		bson.M{"_id": bson.M{"$gte": start}},
+		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetProjection(bson.M{"_id": 1}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	ids := make([]int64, 0, want)
+	expect := start // 下一个应存在的号
+	for cursor.Next(ctx) && int64(len(ids)) < want {
 		var doc struct {
-			Seq int64 `bson:"seq"`
+			ID int64 `bson:"_id"`
 		}
-		if merr := r.counters.FindOneAndUpdate(ctx,
-			bson.M{"_id": "user"},
-			bson.M{"$max": bson.M{"seq": start - 1}},
-			options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
-		).Decode(&doc); merr == nil {
-			return r.nextSeq(ctx, "user")
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, err
+		}
+		for doc.ID > expect && int64(len(ids)) < want {
+			ids = append(ids, expect)
+			expect++
+		}
+		if doc.ID >= expect {
+			expect = doc.ID + 1
 		}
 	}
-	return uid, nil
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+	for int64(len(ids)) < want { // 号段连满（或 want 大于洞数）：尾部顺延
+		ids = append(ids, expect)
+		expect++
+	}
+	return ids, nil
 }
 
-// SeedUserCounter 注册取号起点守卫（Bootstrap 幂等快路径）：user 计数器 $max 到起点-1，
-// 让首个注册免走 nextUserSeq 的垫高重取；运行期改动由 nextUserSeq 兜底，两者口径一致。
-func (r *Repo) SeedUserCounter(ctx context.Context) error {
+// PeekUserSeqs 预读前 want 个自动分配的用户 ID（v0.34 花名册预览引入，v0.61 按序
+// 补空口径）：id 留空的行在预览阶段预分配空缺号展示，不落库——真正建号走
+// CreateUserWithProfile 指定该号；预览与建号之间的并发注册抢占由建号时唯一索引
+// 兜底，行失败原因如实展示。
+func (r *Repo) PeekUserSeqs(ctx context.Context, want int64) ([]int64, error) {
 	start := DefaultUserSeqStart
 	if s, err := r.GetSystemSettings(ctx); err == nil {
 		start = s.UserSeqStartVal()
 	}
-	var before struct {
-		Seq int64 `bson:"seq"`
-	}
-	err := r.counters.FindOneAndUpdate(ctx,
-		bson.M{"_id": "user"},
-		bson.M{"$max": bson.M{"seq": start - 1}},
-		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.Before),
-	).Decode(&before)
-	if IsNotFound(err) {
-		return nil // 全新计数器，本次 $max 已写入起点-1
-	}
-	if err == nil && before.Seq < start-1 {
-		slog.Info("user 计数器已垫高（注册取号起点）", "component", "boot", "from", before.Seq, "to", start-1, "start", start)
-	}
-	return err
+	return r.peekUserSeqs(ctx, start, want)
 }
 
-// PeekUserSeq 预读下一个自动分配的用户 ID（v0.34 花名册预览：id 留空的行在预览阶段
-// 预分配顺延号展示，不消耗计数器——真正建号走 CreateUserWithProfile 指定该号）。
-// 口径与 nextUserSeq 一致：max(计数器, 注册取号起点-1) + 1；CreateUserWithID 建号
-// 会把计数器 $max 到该号，预读值恒 ≥ 已占用号，不与既有号冲突（并发注册的极小
-// 竞态由建号时唯一索引兜底，行失败原因如实展示）。
-func (r *Repo) PeekUserSeq(ctx context.Context) (int64, error) {
-	start := DefaultUserSeqStart
-	if s, err := r.GetSystemSettings(ctx); err == nil {
-		start = s.UserSeqStartVal()
+// insertAutoUser 自动取号建号（v0.61 按序补空的并发兜底）：并发注册同抢一洞时由
+// users 唯一索引兜底，重扫重试（上限 5 次）；用户名撞键不重试，原样上抛走调用方
+// 既有口径（注册端「用户名已存在」/管理端撞键分辨提示）。
+func (r *Repo) insertAutoUser(ctx context.Context, username string, doc func(uid int64) bson.M) (int64, error) {
+	var lastErr error
+	for range 5 {
+		uid, err := r.nextUserSeq(ctx)
+		if err != nil {
+			return 0, err
+		}
+		if _, err = r.users.InsertOne(ctx, doc(uid)); err == nil {
+			return uid, nil
+		}
+		if !mongo.IsDuplicateKeyError(err) {
+			return 0, err
+		}
+		lastErr = err
+		if _, _, gerr := r.GetUserByUsername(ctx, username); gerr == nil {
+			return 0, err // 用户名已存在：非号段竞态，不重试
+		}
 	}
-	var doc struct {
-		Seq int64 `bson:"seq"`
-	}
-	err := r.counters.FindOne(ctx, bson.M{"_id": "user"}).Decode(&doc)
-	if IsNotFound(err) {
-		return start, nil // 计数器未初始化：首号 = 起点
-	}
-	if err != nil {
-		return 0, err
-	}
-	next := doc.Seq + 1
-	if next < start {
-		next = start
-	}
-	return next, nil
+	return 0, lastErr
 }
 
-// CreateUserWithID 管理端手动指定 ID 建号：落库后把 user 计数器 $max 到该 ID，
-// 保证后续自增取号不会撞上手动占用的号（$max 幂等只会前进）。
+// CreateUserWithID 管理端手动指定 ID 建号：占用冲突由 _id/用户名唯一索引兜底；
+// 自动取号（v0.61 按序补空）扫描实际占用，天然跳过手动占用的号。
 func (r *Repo) CreateUserWithID(ctx context.Context, id int64, username, password, nickname, role string) (int64, error) {
 	hash, err := auth.HashPassword(password)
 	if err != nil {
@@ -288,16 +296,6 @@ func (r *Repo) CreateUserWithID(ctx context.Context, id int64, username, passwor
 	})
 	if err != nil {
 		return 0, err
-	}
-	var doc struct {
-		Seq int64 `bson:"seq"`
-	}
-	if err := r.counters.FindOneAndUpdate(ctx,
-		bson.M{"_id": "user"},
-		bson.M{"$max": bson.M{"seq": id}},
-		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
-	).Decode(&doc); err != nil {
-		return id, err
 	}
 	return id, nil
 }
@@ -318,41 +316,31 @@ func (r *Repo) CreateUserWithProfile(ctx context.Context, id int64, username, pa
 	if err != nil {
 		return 0, err
 	}
-	if id <= 0 {
-		if id, err = r.nextUserSeq(ctx); err != nil {
-			return 0, err
+	build := func(uid int64) bson.M {
+		doc := bson.M{
+			"_id": uid, "uname": username, "pwdHash": hash,
+			"nickname": nickname, "role": role, "createdAt": time.Now(),
+			"pwdRemind": true, // 批量建号：初始密码（随机/花名册列）由教师发放，首登提醒改密（可跳过）
 		}
+		if p.Gender != "" {
+			doc["gender"] = p.Gender
+		}
+		if p.GradeNo > 0 {
+			doc["gradeNo"] = p.GradeNo
+		}
+		if p.School != "" {
+			doc["school"] = p.School
+		}
+		if p.Region != "" {
+			doc["region"] = p.Region
+		}
+		return doc
 	}
-	doc := bson.M{
-		"_id": id, "uname": username, "pwdHash": hash,
-		"nickname": nickname, "role": role, "createdAt": time.Now(),
-		"pwdRemind": true, // 批量建号：初始密码（随机/花名册列）由教师发放，首登提醒改密（可跳过）
+	if id <= 0 {
+		return r.insertAutoUser(ctx, username, build)
 	}
-	if p.Gender != "" {
-		doc["gender"] = p.Gender
-	}
-	if p.GradeNo > 0 {
-		doc["gradeNo"] = p.GradeNo
-	}
-	if p.School != "" {
-		doc["school"] = p.School
-	}
-	if p.Region != "" {
-		doc["region"] = p.Region
-	}
-	_, err = r.users.InsertOne(ctx, doc)
-	if err != nil {
+	if _, err := r.users.InsertOne(ctx, build(id)); err != nil {
 		return 0, err
-	}
-	var seqDoc struct {
-		Seq int64 `bson:"seq"`
-	}
-	if err := r.counters.FindOneAndUpdate(ctx,
-		bson.M{"_id": "user"},
-		bson.M{"$max": bson.M{"seq": id}},
-		options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After),
-	).Decode(&seqDoc); err != nil {
-		return id, err
 	}
 	return id, nil
 }
@@ -363,19 +351,13 @@ func (r *Repo) CreateUserWithEmail(ctx context.Context, username, password, nick
 	if err != nil {
 		return 0, err
 	}
-	uid, err := r.nextUserSeq(ctx)
-	if err != nil {
-		return 0, err
-	}
-	_, err = r.users.InsertOne(ctx, bson.M{
-		"_id": uid, "uname": username, "pwdHash": hash,
-		"nickname": nickname, "role": role, "createdAt": time.Now(),
-		"email": email,
+	return r.insertAutoUser(ctx, username, func(uid int64) bson.M {
+		return bson.M{
+			"_id": uid, "uname": username, "pwdHash": hash,
+			"nickname": nickname, "role": role, "createdAt": time.Now(),
+			"email": email,
+		}
 	})
-	if err != nil {
-		return 0, err
-	}
-	return uid, nil
 }
 
 // GetUserByEmail 按绑定邮箱查用户（找回密码/注册查重）。

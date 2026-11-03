@@ -62,9 +62,9 @@ type RepoAPI interface {
 	CreateUserWithEmail(ctx context.Context, username, password, nickname, role, email string) (int64, error)
 	CreateUserWithID(ctx context.Context, id int64, username, password, nickname, role string) (int64, error)
 	CreateUserWithPassword(ctx context.Context, username, password, nickname, role string) (int64, error)
-	// v0.34 用户档案批：花名册建号 / 年级晋级 / 批量查重
+	// v0.34 用户档案批：花名册建号 / 年级晋级 / 批量查重（PeekUserSeqs v0.61 按序补空预读）
 	CreateUserWithProfile(ctx context.Context, id int64, username, password, nickname, role string, p repo.UserProfile) (int64, error)
-	PeekUserSeq(ctx context.Context) (int64, error)
+	PeekUserSeqs(ctx context.Context, want int64) ([]int64, error)
 	// v0.40 升维祝福：读路径兜底检测（判题路径走具体 repo 不经此缝）
 	EnsureLevelBlessing(ctx context.Context, uid int64, level int) error
 	UserBlessUntil(ctx context.Context, uid int64) (time.Time, error)

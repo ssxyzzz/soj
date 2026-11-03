@@ -61,8 +61,8 @@ type SystemSettings struct {
 	NotifyRetentionDays *int `bson:"notifyRetentionDays,omitempty"`
 	// root 全站广播每日上限；0 = 不限。
 	NotifyBroadcastPerDay *int `bson:"notifyBroadcastPerDay,omitempty"`
-	// 注册取号起点（v0.24 小批）：自动分配的用户 ID 从该号起（默认 100）；只抬高不回退
-	// ——计数器已超过起点时从计数器继续；手动指定 ID 不受此限。
+	// 注册取号起点（v0.24 小批，v0.61 按序补空）：自动分配的用户 ID 从该号起按序
+	// 回填未占用号（默认 100）；起点以下号段不参与。手动指定 ID 不受此限。
 	UserSeqStart *int `bson:"userSeqStart,omitempty"`
 	// 自动题号起点：自动分配的题目 ID 从该号起（默认 1001，1~1000 惯例留给导入题包）；
 	// 只抬高不回退——计数器已超过起点时从计数器继续；导入/建题指定题号不受此限。
