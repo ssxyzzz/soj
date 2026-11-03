@@ -38,8 +38,20 @@ func registerStatic(r *gin.Engine) {
 			serveFromFS(c, sub, name)
 			return
 		}
+		if missingAssetNoFallback(p) {
+			c.String(http.StatusNotFound, "404 asset not found: %s", p)
+			return
+		}
 		serveFromFS(c, sub, "index.html")
 	})
+}
+
+// missingAssetNoFallback：未命中也不回退 index.html 的路径——/assets/ 全部是 vite
+// 哈希产物，同名必同内容、版本绑定。旧前端（SW 缓存/旧标签页）拿着旧 index 引用
+// 已删 chunk 时，HTML 冒充 200 JS 会让 ES module 解析炸掉、故障变玄学（生产实测
+// 踩坑：发版后画板打不开，刷新自愈）；明 404 才能让浏览器/SW 正常走更新流程
+func missingAssetNoFallback(p string) bool {
+	return strings.HasPrefix(p, "/assets/")
 }
 
 // vite 构建产物形如 assets/index-BwZDfCAb.js：文件名带 8 位构建哈希，同名必同内容。

@@ -32,3 +32,26 @@ func TestCacheControl(t *testing.T) {
 		}
 	}
 }
+
+// 发版后旧前端（SW 缓存/旧标签页）会引用已删除的旧哈希 chunk，这些请求必须明 404、
+// 不得回退 index.html（HTML 冒充 200 JS → ES module 解析炸 → 故障玄学化，生产实测踩坑）
+func TestMissingAssetNoFallback(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/assets/BoardView-OLDHASH.js", true},
+		{"/assets/vendor-core-DQ9VZijj.js", true},
+		{"/assets/", true},
+		{"/draw", false},
+		{"/login", false},
+		{"/sw.js", false},
+		{"/favicon.ico", false},
+		{"/api/missing", false}, // /api 在 NoRoute 前置分支 JSON 404，不走回退判定
+	}
+	for _, c := range cases {
+		if got := missingAssetNoFallback(c.path); got != c.want {
+			t.Errorf("missingAssetNoFallback(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}
