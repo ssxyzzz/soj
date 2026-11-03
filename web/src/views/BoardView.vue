@@ -945,19 +945,11 @@ function resetZoom(): void {
   zoomAt(1 / cam.scale)
 }
 
-// 画布全屏（浏览器 Fullscreen API，作用于 stage）：舞台尺寸变化由 ResizeObserver
-// 感知并自动重算视窗；Esc 退出交浏览器默认行为（onKeydown 已让位不清选择）
-async function toggleFullscreen(): Promise<void> {
-  try {
-    if (document.fullscreenElement) await document.exitFullscreen()
-    else await stageEl.value?.requestFullscreen()
-  } catch {
-    /* 无用户手势/策略拒绝时静默忽略 */
-  }
-}
-
-function onFullscreenChange(): void {
-  isFullscreen.value = document.fullscreenElement === stageEl.value
+// 画布铺满模式（浏览器内，非 Fullscreen API）：根节点转 fixed 盖住导航以下整页、
+// 隐藏页头，卡片吃满剩余高度；顶部站点菜单（sticky z-50）保持可见可点。
+// Esc 可退出（onKeydown 分支）；舞台尺寸变化由 ResizeObserver 感知自动重算视窗
+function toggleFullscreen(): void {
+  isFullscreen.value = !isFullscreen.value
 }
 
 function fitView(): void {
@@ -1113,7 +1105,10 @@ function onKeydown(e: KeyboardEvent): void {
     return
   }
   if (e.key === 'Escape') {
-    if (document.fullscreenElement) return // 全屏下 Esc=浏览器退出全屏，不清选择不切工具
+    if (isFullscreen.value) {
+      isFullscreen.value = false // Esc 退出铺满模式
+      return
+    }
     if (drag) {
       drag = null
       renderer?.setPreview(null)
@@ -1154,7 +1149,6 @@ onMounted(() => {
   ro.observe(stEl)
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('keyup', onKeyup)
-  document.addEventListener('fullscreenchange', onFullscreenChange)
   themeObs = new MutationObserver(() => {
     palette.value = readPalette()
     renderer?.setPalette(palette.value)
@@ -1198,7 +1192,6 @@ onBeforeUnmount(() => {
   themeObs?.disconnect()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('keyup', onKeyup)
-  document.removeEventListener('fullscreenchange', onFullscreenChange)
   if (rafId) cancelAnimationFrame(rafId)
   clearTimeout(saveTimer)
 })
@@ -1211,7 +1204,7 @@ watch(tool, () => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page" :class="{ 'page-fs': isFullscreen }">
     <div class="page-head">
       <div class="kicker">BOARD</div>
       <h1 class="page-title">画板<small>课堂随手画：手绘笔迹 + 快速表格 / 树 / 图；画稿只存本机，讲完即删</small></h1>
@@ -1491,11 +1484,35 @@ watch(tool, () => {
   user-select: none;
 }
 
-/* 浏览器全屏态：铺满视口去卡片边框圆角，背景纯白防黑边 */
-.board-stage:fullscreen {
-  border: none;
-  border-radius: 0;
-  background: var(--soj-white);
+/* 浏览器内铺满模式：fixed 盖住导航以下整页（导航 sticky z-50 保持可见可点），
+   隐藏页头标题区，卡片与舞台吃满剩余高度 */
+.page-fs {
+  position: fixed;
+  inset: var(--soj-nav-h) 0 0;
+  z-index: 49;
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  margin: 0;
+  padding: var(--soj-sp-12) var(--soj-sp-16);
+  overflow: auto;
+}
+
+.page-fs .page-head {
+  display: none;
+}
+
+.page-fs .board-card {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.page-fs .board-stage {
+  flex: 1;
+  height: auto;
+  min-height: 0;
 }
 
 .board-svg {
