@@ -11,8 +11,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Circle,
   Eraser,
+  Fullscreen,
   Hand,
   Maximize,
+  Minimize2,
   Minus,
   MousePointer2,
   MoveUpRight,
@@ -105,6 +107,7 @@ const selected = ref(new Set<number>())
 const canUndo = ref(false)
 const canRedo = ref(false)
 const spacePressed = ref(false)
+const isFullscreen = ref(false)
 
 const cam = reactive({ x: 0, y: 0, scale: 1 })
 const stage = reactive({ w: 800, h: 500 })
@@ -942,6 +945,21 @@ function resetZoom(): void {
   zoomAt(1 / cam.scale)
 }
 
+// 画布全屏（浏览器 Fullscreen API，作用于 stage）：舞台尺寸变化由 ResizeObserver
+// 感知并自动重算视窗；Esc 退出交浏览器默认行为（onKeydown 已让位不清选择）
+async function toggleFullscreen(): Promise<void> {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen()
+    else await stageEl.value?.requestFullscreen()
+  } catch {
+    /* 无用户手势/策略拒绝时静默忽略 */
+  }
+}
+
+function onFullscreenChange(): void {
+  isFullscreen.value = document.fullscreenElement === stageEl.value
+}
+
 function fitView(): void {
   const bb = model.contentBBox()
   if (!bb) {
@@ -1095,6 +1113,7 @@ function onKeydown(e: KeyboardEvent): void {
     return
   }
   if (e.key === 'Escape') {
+    if (document.fullscreenElement) return // 全屏下 Esc=浏览器退出全屏，不清选择不切工具
     if (drag) {
       drag = null
       renderer?.setPreview(null)
@@ -1135,6 +1154,7 @@ onMounted(() => {
   ro.observe(stEl)
   window.addEventListener('keydown', onKeydown)
   window.addEventListener('keyup', onKeyup)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
   themeObs = new MutationObserver(() => {
     palette.value = readPalette()
     renderer?.setPalette(palette.value)
@@ -1178,6 +1198,7 @@ onBeforeUnmount(() => {
   themeObs?.disconnect()
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('keyup', onKeyup)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
   if (rafId) cancelAnimationFrame(rafId)
   clearTimeout(saveTimer)
 })
@@ -1333,6 +1354,16 @@ watch(tool, () => {
             <Maximize class="ticon" />
           </button>
           <button type="button" class="zbtn ztxt" title="重置 100%" aria-label="重置缩放" @click="resetZoom">1:1</button>
+          <button
+            type="button"
+            class="zbtn"
+            :title="isFullscreen ? '退出全屏' : '全屏画布'"
+            :aria-label="isFullscreen ? '退出全屏' : '全屏画布'"
+            @click="toggleFullscreen"
+          >
+            <Minimize2 v-if="isFullscreen" class="ticon" />
+            <Fullscreen v-else class="ticon" />
+          </button>
         </div>
       </div>
     </div>
@@ -1458,6 +1489,13 @@ watch(tool, () => {
   overflow: hidden;
   /* 画布禁文字选择：拖拽手势不得触发浏览器原生选择（会 pointercancel 中断绘制） */
   user-select: none;
+}
+
+/* 浏览器全屏态：铺满视口去卡片边框圆角，背景纯白防黑边 */
+.board-stage:fullscreen {
+  border: none;
+  border-radius: 0;
+  background: var(--soj-white);
 }
 
 .board-svg {
