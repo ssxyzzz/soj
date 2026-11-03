@@ -645,14 +645,12 @@ export class BoardRenderer {
 interface DocV1 {
   v: 1
   idSeq: number
-  labelSeq: number
   shapes: Shape[]
 }
 
 export class BoardModel {
   shapes: Shape[] = []
   idSeq = 1
-  labelSeq = 1
   private undoStack: string[] = []
   private redoStack: string[] = []
 
@@ -660,8 +658,16 @@ export class BoardModel {
     return this.idSeq++
   }
 
+  // 节点标签即时派生 = 当前画布最大节点标签 + 1（非数字标签按 0 计）：
+  // 清空画布自动从 1 重新编号，撤销恢复后也不与残留标签冲突（无状态可失步）
   nextLabel(): string {
-    return String(this.labelSeq++)
+    let max = 0
+    for (const s of this.shapes) {
+      if (s.type !== 'node') continue
+      const n = Number.parseInt(s.label, 10)
+      if (Number.isInteger(n) && n > max) max = n
+    }
+    return String(max + 1)
   }
 
   get(id: number): Shape | undefined {
@@ -721,7 +727,7 @@ export class BoardModel {
 
   // —— 快照历史：整体 JSON 深拷贝，课堂规模毫秒级，代码量比命令模式小一个量级 ——
   snapshot(): string {
-    const d: DocV1 = { v: 1, idSeq: this.idSeq, labelSeq: this.labelSeq, shapes: this.shapes }
+    const d: DocV1 = { v: 1, idSeq: this.idSeq, shapes: this.shapes }
     return JSON.stringify(d)
   }
 
@@ -729,7 +735,6 @@ export class BoardModel {
     const d = JSON.parse(raw) as DocV1
     this.shapes = d.shapes
     this.idSeq = d.idSeq
-    this.labelSeq = d.labelSeq
   }
 
   pushUndo(): void {
@@ -773,7 +778,6 @@ export class BoardModel {
       if (d?.v === 1 && Array.isArray(d.shapes) && typeof d.idSeq === 'number') {
         this.shapes = d.shapes
         this.idSeq = d.idSeq
-        this.labelSeq = typeof d.labelSeq === 'number' ? d.labelSeq : 1
         return true
       }
     } catch {

@@ -61,7 +61,14 @@ import type {
   Tool,
 } from '@/components/board/engine'
 
-const SAVE_KEY = 'soj.board.v2'
+// 多画布本地存档（不上服务器）：v3 = 索引 {v,active,count} + 每画布一份 DocV1 快照；
+// v2 单画布旧档首次加载迁移为画布 1 后移除（不留老账）
+const CANVAS_MAX = 5
+const SAVE_INDEX_KEY = 'soj.board.v3'
+const LEGACY_SAVE_KEY = 'soj.board.v2'
+const canvasKey = (n: number) => `soj.board.v3.c${n}`
+const canvasIndex = ref(1)
+const canvasCount = ref(1)
 
 // ---------- 调色板：挂载时从 CSS 变量读入，主题切换（v5/navy）自动跟随 ----------
 
@@ -1006,11 +1013,63 @@ function autosave(): void {
   }
   saveTimer = setTimeout(() => {
     try {
-      localStorage.setItem(SAVE_KEY, model.snapshot())
+      localStorage.setItem(canvasKey(canvasIndex.value), model.snapshot())
     } catch {
       // 存储满 / 隐私模式：忽略，画稿仍在内存与撤销栈里
     }
   }, 600)
+}
+
+function persistIndex(): void {
+  try {
+    localStorage.setItem(
+      SAVE_INDEX_KEY,
+      JSON.stringify({ v: 1, active: canvasIndex.value, count: canvasCount.value }),
+    )
+  } catch {
+    // 存储满 / 隐私模式：容忍，画布数本次会话仍可用
+  }
+}
+
+// 立即落盘当前画布（切换/治愈时用）：绕过 600ms 防抖，防止换档后防抖存档写串画布
+function persistNow(): void {
+  clearTimeout(saveTimer)
+  try {
+    localStorage.setItem(canvasKey(canvasIndex.value), model.snapshot())
+  } catch {
+    // 存储满 / 隐私模式：忽略，画稿仍在内存与撤销栈里
+  }
+}
+
+// 装载画布 n：换档即重建编辑态（选择/撤销重做栈随档清空，快照只存文档本身）；
+// 含防线一（加载即重定基），返回是否恢复了非空画稿
+function loadCanvas(n: number): boolean {
+  const raw = localStorage.getItem(canvasKey(n))
+  const restored = raw ? model.load(raw) && model.shapes.length > 0 : false
+  const rebased = model.rebaseIfNeeded()
+  drag = null
+  selected.value = new Set()
+  if (restored && model.contentBBox()) fitView()
+  else centerOrigin()
+  renderer?.renderAll(model)
+  refreshOverlay()
+  syncHistory()
+  if (rebased) persistNow() // 治愈后的快照立刻落盘（量级已安全，护栏空转）
+  return restored
+}
+
+function switchCanvas(n: number): void {
+  if (n === canvasIndex.value || drag) return
+  persistNow() // 先冲掉旧画布防抖存档再换档
+  canvasIndex.value = n
+  persistIndex()
+  loadCanvas(n)
+}
+
+function createCanvas(): void {
+  if (canvasCount.value >= CANVAS_MAX) return
+  canvasCount.value++
+  switchCanvas(canvasCount.value) // 新档无存档 → 空画布居中原点
 }
 
 // ---------- 键盘 ----------
@@ -1084,20 +1143,34 @@ onMounted(() => {
   })
   themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
-  // 本地暂存恢复：有内容则适应内容视窗
-  let restored = false
-  const raw = localStorage.getItem(SAVE_KEY)
-  if (raw) restored = model.load(raw) && model.shapes.length > 0
-  // 防线一：加载即重定基——带病存档（历史几何 bug 把坐标滚到 1e11，Skia float32 ≥1e8
-  // 光栅化全空）必须在首帧渲染前治愈，否则「事件正常、笔画落库、屏幕全白」
-  const rebased = model.rebaseIfNeeded()
-  if (restored && model.contentBBox()) fitView()
-  else centerOrigin()
-  renderer.renderAll(model)
-  refreshOverlay()
-  syncHistory()
+  // 多画布索引恢复；无 v3 索引则做 v2 → v3 迁移（旧单画布档整体成为画布 1）
+  const idxRaw = localStorage.getItem(SAVE_INDEX_KEY)
+  let idx: { v?: number; active?: number; count?: number } | null = null
+  try {
+    idx = idxRaw ? (JSON.parse(idxRaw) as { v?: number; active?: number; count?: number }) : null
+  } catch {
+    idx = null // 坏索引当无档，走迁移兜底
+  }
+  if (idx && typeof idx.active === 'number' && typeof idx.count === 'number') {
+    canvasCount.value = Math.min(CANVAS_MAX, Math.max(1, Math.floor(idx.count)))
+    canvasIndex.value = Math.min(canvasCount.value, Math.max(1, Math.floor(idx.active)))
+    persistIndex()
+  } else {
+    const legacy = localStorage.getItem(LEGACY_SAVE_KEY)
+    if (legacy) {
+      try {
+        localStorage.setItem(canvasKey(1), legacy)
+        localStorage.removeItem(LEGACY_SAVE_KEY)
+      } catch {
+        // 迁移写失败：保留旧档，本次按空画布 1 起步
+      }
+    }
+    canvasIndex.value = 1
+    canvasCount.value = 1
+    persistIndex()
+  }
+  const restored = loadCanvas(canvasIndex.value)
   if (restored) ElMessage.success('已恢复上次画稿')
-  if (rebased) autosave() // 治愈后的快照立刻落盘替换带病存档（此处量级已安全，autosave 护栏为空转）
 })
 
 onBeforeUnmount(() => {
@@ -1223,6 +1296,30 @@ watch(tool, () => {
           <button type="button" class="tbar-btn" title="删最后一行" @click="tableResize('row', -1)">-行</button>
           <button type="button" class="tbar-btn" title="末尾加一列" @click="tableResize('col', 1)">+列</button>
           <button type="button" class="tbar-btn" title="删最后一列" @click="tableResize('col', -1)">-列</button>
+        </div>
+        <div class="canvas-tabs">
+          <button
+            v-for="n in canvasCount"
+            :key="n"
+            type="button"
+            class="ctab"
+            :class="{ on: n === canvasIndex }"
+            :title="`切换到画布 ${n}`"
+            :aria-label="`切换到画布 ${n}`"
+            @click="switchCanvas(n)"
+          >
+            {{ n }}
+          </button>
+          <button
+            v-if="canvasCount < CANVAS_MAX"
+            type="button"
+            class="ctab cadd"
+            title="新建画布（最多 5 个，仅存本机）"
+            aria-label="新建画布"
+            @click="createCanvas"
+          >
+            +
+          </button>
         </div>
         <div class="board-zoomer">
           <button type="button" class="zbtn" title="缩小" aria-label="缩小" @click="zoomAt(1 / 1.25)">
@@ -1441,6 +1538,49 @@ watch(tool, () => {
   border-radius: var(--soj-radius-pill);
   padding: 2px var(--soj-sp-6);
   box-shadow: var(--soj-shadow-card);
+}
+
+/* 左下角画布切换条：多画布（≤5）本地缓存，与右下角缩放器同款药丸 */
+.canvas-tabs {
+  position: absolute;
+  left: var(--soj-sp-12);
+  bottom: var(--soj-sp-12);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-2);
+  background: var(--el-bg-color);
+  border: 1px solid var(--soj-line);
+  border-radius: var(--soj-radius-pill);
+  padding: 2px var(--soj-sp-6);
+  box-shadow: var(--soj-shadow-card);
+}
+
+.ctab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--soj-radius-pill);
+  background: transparent;
+  color: var(--soj-ink-2);
+  font-size: var(--soj-fs-12);
+  cursor: pointer;
+  padding: 0 var(--soj-sp-4);
+}
+
+.ctab:hover {
+  background: var(--soj-surface-2);
+  color: var(--soj-blue);
+}
+
+.ctab.on {
+  background: var(--soj-blue-soft);
+  border-color: var(--soj-blue-line);
+  color: var(--soj-blue);
+  font-weight: var(--soj-fw-medium);
 }
 
 .zbtn {
