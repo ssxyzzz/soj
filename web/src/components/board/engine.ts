@@ -420,27 +420,25 @@ export function bboxesIntersect(a: BBox, b: BBox): boolean {
 // —— 单选手柄缩放：把 shape 几何从旧包围盒线性映射到新包围盒（锚定左上角）——
 // 连线(edge)由节点推导，不参与；文字缩放的是字号；表格缩放的是格子尺寸；
 // 直线/箭头=手柄所在端点直接跟手（零乘性，杜绝退化轴放大乱飞）；
-// 笔迹含退化轴（细扁笔迹 from.w/h < 8）时退化为对角线等比缩放，避免薄轴系数爆炸
-export function resizeShape(s: Shape, from: BBox, to: BBox): void {
+// 笔迹必须传拖拽开始时的原始点集（origPoints）：映射若用「当前已缩放点」相对原始
+// 包围盒重算，每个 pointermove 复合乘一次系数（6.3^14≈天文数字，实测一拖爆到 3.8e9）
+export function resizeShape(s: Shape, from: BBox, to: BBox, origPoints?: [number, number][]): void {
   const sx = from.w > 0.5 ? to.w / from.w : 1
   const sy = from.h > 0.5 ? to.h / from.h : 1
   const rx = (x: number) => to.x + (x - from.x) * sx
   const ry = (y: number) => to.y + (y - from.y) * sy
   switch (s.type) {
     case 'stroke': {
-      if (from.w < 8 || from.h < 8) {
-        const fromDiag = Math.hypot(from.w, from.h) || 1
-        const k = Math.hypot(to.w, to.h) / fromDiag
-        for (const p of s.points) {
-          p[0] = to.x + (p[0] - from.x) * k
-          p[1] = to.y + (p[1] - from.y) * k
+      const pts = origPoints ?? s.points
+      const mapped = pts.map((p) => {
+        if (from.w < 8 || from.h < 8) {
+          const fromDiag = Math.hypot(from.w, from.h) || 1
+          const k = Math.hypot(to.w, to.h) / fromDiag
+          return [to.x + (p[0] - from.x) * k, to.y + (p[1] - from.y) * k] as [number, number]
         }
-      } else {
-        for (const p of s.points) {
-          p[0] = rx(p[0])
-          p[1] = ry(p[1])
-        }
-      }
+        return [rx(p[0]), ry(p[1])] as [number, number]
+      })
+      s.points = mapped
       break
     }
     case 'line':

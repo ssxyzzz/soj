@@ -163,6 +163,8 @@ interface DragState {
   erased?: boolean
   resizeId?: number
   resizeFrom?: BBox
+  // 笔迹缩放专用：拖拽开始时的原始点集快照（防逐事件复合放大）
+  origPoints?: [number, number][]
   // 移动/缩放首帧才入撤销栈：纯点击不成空快照，且快照必在落点变更之前
   undoPushed?: boolean
 }
@@ -294,6 +296,10 @@ function onPointerDown(e: PointerEvent): void {
     return
   }
   if (!renderer) return
+  // 左键/中键手势一律拦默认行为：浏览器原生文字选择一旦随拖拽启动，会触发
+  // pointercancel 中断绘制（ego 等指针捕获被拒的浏览器实测「画不出」的根因；
+  // Edge 捕获成功压制了选择所以能画）。选中文本的体感 bug 同源。
+  if (e.button === 0 || e.button === 1 || spacePressed.value) e.preventDefault()
   const w = toWorld(e)
   const st: DragState = { mode: 'click', sx: w.x, sy: w.y, lx: w.x, ly: w.y, lpx: e.clientX, lpy: e.clientY }
   if (spacePressed.value || e.button === 1) {
@@ -318,6 +324,7 @@ function onPointerDown(e: PointerEvent): void {
         st.mode = 'resize'
         st.resizeId = h.id
         if (bb) st.resizeFrom = bb
+        if (hs && hs.type === 'stroke') st.origPoints = hs.points.map((p) => [p[0], p[1]] as [number, number])
         break
       }
       const hit = model.hitTest(w.x, w.y, tol)
@@ -391,27 +398,20 @@ function onPointerDown(e: PointerEvent): void {
   drag = st
 }
 
-// 边缘自动平移：拖拽（绘制/移动/缩放/连线）靠近画布边缘时视图自动跟进，
-// 内容不会被拖出视口弄丢（Excalidraw 同款交互）
-function edgeAutoPan(e: PointerEvent): void {
-  const rect = svgEl.value?.getBoundingClientRect()
-  if (!rect) return
-  const EDGE = 56
-  const PUSH = 0.16 // 每次指针事件的推进量（随事件频率自适应）
-  const dLeft = e.clientX - rect.left
-  const dRight = rect.right - e.clientX
-  const dTop = e.clientY - rect.top
-  const dBottom = rect.bottom - e.clientY
-  if (dLeft < EDGE) cam.x -= ((EDGE - dLeft) * PUSH) / cam.scale
-  if (dRight < EDGE) cam.x += ((EDGE - dRight) * PUSH) / cam.scale
-  if (dTop < EDGE) cam.y -= ((EDGE - dTop) * PUSH) / cam.scale
-  if (dBottom < EDGE) cam.y += ((EDGE - dBottom) * PUSH) / cam.scale
+// 手势世界坐标钳制在当前视口内：画/拖/缩放永远不出可见区——「拖出视野消失」与
+// 「边缘缩放爆炸」（自动平移期相机位移被算进 to.w，笔迹系数可爆到 10 倍+）从根上杜绝；
+// 曾试边缘自动平移（Excalidraw 式）因该爆炸问题撤回，视口内钳制更简单可预期
+function clampToViewport(w: { x: number; y: number }) {
+  const right = cam.x + stage.w / cam.scale
+  const bottom = cam.y + stage.h / cam.scale
+  w.x = Math.max(cam.x, Math.min(right, w.x))
+  w.y = Math.max(cam.y, Math.min(bottom, w.y))
+  return w
 }
 
 function onPointerMove(e: PointerEvent): void {
   if (!drag) return
-  if (drag.mode === 'draw' || drag.mode === 'move' || drag.mode === 'resize' || drag.mode === 'link') edgeAutoPan(e)
-  const w = toWorld(e)
+  const w = clampToViewport(toWorld(e))
   const d = drag
   switch (d.mode) {
     case 'pan':
@@ -474,7 +474,7 @@ function onPointerMove(e: PointerEvent): void {
         d.undoPushed = true
         syncHistory()
       }
-      resizeShape(s, from, to)
+      resizeShape(s, from, to, d.origPoints)
       renderer?.renderIds(model, [s.id])
       refreshOverlay()
       return
@@ -498,7 +498,7 @@ function onPointerUp(e: PointerEvent): void {
   const d = drag
   if (!d) return
   drag = null
-  const w = toWorld(e)
+  const w = clampToViewport(toWorld(e))
   switch (d.mode) {
     case 'pan':
       return
@@ -1325,6 +1325,8 @@ watch(tool, () => {
   background-image: radial-gradient(var(--soj-line) 1px, transparent 1px);
   background-size: 24px 24px;
   overflow: hidden;
+  /* 画布禁文字选择：拖拽手势不得触发浏览器原生选择（会 pointercancel 中断绘制） */
+  user-select: none;
 }
 
 .board-svg {
