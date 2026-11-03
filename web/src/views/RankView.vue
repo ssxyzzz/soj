@@ -151,6 +151,23 @@ onMounted(() => {
       <h1 class="page-title">{{ pageTitle }}<small>{{ pageSub }}</small></h1>
     </div>
 
+    <!-- 榜单切换（v0.57 起移至领奖台之上）：切换 → 前三领奖台 → 排名表 -->
+    <div class="board-tabs">
+      <button
+        v-for="b in (['level', 'solve', 'combo', 'streak'] as const)"
+        :key="b"
+        class="board-tab"
+        :class="{ on: board === b }"
+        @click="switchBoard(b)"
+      >
+        {{ { level: '🏆 等级榜', solve: '⚔️ 刷题榜', combo: '🔥 连击榜', streak: '📅 坚持榜' }[b] }}
+      </button>
+    </div>
+    <div v-if="board === 'combo'" class="board-tabs" style="margin-top: calc(-1 * var(--soj-sp-12))">
+      <button class="board-tab" :class="{ on: comboBy === 'best' }" @click="switchComboBy('best')">🏆 历史连击</button>
+      <button class="board-tab" :class="{ on: comboBy === 'cur' }" @click="switchComboBy('cur')">🔥 当前连击</button>
+    </div>
+
     <!-- 领奖台（前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3）；整卡可点进公开主页 -->
     <div v-if="podium.length" class="podium" v-loading="loading || gameLoading">
       <div
@@ -174,21 +191,6 @@ onMounted(() => {
     </div>
 
     <el-card class="tbl-card">
-      <div class="board-tabs">
-        <button
-          v-for="b in (['level', 'solve', 'combo', 'streak'] as const)"
-          :key="b"
-          class="board-tab"
-          :class="{ on: board === b }"
-          @click="switchBoard(b)"
-        >
-          {{ { level: '🏆 等级榜', solve: '⚔️ 刷题榜', combo: '🔥 连击榜', streak: '📅 坚持榜' }[b] }}
-        </button>
-      </div>
-      <div v-if="board === 'combo'" class="board-tabs" style="margin-top: var(--soj-sp-8)">
-        <button class="board-tab" :class="{ on: comboBy === 'best' }" @click="switchComboBy('best')">🏆 历史连击</button>
-        <button class="board-tab" :class="{ on: comboBy === 'cur' }" @click="switchComboBy('cur')">🔥 当前连击</button>
-      </div>
       <div v-if="(board === 'combo' || board === 'streak') && gameMeRank" class="my-game-rank">
         我的{{ boardTitle }}名次：<b>#{{ gameMeRank }}</b>（{{ board === 'combo' && comboBy === 'best' ? '历史' : '当前' }} {{ gameMeValue }}）
       </div>
@@ -438,12 +440,12 @@ onMounted(() => {
 </style>
 
 <style scoped>
-/* 多榜制（v0.41）：四榜切换胶囊 */
+/* 多榜制（v0.41）：四榜切换胶囊（v0.57 起移至领奖台上方，脱离表格卡） */
 .board-tabs {
   display: flex;
   gap: var(--soj-sp-8);
   flex-wrap: wrap;
-  margin-bottom: var(--soj-sp-14);
+  margin-bottom: var(--soj-sp-20);
 }
 
 .board-tab {
