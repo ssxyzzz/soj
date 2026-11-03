@@ -375,13 +375,14 @@ function onCommand(command: string) {
       <router-view />
     </el-main>
     <el-footer class="footer">
-      <!-- 代码对比工具入口（v0.47）：独立工具页，置于页脚信息行上方一行 -->
+      <!-- 页脚工具行（v0.60 改名）：独立工具页入口，置于页脚信息行上方一行 -->
       <div class="footer-tools">
+        <router-link to="/draw" class="ftool">画板</router-link>
         <router-link to="/diff" class="ftool">代码对比</router-link>
       </div>
       <div class="footer-line">
         <!-- 页脚信息行（2026-11-02 单行化 + 主题 popover 向上选择）：SiteFooterLine 共用组件，
-             登录页页脚同款；代码对比工具行仍在上方独立一行 -->
+             登录页页脚同款 -->
         <SiteFooterLine />
       </div>
     </el-footer>

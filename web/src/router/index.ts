@@ -177,6 +177,14 @@ const router = createRouter({
           meta: { title: '代码对比', requiresAuth: true },
         },
         {
+          path: 'draw',
+          name: 'draw',
+          // 手绘画板（v0.60）：自研 roughjs 手绘引擎（懒加载独立 chunk），页脚入口；
+          // 登录后可用；画稿仅 localStorage 本地暂存，后端零存储
+          component: () => import('@/views/BoardView.vue'),
+          meta: { title: '画板', requiresAuth: true },
+        },
+        {
           path: 'admin',
           name: 'admin',
           component: () => import('@/views/AdminView.vue'),
