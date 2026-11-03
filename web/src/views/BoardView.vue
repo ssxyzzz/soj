@@ -278,6 +278,16 @@ function toWorld(e: { clientX: number; clientY: number }) {
   }
 }
 
+// 指针捕获（拖拽出 svg 也能持续收事件）。ego 等带代理层的浏览器可能拒绝捕获并抛错——
+// 捕获失败只降级为「光标不出画布即可正常绘制」，绝不让它中断绘制主流程
+function capturePointer(e: PointerEvent): void {
+  try {
+    svgEl.value?.setPointerCapture(e.pointerId)
+  } catch {
+    /* 捕获被拒绝：忽略 */
+  }
+}
+
 function onPointerDown(e: PointerEvent): void {
   if (editing.value) {
     commitEdit()
@@ -291,11 +301,11 @@ function onPointerDown(e: PointerEvent): void {
     e.preventDefault()
     st.mode = 'pan'
     drag = st
-    svgEl.value?.setPointerCapture(e.pointerId)
+    capturePointer(e)
     return
   }
   if (e.button !== 0) return
-  svgEl.value?.setPointerCapture(e.pointerId)
+  capturePointer(e)
   const tol = 8 / cam.scale
   const style = curStyle()
   switch (tool.value) {
@@ -381,8 +391,26 @@ function onPointerDown(e: PointerEvent): void {
   drag = st
 }
 
+// 边缘自动平移：拖拽（绘制/移动/缩放/连线）靠近画布边缘时视图自动跟进，
+// 内容不会被拖出视口弄丢（Excalidraw 同款交互）
+function edgeAutoPan(e: PointerEvent): void {
+  const rect = svgEl.value?.getBoundingClientRect()
+  if (!rect) return
+  const EDGE = 56
+  const PUSH = 0.16 // 每次指针事件的推进量（随事件频率自适应）
+  const dLeft = e.clientX - rect.left
+  const dRight = rect.right - e.clientX
+  const dTop = e.clientY - rect.top
+  const dBottom = rect.bottom - e.clientY
+  if (dLeft < EDGE) cam.x -= ((EDGE - dLeft) * PUSH) / cam.scale
+  if (dRight < EDGE) cam.x += ((EDGE - dRight) * PUSH) / cam.scale
+  if (dTop < EDGE) cam.y -= ((EDGE - dTop) * PUSH) / cam.scale
+  if (dBottom < EDGE) cam.y += ((EDGE - dBottom) * PUSH) / cam.scale
+}
+
 function onPointerMove(e: PointerEvent): void {
   if (!drag) return
+  if (drag.mode === 'draw' || drag.mode === 'move' || drag.mode === 'resize' || drag.mode === 'link') edgeAutoPan(e)
   const w = toWorld(e)
   const d = drag
   switch (d.mode) {

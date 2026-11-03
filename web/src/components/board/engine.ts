@@ -469,8 +469,8 @@ export function resizeShape(s: Shape, from: BBox, to: BBox): void {
       s.h = to.h
       break
     case 'text': {
-      // 字号线性增减（拖多少长多少，可逆可预期；乘性比例会让小字一拖就翻倍）
-      const size = Math.max(10, Math.min(72, Math.round(s.size + (to.h - from.h) / 1.35)))
+      // 字号 1:1 跟手：字形增量 = 光标位移（不含包围盒近似系数，肉眼所见即所拖）
+      const size = Math.max(10, Math.min(72, Math.round(s.size + (to.h - from.h))))
       s.x = to.x
       s.y = to.y + size // 基线锚在新包围盒顶（bbox.y 即基线减字号）
       s.size = size
