@@ -446,7 +446,8 @@ export function resizeShape(s: Shape, from: BBox, to: BBox): void {
       s.h = to.h
       break
     case 'text': {
-      const size = Math.max(10, Math.min(72, Math.round(s.size * sy)))
+      // 字号线性增减（拖多少长多少，可逆可预期；乘性比例会让小字一拖就翻倍）
+      const size = Math.max(10, Math.min(72, Math.round(s.size + (to.h - from.h) / 1.35)))
       s.x = to.x
       s.y = to.y + size // 基线锚在新包围盒顶（bbox.y 即基线减字号）
       s.size = size
@@ -456,11 +457,15 @@ export function resizeShape(s: Shape, from: BBox, to: BBox): void {
       s.cw = Math.max(20, Math.min(220, to.w / s.cols))
       s.ch = Math.max(16, Math.min(180, to.h / s.rows))
       break
-    case 'node':
-      s.r = Math.max(8, Math.min(80, Math.min(to.w, to.h) / 2))
-      s.x = to.x + to.w / 2
-      s.y = to.y + to.h / 2
+    case 'node': {
+      // 圆心固定不滑移，半径随光标位移线性增长（直径增量=光标位移，边缘跟手）
+      const cx = from.x + from.w / 2
+      const cy = from.y + from.h / 2
+      s.r = Math.max(8, Math.min(80, from.w / 2 + (Math.min(to.w, to.h) - Math.min(from.w, from.h)) / 2))
+      s.x = cx
+      s.y = cy
       break
+    }
     case 'edge':
       break
   }
