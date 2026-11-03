@@ -1007,21 +1007,6 @@ onMounted(() => {
   const stEl = stageEl.value
   if (!svg || !stEl) return
   renderer = new BoardRenderer(svg, palette.value)
-  // TODO(dev-debug) 临时调试钩子，定位后删除
-  ;(window as unknown as Record<string, unknown>).__board = {
-    get editing() {
-      return editing.value
-    },
-    get tool() {
-      return tool.value
-    },
-    get selected() {
-      return [...selected.value]
-    },
-    get cam() {
-      return { ...cam }
-    },
-  }
   stage.w = stEl.clientWidth
   stage.h = stEl.clientHeight
   ro = new ResizeObserver(() => {
