@@ -568,7 +568,7 @@ export interface AdminUser {
 
 export interface SecurityLogItem {
   at: string
-  type: string // login_success | login_failure | login_locked | password_change | password_reset_admin | rate_limited
+  type: string // login_success | login_failure | login_locked | password_change | password_reset_admin | rate_limited | uid_change | role_change
   uid: number
   username: string
   ip: string

@@ -21,6 +21,7 @@ const typeMeta: Record<string, { label: string; kind: 'success' | 'danger' | 'wa
   broadcast: { label: '全站广播', kind: 'primary' },
   user_import: { label: '批量建号', kind: 'primary' },
   uid_change: { label: '改用户 ID', kind: 'warning' },
+  role_change: { label: '角色变更', kind: 'warning' },
 }
 
 const list = ref<SecurityLogItem[]>([])

@@ -217,10 +217,19 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 		}
 	}
 	pwdResetUname := "" // 重置密码的审计对象（最终用户名：本请求可能同时改名）
+	oldRole := ""       // 角色变更审计对象：更新前的原角色（v0.59）
 	if req.Username != nil {
 		pwdResetUname = *req.Username
-	} else if u, err := h.repo.GetUserByID(c.Request.Context(), id); err == nil {
-		pwdResetUname = u.Username
+	}
+	if req.Username != nil || req.Role != nil {
+		if u, err := h.repo.GetUserByID(c.Request.Context(), id); err == nil {
+			if req.Username == nil {
+				pwdResetUname = u.Username
+			}
+			if req.Role != nil {
+				oldRole = u.Role
+			}
+		}
 	}
 	if req.Password != nil {
 		if msg := passwordProblem(*req.Password); msg != "" {
@@ -275,6 +284,10 @@ func (h *Handlers) AdminUpdateUser(c *gin.Context) {
 					map[string]string{"username": pwdResetUname, "action": "的登录密码已被管理员重置"})
 			}
 		}
+	}
+	if req.Role != nil {
+		// v0.59：角色变更落安全审计（提权/降权可查，与改密/改 ID 同级）
+		h.securityLog(c, repo.SecRoleChange, id, pwdResetUname, "角色变更："+oldRole+" → "+*req.Role)
 	}
 	if req.Role != nil || req.Username != nil || req.Password != nil {
 		h.idents.flush() // 角色/用户名/密码版本变更即时生效（不等缓存 TTL）

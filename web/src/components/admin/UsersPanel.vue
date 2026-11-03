@@ -225,7 +225,7 @@ function resetImport() {
   importStep.value = 1
 }
 
-// ---- 编辑弹窗：用户名 / 昵称 / 密码 / 确认密码 ----
+// ---- 编辑弹窗：账号字段（用户名/昵称/密码/资料/角色）+ 改 ID 段（v0.59 并入） ----
 // 用户名是登录身份标识：持有 user.username.edit 权限位（默认仅 root）才可改，其余只读展示
 const canRename = computed(() => userStore.can('user.username.edit'))
 // 绑定邮箱解绑（v0.16）：root 硬编码（后端 RequireRoot）
@@ -234,6 +234,7 @@ const showEdit = ref(false)
 const editSaving = ref(false)
 const unbinding = ref(false)
 // email/phone：绑定信息（v0.16），后端用户列表下发；AdminUser 类型不含，就地扩展
+// role/originRole：角色（v0.59 并入编辑弹窗，后端 PATCH role 通道就绪）；newId：改 ID 段输入
 const editForm = reactive({
   id: 0,
   username: '',
@@ -247,6 +248,9 @@ const editForm = reactive({
   grade: '',
   school: '',
   region: '',
+  role: '',
+  originRole: '',
+  newId: undefined as number | undefined,
 })
 
 function openEdit(row: AdminUser) {
@@ -262,6 +266,9 @@ function openEdit(row: AdminUser) {
   editForm.grade = row.grade ?? ''
   editForm.school = row.school ?? ''
   editForm.region = row.region ?? ''
+  editForm.role = row.role
+  editForm.originRole = row.role
+  editForm.newId = undefined
   showEdit.value = true
   openXp(row) // 经验/玉调整并入编辑弹窗（2026-10-30 拍板）：打开即带出当前值
   openJade(row)
@@ -291,6 +298,8 @@ async function unbindEmail() {
 
 async function submitEdit() {
   const renamed = canRename.value && editForm.username.trim() !== editForm.originUsername
+  // 角色变更（v0.59 并入编辑弹窗）：变更才随确认修改提交；初始管理员 ID=1 的 root 受保护（后端兜底）
+  const roleChanged = editForm.id !== 1 && editForm.role !== editForm.originRole
   if (renamed && !/^[A-Za-z0-9_]{3,32}$/.test(editForm.username.trim())) {
     ElMessage.warning('用户名需为 3-32 位字母/数字/下划线')
     return
@@ -310,11 +319,17 @@ async function submitEdit() {
     }
   }
   try {
-    await ElMessageBox.confirm(`确认修改用户 ${editForm.originUsername} 的信息？`, '确认修改', {
-      type: 'warning',
-      confirmButtonText: '确认修改',
-      cancelButtonText: '取消',
-    })
+    await ElMessageBox.confirm(
+      roleChanged
+        ? `确认修改用户 ${editForm.originUsername} 的信息？（含角色变更：${roleStore.roleName(editForm.originRole)} → ${roleStore.roleName(editForm.role)}，角色变更即时生效）`
+        : `确认修改用户 ${editForm.originUsername} 的信息？`,
+      '确认修改',
+      {
+        type: 'warning',
+        confirmButtonText: '确认修改',
+        cancelButtonText: '取消',
+      },
+    )
   } catch {
     return
   }
@@ -324,6 +339,7 @@ async function submitEdit() {
       nickname: editForm.nickname.trim(),
       ...(renamed ? { username: editForm.username.trim() } : {}),
       ...(editForm.password ? { password: editForm.password } : {}),
+      ...(roleChanged ? { role: editForm.role } : {}),
       gender: editForm.gender,
       grade: editForm.grade,
       school: editForm.school.trim(),
@@ -338,31 +354,23 @@ async function submitEdit() {
 }
 
 // ---- 改 ID（v0.50）：uid 是全站身份主键，改 ID = 服务端事务内跨集合引用搬家 ----
-// 与改用户名正交（改名走 user.username.edit 位）；此处权限复用 admin.user.manage（用户拍板）
+// 与改用户名正交（改名走 user.username.edit 位）；权限复用 admin.user.manage（用户拍板）。
+// v0.59 并入编辑弹窗（独立弹窗/操作列链接退役）：root 账号不显示该段，后端 ErrChangeIDRoot 兜底
 const canChangeId = computed(() => userStore.can('admin.user.manage'))
-const showChangeId = ref(false)
 const changing = ref(false)
-const changeForm = reactive({ id: 0, username: '', newId: undefined as number | undefined })
-
-function openChangeId(row: AdminUser) {
-  changeForm.id = row.id
-  changeForm.username = row.username
-  changeForm.newId = undefined
-  showChangeId.value = true
-}
 
 async function submitChangeId() {
-  if (!changeForm.newId || changeForm.newId <= 0) {
+  if (!editForm.newId || editForm.newId <= 0) {
     ElMessage.warning('请填写正整数新 ID')
     return
   }
-  if (changeForm.newId === changeForm.id) {
+  if (editForm.newId === editForm.id) {
     ElMessage.warning('新 ID 与当前 ID 相同')
     return
   }
   try {
     await ElMessageBox.confirm(
-      `确认把用户 ${changeForm.username} 的 ID 从 #${changeForm.id} 改为 #${changeForm.newId}？全部提交、玉、帖子、班级记录将一并迁移，其当前登录态立即失效（重新登录即恢复）。`,
+      `确认把用户 ${editForm.originUsername} 的 ID 从 #${editForm.id} 改为 #${editForm.newId}？全部提交、玉、帖子、班级记录将一并迁移，其当前登录态立即失效（重新登录即恢复）。`,
       '确认改 ID',
       { type: 'warning', confirmButtonText: '确认改 ID', cancelButtonText: '取消' },
     )
@@ -371,9 +379,9 @@ async function submitChangeId() {
   }
   changing.value = true
   try {
-    const r = await adminApi.changeUserId(changeForm.id, changeForm.newId)
-    ElMessage.success(`已改 ID：#${changeForm.id} → #${changeForm.newId}（迁移记录 ${r.moved} 条）`)
-    showChangeId.value = false
+    const r = await adminApi.changeUserId(editForm.id, editForm.newId)
+    ElMessage.success(`已改 ID：#${editForm.id} → #${editForm.newId}（迁移记录 ${r.moved} 条）`)
+    showEdit.value = false // ID 已变，整行数据刷新后重开
     await load()
   } catch {
     // 拦截器统一提示（占用/禁改/事务回滚等）
@@ -538,18 +546,9 @@ defineExpose({ refresh: () => load() })
             <b class="nickname">{{ row.nickname }}</b>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="130">
+        <el-table-column label="操作" width="80">
           <template #default="{ row }">
             <el-button size="small" link type="primary" @click="openEdit(row as AdminUser)">编辑</el-button>
-            <el-button
-              v-if="canChangeId && row.role !== 'root'"
-              size="small"
-              link
-              type="warning"
-              @click="openChangeId(row as AdminUser)"
-            >
-              改 ID
-            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -560,32 +559,6 @@ defineExpose({ refresh: () => load() })
       :description="keyword ? `没有匹配「${keyword.trim()}」的用户` : '暂无用户'"
       :image-size="60"
     />
-
-    <!-- 改 ID 弹窗（v0.50）：跨集合引用搬家，二次确认明示登录态失效 -->
-    <el-dialog v-model="showChangeId" :title="`改 ID · ${changeForm.username}`" width="460">
-      <el-form label-position="top" @submit.prevent>
-        <el-form-item label="当前 ID">
-          <span class="mono dim">{{ changeForm.id }}</span>
-        </el-form-item>
-        <el-form-item label="新 ID">
-          <el-input-number
-            v-model="changeForm.newId"
-            :min="1"
-            :max="1000000000"
-            :controls="false"
-            placeholder="正整数，不得与现有用户冲突"
-            style="width: 240px"
-          />
-        </el-form-item>
-        <p class="dim" style="margin: 0">
-          该用户的全部提交、玉、帖子、班级记录等将一并迁移到新号；操作不可撤销，请谨慎执行。
-        </p>
-      </el-form>
-      <template #footer>
-        <el-button @click="showChangeId = false">取消</el-button>
-        <el-button type="danger" :loading="changing" @click="submitChangeId">确认改 ID</el-button>
-      </template>
-    </el-dialog>
 
     <!-- 批量建号·中文花名册（v0.34 两段式）：上传识别 → 预览确认（id/用户名可改）→ 建号导出 -->
     <el-dialog v-model="showImport" title="批量导入用户" width="920" @closed="resetImport">
@@ -728,7 +701,7 @@ defineExpose({ refresh: () => load() })
       </template>
     </el-dialog>
 
-    <!-- 编辑弹窗（2026-10-30 拍板加宽 520→720）：账号信息 + 经验调整 + 玉调整（root）三段合一 -->
+    <!-- 编辑弹窗（2026-10-30 拍板加宽 520→720）：账号信息（含角色，v0.59）+ 经验调整 + 玉调整（root）+ 改 ID（v0.59 并入）多段合一 -->
     <el-dialog v-model="showEdit" :title="`编辑 · ${editForm.originUsername}`" width="720">
       <el-form label-position="top">
         <el-form-item label="绑定信息">
@@ -757,6 +730,13 @@ defineExpose({ refresh: () => load() })
           </el-form-item>
           <el-form-item label="昵称">
             <el-input v-model="editForm.nickname" maxlength="6" placeholder="用于榜单、题解等公开页面展示（6 字以内）" />
+          </el-form-item>
+          <!-- 角色（v0.59 并入编辑弹窗）：选项与建号弹窗同源；初始管理员 ID=1 的 root 受保护禁改（后端兜底） -->
+          <el-form-item label="角色">
+            <el-select v-model="editForm.role" :disabled="editForm.id === 1" style="width: 160px">
+              <el-option v-for="r in roleStore.roles" :key="r.id" :value="r.id" :label="`${r.name}（${r.id}）`" />
+            </el-select>
+            <span v-if="editForm.id === 1" class="dim" style="margin-left: var(--soj-sp-8)">初始管理员 root 受保护</span>
           </el-form-item>
           <el-form-item label="新密码">
             <el-input
@@ -837,6 +817,24 @@ defineExpose({ refresh: () => load() })
           <el-button type="success" :loading="jadeSaving" @click="submitJade">调整玉</el-button>
         </div>
         <p class="adj-hint dim">正数增加、负数减少（扣减不透支）</p>
+      </template>
+
+      <!-- 改 ID（v0.50，v0.59 并入编辑弹窗）：uid 是全站身份主键，跨集合引用搬家；独立危险按钮 + 二次确认 -->
+      <template v-if="canChangeId && editForm.originRole !== 'root'">
+        <el-divider content-position="left">改 ID</el-divider>
+        <div class="adj-row">
+          <span class="xp-nums">当前 ID <b class="mono">#{{ editForm.id }}</b></span>
+          <el-input-number
+            v-model="editForm.newId"
+            :min="1"
+            :max="1000000000"
+            :controls="false"
+            placeholder="新 ID（正整数，不得与现有用户冲突）"
+            style="width: 220px"
+          />
+          <el-button type="danger" :loading="changing" @click="submitChangeId">确认改 ID</el-button>
+        </div>
+        <p class="adj-hint dim">全部提交、玉、帖子、班级记录将一并迁移到新号；旧登录态立即失效，操作不可撤销，请谨慎执行</p>
       </template>
 
       <template #footer>

@@ -41,12 +41,13 @@ const (
 	SecBroadcast     = "broadcast"      // v0.24：全站公告广播
 	SecUserImport    = "user_import"    // v0.24 小批：CSV 批量建号
 	SecUIDChange     = "uid_change"     // v0.50：管理端改用户 ID（引用搬家）
+	SecRoleChange    = "role_change"    // v0.59：管理端改用户角色（提权/降权审计）
 )
 
 var SecurityLogTypes = []string{
 	SecLoginSuccess, SecLoginFailure, SecLoginLocked,
 	SecPwdChange, SecPwdResetAdmin, SecPwdReset, SecEmailBind, SecEmailUnbind, SecRateLimited,
-	SecDiscussDelete, SecDiscussMute, SecBroadcast, SecUserImport, SecUIDChange,
+	SecDiscussDelete, SecDiscussMute, SecBroadcast, SecUserImport, SecUIDChange, SecRoleChange,
 }
 
 func (r *Repo) AddSecurityLog(ctx context.Context, e SecurityLog) error {
