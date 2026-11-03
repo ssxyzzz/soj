@@ -11,6 +11,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Circle,
   Eraser,
+  Hand,
   Maximize,
   Minus,
   MousePointer2,
@@ -32,7 +33,7 @@ import {
   CELL_H,
   CELL_MAX,
   CELL_W,
-  HAND_FONT,
+  BOARD_FONT,
   NODE_R,
   TEXT_SIZE,
   TREE_GAP_X,
@@ -44,6 +45,8 @@ import {
   buildExportSvg,
   renderShapeInto,
   resizeShape,
+  textBaselineInBox,
+  textWidth,
 } from '@/components/board/engine'
 import type {
   BBox,
@@ -103,7 +106,7 @@ const viewBox = computed(
 )
 const zoomPct = computed(() => Math.round(cam.scale * 100))
 const cursorClass = computed(() => {
-  if (spacePressed.value) return drag?.mode === 'pan' ? 'cur-grabbing' : 'cur-grab'
+  if (spacePressed.value || tool.value === 'hand') return drag?.mode === 'pan' ? 'cur-grabbing' : 'cur-grab'
   return tool.value === 'select' ? 'cur-move' : 'cur-draw'
 })
 
@@ -119,6 +122,7 @@ function syncHistory(): void {
 // ---------- 工具栏数据 ----------
 
 const tools: { id: Tool; icon: Component; label: string }[] = [
+  { id: 'hand', icon: Hand, label: '拖动画布（空格 / 中键拖拽同效）' },
   { id: 'select', icon: MousePointer2, label: '选择 / 移动' },
   { id: 'pen', icon: Pencil, label: '画笔' },
   { id: 'line', icon: Minus, label: '直线' },
@@ -302,8 +306,8 @@ function onPointerDown(e: PointerEvent): void {
   if (e.button === 0 || e.button === 1 || spacePressed.value) e.preventDefault()
   const w = toWorld(e)
   const st: DragState = { mode: 'click', sx: w.x, sy: w.y, lx: w.x, ly: w.y, lpx: e.clientX, lpy: e.clientY }
-  if (spacePressed.value || e.button === 1) {
-    // 空格/中键平移视口（中键需拦掉浏览器默认的自动滚动）
+  if (tool.value === 'hand' || spacePressed.value || e.button === 1) {
+    // 抓手工具 / 空格 / 中键平移视口（中键需拦掉浏览器默认的自动滚动）
     e.preventDefault()
     st.mode = 'pan'
     drag = st
@@ -702,19 +706,37 @@ function openEdgeEdit(s: EdgeShape): void {
 // 浮层位置随相机（缩放/平移中编辑也粘在锚点上）
 const editorStyle = computed<Record<string, string>>(() => {
   const ed = editing.value
-  if (!ed) return {}
+  if (!ed) return {} as Record<string, string>
   const cs = cam.scale
   const sx = (wx: number) => (wx - cam.x) * cs
   const sy = (wy: number) => (wy - cam.y) * cs
   const base = {
-    fontFamily: HAND_FONT,
+    fontFamily: BOARD_FONT,
     fontSize: `${Math.max(12, ed.size * cs).toFixed(1)}px`,
     color: palette.value[ed.style.color],
     textAlign: 'left',
   }
   switch (ed.kind) {
-    case 'text':
-      return { ...base, left: `${sx(ed.wx) - 6}px`, top: `${sy(ed.wy - ed.size) - 6}px`, width: '260px' }
+    case 'text': {
+      // 编辑框即真实包围盒（所改所得）：SVG 渲染是单行不换行，编辑框同为单行（wrap=off），
+      // 宽度实时随内容测量（与 textWidth/bboxOf 同源），字号原样（去掉 12px 最小钳制），
+      // 行盒=包围盒高且基线经 textBaselineInBox 对齐——编辑所见与提交渲染一致
+      const fs = ed.size * cs
+      const w = Math.max(textWidth(editorText.value, ed.size) * cs, ed.size * cs) + 4
+      return {
+        fontFamily: BOARD_FONT,
+        fontSize: `${fs.toFixed(1)}px`,
+        color: palette.value[ed.style.color],
+        textAlign: 'left',
+        left: `${(sx(ed.wx) - 1).toFixed(1)}px`,
+        top: `${(sy(ed.wy) - textBaselineInBox(ed.size, fs) - 1).toFixed(1)}px`,
+        width: `${w.toFixed(1)}px`,
+        height: `${fs.toFixed(1)}px`,
+        lineHeight: `${fs.toFixed(1)}px`,
+        padding: '0',
+        whiteSpace: 'pre',
+      }
+    }
     case 'node':
       return { ...base, textAlign: 'center', left: `${sx(ed.wx) - 70}px`, top: `${sy(ed.wy) - ed.size * cs * 0.9}px`, width: '140px' }
     case 'cell': {
@@ -727,7 +749,7 @@ const editorStyle = computed<Record<string, string>>(() => {
     case 'edge':
       return { ...base, textAlign: 'center', left: `${sx(ed.wx) - 50}px`, top: `${sy(ed.wy) - ed.size * cs}px`, width: '100px' }
     default:
-      return {}
+      return {} as Record<string, string>
   }
 })
 
@@ -799,7 +821,8 @@ function cancelEdit(): void {
 }
 
 function autosizeEditor(e: Event): void {
-  if (editing.value?.kind === 'cell') return // 单元格定高
+  if (editing.value?.kind === 'cell' || editing.value?.kind === 'text') return
+  // 单元格定高；文字盒随内容实时测量（editorStyle），均不走高度自适应
   const t = e.target as HTMLTextAreaElement
   t.style.height = 'auto'
   t.style.height = `${t.scrollHeight}px`
@@ -972,6 +995,15 @@ function doExport(kind: 'png' | 'svg'): void {
 let saveTimer: ReturnType<typeof setTimeout> | undefined
 function autosave(): void {
   clearTimeout(saveTimer)
+  // 防线二：落盘前重定基——内容量级超限即整体平移回原点附近，相机同步跟随（画面零跳变）
+  // 并整层重渲染；配合防线一保证存档与渲染永远处于 float32 光栅化安全量级，杜绝复发
+  const rb = model.rebaseIfNeeded()
+  if (rb) {
+    cam.x += rb.dx
+    cam.y += rb.dy
+    renderer?.renderAll(model)
+    refreshOverlay()
+  }
   saveTimer = setTimeout(() => {
     try {
       localStorage.setItem(SAVE_KEY, model.snapshot())
@@ -1056,12 +1088,16 @@ onMounted(() => {
   let restored = false
   const raw = localStorage.getItem(SAVE_KEY)
   if (raw) restored = model.load(raw) && model.shapes.length > 0
+  // 防线一：加载即重定基——带病存档（历史几何 bug 把坐标滚到 1e11，Skia float32 ≥1e8
+  // 光栅化全空）必须在首帧渲染前治愈，否则「事件正常、笔画落库、屏幕全白」
+  const rebased = model.rebaseIfNeeded()
   if (restored && model.contentBBox()) fitView()
   else centerOrigin()
   renderer.renderAll(model)
   refreshOverlay()
   syncHistory()
   if (restored) ElMessage.success('已恢复上次画稿')
+  if (rebased) autosave() // 治愈后的快照立刻落盘替换带病存档（此处量级已安全，autosave 护栏为空转）
 })
 
 onBeforeUnmount(() => {
@@ -1175,6 +1211,7 @@ watch(tool, () => {
           v-model="editorText"
           class="board-editor"
           :style="editorStyle"
+          :wrap="editing.kind === 'text' ? 'off' : 'soft'"
           @keydown.stop
           @keydown.enter.exact.prevent="commitEdit"
           @keydown.esc.prevent="cancelEdit"
@@ -1321,9 +1358,6 @@ watch(tool, () => {
   border: 1px solid var(--soj-line);
   border-radius: 12px;
   background: var(--soj-white);
-  /* 淡点阵网格：构图参考系，随主题 hairline 色 */
-  background-image: radial-gradient(var(--soj-line) 1px, transparent 1px);
-  background-size: 24px 24px;
   overflow: hidden;
   /* 画布禁文字选择：拖拽手势不得触发浏览器原生选择（会 pointercancel 中断绘制） */
   user-select: none;

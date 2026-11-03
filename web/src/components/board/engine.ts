@@ -121,6 +121,7 @@ export type Shape =
   | EdgeShape
 
 export type Tool =
+  | 'hand'
   | 'select'
   | 'pen'
   | 'line'
@@ -132,9 +133,11 @@ export type Tool =
   | 'graph'
   | 'eraser'
 
-// 画布手写字体链（有楷体则手写感，无则回退系统体）——零字节换观感
-export const HAND_FONT =
-  "'Kaiti SC','KaiTi','STKaiti','AR PL UKai CN','Segoe Print','Comic Sans MS',cursive"
+// 画板字体（v0.60 用户拍板）：字母数字走 monaco 系等宽（Monaco 首选，未装依次回落
+// JetBrains Mono/Consolas，与全站 --font-mono 同族），栈内等宽字体均无汉字，中文自然
+// 回落 SOJ 默认 CJK 栈（Noto Sans SC → PingFang → 雅黑），与全站正文同源
+export const BOARD_FONT =
+  "Monaco, 'JetBrains Mono', Consolas, 'Courier New', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', sans-serif"
 
 export const TEXT_SIZE = 16
 export const CELL_W = 48
@@ -143,6 +146,9 @@ export const CELL_MAX = 12
 export const NODE_R = 18
 export const TREE_GAP_X = 64
 export const TREE_GAP_Y = 92
+// 坐标重定基阈值：Skia 光栅化 SVG 几何用 float32，实测视口 2644 时内容 |坐标|≳1e8
+// 即画成全空（1e11 处 float32 最小刻度 8192 > 视口宽），1e6 留两个量级安全余量
+export const REBASE_LIMIT = 1e6
 
 const WEIGHT_W: Record<number, number> = { 1: 1.6, 2: 2.4, 3: 3.4 }
 const HISTORY_MAX = 60
@@ -176,8 +182,23 @@ export function textWidth(content: string, size: number): number {
   if (!content) return 0
   if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')
   if (!measureCtx) return content.length * size
-  measureCtx.font = `${size}px ${HAND_FONT}`
+  measureCtx.font = `${size}px ${BOARD_FONT}`
   return measureCtx.measureText(content).width
+}
+
+// 行盒内基线偏移 = half-leading + ascent（编辑浮层 textarea 与 SVG 文字基线对齐用）。
+// 探针必须纯 ASCII（'Ag'）：textarea 行盒 strut 由栈首字体（Monaco 系等宽）决定，
+// 混入 CJK 探针会取到更大的 fallback 字体度量，编辑框整体下坠 ~0.2em；
+// fontBoundingBox* 缺失的浏览器按 0.8/0.2em 兜底
+export function textBaselineInBox(size: number, lineHeight: number): number {
+  const fallback = (lineHeight - size) / 2 + size * 0.8
+  if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')
+  if (!measureCtx) return fallback
+  measureCtx.font = `${size}px ${BOARD_FONT}`
+  const m = measureCtx.measureText('Ag')
+  const a = m.fontBoundingBoxAscent || size * 0.8
+  const d = m.fontBoundingBoxDescent || size * 0.2
+  return (lineHeight - (a + d)) / 2 + a
 }
 
 // ---------- 渲染 ----------
@@ -255,7 +276,7 @@ export function renderShapeInto(
       break
     }
     case 'text': {
-      const t = el('text', { x: s.x, y: s.y, fill: color, 'font-size': s.size, 'font-family': HAND_FONT })
+      const t = el('text', { x: s.x, y: s.y, fill: color, 'font-size': s.size, 'font-family': BOARD_FONT })
       t.textContent = s.content
       halo(t, pal.paper)
       g.appendChild(t)
@@ -276,7 +297,7 @@ export function renderShapeInto(
           y: s.y + Math.floor(i / s.cols) * s.ch + s.ch / 2,
           fill: color,
           'font-size': 14,
-          'font-family': HAND_FONT,
+          'font-family': BOARD_FONT,
           'text-anchor': 'middle',
           'dominant-baseline': 'central',
         })
@@ -293,7 +314,7 @@ export function renderShapeInto(
         y: s.y,
         fill: color,
         'font-size': 14,
-        'font-family': HAND_FONT,
+        'font-family': BOARD_FONT,
         'text-anchor': 'middle',
         'dominant-baseline': 'central',
       })
@@ -324,7 +345,7 @@ export function renderShapeInto(
           y: ((y1 + y2) / 2 - ux * 12).toFixed(1),
           fill: pal.ink,
           'font-size': 12,
-          'font-family': HAND_FONT,
+          'font-family': BOARD_FONT,
           'text-anchor': 'middle',
           'dominant-baseline': 'central',
         })
@@ -389,7 +410,9 @@ export function bboxOf(s: Shape, nodeById: Map<number, NodeShape>): BBox | null 
       return { x: s.x, y: s.y, w: s.w, h: s.h }
     case 'text': {
       const w = textWidth(s.content, s.size)
-      return { x: s.x, y: s.y - s.size, w: Math.max(w, s.size), h: s.size * 1.35 }
+      // 包围盒高恒等字号（底=基线）：缩放手柄钉光标 1:1 与字形 1:1 才能同时成立；
+      // 曾用 1.35 倍行高，字形 1:1 时手柄以 1.35× 速度逃离光标（文字拖拽脱手的根因）
+      return { x: s.x, y: s.y - s.size, w: Math.max(w, s.size), h: s.size }
     }
     case 'table':
       return { x: s.x, y: s.y, w: s.cols * s.cw, h: s.rows * s.ch }
@@ -467,10 +490,11 @@ export function resizeShape(s: Shape, from: BBox, to: BBox, origPoints?: [number
       s.h = to.h
       break
     case 'text': {
-      // 字号 1:1 跟手：字形增量 = 光标位移（不含包围盒近似系数，肉眼所见即所拖）
-      const size = Math.max(10, Math.min(72, Math.round(s.size + (to.h - from.h))))
+      // 包围盒高=字号（见 bboxOf），to.h 即光标相对原盒顶的位移：字号直接取 to.h，
+      // 手柄（盒底=基线）精确钉在光标下，字形同速 1:1，拖多少长多少
+      const size = Math.max(10, Math.min(72, Math.round(to.h)))
       s.x = to.x
-      s.y = to.y + size // 基线锚在新包围盒顶（bbox.y 即基线减字号）
+      s.y = to.y + size // 基线锚在新包围盒底（bbox.y 即基线减字号）
       s.size = size
       break
     }
@@ -790,7 +814,10 @@ export class BoardModel {
       }
       case 'text': {
         const bb = bboxOf(s, byId)
-        return !!bb && x >= bb.x && x <= bb.x + bb.w && y >= bb.y && y <= bb.y + bb.h
+        // 盒高=字号（底=基线），tol 外扩覆盖下伸部（g/p/y 尾与汉字底缘）保证点选/双击命中
+        return (
+          !!bb && x >= bb.x - tol && x <= bb.x + bb.w + tol && y >= bb.y - tol && y <= bb.y + bb.h + tol
+        )
       }
       case 'table':
         return x >= s.x && x <= s.x + s.cols * s.cw && y >= s.y && y <= s.y + s.rows * s.ch
@@ -829,6 +856,21 @@ export class BoardModel {
     }
     if (!isFinite(minX)) return null
     return pad({ x: minX, y: minY, w: maxX - minX, h: maxY - minY }, 24)
+  }
+
+  // 坐标重定基：内容离原点超过 REBASE_LIMIT 时整体平移回原点附近，返回实际位移供调用方
+  // 同步移动相机（内容与相机同移则画面零跳变）；空画布 / 量级安全返回 null。
+  // 根因背景：历次几何 bug 曾把画稿坐标滚到 1e11 并随 localStorage 复活，Skia float32
+  // 在该量级无法光栅化几何（画成全空），呈「事件正常、笔画落库、屏幕全白」的失灵态
+  rebaseIfNeeded(limit: number = REBASE_LIMIT): { dx: number; dy: number } | null {
+    const bb = this.contentBBox()
+    if (!bb) return null
+    const far = Math.max(Math.abs(bb.x), Math.abs(bb.y), Math.abs(bb.x + bb.w), Math.abs(bb.y + bb.h))
+    if (far <= limit) return null
+    const dx = -bb.x
+    const dy = -bb.y
+    this.translate(new Set(this.shapes.map((s) => s.id)), dx, dy)
+    return { dx, dy }
   }
 
   // —— 一键整理：对每棵连通树做「叶序槽位 + 父=子均值」的整洁布局，
