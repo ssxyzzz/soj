@@ -103,7 +103,8 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		cli, err = mongo.Connect(options.Client().
 			ApplyURI(uri).
 			SetConnectTimeout(5*time.Second).
-			SetServerSelectionTimeout(5*time.Second))
+			SetServerSelectionTimeout(5*time.Second).
+			SetMonitor(slowOpMonitor()))
 		if err == nil {
 			pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 			err = cli.Ping(pingCtx, nil)

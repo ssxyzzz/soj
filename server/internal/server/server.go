@@ -115,7 +115,8 @@ func Run(ctx context.Context, deps *Deps) {
 	if err := r.SetTrustedProxies(cfg.TrustedProxies); err != nil {
 		fatalWeb("可信代理配置无效（SOJ_TRUSTED_PROXIES）", "error", err)
 	}
-	r.Use(gin.Logger(), gin.Recovery(), CORS(), Gzip())
+	// slowLog 最外层（v0.66 批①）：请求总耗时 >1s 打 Warn 带路由模板，日志点名慢接口
+	r.Use(slowLog(), gin.Logger(), gin.Recovery(), CORS(), Gzip())
 
 	// 题面图片公开读取（v0.5.1）：非 /api 前缀，随机文件名 + immutable 缓存
 	r.GET("/uploads/:file", h.ServeUpload)
