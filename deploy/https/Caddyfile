@@ -1,24 +1,17 @@
-# SOJ HTTPS 入口（部署在 VPS 上的 Caddy，v0.13）
+# SOJ HTTPS 入口参考配置（部署在 VPS 上的 Caddy；2026-11-04 v0.66 批②按生产实际形态重写）
 #
-# 前提：Caddy 必须是带 alidns 插件的构建（证书走阿里云 DNS-01，不占 80 端口、不受备案拦截影响）。
-#   官网下载页选择：Platform = linux-amd64，Add modules 勾选 github.com/caddy-dns/alidns
-#   https://caddyserver.com/download
-#   （或用 xcaddy：xcaddy build --with github.com/caddy-dns/alidns）
-#
-# 阿里云 AccessKey 通过环境变量注入（勿写进本文件）：
-#   /etc/caddy/alidns.env（chmod 600，内容如下两行）：
-#     ALICLOUD_ACCESS_KEY=LTAI...（RAM 子账号 AccessKey ID，仅授云解析 DNS 权限）
-#     ALICLOUD_SECRET_KEY=...
-#   systemd 单元加：EnvironmentFile=/etc/caddy/alidns.env
+# 证书：默认 ACME 自动 HTTPS（官方 caddy 即可，无需插件）——签发与续期全自动，
+#   Caddy 内置 ACME 挑战路由优先于下方 :80 块，80 口 respond 403 不影响签发。
+#   DNS-01 候选方案（备案完成前预签、80/443 端口受限场景）见本目录 README.md 手册，
+#   需 alidns 插件定制构建。
+# 日常维护：validate 先行校验，systemctl reload caddy 平滑生效（零断连）。
 
 {
-	# 证书到期/异常通知邮箱（Let's Encrypt 要求）
-	email admin@example.com
-
 	# 接入层兜底（v0.66 批②隔离）：Caddy v2 默认无任何超时——慢客户端可无限期
-	# 占用 Caddy→frp→SOJ 整条链路连接。read_header 拦慢连接握手，read_body 放宽
-	# 保大包上传（64MB 建题 zip 走慢上链可至分钟级），write 放宽保多题导出/备份
-	# 下载等长流式响应，idle 收常规 keep-alive
+	# 占用 Caddy→frp→SOJ 整条链路连接。read_header 拦慢连接握手；read_body 放宽
+	# 保大包上传（64MB 建题 zip 走慢上链可至分钟级）；write 放宽保多题导出/备份
+	# 下载等长流式响应；idle 收常规 keep-alive。全局对同机全部站点生效；
+	# WebSocket 长连接升级后被 hijack 透传，不受 write 超时影响。
 	servers {
 		timeouts {
 			read_header 10s
@@ -30,21 +23,18 @@
 }
 
 soj.example.com {
-	# DNS-01 验证：证书签发与续期只查阿里云 DNS 记录，不回连服务器端口——
-	# 备案前后、任意端口状态下都能签
-	tls {
-		dns alidns {env.ALICLOUD_ACCESS_KEY} {env.ALICLOUD_SECRET_KEY}
-	}
-
-	# HSTS：强制浏览器后续一律走 HTTPS（上线确认稳定后再放开，见手册）
-	header Strict-Transport-Security "max-age=31536000"
-
 	# 压缩必开（2026-11-02 实锤教训：漏配 encode 时大静态文件裸传，叠加 VPS 带宽顶
-	# 即 35s 级事故）。zstd 优先（压缩率与解压速度双优，现代浏览器全支持），回退 gzip
+	# 即 35s 级事故）。zstd 优先，回退 gzip；应用已压缩的响应（带 Content-Encoding）
+	# 自动跳过，与应用层 gzip 中间件双保险不冲突
 	encode zstd gzip
 
+	# 可选加固（生产暂未启用，确认稳定后放开）：
+	# header Strict-Transport-Security "max-age=31536000"
+
 	# 请求体上限（v0.66 批②）：后端 JSON 路由多无 MaxBytesReader，入口先拦——
-	# soj 容器 mem_limit 1g，超大 body 直达应用有 OOM 面；100MB = 建题 zip 64MB + 余量
+	# soj 容器 mem_limit 1g，超大 body 直达应用有 OOM 面；100MB = 建题 zip 64MB + 余量。
+	# 超限报错形态：老版 Caddy 对反代 body 超限回 502（新版映射 413），拦截目的一致；
+	# 后端细闸（建题 64MB 等约 5 处 MaxBytesReader）先行响应，本粗闸只兜无闸路由的底
 	request_body {
 		max_size 100MB
 	}
@@ -53,4 +43,13 @@ soj.example.com {
 	# Caddy 在此注入 X-Forwarded-For（学生真实 IP），经 frp 纯 TCP 隧道原样到达 SOJ，
 	# SOJ 侧由 SOJ_TRUSTED_PROXIES 决定信任（docker-compose 已配好私网段）。
 	reverse_proxy 127.0.0.1:8080
+}
+
+# 同机托管的其他站点：按需复制同款站点块（reverse_proxy 到各自端口）即可，
+# 全局 servers timeouts 自动生效；request_body 为站点级，按各站需求单独配置。
+
+# 80 口明文访问一律 403（防扫描/端口探测）；Caddy 内置 ACME 挑战路由优先于本块，
+# 不影响证书签发与续期
+:80 {
+	respond 403
 }
