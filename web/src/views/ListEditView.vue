@@ -5,7 +5,7 @@
 // 章节目录卡（迷你导航，点击滚动定位）。节点题目管理走大弹窗（SectionProblemsDialog：
 // 双栏选题 + 上一节/下一节 + 跨节防重），标题/描述只在大纲就地编辑（只留一处）。
 // 数据模型不动：两层章/节、单章不混挂、整体 PATCH；新增脏标记 + ⌘S + 离开拦截。
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -16,6 +16,7 @@ import RailCard from '@/components/RailCard.vue'
 import SectionProblemsDialog from '@/components/SectionProblemsDialog.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
 import { listApi } from '@/api'
+import { useListener } from '@/composables/useWindowListener'
 import type { ListDetail, ListEntryDraft } from '@/types'
 
 const route = useRoute()
@@ -75,10 +76,10 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
-  window.addEventListener('keydown', onKeydown)
 })
 
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+// ⌘S / Ctrl+S 保存（监听走 useListener，v0.64 病根②收口：作用域卸载自动摘）
+useListener(window, 'keydown', onKeydown)
 
 // ⌘S / Ctrl+S 保存
 function onKeydown(e: KeyboardEvent) {

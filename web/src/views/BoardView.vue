@@ -49,7 +49,9 @@ import {
   resizeShape,
   textBaselineInBox,
   textWidth,
+  translateIn,
 } from '@/components/board/engine'
+import { useListener } from '@/composables/useWindowListener'
 import type {
   BBox,
   ColorSlot,
@@ -179,7 +181,13 @@ interface DragState {
   resizeFrom?: BBox
   // 笔迹缩放专用：拖拽开始时的原始点集快照（防逐事件复合放大）
   origPoints?: [number, number][]
-  // 移动/缩放首帧才入撤销栈：纯点击不成空快照，且快照必在落点变更之前
+  // 手势前基线（v0.64 patch 历史）：move = 受影响图形深拷贝、resize = 单图形
+  // 深拷贝、erase = 逐次删除的 {shape, index}（批内按 index 升序）；手势期间
+  // 直接改保实时反馈，up 时 mutateFrom 固化为一条 patch
+  origShapes?: Shape[]
+  origShape?: Shape
+  origErased?: { shape: Shape; index: number }[]
+  // 移动/缩放手势「已产生变更」标记：首帧置位，up 时据此收尾入史
   undoPushed?: boolean
 }
 
@@ -253,7 +261,8 @@ function tableResize(kind: 'row' | 'col', delta: 1 | -1): void {
     ? Math.max(1, Math.min(CELL_MAX, t.rows + delta))
     : Math.max(1, Math.min(CELL_MAX, t.cols + delta))
   if (next === (kind === 'row' ? t.rows : t.cols)) return
-  model.pushUndo()
+  // 基线先留（手势式收尾入史）：直接改保 tableBar 引用与工具条联动不脱钩
+  const orig = JSON.parse(JSON.stringify(t)) as TableShape
   const cells: string[] = []
   const rows = kind === 'row' ? next : t.rows
   const cols = kind === 'col' ? next : t.cols
@@ -265,6 +274,14 @@ function tableResize(kind: 'row' | 'col', delta: 1 | -1): void {
   t.cells = cells
   renderer?.renderIds(model, [t.id])
   refreshOverlay()
+  model.mutateFrom(model.docWithOverrides([orig]), (d) => {
+    const dt = d.shapes.find((x) => x.id === t.id)
+    if (dt && dt.type === 'table') {
+      dt.rows = t.rows
+      dt.cols = t.cols
+      dt.cells = t.cells
+    }
+  })
   syncHistory()
   autosave()
 }
@@ -437,7 +454,15 @@ function onPointerMove(e: PointerEvent): void {
     case 'draw': {
       const draft = d.draft
       if (!draft) return
-      if (draft.type === 'stroke') draft.points.push([w.x, w.y])
+      // 笔迹输入端抽稀（v0.64 病根③正交项）：pointer 事件频率（高刷 120Hz+）远高于
+      // 视觉必要密度，相邻点屏幕距离 <1.2px 的丢弃——长笔迹点数降一个量级，
+      // patch/存档/命中测试全链路受益；首点已在 down 时必留
+      if (draft.type === 'stroke') {
+        const last = draft.points[draft.points.length - 1]
+        const dx = (w.x - last[0]) * cam.scale
+        const dy = (w.y - last[1]) * cam.scale
+        if (dx * dx + dy * dy >= 1.44) draft.points.push([w.x, w.y])
+      }
       else if (draft.type === 'line' || draft.type === 'arrow') {
         draft.x2 = w.x
         draft.y2 = w.y
@@ -457,11 +482,14 @@ function onPointerMove(e: PointerEvent): void {
       return
     }
     case 'move': {
-      // 拖动期零重渲染：只平移已渲染的 <g>（含相连边），落点后再按真实坐标重建
+      // 拖动期零重渲染：只平移已渲染的 <g>（含相连边），落点后再按真实坐标重建；
+      // 首帧记手势基线（受影响图形深拷贝，O(图形) 非 O(文档)），up 时固化为 patch
       if (!d.undoPushed && (w.x !== d.lx || w.y !== d.ly)) {
-        model.pushUndo()
         d.undoPushed = true
-        syncHistory()
+        d.origShapes = [...(d.movedIds ?? new Set<number>())]
+          .map((id) => model.get(id))
+          .filter((s): s is Shape => !!s)
+          .map((s) => JSON.parse(JSON.stringify(s)) as Shape)
       }
       d.ax = (d.ax ?? 0) + (w.x - d.lx)
       d.ay = (d.ay ?? 0) + (w.y - d.ly)
@@ -484,9 +512,8 @@ function onPointerMove(e: PointerEvent): void {
       if (!s || !from) return
       const to: BBox = { x: from.x, y: from.y, w: Math.max(8, w.x - from.x), h: Math.max(8, w.y - from.y) }
       if (!d.undoPushed) {
-        model.pushUndo()
         d.undoPushed = true
-        syncHistory()
+        d.origShape = JSON.parse(JSON.stringify(s)) as Shape // 手势基线（单图形）
       }
       resizeShape(s, from, to, d.origPoints)
       renderer?.renderIds(model, [s.id])
@@ -527,10 +554,14 @@ function onPointerUp(e: PointerEvent): void {
       const ax = d.ax ?? 0
       const ay = d.ay ?? 0
       if (ax || ay) {
-        model.translate(selected.value, ax, ay)
+        // 手势收尾入史：基线→终态固化为一条 patch（确定性重放平移）
+        model.mutateFrom(model.docWithOverrides(d.origShapes ?? []), (dd) => {
+          translateIn(dd.shapes, selected.value, ax, ay)
+        })
         renderer?.clearTransforms(d.movedIds ?? [])
         renderer?.renderIds(model, d.movedIds ?? [])
         refreshOverlay()
+        syncHistory()
         autosave()
       } else {
         renderer?.clearTransforms(d.movedIds ?? [])
@@ -551,10 +582,34 @@ function onPointerUp(e: PointerEvent): void {
       return
     }
     case 'erase':
-      if (d.erased) autosave()
+      if (d.erased && d.origErased?.length) {
+        // 手势收尾入史：被删图形按原位插回作基线，重放整批删除为一条 patch
+        const erasedIds = new Set(d.origErased.map((o) => o.shape.id))
+        model.mutateFrom(model.docWithShapesReinstated(d.origErased), (dd) => {
+          spliceShapes(dd, erasedIds)
+        })
+        syncHistory()
+        autosave()
+      }
       return
     case 'resize':
-      if (d.undoPushed) autosave()
+      if (d.undoPushed && d.origShape) {
+        // 手势收尾入史：orig 放回基线，确定性重放 resizeShape（from/to/origPoints 均在）
+        const orig = d.origShape
+        model.mutateFrom(model.docWithOverrides([orig]), (dd) => {
+          const ds = dd.shapes.find((x) => x.id === orig.id)
+          if (ds && d.resizeFrom) {
+            resizeShape(
+              ds,
+              d.resizeFrom,
+              { x: d.resizeFrom.x, y: d.resizeFrom.y, w: Math.max(8, w.x - d.resizeFrom.x), h: Math.max(8, w.y - d.resizeFrom.y) },
+              d.origPoints,
+            )
+          }
+        })
+        syncHistory()
+        autosave()
+      }
       return
     case 'link':
       commitLink(d, w)
@@ -576,17 +631,21 @@ function commitDraft(d: DragState, e: PointerEvent): void {
   if (s.type === 'table' && s.rows === 1 && s.cols === 1 && Math.hypot(e.clientX - d.lpx, e.clientY - d.lpy) < CELL_W / 2) {
     return // 单格且几乎没拖：视为误触
   }
-  model.pushUndo()
-  model.add(s)
+  model.mutate((dd) => {
+    s.id = dd.idSeq++
+    dd.shapes.push(s)
+  })
   renderer?.upsert(model, s.id)
   syncHistory()
   autosave()
 }
 
 function createNodeAt(x: number, y: number): void {
-  model.pushUndo()
   const s: NodeShape = { id: 0, type: 'node', x, y, r: NODE_R, label: model.nextLabel(), style: curStyle() }
-  model.add(s)
+  model.mutate((dd) => {
+    s.id = dd.idSeq++
+    dd.shapes.push(s)
+  })
   renderer?.upsert(model, s.id)
   syncHistory()
   autosave()
@@ -597,9 +656,11 @@ function commitLink(d: DragState, w: { x: number; y: number }): void {
   if (!from) return
   if (d.linkTarget && d.linkTarget.id !== from.id) {
     // 节点 → 节点：连边
-    model.pushUndo()
     const e: EdgeShape = { id: 0, type: 'edge', from: from.id, to: d.linkTarget.id, label: '', directed: directed.value, style: curStyle() }
-    model.add(e)
+    model.mutate((dd) => {
+      e.id = dd.idSeq++
+      dd.shapes.push(e)
+    })
     renderer?.upsert(model, e.id)
     syncHistory()
     autosave()
@@ -610,11 +671,14 @@ function commitLink(d: DragState, w: { x: number; y: number }): void {
     const pos = treeMode.value
       ? { x: from.x + childCount(from.id) * TREE_GAP_X, y: from.y + TREE_GAP_Y }
       : { x: w.x, y: w.y }
-    model.pushUndo()
     const n: NodeShape = { id: 0, type: 'node', x: pos.x, y: pos.y, r: NODE_R, label: model.nextLabel(), style: curStyle() }
-    model.add(n)
     const e: EdgeShape = { id: 0, type: 'edge', from: from.id, to: n.id, label: '', directed: directed.value, style: curStyle() }
-    model.add(e)
+    model.mutate((dd) => {
+      n.id = dd.idSeq++
+      dd.shapes.push(n)
+      e.id = dd.idSeq++
+      dd.shapes.push(e)
+    })
     renderer?.upsert(model, n.id)
     renderer?.upsert(model, e.id)
     syncHistory()
@@ -633,11 +697,20 @@ function eraseAt(w: { x: number; y: number }): void {
   if (!d || d.mode !== 'erase') return
   const hit = model.hitTest(w.x, w.y, 8 / cam.scale)
   if (!hit) return
-  if (!d.erased) {
-    model.pushUndo()
-    d.erased = true
-    syncHistory()
+  // 手势删除基线：删除前记录本次命中（含级联边）的原位拷贝——批内按 index 升序，
+  // up 时 docWithShapesReinstated 倒序插回即精确复原
+  const ids = new Set<number>([hit.id])
+  for (const eid of model.edgesOf(ids)) ids.add(eid)
+  d.origErased ??= []
+  const marked: { shape: Shape; index: number }[] = []
+  for (const id of ids) {
+    const s = model.get(id)
+    const idx = s ? model.shapes.indexOf(s) : -1
+    if (s && idx >= 0) marked.push({ shape: JSON.parse(JSON.stringify(s)) as Shape, index: idx })
   }
+  marked.sort((a, b) => a.index - b.index)
+  d.origErased.push(...marked)
+  d.erased = true
   deleteCascade(new Set([hit.id]))
   if (selected.value.has(hit.id)) {
     const next = new Set(selected.value)
@@ -774,18 +847,23 @@ function commitEdit(): void {
       if (s && s.type === 'text') {
         if (!val.trim()) {
           // 清空即删（Excalidraw 同语义）
-          model.pushUndo()
-          model.delete(new Set([s.id]))
+          model.mutate((d) => {
+            spliceShapes(d, new Set([s.id]))
+          })
           renderer?.removeIds([s.id])
         } else if (val !== s.content) {
-          model.pushUndo()
-          s.content = val
+          model.mutate((d) => {
+            const dt = d.shapes.find((x) => x.id === s.id)
+            if (dt && dt.type === 'text') dt.content = val
+          })
           renderer?.renderIds(model, [s.id])
         }
       } else if (!ed.shapeId && val.trim()) {
-        model.pushUndo()
         const t: TextShape = { id: 0, type: 'text', x: ed.wx, y: ed.wy, content: val, size: ed.size, style: ed.style }
-        model.add(t)
+        model.mutate((d) => {
+          t.id = d.idSeq++
+          d.shapes.push(t)
+        })
         renderer?.upsert(model, t.id)
       }
       break
@@ -794,8 +872,10 @@ function commitEdit(): void {
       const s = model.get(ed.shapeId)
       const v = val.trim()
       if (s?.type === 'node' && v && v !== s.label) {
-        model.pushUndo()
-        s.label = v
+        model.mutate((d) => {
+          const dn = d.shapes.find((x) => x.id === s.id)
+          if (dn && dn.type === 'node') dn.label = v
+        })
         renderer?.renderIds(model, [s.id])
       }
       break
@@ -803,8 +883,10 @@ function commitEdit(): void {
     case 'cell': {
       const s = model.get(ed.shapeId)
       if (s?.type === 'table' && ed.cellIndex < s.cells.length && val !== s.cells[ed.cellIndex]) {
-        model.pushUndo()
-        s.cells[ed.cellIndex] = val
+        model.mutate((d) => {
+          const dt = d.shapes.find((x) => x.id === s.id)
+          if (dt && dt.type === 'table') dt.cells[ed.cellIndex] = val
+        })
         renderer?.renderIds(model, [s.id])
       }
       break
@@ -813,8 +895,10 @@ function commitEdit(): void {
       const s = model.get(ed.shapeId)
       const v = val.trim()
       if (s?.type === 'edge' && v !== s.label) {
-        model.pushUndo()
-        s.label = v
+        model.mutate((d) => {
+          const de = d.shapes.find((x) => x.id === s.id)
+          if (de && de.type === 'edge') de.label = v
+        })
         renderer?.renderIds(model, [s.id])
       }
       break
@@ -872,10 +956,21 @@ function doRedo(): void {
   afterHistorySwap()
 }
 
+// patch 体积红线：删除一律倒序 splice（逐项 remove patch，O(删除数)）——
+// filter 整根重赋值会产出 replace 整数组的 patch（undo/redo 双份 O(文档)，
+// 退化回快照时代），所有删除点共用本helper
+function spliceShapes(d: { shapes: Shape[] }, gone: Set<number>): void {
+  for (let i = d.shapes.length - 1; i >= 0; i--) if (gone.has(d.shapes[i].id)) d.shapes.splice(i, 1)
+}
+
 function deleteSelected(): void {
   if (!selected.value.size) return
-  model.pushUndo()
-  deleteCascade(selected.value)
+  const ids = new Set(selected.value)
+  for (const eid of model.edgesOf(ids)) ids.add(eid)
+  model.mutate((d) => {
+    spliceShapes(d, ids)
+  })
+  renderer?.removeIds(ids)
   selected.value = new Set()
   refreshOverlay()
   syncHistory()
@@ -883,7 +978,7 @@ function deleteSelected(): void {
 }
 
 // 级联删除：删节点时连同引用它的边一起删（否则增量渲染下连线 <g> 残留成僵尸线）；
-// 同一撤销快照内，撤销一并恢复
+// 调用方负责把同一批删除固化为一条历史（erase 手势记 origErased、deleteSelected 走 mutate）
 function deleteCascade(ids: Set<number>): void {
   const all = new Set(ids)
   for (const eid of model.edgesOf(ids)) all.add(eid)
@@ -901,8 +996,9 @@ async function clearAll(): Promise<void> {
   } catch {
     return
   }
-  model.pushUndo()
-  model.shapes = []
+  model.mutate((d) => {
+    d.shapes.splice(0, d.shapes.length) // splice 逐项 remove（整根赋值会产出 O(文档) patch）
+  })
   selected.value = new Set()
   renderer?.renderAll(model)
   refreshOverlay()
@@ -911,12 +1007,25 @@ async function clearAll(): Promise<void> {
 }
 
 function tidy(): void {
-  model.pushUndo()
+  // 整理基线：全部节点深拷贝（节点数有限、坐标即全部变更面）；tidyTree 直接改
+  // this 保渲染路径不变，随后字段同步固化入史——无可整理时无变更自然不入史
+  const origs = model.shapes
+    .filter((s) => s.type === 'node')
+    .map((s) => JSON.parse(JSON.stringify(s)) as Shape)
   if (!model.tidyTree()) {
-    model.popUndo()
     ElMessage.info('画布上还没有可整理的树 / 图节点')
     return
   }
+  model.mutateFrom(model.docWithOverrides(origs), (d) => {
+    for (const s of d.shapes) {
+      if (s.type !== 'node') continue
+      const cur = model.get(s.id)
+      if (cur && cur.type === 'node') {
+        s.x = cur.x
+        s.y = cur.y
+      }
+    }
+  })
   renderer?.renderAll(model)
   refreshOverlay()
   syncHistory()
@@ -1130,6 +1239,10 @@ function onKeyup(e: KeyboardEvent): void {
   if (e.code === 'Space') spacePressed.value = false
 }
 
+// 键盘监听走 useListener（v0.64 病根②收口）：setup 顶层声明即绑定、作用域卸载自动摘
+useListener(window, 'keydown', onKeydown)
+useListener(window, 'keyup', onKeyup)
+
 // ---------- 主题跟随与生命周期 ----------
 
 let themeObs: MutationObserver | null = null
@@ -1147,8 +1260,6 @@ onMounted(() => {
     stage.h = stEl.clientHeight
   })
   ro.observe(stEl)
-  window.addEventListener('keydown', onKeydown)
-  window.addEventListener('keyup', onKeyup)
   themeObs = new MutationObserver(() => {
     palette.value = readPalette()
     renderer?.setPalette(palette.value)
@@ -1190,8 +1301,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   ro?.disconnect()
   themeObs?.disconnect()
-  window.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('keyup', onKeyup)
   if (rafId) cancelAnimationFrame(rafId)
   clearTimeout(saveTimer)
 })

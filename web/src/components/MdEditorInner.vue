@@ -26,6 +26,7 @@ import { basicSetup } from 'codemirror'
 
 import { authApi, mdApi } from '@/api'
 import MdView from '@/components/MdView.vue'
+import { useListener } from '@/composables/useWindowListener'
 import { useUserStore } from '@/stores/user'
 
 const props = withDefaults(
@@ -286,12 +287,15 @@ async function uploadFiles(files: FileList | File[]) {
   }
 }
 
-// ---- 分栏拖拽（split 模式，20%–80% 钳制） ----
+// ---- 分栏拖拽（split 模式，20%–80% 钳制）；document 监听走 useListener（v0.64 病根②收口） ----
+let dragStops: (() => void)[] = []
 function startDrag(e: MouseEvent) {
   if (e.button !== 0) return
   e.preventDefault()
-  document.addEventListener('mousemove', onDrag)
-  document.addEventListener('mouseup', endDrag)
+  dragStops = [
+    useListener(document, 'mousemove', onDrag),
+    useListener(document, 'mouseup', endDrag),
+  ]
   document.body.style.cursor = 'col-resize'
 }
 function onDrag(e: MouseEvent) {
@@ -302,8 +306,8 @@ function onDrag(e: MouseEvent) {
   splitPct.value = Math.min(80, Math.max(20, pct))
 }
 function endDrag() {
-  document.removeEventListener('mousemove', onDrag)
-  document.removeEventListener('mouseup', endDrag)
+  dragStops.forEach((s) => s())
+  dragStops = []
   document.body.style.cursor = ''
 }
 
@@ -325,6 +329,7 @@ function syncScroll() {
 
 // ---- 全屏（自管 body overflow；Esc 退出；z-index 盖过 EP 弹层 2000） ----
 let bodyOverflowBefore = ''
+let escStop: (() => void) | null = null
 function onEsc(e: KeyboardEvent) {
   if (e.key === 'Escape' && fullscreen.value) toggleFullscreen()
 }
@@ -334,16 +339,18 @@ function toggleFullscreen() {
   if (on) {
     bodyOverflowBefore = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    window.addEventListener('keydown', onEsc)
+    escStop = useListener(window, 'keydown', onEsc)
   } else {
     document.body.style.overflow = bodyOverflowBefore
-    window.removeEventListener('keydown', onEsc)
+    escStop?.()
+    escStop = null
   }
   nextTick(() => view?.focus())
 }
 
 // ---- 高度：autoHeight = 内容自然生长（CSS overflow 方案，无 JS 量高） ----
 // 底部手柄按下进入拖拽：高度随鼠标走（≥140px），松手锁定（userSized）此后内滚
+let resizeStops: (() => void)[] = []
 function startResize(e: MouseEvent) {
   if (!props.autoHeight || userSized.value || e.button !== 0 || !rootEl.value) return
   e.preventDefault()
@@ -356,12 +363,14 @@ function startResize(e: MouseEvent) {
     rootEl.value.style.height = `${Math.max(140, startH + (ev.clientY - startY))}px`
   }
   const onUp = () => {
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
+    resizeStops.forEach((s) => s())
+    resizeStops = []
     document.body.style.cursor = ''
   }
-  document.addEventListener('mousemove', onMove)
-  document.addEventListener('mouseup', onUp)
+  resizeStops = [
+    useListener(document, 'mousemove', onMove),
+    useListener(document, 'mouseup', onUp),
+  ]
 }
 
 // ---- 工具栏 ----
@@ -537,11 +546,10 @@ onBeforeUnmount(() => {
   window.clearTimeout(prefTimer)
   renderCtl?.abort()
   renderSeq++
-  if (fullscreen.value) {
-    document.body.style.overflow = bodyOverflowBefore
-    window.removeEventListener('keydown', onEsc)
-  }
+  if (fullscreen.value) document.body.style.overflow = bodyOverflowBefore
+  escStop?.() // useListener 已有作用域兜底，此处显式收口手势/全屏在途状态
   endDrag()
+  resizeStops.forEach((s) => s()) // 高度拖拽中途卸载的兜底（v0.64 补）
   view?.scrollDOM.removeEventListener('scroll', syncScroll)
   view?.destroy()
   view = null

@@ -24,7 +24,10 @@ type Config struct {
 	SeedDir      string // 启动时自动导入的种子题目目录（可为空）
 	SandboxAddr  string // go-judge 沙箱地址
 	JWTSecret    string
-	JudgeWorkers int // 判题并发数
+	// 下载直链签名密钥（v0.64 直链化）：与 JWT 用途隔离的独立一把，同样走
+	// 「显式 env > 密钥卷 > 自动生成持久化」（见 resolveDownloadSecret）。
+	DownloadSecret string
+	JudgeWorkers   int // 判题并发数
 	// 编译并发闸容量（快赢批⑤）：默认 1 = 编译串行化（并发 g++ 瞬时 CE 治理的既定
 	// 口径）；考试 + 自测高峰期编译吞吐吃紧时可在 override 调大（受沙箱核数约束）。
 	// 判题 / 自测 / checker / interactor 编译共闸。
@@ -47,6 +50,7 @@ func Load() *Config {
 		SeedDir:            getEnv("SOJ_SEED_DIR", ""),
 		SandboxAddr:        getEnv("SOJ_SANDBOX_ADDR", "http://127.0.0.1:5050"),
 		JWTSecret:          os.Getenv("SOJ_JWT_SECRET"), // 留空 = server.Run 从密钥卷载入或自动生成随机密钥（见 resolveJWTSecret）
+		DownloadSecret:     os.Getenv("SOJ_DOWNLOAD_SECRET"), // 留空 = server.Run 从密钥卷载入或自动生成（见 resolveDownloadSecret）
 		JudgeWorkers:       getEnvInt("SOJ_JUDGE_WORKERS", 2),
 		CompileConcurrency: getEnvInt("SOJ_COMPILE_CONCURRENCY", 1),
 	}

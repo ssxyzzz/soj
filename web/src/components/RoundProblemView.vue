@@ -7,7 +7,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft } from '@element-plus/icons-vue'
 
-import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
+import { contestApi, examApi, problemApi, submissionApi, type RoundKind } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import { usePolling } from '@/composables/usePolling'
 import CodePane from '@/components/CodePane.vue'
@@ -24,7 +24,9 @@ import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
 import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
-import type { ContestDetail, ContestMySubmission, ObjectiveAnswer as ObjAnswer, ProblemDetail } from '@/types'
+import type {
+  ContestDetail, ContestMySubmission, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission,
+} from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
 
@@ -40,6 +42,8 @@ const round = ref<ContestDetail | null>(null)
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
 const mine = ref<ContestMySubmission[]>([])
+// 点开的提交：隐藏期 = 列表行（自带 code）；已揭榜 = 详情接口 Submission（列表瘦身）
+const mineDetail = ref<ContestMySubmission | Submission | null>(null)
 const revealed = ref(false)
 
 const showSubmit = ref(false)
@@ -49,7 +53,6 @@ const showMine = ref(false)
 const submitting = ref(false)
 // 我的提交弹窗（对齐题库的弹窗形态）：列表点行 → 代码详情；隐藏期内不出分
 const mineView = ref<'list' | 'code'>('list')
-const mineDetail = ref<ContestMySubmission | null>(null)
 // 所有代码入口：题库全量可见人群（admin/root）在赛事做题页也可查看，普通参与者维持无此入口
 const canViewOthers = computed(() => userStore.can('problem.view.all'))
 
@@ -136,9 +139,19 @@ const funcTemplate = computed(() => problem.value?.function?.template_code || ''
 const isInteractive = computed(() => problem.value?.type === 'interactive')
 const noCases = computed(() => !isObjective.value && problem.value?.has_cases === false)
 
-function openMineDetail(s: ContestMySubmission) {
+async function openMineDetail(s: ContestMySubmission) {
   if (!s.id) return
-  mineDetail.value = s
+  // v0.64 拆形：已揭榜的列表行瘦身不带 code，点开按需拉详情；隐藏期行自带
+  // code（考时回看唯一通道），直接展示
+  if (revealed.value && !s.code) {
+    try {
+      mineDetail.value = await submissionApi.get(s.id)
+    } catch {
+      return // 拦截器已提示
+    }
+  } else {
+    mineDetail.value = s
+  }
   mineView.value = 'code'
 }
 

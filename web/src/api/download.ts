@@ -1,55 +1,17 @@
-// 文件下载（v0.5.6 成绩 CSV 导出；v0.8.3 起通用化，测试数据 zip 等同一机制）。
-// v0.29 起复用主 client（api/index.ts 的裸实例导出）：鉴权头与 401 登出统一；
-// 主拦截层对 blob 的 HTTP 错误静默（只 401 登出），错误提示由此处解析——
-// fail 响应是 JSON-in-Blob，能解出比泛化「网络错误」更准确的原因。
-import { ElMessage } from 'element-plus'
-
+// 文件下载（v0.5.6 成绩 CSV 导出起步；v0.8.3 通用化；v0.64 直链化）：
+// 先 POST /download-link 换 5 分钟短签直链，再 a.href 交给浏览器原生下载器——
+// 超时/进度/断点/取消天然自带、前端零 blob 中转（旧 blob 通道 timeout:0 无超时、
+// 连接 stall 即按钮永挂、大包整包驻内存的病根随 v0.64 退役）。
+// 签发失败（401/非白名单路径）由 api 拦截器统一提示；url 传 API 路径
+// （client 的 baseURL 已是 /api，服务端补全 /api 前缀后签名放行）。
 import { client } from './index'
 
-// 文件名优先取服务端 Content-Disposition（RFC 5987 filename*，中文文件名），
-// 无则用调用方兜底名；url 传 API 路径（client 的 baseURL 已是 /api）。
-// onProgress（v0.37）：导出包常无 Content-Length（zip 流式现压），按已收字节数报
-// 「已下载 X MB」——大包在慢链路上不再盲转，调用方可绑到按钮 loading 文案。
-export async function downloadFile(
-  url: string,
-  fallbackName: string,
-  onProgress?: (loadedMB: number) => void,
-): Promise<void> {
-  try {
-    const r = await client.get(url, {
-      responseType: 'blob',
-      timeout: 0, // 服务端导出现算榜单/进度，放宽超时
-      onDownloadProgress: onProgress
-        ? (e) => {
-            onProgress(e.loaded / 1048576)
-          }
-        : undefined,
-    })
-    const cd = (r.headers['content-disposition'] as string) ?? ''
-    const star = cd.match(/filename\*=UTF-8''([^;]+)/i)
-    const plain = cd.match(/filename="?([^";]+)"?/i)
-    let filename = fallbackName
-    if (star) filename = decodeURIComponent(star[1])
-    else if (plain) filename = plain[1]
-    const blobUrl = URL.createObjectURL(r.data as Blob)
-    const a = document.createElement('a')
-    a.href = blobUrl
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(blobUrl)
-  } catch (e) {
-    // 401 已由拦截层登出跳登录；其余（如非组织者/班级管理员被拒）解析 JSON-in-Blob 提示
-    if ((e as { response?: { status?: number } }).response?.status === 401) return
-    const d = (e as { response?: { data?: unknown } }).response?.data
-    if (d instanceof Blob) {
-      try {
-        const body = JSON.parse(await d.text()) as { message?: string }
-        ElMessage.error(body.message || '导出失败')
-      } catch {
-        ElMessage.error('导出失败')
-      }
-    } else {
-      ElMessage.error('导出失败')
-    }
-  }
+export async function downloadFile(url: string, fallbackName: string): Promise<void> {
+  const r = await client.post<{ url: string }>('/download-link', { path: url })
+  const a = document.createElement('a')
+  a.href = r.data.url // 同源短签直链（5min 有效）
+  a.download = fallbackName // 无 Content-Disposition 的端点兜底必下载；有名端点服务端名同源会被此属性优先
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }

@@ -87,26 +87,17 @@ const picking = ref(false)
 function onSelChange(rows: ProblemListItem[]) {
   selected.value = new Set(rows.map((r) => r.id))
 }
-// 导出已下字节数（v0.37）：zip 流式现压无总长，按「已下载 X MB」给实感
-const exportMB = ref(0)
+// 导出（v0.64 直链化）：签发短签直链即返回，下载进度交浏览器原生下载器
 async function exportSelected() {
   if (!selected.value.size || exporting.value) return
   exporting.value = true
-  exportMB.value = 0
   try {
     const ids = [...selected.value].sort((a, b) => a - b).join(',')
-    await downloadFile(
-      `/problems/export?ids=${ids}`,
-      `soj-packages-${selected.value.size}.zip`,
-      (mb) => {
-        exportMB.value = mb
-      },
-    )
+    await downloadFile(`/problems/export?ids=${ids}`, `soj-packages-${selected.value.size}.zip`)
     selected.value = new Set()
     picking.value = false
   } finally {
     exporting.value = false
-    exportMB.value = 0
   }
 }
 
@@ -506,7 +497,7 @@ onMounted(() => {
                 :disabled="!selected.size"
                 @click="exportSelected"
               >
-                {{ exporting && exportMB > 0 ? `打包中·已 ${exportMB.toFixed(1)}MB` : `导出已选（${selected.size}）` }}
+                {{ exporting ? '正在准备导出…' : `导出已选（${selected.size}）` }}
               </el-button>
               <el-button
                 style="width: 100%"

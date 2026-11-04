@@ -5,7 +5,7 @@
 // 教师级权限（submission.view.all）可重测：重置 Pending 交还判题池，轮询至终态。
 // v0.7.1：队列态（排队/评测/取消中）可取消评测——本人 ∨ submission.view.all。
 import { computed, ref, watch } from 'vue'
-import { useJudgePoll } from '@/composables/useJudgePoll'
+import { usePolling } from '@/composables/usePolling'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { submissionApi, aiTutorApi } from '@/api'
@@ -161,20 +161,34 @@ async function onCancel() {
   }
 }
 
-// 轮询：1.2s 一次拉详情，到终态停并提示（重测/取消共用；useJudgePoll 终态口径
-// 统一 isQueueStatus，卸载自清——v0.27 的 onUnmounted 守卫由 composable 接管）
+// 轮询：1.2s 一次拉详情，到终态停并提示（重测/取消共用）。v0.64 轮询归一后全站仅
+// usePolling 一套：终态口径统一 isQueueStatus、拉取失败续拍自愈、隐藏标签页自动
+// 暂停、作用域卸载自停、10min 上限防判题队列僵死时无限转圈。
 let pollId = 0
-const judgePoll = useJudgePoll(() => submissionApi.get(pollId))
+let pollDoneMsg: string | null = null
+const judgePoll = usePolling(
+  async () => {
+    const s = await submissionApi.get(pollId)
+    polled.value = s
+    if (isQueueStatus(s.status)) return // 队列/评测/取消中：续拍
+    if (pollDoneMsg) ElMessage.success(pollDoneMsg)
+    pollDoneMsg = null
+    return false // 终态停
+  },
+  1200,
+  {
+    maxDurationMs: 600_000,
+    onExpire: () => {
+      pollDoneMsg = null
+      ElMessage.warning('评测等待时间过长，已停止自动刷新')
+    },
+  },
+)
 
 function pollUntilDone(id: number, doneMsg: string) {
   pollId = id
-  judgePoll.start(
-    () => {},
-    doneMsg,
-    (s) => {
-      polled.value = s
-    },
-  )
+  pollDoneMsg = doneMsg
+  judgePoll.restart()
 }
 
 watch(

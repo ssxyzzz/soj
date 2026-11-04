@@ -3,7 +3,7 @@
 // 第一步选来源（SOJ / Hydro 本期实做；QDUOJ / HOJ 下期置灰），每种来源独立适配器：
 // SOJ = problem.md 定题目目录 + data/ 数据；Hydro = 官方导出包（problem_zh.md 题面 + testdata/）。
 // 上传后原地轮询进度（逐题结果流），取消立马生效（已导入保留）；全站单任务排队。
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { QuestionFilled, UploadFilled } from '@element-plus/icons-vue'
@@ -11,6 +11,7 @@ import type { UploadUserFile } from 'element-plus'
 
 import { importApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
+import { useListener } from '@/composables/useWindowListener'
 import PageShell from '@/components/PageShell.vue'
 import type { BatchImportStatus } from '@/types'
 
@@ -176,8 +177,7 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
   }
 }
 
-window.addEventListener('beforeunload', onBeforeUnload)
-onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
+useListener(window, 'beforeunload', onBeforeUnload)
 
 function resultLine(r: { status: string; name: string; title?: string; pid?: number; reason?: string }): string {
   const who = r.title ? `「${r.title}」` : r.name

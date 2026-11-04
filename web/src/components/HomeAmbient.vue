@@ -3,7 +3,9 @@
 // + 移动时的低频涟漪环。网格显影与静态画布撤下由全站 AmbientGrid（MainLayout 挂载）
 // 负责——本组件只叠页面的光；2026-11-02 用户拍板登录页鼠标特效与首页一致，登录页同挂。
 // prefers-reduced-motion 时不启用。
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
+
+import { useListener } from '@/composables/useWindowListener'
 
 const layer = ref<HTMLElement>()
 const spot = ref<HTMLElement>()
@@ -69,23 +71,13 @@ function onLeave() {
   seen = false
 }
 
-function bind() {
-  window.addEventListener('mousemove', onMove, { passive: true })
-  document.documentElement.addEventListener('mouseleave', onLeave)
+// 监听走 useListener（v0.64 病根②收口）：setup 顶层声明即绑定、作用域卸载自动摘
+if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  useListener(window, 'mousemove', onMove, { passive: true })
+  useListener(document.documentElement, 'mouseleave', onLeave)
 }
-
-function unbind() {
-  window.removeEventListener('mousemove', onMove)
-  document.documentElement.removeEventListener('mouseleave', onLeave)
-}
-
-onMounted(() => {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-  bind()
-})
 
 onBeforeUnmount(() => {
-  unbind()
   if (raf) cancelAnimationFrame(raf)
 })
 </script>

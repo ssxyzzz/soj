@@ -869,10 +869,13 @@ func (h *Handlers) roundMySubmissions(c *gin.Context, s roundScope) {
 	items := make([]gin.H, 0, len(subs))
 	for _, s := range subs {
 		if revealed {
-			items = append(items, submissionJSON(s, s.UID == uid))
+			// v0.64 拆形：已揭榜列表瘦身（无 code/detail）——揭榜等待期前端 1.5s
+			// 轮询，旧形状每拍全量代码 MB 级 JSON.parse；看代码/明细改走详情接口按需取
+			items = append(items, submissionJSON(s, false))
 			continue
 		}
 		// 隐藏期内不出分（状态/得分不返回），但代码是本人写的，随提交带回去供回看
+		//（详情接口隐藏期对参赛者 404，列表自带 code 是考时回看的唯一通道，保留）
 		items = append(items, gin.H{
 			"id": s.ID, "pid": s.ProblemID, "created_at": s.CreatedAt,
 			"language": s.Language, "code": s.Code,

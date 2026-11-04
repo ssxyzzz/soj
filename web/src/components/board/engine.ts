@@ -2,8 +2,15 @@
 // 2026-11-03 用户拍板弃 roughjs 手绘风）+ perfect-freehand 画笔渲染、快照历史、
 // 几何命中测试、树布局整理、导出序列化。交互状态机在 BoardView.vue，
 // 本文件不监听任何 DOM 事件；主画布与导出共用同一渲染管线，保证所见即所得。
-// 体积红线：perfect-freehand ~2KB（gzip），本文件只做薄封装。
+// 体积红线：perfect-freehand ~2KB（gzip），本文件只做薄封装；immer（v0.64 撤销栈
+// patch 化引入，~5KB gzip）承担正/逆补丁生成，免手写每种操作的逆变换。
 import { getStroke } from 'perfect-freehand'
+import { applyPatches, enablePatches, produceWithPatches, setAutoFreeze, type Patch } from 'immer'
+
+enablePatches()
+// 文档保持普通对象：手势期（拖动/缩放）对 model 的直接改实时可见，
+// 冻结会在 produce 之外的字段写入上抛错
+setAutoFreeze(false)
 
 export const SVG_NS = 'http://www.w3.org/2000/svg'
 
@@ -151,7 +158,6 @@ export const TREE_GAP_Y = 92
 export const REBASE_LIMIT = 1e6
 
 const WEIGHT_W: Record<number, number> = { 1: 1.6, 2: 2.4, 3: 3.4 }
-const HISTORY_MAX = 60
 
 // ---------- 基础工具 ----------
 
@@ -648,14 +654,125 @@ interface DocV1 {
   shapes: Shape[]
 }
 
+// —— patch 历史（v0.64 病根③收口）：undo/redo 栈存 immer 正/逆 patch（体积
+// O(变更)），取代整文档 JSON 快照 ×60（体积 O(文档)，数百笔后单快照 MB 级 =
+// 数十 MB 字符串常驻 + 每次落笔同步 stringify 停顿）。栈容量 = 条数上限 ×
+// 字节预算双闸（内存有界）；无实际变更的操作自动不入史。snapshot/load 保留
+// 用于存档与跨画布持久化，不再参与历史。
+interface HistoryEntry {
+  undo: Patch[]
+  redo: Patch[]
+  bytes: number
+}
+
+// 条数上限（小操作贴着它走）；字节预算管大笔迹条目——超预算丢最旧，撤销
+// 深度换内存有界（旧口径 60 份全量快照最坏数十 MB，这里 1.5MB 封顶）
+const HISTORY_MAX = 60
+const HISTORY_BYTE_BUDGET = 1.5 * 1024 * 1024
+
+/** 平移一批 shape（纯函数）：draft 与现行数组通用（move 手势收尾重放用）。 */
+export function translateIn(shapes: Shape[], ids: Set<number>, dx: number, dy: number): void {
+  for (const s of shapes) {
+    if (!ids.has(s.id)) continue
+    switch (s.type) {
+      case 'stroke':
+        for (const p of s.points) {
+          p[0] += dx
+          p[1] += dy
+        }
+        break
+      case 'line':
+      case 'arrow':
+        s.x1 += dx
+        s.y1 += dy
+        s.x2 += dx
+        s.y2 += dy
+        break
+      case 'rect':
+      case 'ellipse':
+      case 'text':
+      case 'table':
+      case 'node':
+        s.x += dx
+        s.y += dy
+        break
+      case 'edge':
+        break // 端点由节点推导，不参与平移
+    }
+  }
+}
+
 export class BoardModel {
   shapes: Shape[] = []
   idSeq = 1
-  private undoStack: string[] = []
-  private redoStack: string[] = []
+  private undoStack: HistoryEntry[] = []
+  private redoStack: HistoryEntry[] = []
+  private historyBytes = 0
 
-  nextId(): number {
-    return this.idSeq++
+  // —— 历史三入口 ——
+
+  /** 当前文档的不可变视角（历史与存档共用形状）。 */
+  private doc(): DocV1 {
+    return { v: 1, idSeq: this.idSeq, shapes: this.shapes }
+  }
+
+  private adopt(d: DocV1): void {
+    this.shapes = d.shapes
+    // id 单调递增不复用：撤销「建图形」后重建不与旧 DOM/引用撞号
+    this.idSeq = Math.max(this.idSeq, d.idSeq)
+  }
+
+  private pushHistory(undoP: Patch[], redoP: Patch[]): void {
+    if (!redoP.length) return // 无实际变更不入史（空整理/误触自动无害化）
+    const bytes = JSON.stringify(undoP).length + JSON.stringify(redoP).length
+    this.undoStack.push({ undo: undoP, redo: redoP, bytes })
+    this.historyBytes += bytes
+    this.redoStack = [] // 新变更截断重做分支（与快照时代同语义）
+    while (
+      this.undoStack.length > HISTORY_MAX ||
+      (this.historyBytes > HISTORY_BYTE_BUDGET && this.undoStack.length > 1)
+    ) {
+      this.historyBytes -= this.undoStack.shift()!.bytes
+    }
+  }
+
+  /** 原子变更唯一入口：在 draft 上直接改（现有改法照搬进回调），正/逆 patch 自动入史。 */
+  mutate(fn: (d: DocV1) => void): void {
+    const [next, redoP, undoP] = produceWithPatches(this.doc(), fn)
+    this.adopt(next)
+    this.pushHistory(undoP, redoP)
+  }
+
+  /**
+   * 手势收尾入口：拖动/缩放/擦除期间为实时视觉反馈已直接改过 model，结束时以
+   * 「手势前基线」为 base 重放终态（fn 为确定性变换），把 基线→终态 固化为一条
+   * patch——手势期间不入史、一个手势一条历史。
+   */
+  mutateFrom(base: DocV1, fn: (d: DocV1) => void): void {
+    const [next, redoP, undoP] = produceWithPatches(base, fn)
+    this.adopt(next)
+    this.pushHistory(undoP, redoP)
+  }
+
+  /** 手势基线：给定 shape 集合换回手势前拷贝，其余共享现引用（move/resize 用）。 */
+  docWithOverrides(origs: Shape[]): DocV1 {
+    if (!origs.length) return this.doc()
+    const m = new Map(origs.map((o) => [o.id, o]))
+    return { v: 1, idSeq: this.idSeq, shapes: this.shapes.map((s) => m.get(s.id) ?? s) }
+  }
+
+  /** 手势基线：被删 shape 按删除逆序插回各自记录位置（erase 用；批内记录须按
+   * index 升序 push——倒序 splice 即精确复原：每次插入撤销最近一次删除）。 */
+  docWithShapesReinstated(origs: { shape: Shape; index: number }[]): DocV1 {
+    const shapes = [...this.shapes]
+    for (let i = origs.length - 1; i >= 0; i--) shapes.splice(origs[i].index, 0, origs[i].shape)
+    return { v: 1, idSeq: this.idSeq, shapes }
+  }
+
+  resetHistory(): void {
+    this.undoStack = []
+    this.redoStack = []
+    this.historyBytes = 0
   }
 
   // 节点标签即时派生 = 当前画布最大节点标签 + 1（非数字标签按 0 计）：
@@ -674,11 +791,8 @@ export class BoardModel {
     return this.shapes.find((s) => s.id === id)
   }
 
-  add(s: Shape): void {
-    s.id = this.nextId()
-    this.shapes.push(s)
-  }
-
+  // 图形增删一律走 mutate（入史）；delete 仅剩手势期即时删除路径使用
+  //（erase 手势收尾 mutateFrom 固化，BoardView deleteCascade 调用）
   delete(ids: Set<number>): void {
     this.shapes = this.shapes.filter((s) => !ids.has(s.id))
   }
@@ -695,72 +809,30 @@ export class BoardModel {
   }
 
   translate(ids: Set<number>, dx: number, dy: number): void {
-    for (const s of this.shapes) {
-      if (!ids.has(s.id)) continue
-      switch (s.type) {
-        case 'stroke':
-          for (const p of s.points) {
-            p[0] += dx
-            p[1] += dy
-          }
-          break
-        case 'line':
-        case 'arrow':
-          s.x1 += dx
-          s.y1 += dy
-          s.x2 += dx
-          s.y2 += dy
-          break
-        case 'rect':
-        case 'ellipse':
-        case 'text':
-        case 'table':
-        case 'node':
-          s.x += dx
-          s.y += dy
-          break
-        case 'edge':
-          break // 端点由节点推导，不参与平移
-      }
-    }
+    translateIn(this.shapes, ids, dx, dy)
   }
 
-  // —— 快照历史：整体 JSON 深拷贝，课堂规模毫秒级，代码量比命令模式小一个量级 ——
+  // —— 存档序列化（v0.64 起与历史解耦：只服务 localStorage 存档/跨画布持久化） ——
   snapshot(): string {
     const d: DocV1 = { v: 1, idSeq: this.idSeq, shapes: this.shapes }
     return JSON.stringify(d)
   }
 
-  private restore(raw: string): void {
-    const d = JSON.parse(raw) as DocV1
-    this.shapes = d.shapes
-    this.idSeq = d.idSeq
-  }
-
-  pushUndo(): void {
-    this.undoStack.push(this.snapshot())
-    if (this.undoStack.length > HISTORY_MAX) this.undoStack.shift()
-    this.redoStack = []
-  }
-
-  // 误推的空快照回退（如一键整理发现无可整理时）
-  popUndo(): void {
-    this.undoStack.pop()
-  }
-
   undo(): boolean {
-    const prev = this.undoStack.pop()
-    if (!prev) return false
-    this.redoStack.push(this.snapshot())
-    this.restore(prev)
+    const e = this.undoStack.pop()
+    if (!e) return false
+    this.historyBytes -= e.bytes
+    this.redoStack.push(e)
+    this.adopt(applyPatches(this.doc(), e.undo))
     return true
   }
 
   redo(): boolean {
-    const next = this.redoStack.pop()
-    if (!next) return false
-    this.undoStack.push(this.snapshot())
-    this.restore(next)
+    const e = this.redoStack.pop()
+    if (!e) return false
+    this.undoStack.push(e)
+    this.historyBytes += e.bytes
+    this.adopt(applyPatches(this.doc(), e.redo))
     return true
   }
 
@@ -778,6 +850,7 @@ export class BoardModel {
       if (d?.v === 1 && Array.isArray(d.shapes) && typeof d.idSeq === 'number') {
         this.shapes = d.shapes
         this.idSeq = d.idSeq
+        this.resetHistory() // 换档历史随档清空（旧档 patch 路径对新档无意义）
         return true
       }
     } catch {

@@ -78,6 +78,8 @@ func Run(ctx context.Context, deps *Deps) {
 	cfg := deps.Cfg
 	// JWT 密钥：显式设置 > 密钥卷 > 自动生成（公网伪造 token 防线不变，见 resolveJWTSecret）
 	cfg.JWTSecret = resolveJWTSecret(cfg)
+	// 下载直链签名密钥（v0.64）：与 JWT 用途隔离的独立一把，同密钥卷机制
+	cfg.DownloadSecret = resolveDownloadSecret(cfg)
 	// 邮件通道（v0.16）：smtp 通道开着但配置不全拒绝启动（验证码发不出去等于把
 	// 注册/找回功能打成半残，早失败好过线上排查）
 	if s, err := deps.Repo.GetSystemSettings(ctx); err == nil {
@@ -242,10 +244,15 @@ func Run(ctx context.Context, deps *Deps) {
 			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
 			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)
 			authed.POST("/problems/:id/testdata", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ReplaceProblemTestdata)
-			authed.GET("/problems/:id/testdata/download", RequirePerm(repo.PermProblemDataDownload), h.DownloadProblemTestdata)
+			// 下载直链（v0.64 病根③收口）：下载端点挪出 authed、挂 dlAuth——带
+			// Authorization 头照旧登录态+权限位；无头凭 5min 短签直链放行（浏览器
+			// 原生下载器接管，前端零 blob 中转）。签发见 /download-link；权限由
+			// dlAuth 按回放身份执行，无权者签了也下不了。
+			authed.POST("/download-link", h.IssueDownloadLink)
+			api.GET("/problems/:id/testdata/download", h.dlAuth(repo.PermProblemDataDownload), h.DownloadProblemTestdata)
 			// 多题打包导出（v0.18.1）：权限位与单题下载同源；与 /problems/:id 参数路由
 			// 同级静态段，gin 树静态优先匹配
-			authed.GET("/problems/export", RequirePerm(repo.PermProblemDataDownload), h.ExportProblems)
+			api.GET("/problems/export", h.dlAuth(repo.PermProblemDataDownload), h.ExportProblems)
 			authed.POST("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateChecker)
 			authed.POST("/problems/:id/function/:file", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateFunctionFile) // driver|template（v0.9.1）
 			authed.DELETE("/problems/:id/function/:file", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveFunctionFile)
@@ -320,7 +327,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.DELETE("/assignments/:id/problems/:pid", h.RemoveAssignmentProblem)
 			authed.GET("/assignments/:id/progress", h.AssignmentProgress)
 			authed.GET("/assignments/:id/problems/:pid/submissions", h.AssignmentUserSubmissions)
-			authed.GET("/assignments/:id/export", h.AssignmentExport) // 成绩导出 CSV（v0.5.6）
+			api.GET("/assignments/:id/export", h.dlAuth(), h.AssignmentExport) // 成绩导出 CSV（v0.5.6；v0.64 直链化）
 
 			// 比赛：创建（主题库=root，班级=班级管理员，handler 内校验）/删除/赛时提交/我的提交/榜单
 			authed.POST("/contests", h.CreateContest)
@@ -330,7 +337,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/contests/:id/submissions/mine", h.ContestMySubmissions)
 			authed.GET("/contests/:id/problems/:pid/submissions", h.ContestUserSubmissions)
 			authed.GET("/contests/:id/leaderboard", h.ContestLeaderboard)
-			authed.GET("/contests/:id/export", h.ContestExport) // 成绩导出 CSV（v0.5.6）
+			api.GET("/contests/:id/export", h.dlAuth(), h.ContestExport) // 成绩导出 CSV（v0.5.6；v0.64 直链化）
 			authed.GET("/contests/:id/paper", h.ContestPaper)   // 打印试卷数据（v0.10，organizer/root）
 
 			// 班级考试：发起（班级管理员）/删除/考时提交/我的提交/榜单
@@ -343,7 +350,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/submissions/mine", h.ExamMySubmissions)
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
-			authed.GET("/exams/:id/export", h.ExamExport) // 成绩导出 CSV（v0.5.6）
+			api.GET("/exams/:id/export", h.dlAuth(), h.ExamExport) // 成绩导出 CSV（v0.5.6；v0.64 直链化）
 			authed.GET("/exams/:id/paper", h.ExamPaper)   // 打印试卷数据（v0.10，organizer/root）
 			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)
 			authed.PATCH("/exams/:id/file-io", h.SetExamFileIO)
@@ -356,7 +363,7 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.PATCH("/problems/:id/duplicate", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemDuplicate)
 			authed.PATCH("/problems/:id/statement", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.SetProblemStatement)
 			// v0.10：客观题小题 YAML 双向 + 单题/整卷学生版试卷打印
-			authed.GET("/problems/:id/objective/questions.yaml", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ExportObjectiveYAML)
+			api.GET("/problems/:id/objective/questions.yaml", h.dlAuth(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ExportObjectiveYAML) // v0.64 直链化
 			authed.GET("/problems/:id/paper", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ProblemPaper)
 			authed.POST("/objective/questions/parse", RequirePermAny(repo.PermProblemCreate, repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ParseObjectiveYAML)
 
@@ -369,7 +376,7 @@ func Run(ctx context.Context, deps *Deps) {
 				// 改用户 ID（v0.50）：跨集合引用搬家（事务原子），与用户管理同权限位
 				adminG.PATCH("/users/:id/change-id", RequirePerm(repo.PermAdminUserManage), h.AdminChangeUserID)
 				// 批量建号（v0.34 中文花名册·两段式）：模板下载 + 上传识别 + 确认建号，与建号同权限位
-				adminG.GET("/users/import-template", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportTemplate)
+				api.GET("/admin/users/import-template", h.dlAuth(repo.PermAdminUserManage), h.AdminUserImportTemplate) // v0.64 直链化
 				adminG.POST("/users/import-preview", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportPreview)
 				adminG.POST("/users/import-commit", RequirePerm(repo.PermAdminUserManage), h.AdminUserImportCommit)
 				// 年级晋级状态（v0.34，全自动无手动触发）：系统设置权限位（root 后台面板）

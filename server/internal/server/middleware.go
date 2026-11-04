@@ -29,27 +29,35 @@ func CORS() gin.HandlerFunc {
 // 库中不一致即 401——改密/管理员重置后所有旧 token 全端下线（v0.14）。
 func AuthRequired(h *Handlers) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-		uid, _, tokenPwdVer, err := auth.ParseToken(token, h.cfg.JWTSecret)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录或登录已过期"})
-			return
+		if h.authIdent(c) {
+			c.Next()
 		}
-		e, ok := h.loadIdent(c.Request.Context(), uid)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "账号状态异常，请重新登录"})
-			return
-		}
-		if e.pwdVer != tokenPwdVer {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "密码已变更，请重新登录"})
-			return
-		}
-		c.Set("uid", uid)
-		c.Set("uname", e.uname)
-		c.Set("role", e.role)
-		c.Set("perms", e.perms)
-		c.Next()
 	}
+}
+
+// authIdent 登录态校验体（v0.64 从 AuthRequired 抽出供 dlAuth 复用）：失败时已
+// Abort 并返回 false；成功时写入 uid/uname/role/perms 并返回 true。
+func (h *Handlers) authIdent(c *gin.Context) bool {
+	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	uid, _, tokenPwdVer, err := auth.ParseToken(token, h.cfg.JWTSecret)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录或登录已过期"})
+		return false
+	}
+	e, ok := h.loadIdent(c.Request.Context(), uid)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "账号状态异常，请重新登录"})
+		return false
+	}
+	if e.pwdVer != tokenPwdVer {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "密码已变更，请重新登录"})
+		return false
+	}
+	c.Set("uid", uid)
+	c.Set("uname", e.uname)
+	c.Set("role", e.role)
+	c.Set("perms", e.perms)
+	return true
 }
 
 // AuthOptional 尝试解析登录态，无论成功与否都放行（用于可选登录的公开接口）。
@@ -72,33 +80,34 @@ func AuthOptional(h *Handlers) gin.HandlerFunc {
 // RequirePerm 校验当前用户持有某权限位（root 恒通过）。挂在 AuthRequired/AuthOptional 之后。
 func RequirePerm(perm string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_, _, _, logged := currentUser(c)
-		if !logged {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录"})
-			return
+		if permAnyCheck(c, perm) {
+			c.Next()
 		}
-		if !hasPerm(c, perm) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 1, "message": "权限不足"})
-			return
-		}
-		c.Next()
 	}
 }
 
 // RequirePermAny 任一权限位命中即可（属主级校验由 handler 补充）。
 func RequirePermAny(perms ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_, _, _, logged := currentUser(c)
-		if !logged {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录"})
-			return
+		if permAnyCheck(c, perms...) {
+			c.Next()
 		}
-		if !hasPermAny(c, perms...) {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 1, "message": "权限不足"})
-			return
-		}
-		c.Next()
 	}
+}
+
+// permAnyCheck 权限位校验体（v0.64 抽出供 dlAuth 复用）：未登录 401、无权限 403，
+// 失败时已 Abort 并返回 false；单权限位时与原 RequirePerm 语义一致。
+func permAnyCheck(c *gin.Context, perms ...string) bool {
+	_, _, _, logged := currentUser(c)
+	if !logged {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录"})
+		return false
+	}
+	if !hasPermAny(c, perms...) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"code": 1, "message": "权限不足"})
+		return false
+	}
+	return true
 }
 
 // RequireRoot 硬编码 root：用于角色管理等不可下放的操作。

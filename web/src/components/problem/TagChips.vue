@@ -5,6 +5,7 @@
 // 每级行前带层级标签（一级/二级/…）；行区滚轮隔离见 onCanvasWheel。
 import { computed, onBeforeUnmount, ref } from 'vue'
 
+import { onRowsWheel } from '@/composables/useHorizontalWheel'
 import type { TagNode } from '@/types'
 
 const props = withDefaults(
@@ -112,19 +113,8 @@ function cancelHoverClear() {
   }
 }
 
-// 滚轮隔离（2026-10-23 验收定稿口径）：鼠标在标签行区内滚动**一律不带动页面**——
-// 落在哪行就把增量映射到该行横向滚动（触摸板横扫 deltaX 优先）；行内展示完了
-// （无溢出 / 已滚到头）也吞掉事件，绝不外溢给页面滚动条。
-function onCanvasWheel(e: WheelEvent) {
-  e.preventDefault()
-  const line = (e.target as HTMLElement).closest('.tag-line')
-  const el = line?.querySelector<HTMLElement>('.tag-row')
-  if (!el) return
-  const max = el.scrollWidth - el.clientWidth
-  if (max <= 0) return
-  const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-  if (delta) el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
-}
+// 滚轮：useHorizontalWheel 容器路由版（v0.64 病根①收口，全站唯一实现）——
+// 指针所在行有横向溢出才接管（触摸板横扫 deltaX 优先），无溢出交给页面滚动。
 
 onBeforeUnmount(() => {
   if (hoverTimer) clearTimeout(hoverTimer)
@@ -142,7 +132,7 @@ onBeforeUnmount(() => {
     </div>
     <!-- 每级行 = 行标签 + 独立横滚容器；wheel 挂画布层统一路由（见 onCanvasWheel）：
          行区内滚动永不外溢给页面，鼠标所在行各自横移、各行独立记位置 -->
-    <div class="tag-canvas" @mouseenter="cancelHoverClear" @wheel="onCanvasWheel">
+    <div class="tag-canvas" @mouseenter="cancelHoverClear" @wheel="onRowsWheel">
       <div v-for="(r, i) in rows" :key="i" class="tag-line" @mouseenter="cancelHoverClear">
         <span class="tag-line-label">{{ rowLabel(i) }}</span>
         <div class="tag-row">

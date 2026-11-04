@@ -998,17 +998,20 @@ export interface ExamListItem {
   is_organizer: boolean
 }
 
+// 赛/考「我的提交」列表（v0.64 拆形，按 revealed 判别两种形态）：
+// 隐藏期行 = {id,pid,created_at,language,code}（考时回看唯一通道，详情接口隐藏期 404）；
+// 已揭榜行 = 瘦身状态/得分/耗时（无 code/detail，看代码走详情接口 Submission 按需取）。
 export interface ContestMySubmission {
   id: number
   pid: number
   created_at: string
-  status?: string
-  score?: number
   language?: string
+  code?: string // 仅隐藏期返回
+  status?: string // 仅已揭榜返回
+  score?: number
   time_ms?: number
   memory_kb?: number
   error_info?: string
-  code?: string
 }
 
 export interface LeaderCell {

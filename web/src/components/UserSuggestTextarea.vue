@@ -8,6 +8,7 @@
 import { nextTick, onBeforeUnmount, ref } from 'vue'
 
 import { userApi } from '@/api'
+import { useListener } from '@/composables/useWindowListener'
 import type { LookupUser } from '@/types'
 
 const props = withDefaults(
@@ -82,20 +83,25 @@ function onReposition() {
   if (open.value) place()
 }
 
+// 弹层期跟手重定位监听（v0.64 病根②收口）：useListener 声明即绑定、close 统一摘除
+let popStops: (() => void)[] = []
+
 function openPop() {
   open.value = true
   place() // 先按估算占位
   nextTick(place) // 渲染后再校一次
-  window.addEventListener('scroll', onReposition, true)
-  window.addEventListener('resize', onReposition)
+  popStops = [
+    useListener(window, 'scroll', onReposition, true),
+    useListener(window, 'resize', onReposition),
+  ]
 }
 
 function close() {
   open.value = false
   items.value = []
   active.value = -1
-  window.removeEventListener('scroll', onReposition, true)
-  window.removeEventListener('resize', onReposition)
+  popStops.forEach((s) => s())
+  popStops = []
 }
 
 function pick(u: LookupUser) {

@@ -21,6 +21,7 @@
     "codemirror": "^6.0.2",
     "element-plus": "^2.8.6",
     "highlight.js": "^11.11.1",
+    "immer": "^11.2.9",
     "katex": "^0.19.1",
     "lucide-vue-next": "^0.577.0",
     "perfect-freehand": "^1.2.3",

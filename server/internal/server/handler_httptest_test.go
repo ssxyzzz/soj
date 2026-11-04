@@ -50,6 +50,9 @@ type fakeRepo struct {
 	createSubmissions int
 	bestScores        map[int64]int // pid → 该用户本题最高分（讨论门槛视角）
 	discussTopic      *repo.DiscussTopic
+
+	rounds    []*repo.Contest    // 比赛详情（roundmy_test 用）
+	roundSubs []*repo.Submission // 场内「我的提交」回放（roundmy_test 用）
 }
 
 func (f *fakeRepo) GetUserByID(_ context.Context, id int64) (*repo.User, error) {
@@ -226,17 +229,17 @@ const testJWTSecret = "httptest-secret-0123456789abcdef"
 
 func newTestHandlers(f *fakeRepo) *Handlers {
 	return &Handlers{
-		cfg:            &config.Config{Addr: ":0", JWTSecret: testJWTSecret},
-		repo:           f,
-		limiter:        newRateLimiter(),
-		runLimit:       newRateLimiter(),
-		renderLimit:    newRateLimiter(),
-		idents:         newIdentCache(),
-		ipLimitGlobal:  newIPLimiter(ipRateGlobalPerMin, time.Minute),
-		ipLimitAuth:    newIPLimiter(ipRateAuthPerMin, time.Minute),
-		leaderCache:    map[string]leaderEntry{},
-		rank:           newRankCache(nil),
-		boards:         newBoardsCache(nil),
+		cfg:           &config.Config{Addr: ":0", JWTSecret: testJWTSecret},
+		repo:          f,
+		limiter:       newRateLimiter(),
+		runLimit:      newRateLimiter(),
+		renderLimit:   newRateLimiter(),
+		idents:        newIdentCache(),
+		ipLimitGlobal: newIPLimiter(ipRateGlobalPerMin, time.Minute),
+		ipLimitAuth:   newIPLimiter(ipRateAuthPerMin, time.Minute),
+		leaderCache:   map[string]leaderEntry{},
+		rank:          newRankCache(nil),
+		boards:        newBoardsCache(nil),
 	}
 }
 
@@ -285,12 +288,12 @@ func doJSON(r *gin.Engine, method, path, token string, body string) (int, map[st
 
 func baseFake() *fakeRepo {
 	return &fakeRepo{
-		users:    map[int64]*repo.User{},
-		roles:    map[string]*repo.Role{},
-		problems: map[int64]*repo.Problem{},
-		settings: &repo.SystemSettings{RateLimitPerMinute: 100},
+		users:      map[int64]*repo.User{},
+		roles:      map[string]*repo.Role{},
+		problems:   map[int64]*repo.Problem{},
+		settings:   &repo.SystemSettings{RateLimitPerMinute: 100},
 		bestScores: map[int64]int{},
-		jadeBal:  map[int64]int64{},
+		jadeBal:    map[int64]int64{},
 	}
 }
 

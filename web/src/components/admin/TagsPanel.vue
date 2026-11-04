@@ -8,6 +8,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { problemApi, tagApi } from '@/api'
+import { onRowWheel } from '@/composables/useHorizontalWheel'
+import { useListener } from '@/composables/useWindowListener'
 import type { ProblemListItem, TagNode, TagRefProblem } from '@/types'
 import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
@@ -236,19 +238,8 @@ function cancelHoverClear() {
   }
 }
 
-// 滚轮横移：竖向滚轮增量映射到横向滚动（当前层级的标签一览）；触摸板横扫 deltaX 优先。
-// 行内有溢出时**整行接管滚轮**——滚到头也不再放行，持续滚动不会带动页面下滑
-// （鼠标停在本行即浏览本行）；行本身没有溢出才不拦截，滚轮交给页面正常滚动。
-// 与 TagChips 同款（题库筛选/建题表单/后台管理三处标签树行为一致）。
-function onWheel(e: WheelEvent) {
-  const el = e.currentTarget as HTMLElement
-  const max = el.scrollWidth - el.clientWidth
-  if (max <= 0) return
-  e.preventDefault()
-  const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-  if (delta === 0) return
-  el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + delta))
-}
+// 滚轮横移：useHorizontalWheel 行元素版（v0.64 病根①收口，与题库 TagChips 同一实现）——
+// 行内有溢出才整行接管（滚到头也不再放行），无溢出交给页面正常滚动。
 
 // ＋ 默认全隐藏：显示悬停行（路径最深处）的行尾 ＋ 与该空标签下的 mini-add；
 // 无悬停时回退到根行（保证任何时候都能建一级标签）。
@@ -362,9 +353,13 @@ function commitAdd(fromBlur = false) {
 
 // 长按（500ms）进浮动态：卡片抬升、出现 ×、可直接拖动换位（同级）；
 // 阈值前松手 = 普通点击下钻，移动超 8px 视为滚动意图取消长按。
+// v0.64 病根②收口：window 监听一律 useListener（声明即绑定、stop 幂等摘除），
+// cancelPress 统一收口全部退出路径——旧版单击路径漏摘一组 window
+// pointermove/pointerup（每次点击永久泄漏、越用越卡）的写法已不可能复现。
 let pressTimer: ReturnType<typeof setTimeout> | undefined
 let suppressClick = false
 let pressStart = { x: 0, y: 0 }
+let pressTeardown: (() => void) | null = null
 let dragCleanup: (() => void) | null = null
 
 function onCardPointerDown(e: PointerEvent, row: number, node: DraftNode) {
@@ -382,11 +377,15 @@ function onCardPointerDown(e: PointerEvent, row: number, node: DraftNode) {
     if (Math.hypot(ev.clientX - pressStart.x, ev.clientY - pressStart.y) > 8) cancelPress()
   }
   const up = () => cancelPress()
-  window.addEventListener('pointermove', earlyMove)
-  window.addEventListener('pointerup', up)
+  const stopMove = useListener(window, 'pointermove', earlyMove)
+  const stopUp = useListener(window, 'pointerup', up)
+  pressTeardown = () => {
+    stopMove()
+    stopUp()
+  }
   pressTimer = setTimeout(() => {
-    window.removeEventListener('pointermove', earlyMove)
-    window.removeEventListener('pointerup', up)
+    pressTeardown?.()
+    pressTeardown = null
     pressTimer = undefined
     floating.value = node.id
     suppressClick = true
@@ -399,6 +398,8 @@ function cancelPress() {
     clearTimeout(pressTimer)
     pressTimer = undefined
   }
+  pressTeardown?.()
+  pressTeardown = null
 }
 
 function beginDrag(rowEl: Element | null, node: DraftNode) {
@@ -406,13 +407,13 @@ function beginDrag(rowEl: Element | null, node: DraftNode) {
   const move = (ev: PointerEvent) => dragMove(ev, rowEl, node)
   const up = () => {
     draggingId.value = null
-    window.removeEventListener('pointermove', move)
-    window.removeEventListener('pointerup', up)
+    stopMove()
+    stopUp()
     dragCleanup = null
   }
+  const stopMove = useListener(window, 'pointermove', move)
+  const stopUp = useListener(window, 'pointerup', up)
   dragCleanup = up
-  window.addEventListener('pointermove', move)
-  window.addEventListener('pointerup', up)
 }
 
 // 拖动换位：按指针 x 与兄弟卡片中点比较，实时在兄弟数组内 splice（草稿即视即所得）
@@ -475,9 +476,11 @@ function toPayload(list: DraftNode[]): TagNode[] {
   }))
 }
 
+// 常驻 window 监听（v0.64 病根②收口）：setup 顶层 useListener，作用域卸载自动摘
+useListener(window, 'keydown', onKeydown)
+useListener(window, 'beforeunload', onBeforeUnload)
+
 onMounted(async () => {
-  window.addEventListener('keydown', onKeydown)
-  window.addEventListener('beforeunload', onBeforeUnload)
   try {
     const r = await tagApi.adminTree(props.tree)
     draft.value = fromServer(r.nodes)
@@ -491,8 +494,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown)
-  window.removeEventListener('beforeunload', onBeforeUnload)
   cancelPress()
   dragCleanup?.()
   if (hoverTimer) clearTimeout(hoverTimer)
@@ -757,7 +758,7 @@ async function unbind(row?: TagRefProblem) {
         class="tag-row"
         @click.self="exitFloating"
         @mouseenter="cancelHoverClear"
-        @wheel="onWheel"
+        @wheel="onRowWheel"
       >
         <TransitionGroup name="tag">
         <div

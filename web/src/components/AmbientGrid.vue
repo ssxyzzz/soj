@@ -7,6 +7,8 @@
 // prefers-reduced-motion 时整套不启用（body 类也不加，保留原静态画布）。
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
+import { useListener } from '@/composables/useWindowListener'
+
 const grid = ref<HTMLElement>()
 
 // 目标点（鼠标）/ 当前点（mask 圆心）；0.28 紧跟（2026-10-25 手感定稿）
@@ -58,24 +60,19 @@ function onLeave() {
   seen = false
 }
 
-function bind() {
-  window.addEventListener('mousemove', onMove, { passive: true })
-  document.documentElement.addEventListener('mouseleave', onLeave)
-}
-
-function unbind() {
-  window.removeEventListener('mousemove', onMove)
-  document.documentElement.removeEventListener('mouseleave', onLeave)
+// 监听走 useListener（v0.64 病根②收口）：setup 顶层声明即绑定、作用域卸载自动摘
+const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+if (!reduced) {
+  useListener(window, 'mousemove', onMove, { passive: true })
+  useListener(document.documentElement, 'mouseleave', onLeave)
 }
 
 onMounted(() => {
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  if (reduced) return
   document.body.classList.add('ambient-on')
-  bind()
 })
 
 onBeforeUnmount(() => {
-  unbind()
   if (raf) cancelAnimationFrame(raf)
   document.body.classList.remove('ambient-on')
 })

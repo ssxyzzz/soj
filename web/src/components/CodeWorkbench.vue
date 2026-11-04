@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SelfTestPanel from '@/components/SelfTestPanel.vue'
 import { authApi } from '@/api'
+import { useListener } from '@/composables/useWindowListener'
 import { useUserStore } from '@/stores/user'
 import { autocompleteOn, defaultLang, languageOptions, mergedPrefs, templateFor } from '@/utils/code'
 import { parseIOSamples } from '@/utils/md'
@@ -98,15 +99,18 @@ function doSubmit() {
   emit('submit', lang.value, code.value)
 }
 
-// ---- 拖动分栏：以容器百分比记录左栏宽度，夹在 15%~85% ----
+// ---- 拖动分栏：以容器百分比记录左栏宽度，夹在 15%~85%；监听走 useListener（v0.64 病根②收口） ----
 let dragging = false
 let containerEl: HTMLElement | null = null
+let dragStops: (() => void)[] = []
 
 function onDragStart(e: MouseEvent) {
   dragging = true
   containerEl = divider.value?.parentElement ?? null
-  document.addEventListener('mousemove', onDragMove)
-  document.addEventListener('mouseup', onDragEnd)
+  dragStops = [
+    useListener(document, 'mousemove', onDragMove),
+    useListener(document, 'mouseup', onDragEnd),
+  ]
   e.preventDefault()
 }
 
@@ -119,17 +123,16 @@ function onDragMove(e: MouseEvent) {
 
 function onDragEnd() {
   dragging = false
-  document.removeEventListener('mousemove', onDragMove)
-  document.removeEventListener('mouseup', onDragEnd)
+  dragStops.forEach((s) => s())
+  dragStops = []
 }
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && props.modelValue) emit('update:modelValue', false)
 }
 
-onMounted(() => document.addEventListener('keydown', onKeydown))
+useListener(document, 'keydown', onKeydown)
 onBeforeUnmount(() => {
-  document.removeEventListener('keydown', onKeydown)
   onDragEnd()
   // 全屏开着时卸载（如切路由）：滚动锁兜底恢复，避免底层页面被永久锁死
   document.documentElement.style.overflow = ''
