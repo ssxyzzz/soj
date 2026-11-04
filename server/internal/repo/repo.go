@@ -104,6 +104,9 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 			ApplyURI(uri).
 			SetConnectTimeout(5*time.Second).
 			SetServerSelectionTimeout(5*time.Second).
+			// 池上限显式化（v0.66 批②）：Web/判题分进程后每进程各 60——慢查询堆积
+			// 时波及面有界；默认 100 对单机 mongod 偏大且从不显式，属于隐式依赖
+			SetMaxPoolSize(60).
 			SetMonitor(slowOpMonitor()))
 		if err == nil {
 			pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)

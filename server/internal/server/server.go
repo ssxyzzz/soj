@@ -125,6 +125,7 @@ func Run(ctx context.Context, deps *Deps) {
 	r.GET("/problems/:id/assets/:file", AuthOptional(h), h.ServeProblemAsset)
 
 	api := r.Group("/api")
+	api.Use(apiTimeout())          // 默认 30s deadline（v0.66 批②隔离）：长路由白名单见 apitimeout.go
 	api.Use(h.rateLimit("global")) // IP 限流（v0.14）：私网来源跳过，公网直连生效
 	{
 		api.GET("/health", h.Health)

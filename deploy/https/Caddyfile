@@ -14,6 +14,19 @@
 {
 	# 证书到期/异常通知邮箱（Let's Encrypt 要求）
 	email admin@example.com
+
+	# 接入层兜底（v0.66 批②隔离）：Caddy v2 默认无任何超时——慢客户端可无限期
+	# 占用 Caddy→frp→SOJ 整条链路连接。read_header 拦慢连接握手，read_body 放宽
+	# 保大包上传（64MB 建题 zip 走慢上链可至分钟级），write 放宽保多题导出/备份
+	# 下载等长流式响应，idle 收常规 keep-alive
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 10m
+			write 10m
+			idle 3m
+		}
+	}
 }
 
 soj.example.com {
@@ -29,6 +42,12 @@ soj.example.com {
 	# 压缩必开（2026-11-02 实锤教训：漏配 encode 时大静态文件裸传，叠加 VPS 带宽顶
 	# 即 35s 级事故）。zstd 优先（压缩率与解压速度双优，现代浏览器全支持），回退 gzip
 	encode zstd gzip
+
+	# 请求体上限（v0.66 批②）：后端 JSON 路由多无 MaxBytesReader，入口先拦——
+	# soj 容器 mem_limit 1g，超大 body 直达应用有 OOM 面；100MB = 建题 zip 64MB + 余量
+	request_body {
+		max_size 100MB
+	}
 
 	# 反代到本机 frps 的 remotePort（frp 配置不动）。
 	# Caddy 在此注入 X-Forwarded-For（学生真实 IP），经 frp 纯 TCP 隧道原样到达 SOJ，

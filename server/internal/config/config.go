@@ -27,7 +27,7 @@ type Config struct {
 	// 下载直链签名密钥（v0.64 直链化）：与 JWT 用途隔离的独立一把，同样走
 	// 「显式 env > 密钥卷 > 自动生成持久化」（见 resolveDownloadSecret）。
 	DownloadSecret string
-	JudgeWorkers   int // 判题并发数
+	JudgeWorkers   int // 判题并发数；0 = Web-only（判题交给独立 judge 容器，v0.66 批②）
 	// 编译并发闸容量（快赢批⑤）：默认 1 = 编译串行化（并发 g++ 瞬时 CE 治理的既定
 	// 口径）；考试 + 自测高峰期编译吞吐吃紧时可在 override 调大（受沙箱核数约束）。
 	// 判题 / 自测 / checker / interactor 编译共闸。

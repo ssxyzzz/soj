@@ -47,7 +47,7 @@ services:
 
   # SOJ 主程序：前端页面 + API + 内置判题线程池，单容器单进程
   soj:
-    build:
+    build: &soj-build
       context: ./server
       additional_contexts:
         web: ./web
@@ -82,7 +82,9 @@ services:
       # 容器视角直连方是 docker 网桥网关（172.x）而非 127.0.0.1，故放开 loopback + 私网段；
       # 反代拓扑下用于还原学生真实 IP；none = 不信任任何代理
       SOJ_TRUSTED_PROXIES: "127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
-      SOJ_JUDGE_WORKERS: "2"
+      # Web-only 形态（v0.66 批②隔离）：判题交给下方 judge 容器，判题慢/沙箱假死
+      # 不拖 Web 的 Mongo 连接池，Web 慢查询不拖判题回写；自测编译闸留在本进程
+      SOJ_JUDGE_WORKERS: "0"
       SOJ_SANDBOX_ADDR: "http://sandbox:5050"
       SOJ_BACKUP_DIR: "/data/backups"
       SOJ_KEYS_DIR: "/data/keys" # 密钥卷：与 testdata 卷分离，私钥/公钥不入库不进备份
@@ -96,6 +98,32 @@ services:
       - backup_data:/data/backups
       - backup_keys:/data/keys
       - ./data/seed:/data/seed:ro
+    depends_on:
+      mongo:
+        condition: service_healthy
+      sandbox:
+        condition: service_started
+
+  # 独立判题进程（v0.66 批②隔离）：--judge-only 只跑判题池与巡检（无 HTTP），
+  # 与 soj 同镜像同卷——判题读测试点文件、经 Mongo 队列领取提交，两进程互不拖累；
+  # 提交入队的即时唤醒信号跨进程收不到，靠 1s 轮询兜底（判题端到端秒级，无感）
+  judge:
+    build: *soj-build
+    # 镜像 ENTRYPOINT 已是 /app/soj：command 只给旗标（写全路径会变成位置参数、
+    # flag 解析提前终止，judge 容器曾因此跑成 Web——2026-11-04 部署实测）
+    command: ["--judge-only"]
+    restart: unless-stopped
+    mem_limit: 1g
+    logging: *default-logging
+    environment:
+      TZ: Asia/Shanghai
+      SOJ_MONGO_URI: "mongodb://mongo:27017/?replicaSet=rs0"
+      SOJ_MONGO_DB: soj
+      SOJ_DATA_DIR: /data/testdata
+      SOJ_JUDGE_WORKERS: "2"
+      SOJ_SANDBOX_ADDR: "http://sandbox:5050"
+    volumes:
+      - testdata:/data/testdata # 判题逐点读测试数据，与 soj 共卷
     depends_on:
       mongo:
         condition: service_healthy

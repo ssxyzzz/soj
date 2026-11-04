@@ -17,6 +17,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"soj/internal/lang"
@@ -31,6 +32,9 @@ const (
 	maxStdout          = 64 << 20
 	maxStderr          = 1 << 20
 	pollInterval       = time.Second
+	// 沙箱假死熔断（v0.66 批②）：连续 N 份 System Error 即暂停领取转入探测
+	sandboxFailBackoff = 3
+	sandboxProbeEvery  = 10 * time.Second
 )
 
 // Judger 组合判题所需依赖，可挂在 Web 进程内或独立进程运行。
@@ -40,6 +44,7 @@ type Judger struct {
 	Provider testdata.Provider
 	Name     string // 判题进程标识，写入提交便于排查
 	Waker    *Waker // 提交即时唤醒（v0.7.1）：Web 进程入队后非阻塞通知，空闲 worker 近零延迟领取
+	sbFails  atomic.Int32 // 连续沙箱故障计数（熔断退避用，多 worker 并发递增）
 }
 
 // Waker 提交入队的即时唤醒信号（Web+判题同进程部署形态下的近零延迟领取；
@@ -74,10 +79,15 @@ func (w *Waker) C() <-chan struct{} {
 	return w.ch
 }
 
-// Pool 启动 workers 个判题循环，直到 ctx 取消。
+// Pool 启动 workers 个判题循环，直到 ctx 取消。workers=0 为 Web-only 形态
+//（v0.66 批②：判题交给独立 judge 容器，Web 进程不启判题循环与巡检；自测仍借
+// 本进程的编译闸与沙箱客户端，不受影响）。
 func (j *Judger) Pool(ctx context.Context, workers int) {
-	if workers < 1 {
+	if workers < 0 {
 		workers = 1
+	}
+	if workers == 0 {
+		return
 	}
 	go j.pendingWatch(ctx) // Pending 深度巡检（判题可观测）：进程内单例，随池启停
 	for i := 0; i < workers; i++ {
@@ -109,7 +119,38 @@ func (j *Judger) loop(ctx context.Context, worker int) {
 			}
 			continue
 		}
-		j.runOneSafely(ctx, sub)
+		status := j.runOneSafely(ctx, sub)
+		// 沙箱假死熔断（v0.66 批②）：连续 System Error 即暂停领取并探测沙箱——
+		// 原实现假死时每份提交耗满 120s 客户端超时才报错、心跳照常跳（租约回收
+		// 不触发），「卡而不死」持续放血、吞吐坍缩至 ~1 份/分钟
+		if status == repo.StatusSystemError {
+			if j.sbFails.Add(1) >= sandboxFailBackoff {
+				j.waitSandboxAlive(ctx, name)
+			}
+		} else {
+			j.sbFails.Store(0)
+		}
+	}
+}
+
+// waitSandboxAlive 探测等待沙箱恢复：每 10s 一次 Available 探测（3s 超时），
+// 恢复即返回并复位连续故障计数。探测期间不领取新提交（已领的照常判完）。
+func (j *Judger) waitSandboxAlive(ctx context.Context, worker string) {
+	slog.Warn("连续 System Error，暂停判题并探测沙箱", "component", "judge",
+		"worker", worker, "fails", j.sbFails.Load())
+	defer j.sbFails.Store(0)
+	for {
+		pctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		ok := j.Sandbox.Available(pctx)
+		cancel()
+		if ok {
+			slog.Info("沙箱已恢复，继续判题", "component", "judge", "worker", worker)
+			return
+		}
+		sleepCtx(ctx, sandboxProbeEvery)
+		if ctx.Err() != nil {
+			return
+		}
 	}
 }
 
@@ -119,7 +160,8 @@ const statusLeaseLost = "(lease lost)"
 
 // runOneSafely 单份提交的判题互相隔离：任何 panic 只影响当前提交。
 // 全程持有租约心跳（LeaseStaleAfter 内不刷新即会被 Web 进程回收重排队）。
-func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
+// 返回回写的终态（含 statusLeaseLost 哨兵）——loop 据此做沙箱熔断计数（v0.66 批②）。
+func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) (status string) {
 	stopHB := make(chan struct{})
 	go j.heartbeatLoop(ctx, sub, stopHB)
 	defer func() {
@@ -128,16 +170,20 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 			slog.Error("判题 panic", "component", "judge", "sid", sub.ID, "panic", r)
 			_ = j.Repo.FinishSubmission(ctx, sub.ID, sub.Judge, repo.StatusSystemError, 0, 0, 0,
 				"判题器内部错误", nil)
+			status = repo.StatusSystemError
 		}
 	}()
 
 	slog.Info("开始判题", "component", "judge", "sid", sub.ID, "uid", sub.UID, "pid", sub.ProblemID, "lang", sub.Language)
 	judgeStart := time.Now()
-	status, timeMS, memKB, score, info, detail := j.evaluate(ctx, sub)
+	var timeMS, memKB, score int
+	var info string
+	var detail []*repo.CaseResult
+	status, timeMS, memKB, score, info, detail = j.evaluate(ctx, sub)
 	recordJudge(time.Since(judgeStart)) // 判题可观测：完成数与时长（不含排队）
 	if status == statusLeaseLost {
 		slog.Warn("租约已失效，弃写结果", "component", "judge", "sid", sub.ID)
-		return
+		return statusLeaseLost
 	}
 	if err := j.Repo.FinishSubmission(ctx, sub.ID, sub.Judge, status, timeMS, memKB, score, info, detail); err != nil {
 		if errors.Is(err, repo.ErrLeaseLost) {
@@ -145,7 +191,7 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 		} else {
 			slog.Error("回写提交结果失败", "component", "judge", "sid", sub.ID, "error", err)
 		}
-		return
+		return status
 	}
 	slog.Info("判题完成", "component", "judge", "sid", sub.ID, "status", status, "ms", timeMS, "mem_kb", memKB, "score", score)
 	// 挑战模式（v0.23）：AC 触发挑战终判（时长按提交创建时刻起算，判题排队耗时不惩罚选手；
@@ -197,6 +243,7 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) {
 			slog.Warn("成就判定失败", "component", "game", "sid", sub.ID, "error", aerr)
 		}
 	}
+	return status
 }
 
 // heartbeatLoop 判题租约心跳：每 HeartbeatInterval 刷一次 heartbeatAt，
@@ -663,6 +710,7 @@ func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (fi
 					sandbox.Pipe("stderr", 256<<10),
 				},
 				CPULimit:      compileCPULimit,
+				ClockLimit:    compileCPULimit * 3, // 墙钟封顶（v0.66 批②）：编译假死不再无限占用闸与 worker
 				MemoryLimit:   compileMemoryLimit,
 				ProcLimit:     64,
 				CopyOut:       []string{"stdout", "stderr"},
@@ -750,7 +798,12 @@ func (j *Judger) runOne(ctx context.Context, l *lang.Language, fileID, code stri
 		cmd.CopyIn[fio.inName] = sandbox.CopyContent(string(input))
 		cmd.CopyOutCached = append(cmd.CopyOutCached, fio.outName)
 	}
-	results, err := j.Sandbox.Run(ctx, []sandbox.Cmd{cmd})
+	// 单点调用级 deadline（v0.66 批②）：墙钟上限 + 15s 沙箱调度/IO 余量——沙箱假死
+	// 不再等满 http.Client 的 120s 才报错（1s 题从最坏 120s 收紧到 ~18s），配合
+	// loop 层连续故障熔断，假死从「持续放血」变为「快速失败 + 探测恢复」
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(cpuLimit)*3+15*time.Second)
+	defer cancel()
+	results, err := j.Sandbox.Run(runCtx, []sandbox.Cmd{cmd})
 	if err != nil || len(results) == 0 {
 		return nil, string(input), err
 	}
