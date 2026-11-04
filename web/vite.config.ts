@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 
@@ -40,6 +40,36 @@ function sojPrecache(): Plugin {
       writeFileSync(
         join(dist, 'asset-manifest.json'),
         JSON.stringify({ version: build, assets, entries }),
+      )
+      // 预热剔除规则与产物格式的交叉断言（v0.67）：sw.js install 的剔除规则在本档
+      // 镜像一份（sw.js 经 public/ 直拷不经打包，无法共享模块）。v0.65 版 Admin 正则
+      // 锚了前导斜杠而清单路径无前导斜杠（'assets/xxx'），0 命中哑掉一版（~190KB 管理
+      // 端 chunk 全员白拉且归档结论失实）——此处用独立口径的宽松识别挑出「应剔除件」，
+      // 再断言 sw.js 规则全命中，漏一件即构建失败：宁可卡发版不带病出货。
+      const expectSkip = (f: string) =>
+        /assets\/Admin[\w.-]*\.(js|css)$/.test(f) ||
+        /KaTeX_.*\.(woff2?|ttf)$/.test(f) ||
+        /assets\/katex-[\w.-]*\.(js|css)$/.test(f)
+      const skipInSw = (f: string) =>
+        /(^|\/)assets\/Admin[\w.-]*\.(js|css)$/.test(f) ||
+        /KaTeX_.*\.(woff2?|ttf)$/.test(f) ||
+        /^assets\/katex-[\w.-]*\.(js|css)$/.test(f)
+      const all = [...assets, ...entries]
+      const missed = all.filter((f) => expectSkip(f) && !skipInSw(f))
+      if (missed.length > 0) {
+        this.error(
+          `sw.js 预热剔除规则漏件 ${missed.length} 件（哑正则防线）：${missed.slice(0, 5).join(', ')}`,
+        )
+      }
+      const pre = all.filter((f) => !skipInSw(f))
+      const preKB = Math.round(
+        all
+          .filter((f) => skipInSw(f) === false)
+          .reduce((s, f) => s + statSync(join(dist, f)).size, 0) / 1024,
+      )
+      console.log(
+        `[soj-precache] 清单 ${all.length} 件，预热 ${pre.length} 件 / ${preKB}KB` +
+          `（剔除 admin ${all.filter((f) => /assets\/Admin/.test(f)).length} + KaTeX 字体 ${all.filter((f) => /KaTeX_.*\.(woff2?|ttf)$/.test(f)).length} + katex 本体 ${all.filter((f) => /assets\/katex-/.test(f)).length}）`,
       )
     },
   }

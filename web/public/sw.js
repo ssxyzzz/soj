@@ -15,7 +15,8 @@
  * 管辖面刻意收窄：只接管导航、/assets/ 哈希件与 favicon.svg；/uploads/（用户图
  * 片，量不可控）与一切其他路径原样放行走网络——SW 坏也坏不到主流程。
  *
- * 换版流（skipWaiting 用户确认制）：新 SW install 时按清单后台预热（并发 2 错峰）
+ * 换版流（skipWaiting 用户确认制）：新 SW install 时按清单后台预热（并发 2 错峰；
+ * v0.67 增量：上一版缓存里的同名哈希件直接跨缓存复制，仅新哈希件走网络）
  * → waiting → 页面横幅「新版本已就绪」→ 用户点击 postMessage SKIP_WAITING →
  * activate 清旧缓存 → 页面 reload 后全部命中本地缓存，零网络冷载。
  * 缓存封顶（v0.60 补丁）：install 预热完即回收历史预热缓存——旧逻辑清理只挂
@@ -85,18 +86,39 @@ self.addEventListener('install', (event) => {
         const res = await fetch(MANIFEST_URL, { cache: 'no-store' })
         if (!res.ok) return
         const m = await res.json()
-        // v0.65 预热收敛：剔除 admin 专属懒 chunk（仅管理端可达，普通用户永不请求）
-        // 与 KaTeX 字体（题面出公式时浏览器按字形按需取，预热 1.2MB 全族纯属挤占
-        // 发版窗口的共享管道）。两类件运行时仍走正常 cache-first，需要时自会入缓存。
-        const files = [...(m.assets || []), ...(m.entries || [])].filter(
-          (f) => !/\/assets\/Admin[\w.-]*\.(js|css)$/.test(f) && !/KaTeX_.*\.(woff2?|ttf)$/.test(f),
-        )
+        // 预热清单过滤：剔除 admin 专属懒 chunk（仅管理端可达，普通用户永不请求）、
+        // KaTeX 字体与 KaTeX 渲染本体 JS/CSS（出公式时运行时照常 cache-first 按需入
+        // 缓存，预热纯属挤占发版窗口的共享管道）。规则与 vite.config.ts sojPrecache
+        // 的构建期断言互为镜像。路径注意：清单路径无前导斜杠（'assets/xxx'），规则
+        // 不得以 / 锚定开头——v0.65 版 Admin 正则因此哑过一版（~190KB 全员白拉且归档
+        // 结论失实），v0.67 修复并补构建期断言防再犯。
+        const skip = (f) =>
+          /(^|\/)assets\/Admin[\w.-]*\.(js|css)$/.test(f) ||
+          /KaTeX_.*\.(woff2?|ttf)$/.test(f) ||
+          /^assets\/katex-[\w.-]*\.(js|css)$/.test(f)
+        const files = [...(m.assets || []), ...(m.entries || [])].filter((f) => !skip(f))
         const cache = await caches.open(CACHE)
+        // 同名复制增量（v0.67 根治「每版全量重拉」）：vite 产物文件名 = 内容哈希，
+        // 同名必同内容（与 fetch handler cache-first 赌的是同一条语义）——上一版缓存
+        // （IDB 记名的激活版，回收时序保证此时仍在）里已有的同名哈希件直接跨缓存复制
+        // （Cache API 内部拷贝，零网络），只有新哈希件才真正走网络。每版全换缓存名导致
+        // 的 ~3MB×N 客户端发版洪峰即此降为真改动件量级；非哈希稳定名件（index.html/
+        // favicon.svg）内容不随名变，不复制照旧网络拉。首装无上一版缓存，自然退化为
+        // 全量预热（现状路径，首装页面刚经网络加载过全部资源、HTTP 缓存命中率高）。
+        const prevName = (await idbGet('activeCache')) || ''
+        const prev = prevName && prevName !== CACHE ? await caches.open(prevName) : null
         for (let i = 0; i < files.length; i += 2) {
           await Promise.all(
             files.slice(i, i + 2).map(async (f) => {
               try {
                 if (await cache.match(f)) return
+                if (prev && HASHED.test(f.slice(f.lastIndexOf('/') + 1))) {
+                  const hit = await prev.match(f)
+                  if (hit) {
+                    await cache.put(f, hit)
+                    return
+                  }
+                }
                 const resp = await fetch(f)
                 if (resp && resp.ok) await cache.put(f, resp)
               } catch (_) {

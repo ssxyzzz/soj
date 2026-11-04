@@ -30,7 +30,9 @@ ensure_toolchain
 web_build() {
   cd "$ROOT/web"
   ensure_web_deps "$ROOT"   # 依赖哈希跳装（toolchain.sh，与 check.sh 共用）
-  npm run build
+  # VERSION 注入与 go_build 同口径：sw.js 构建戳/缓存名携带版本语义（此前只有 go
+  # 二进制拿到，前端恒为 dev.*，与 sw.js 头注释「与 /api/health 同源」不符）
+  VERSION="${VERSION:-$(git -C "$ROOT" describe --always --dirty 2>/dev/null || echo dev)}" npm run build
 }
 sync_embed() {
   rm -rf "$ROOT/server/internal/webui/dist"
