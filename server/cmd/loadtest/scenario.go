@@ -72,6 +72,8 @@ func loginAll(hc *http.Client, base string, us []user, m *metrics) error {
 }
 
 // runBrowse 预热浏览：登录用户高频只读面（me / 首页统计 / 题库列表 / 比赛详情）。
+// 两拍口径（v0.66 批④）：第一拍紧跟登录（ident/personal 缓存全 miss），隔 1s 第二拍
+// 应全命中——两拍分列即缓存效应的实测证据（A5 精准失效 / A11 个性化缓存的收益面）。
 func runBrowse(hc *http.Client, base string, us []user, cid int64, m *metrics) {
 	eps := []struct{ name, path string }{
 		{"GET /api/me", "/api/me"},
@@ -79,18 +81,25 @@ func runBrowse(hc *http.Client, base string, us []user, cid int64, m *metrics) {
 		{"GET /api/problems", "/api/problems?page=1&page_size=20"},
 		{"GET /api/contests/:id", fmt.Sprintf("/api/contests/%d", cid)},
 	}
-	var wg sync.WaitGroup
-	for i := 1; i < len(us); i++ {
-		wg.Add(1)
-		go func(u *user) {
-			defer wg.Done()
-			for _, ep := range eps {
-				r, ms, err := callJSON(hc, http.MethodGet, base, ep.path, u.token, nil)
-				m.observe(ep.name, r, ms, err)
-			}
-		}(&us[i])
+	for pass := 1; pass <= 2; pass++ {
+		suffix := ""
+		if pass == 2 {
+			suffix = "（二拍·缓存命中）"
+			time.Sleep(time.Second)
+		}
+		var wg sync.WaitGroup
+		for i := 1; i < len(us); i++ {
+			wg.Add(1)
+			go func(u *user) {
+				defer wg.Done()
+				for _, ep := range eps {
+					r, ms, err := callJSON(hc, http.MethodGet, base, ep.path, u.token, nil)
+					m.observe(ep.name+suffix, r, ms, err)
+				}
+			}(&us[i])
+		}
+		wg.Wait()
 	}
-	wg.Wait()
 }
 
 type subOutcome struct {

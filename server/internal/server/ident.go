@@ -38,6 +38,16 @@ func (ic *identCache) flush() {
 	ic.mu.Unlock()
 }
 
+// invalidateUID 单用户失效（v0.66 批④）：登录/本人改密/自助重置等高频本人路径改精准
+// 失效——原一律 flush 全量清空，集中登录互相打掉全部缓存，之后每个请求的 auth 退化为
+// 2 次 DB 读（压测实测 GET /api/me p50 45ms）。角色级变更影响面广，admin/roleadmin
+// 低频路径仍走 flush。
+func (ic *identCache) invalidateUID(uid int64) {
+	ic.mu.Lock()
+	delete(ic.m, uid)
+	ic.mu.Unlock()
+}
+
 // loadIdent 取用户身份（带缓存）。用户或其角色不存在时 ok=false（按未登录处理，
 // 顺带堵住「删号后旧 token 仍有效」）。
 func (h *Handlers) loadIdent(ctx context.Context, uid int64) (identEntry, bool) {

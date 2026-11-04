@@ -371,7 +371,7 @@ func (h *Handlers) PasswordReset(c *gin.Context) {
 		return
 	}
 	_ = h.repo.ClearLoginFailures(ctx, u.ID)
-	h.idents.flush()
+	h.idents.invalidateUID(u.ID) // v0.66 批④：本人精准失效（原全量 flush）
 	h.securityLog(c, repo.SecPwdReset, u.ID, u.Username, "找回密码自助重置，全部登录态已下线")
 	h.notifyEmailAsync(s, u.Email, "密码已被重置",
 		map[string]string{"username": u.Username, "action": "的登录密码已被通过邮箱验证码重置"})

@@ -41,6 +41,22 @@ var (
 	statsCacheAt time.Time
 )
 
+// 登录态个性化缓存（v0.66 批④）：tier 判定 + 个人今日一题按 (uid, 日期) 缓存——原
+// 每请求现算 2 聚合 + 最多 11 轮 pickFeatured（压测 p50 279ms）；30s 内刷新首页零 DB。
+// 条目量 = 登录用户数（与 identCache 同量级），按日键过期、常驻进程内存。
+var (
+	personalMu    sync.Mutex
+	personalCache = map[int64]personalEntry{}
+)
+
+type personalEntry struct {
+	day string
+	fp  *featuredProblem
+	at  time.Time
+}
+
+const personalCacheTTL = 30 * time.Second
+
 // pickFeatured 按种子从可见题池挑一道（difficulty>0 时限同难度档），装配标签名与通过率。
 // 池为空（或查询失败）返回 nil，由调用方扩大范围/兜底。种子 = 日期（全局）或 日期|uid（个性化）。
 func (h *Handlers) pickFeatured(ctx context.Context, seed string, difficulty int) *featuredProblem {
@@ -149,32 +165,42 @@ func (h *Handlers) GetSiteStats(c *gin.Context) {
 		statsMu.Unlock()
 	}
 
-	// 登录用户：按账号等级档推荐今日一题——种子 = 日期|uid（当天恒定），同档无题逐环外扩
+	// 登录用户：按账号等级档推荐今日一题——种子 = 日期|uid（当天恒定），同档无题逐环外扩。
+	// v0.66 批④：个性化部分（tier+推荐）按 (uid, 日期) 缓存 30s，刷新首页零 DB
 	if logged {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-		defer cancel()
 		day := time.Now().Format("2006-01-02")
-		seed := day + "|" + strconv.FormatInt(uid, 10)
-		tier := h.userTier(ctx, uid)
-		var personal *featuredProblem // 必须从 nil 起跑：初值若取 st.Featured 会因非 nil 跳过整个外扩循环
-		tried := [11]bool{}
-		for ring := 0; ring < 10 && personal == nil; ring++ {
-			for _, d := range [2]int{tier - ring, tier + ring} {
-				if d < 1 || d > 10 || tried[d] {
-					continue
-				}
-				tried[d] = true
-				if fp := h.pickFeatured(ctx, seed, d); fp != nil {
-					personal = fp
-					break
+		personalMu.Lock()
+		pe, hit := personalCache[uid]
+		personalMu.Unlock()
+		if !hit || pe.day != day || time.Since(pe.at) >= personalCacheTTL {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
+			seed := day + "|" + strconv.FormatInt(uid, 10)
+			tier := h.userTier(ctx, uid)
+			var personal *featuredProblem // 必须从 nil 起跑：初值若取 st.Featured 会因非 nil 跳过整个外扩循环
+			tried := [11]bool{}
+			for ring := 0; ring < 10 && personal == nil; ring++ {
+				for _, d := range [2]int{tier - ring, tier + ring} {
+					if d < 1 || d > 10 || tried[d] {
+						continue
+					}
+					tried[d] = true
+					if fp := h.pickFeatured(ctx, seed, d); fp != nil {
+						personal = fp
+						break
+					}
 				}
 			}
-		}
-		if personal == nil {
-			personal = h.pickFeatured(ctx, seed, 0) // 全档皆空兜底全池
+			if personal == nil {
+				personal = h.pickFeatured(ctx, seed, 0) // 全档皆空兜底全池
+			}
+			cancel()
+			pe = personalEntry{day: day, fp: personal, at: time.Now()}
+			personalMu.Lock()
+			personalCache[uid] = pe
+			personalMu.Unlock()
 		}
 		copied := *st
-		copied.Featured = personal
+		copied.Featured = pe.fp
 		st = &copied
 	}
 	ok(c, st)

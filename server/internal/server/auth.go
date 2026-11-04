@@ -215,7 +215,7 @@ func (h *Handlers) Login(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "服务器内部错误")
 		return
 	}
-	h.idents.flush() // 登录时失效缓存，确保拿到最新角色/昵称
+	h.idents.invalidateUID(u.ID) // 登录精准失效本人缓存拿最新角色/昵称（v0.66 批④：原全量 flush，集中登录互相打掉全部缓存）
 	ok(c, gin.H{"token": token, "user": h.userWithPermsJSON(c.Request.Context(), u)})
 }
 
@@ -256,7 +256,7 @@ func (h *Handlers) ChangePassword(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "修改失败")
 		return
 	}
-	h.idents.flush() // 缓存里的 pwdVer 立即失效，旧 token 全端 401
+	h.idents.invalidateUID(uid) // 本人 pwdVer 即时失效，旧 token 全端 401（v0.66 批④：精准失效）
 	h.securityLog(c, repo.SecPwdChange, uid, uname, "本人修改密码，全部登录态已下线")
 	if s, _ := h.repo.GetSystemSettings(ctx); s != nil && u.Email != "" {
 		h.notifyEmailAsync(s, u.Email, "密码已被修改",

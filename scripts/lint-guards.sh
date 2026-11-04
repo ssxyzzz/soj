@@ -10,7 +10,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-G1_BASE=41
+G1_BASE=40 # v0.66 批④下调 41→40：discuss 列表补 content 投影清偿一处
 G2_BASE=0
 G3_BASE=0
 fail=0

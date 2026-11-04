@@ -13,7 +13,9 @@ package server
 // 不再被误限速。另删除 ContestMySubmissions 里 classId!=0 的迁移期遗留死代码。
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -1024,54 +1026,105 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 	}
 
 	cacheKey := s.Kind + "-" + strconv.FormatInt(ct.ID, 10)
+	// SWR + 单飞（v0.66 批④，照抄 rankCache 范式）：原 TTL 过期后并发请求各自重算
+	// RoundLeaderboard+levelMapFor——发布/揭榜瞬间全班刷新即 N 份重算（静态排查 A1
+	// 惊群；50 人规模实测 3ms 未发作，此为规模上行的结构性防御）。过期先回旧榜、
+	// 后台单飞刷新；冷启动无旧榜才同步付一次。TTL 30s 对发布前后统一生效的既有
+	// 语义不变（原「发布后条件恒假」曾致榜单冻结到重启）。
 	h.leaderMu.Lock()
 	entry, cached := h.leaderCache[cacheKey]
-	h.leaderMu.Unlock()
-	// TTL 30s 对发布前后统一生效：原「发布后条件恒假」曾致发布/rejudge 后榜单冻结到重启
-	if !cached || time.Since(entry.at) > leaderCacheTTL {
-		rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID, roundFullScores(ct))
-		if err != nil {
-			fail(c, http.StatusInternalServerError, "计算榜单失败")
-			return
-		}
-		items := make([]gin.H, 0, len(rows))
-		uids := make([]int64, 0, len(rows))
-		for _, r := range rows {
-			uids = append(uids, r.UID)
-		}
-		levels := h.levelMapFor(c, uids) // 失败为 nil，行内省略等级
-		for i, r := range rows {
-			probs := make([]gin.H, 0, len(ct.Problems))
-			for _, cp := range ct.Problems {
-				cell := r.Problems[cp.PID]
-				if cell == nil {
-					probs = append(probs, gin.H{"pid": cp.PID, "score": 0, "tries": 0, "errors": 0})
-					continue
-				}
-				probs = append(probs, gin.H{"pid": cp.PID, "score": cell.Score, "tries": cell.Tries, "errors": cell.Errors})
-			}
-			item := gin.H{
-				"rank":     i + 1,
-				"uid":      r.UID,
-				"username": r.Username,
-				"nickname": r.Nickname,
-				"total":    r.Total,
-				"problems": probs,
-			}
-			if levels != nil {
-				item["level"] = levels[r.UID]
-			}
-			if r.HasScoring {
-				item["last_scoring_at"] = r.LastScoring
-			}
-			items = append(items, item)
-		}
-		entry = leaderEntry{at: time.Now(), rows: items}
-		h.leaderMu.Lock()
-		leaderCachePut(h.leaderCache, cacheKey, entry)
+	if cached && entry.rows != nil && time.Since(entry.at) < leaderCacheTTL {
 		h.leaderMu.Unlock()
+		ok(c, entry.rows)
+		return
 	}
-	ok(c, entry.rows)
+	if cached && entry.rows != nil { // 过期有旧榜：先回旧榜，后台单飞刷新
+		if !entry.loading {
+			entry.loading = true
+			h.leaderCache[cacheKey] = entry
+			h.leaderMu.Unlock()
+			go h.refreshLeaderCache(cacheKey, s.Kind, ct)
+		} else {
+			h.leaderMu.Unlock()
+		}
+		ok(c, entry.rows)
+		return
+	}
+	h.leaderMu.Unlock()
+	// 冷启动（无旧榜可回）：同步付一次；并发冷启动各自计算后写覆盖，与原实现一致
+	e, err := h.buildLeaderEntry(ctx, s.Kind, ct)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "计算榜单失败")
+		return
+	}
+	h.leaderMu.Lock()
+	leaderCachePut(h.leaderCache, cacheKey, e)
+	h.leaderMu.Unlock()
+	ok(c, e.rows)
+}
+
+// buildLeaderEntry 计算一场榜单条目（组装含等级列）：冷启动同步路径与 SWR 后台刷新共用。
+func (h *Handlers) buildLeaderEntry(ctx context.Context, kind string, ct *repo.Contest) (leaderEntry, error) {
+	rows, err := h.repo.RoundLeaderboard(ctx, kind, ct.ID, roundFullScores(ct))
+	if err != nil {
+		return leaderEntry{}, err
+	}
+	items := make([]gin.H, 0, len(rows))
+	uids := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		uids = append(uids, r.UID)
+	}
+	levels := h.levelMapFor(ctx, uids) // 失败为 nil，行内省略等级
+	for i, r := range rows {
+		probs := make([]gin.H, 0, len(ct.Problems))
+		for _, cp := range ct.Problems {
+			cell := r.Problems[cp.PID]
+			if cell == nil {
+				probs = append(probs, gin.H{"pid": cp.PID, "score": 0, "tries": 0, "errors": 0})
+				continue
+			}
+			probs = append(probs, gin.H{"pid": cp.PID, "score": cell.Score, "tries": cell.Tries, "errors": cell.Errors})
+		}
+		item := gin.H{
+			"rank":     i + 1,
+			"uid":      r.UID,
+			"username": r.Username,
+			"nickname": r.Nickname,
+			"total":    r.Total,
+			"problems": probs,
+		}
+		if levels != nil {
+			item["level"] = levels[r.UID]
+		}
+		if r.HasScoring {
+			item["last_scoring_at"] = r.LastScoring
+		}
+		items = append(items, item)
+	}
+	return leaderEntry{at: time.Now(), rows: items}, nil
+}
+
+// refreshLeaderCache 后台单飞刷新一场榜单（SWR）：独立 ctx 30s（请求 ctx 随响应结束
+// 取消，不该带走刷新），成功覆盖、失败沿用旧榜只记 Warn；结束清 loading 旗。
+func (h *Handlers) refreshLeaderCache(key, kind string, ct *repo.Contest) {
+	defer func() {
+		h.leaderMu.Lock()
+		if e, ok := h.leaderCache[key]; ok {
+			e.loading = false
+			h.leaderCache[key] = e
+		}
+		h.leaderMu.Unlock()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	e, err := h.buildLeaderEntry(ctx, kind, ct)
+	if err != nil {
+		slog.Warn("榜单后台刷新失败，沿用旧榜", "component", "round", "kind", kind, "id", ct.ID, "error", err)
+		return
+	}
+	h.leaderMu.Lock()
+	leaderCachePut(h.leaderCache, key, e)
+	h.leaderMu.Unlock()
 }
 
 // ContestLeaderboard 比赛榜单：组织者/root 恒可见；他人需「查看比赛成绩表」权限位，

@@ -224,11 +224,16 @@ func (h *Handlers) SelfTestRun(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "本题暂不支持自测（仅限标准输入输出的传统题）")
 		return
 	}
-	// 独立信号量：自测排队，不与真实判题抢 worker 名额（编译段仍受 compileGate 串行约束）
+	// 独立信号量：自测排队，不与真实判题抢 worker 名额（编译段仍受 compileGate 串行约束）。
+	// v0.66 批④：等闸加 60s 上限——原只受客户端断开约束，课堂齐发自测时请求无限挂占
+	// 连接（压测基线 10 用户 p50 3s，40 人教室放大到分钟级）
 	select {
 	case selfTestGate <- struct{}{}:
 		defer func() { <-selfTestGate }()
 	case <-c.Request.Context().Done():
+		return
+	case <-time.After(60 * time.Second):
+		fail(c, http.StatusServiceUnavailable, "自测排队人数过多，请稍后再试")
 		return
 	}
 	tctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)

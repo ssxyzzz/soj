@@ -137,11 +137,13 @@ func levelAgg(ctx context.Context, r levelAggRepo, uids []int64) (cfg *repo.Leve
 
 // levelMapFor 批量算一组用户的等级（成绩表/榜单等列表场景用）。
 // 任一步失败返回 nil，由调用方降级省略等级字段。
-func (h *Handlers) levelMapFor(c *gin.Context, uids []int64) map[int64]int {
+// v0.66 批④：入参改 context.Context——榜单 SWR 后台刷新无 gin ctx，请求路径传
+// c.Request.Context() 即可（本函数本就只用 ctx）。
+func (h *Handlers) levelMapFor(ctx context.Context, uids []int64) map[int64]int {
 	if len(uids) == 0 {
 		return map[int64]int{}
 	}
-	cfg, counts, adjs, ok := levelAgg(c.Request.Context(), h.repo, uids)
+	cfg, counts, adjs, ok := levelAgg(ctx, h.repo, uids)
 	if !ok {
 		return nil
 	}

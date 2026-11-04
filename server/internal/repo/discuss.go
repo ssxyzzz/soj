@@ -150,6 +150,9 @@ func (r *Repo) listDiscussTopics(ctx context.Context, filter bson.M, page, pageS
 	}
 	cursor, err := r.discussions.Find(ctx, filter,
 		options.Find().SetSort(bson.D{{Key: "pinned", Value: -1}, {Key: "lastActiveAt", Value: -1}, {Key: "_id", Value: -1}}).
+			// v0.66 批④：列表只渲染 topicJSON（标题/元信息），双份正文全量下发纯带宽浪费——
+			// 排除 content/contentHtml（详情走 GetDiscussTopic 点查），对齐 problem.go 列表排除 statement 范式
+			SetProjection(bson.M{"content": 0, "contentHtml": 0}).
 			SetLimit(int64(pageSize)).SetSkip(int64((page-1)*pageSize)))
 	if err != nil {
 		return nil, 0, err

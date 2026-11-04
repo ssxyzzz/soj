@@ -21,8 +21,9 @@ var Version = "dev"
 
 // leaderEntry 比赛榜单缓存条目（TTL/容量治理见 round.go 的 leaderCachePut）。
 type leaderEntry struct {
-	at   time.Time
-	rows any
+	at      time.Time
+	rows    any
+	loading bool // SWR 单飞旗（v0.66 批④）：过期后仅一个后台刷新在跑
 }
 
 type Handlers struct {

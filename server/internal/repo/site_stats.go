@@ -75,13 +75,16 @@ func (r *Repo) CountSubmissionsSince(ctx context.Context, since time.Time) (int6
 	return r.submissions.CountDocuments(ctx, bson.M{"createdAt": bson.M{"$gte": since}})
 }
 
-// AvgJudgeMSRecent 平均判题时长：最近 1000 条已完成（timeMs>0）的窗口平均，
-// 避免全表聚合；无样本返回 0。
+// AvgJudgeMSRecent 平均判题时长：最近 1000 条提交中已完成（timeMs>0）的窗口平均，
+// 避免全表聚合；无样本返回 0。v0.66 批④：$sort 提前吃 {createdAt:-1} 索引 + $limit
+// 收窗再 $match——原 $match timeMs 前置无索引可走，每分钟（60s 缓存到期）一次全表
+// COLLSCAN；口径随之从「最近 1000 条已完成」微调为「最近 1000 条中的已完成」（展示
+// 型近似，可接受）。
 func (r *Repo) AvgJudgeMSRecent(ctx context.Context) (float64, error) {
 	cur, err := r.submissions.Aggregate(ctx, mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"timeMs": bson.M{"$gt": 0}}}},
 		{{Key: "$sort", Value: bson.D{{Key: "createdAt", Value: -1}}}},
 		{{Key: "$limit", Value: 1000}},
+		{{Key: "$match", Value: bson.M{"timeMs": bson.M{"$gt": 0}}}},
 		{{Key: "$group", Value: bson.M{"_id": nil, "avg": bson.M{"$avg": "$timeMs"}}}},
 	})
 	if err != nil {
