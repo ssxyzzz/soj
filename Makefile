@@ -17,7 +17,11 @@ check: ## 代码门禁：lint + go test + 前端 typecheck（脚本带中文进�
 
 up: check ## 构建发版并对齐镜像（= check + bin + image：先过代码门禁，热替换后重建 soj 镜像，容器重建/宿主机重启不回退）
 	VERSION=$(VERSION) ./scripts/web-building.sh
-	SOJ_VERSION=$(VERSION) docker compose up -d --build soj
+	# 2026-11-04 根修：原 `up -d --build soj` 会把 depends_on 的 sandbox 一并拖进构建图，
+	# 例行发版被 sandbox 基础镜像（Docker Hub）可达性绑架；拆成两步，发版只重建 soj。
+	# sandbox 镜像缺失时 up 仍会按 build: 自动补建，全新机器行为不变。
+	SOJ_VERSION=$(VERSION) docker compose build soj
+	docker compose up -d soj
 
 down: ## 停止并移除容器（数据卷保留）
 	docker compose down
@@ -35,7 +39,8 @@ backup: ## 备份 MongoDB 与测试数据到 ./backups/
 	./scripts/backup.sh
 
 image: ## 重建 soj 镜像并重启容器（不编译前端：嵌入的是 webui/dist 现有产物——单独用它部署前先 make web-building，否则拿旧前端；make up 已含构建与对齐）
-	SOJ_VERSION=$(VERSION) docker compose up -d --build soj
+	SOJ_VERSION=$(VERSION) docker compose build soj
+	docker compose up -d soj
 
 bin: ## 快速编译发版，不过门禁不重建镜像（仅限开发机调试；服务器例行发版一律 make up）
 	./scripts/web-building.sh
