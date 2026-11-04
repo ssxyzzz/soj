@@ -100,9 +100,12 @@ function doSubmit() {
 }
 
 // ---- 拖动分栏：以容器百分比记录左栏宽度，夹在 15%~85%；监听走 useListener（v0.64 病根②收口） ----
+// v0.65 合帧：mousemove 只记坐标，rAF 内一次 gBCR 读 + leftPct 写（逐事件强制布局读根除）
 let dragging = false
 let containerEl: HTMLElement | null = null
 let dragStops: (() => void)[] = []
+let dragRaf = 0
+let dragPendX = 0
 
 function onDragStart(e: MouseEvent) {
   dragging = true
@@ -116,12 +119,23 @@ function onDragStart(e: MouseEvent) {
 
 function onDragMove(e: MouseEvent) {
   if (!dragging || !containerEl) return
+  dragPendX = e.clientX
+  if (!dragRaf) dragRaf = requestAnimationFrame(applyDragMove)
+}
+
+function applyDragMove() {
+  dragRaf = 0
+  if (!dragging || !containerEl) return
   const rect = containerEl.getBoundingClientRect()
-  const pct = ((e.clientX - rect.left) / rect.width) * 100
+  const pct = ((dragPendX - rect.left) / rect.width) * 100
   leftPct.value = Math.min(85, Math.max(15, pct))
 }
 
 function onDragEnd() {
+  if (dragRaf) {
+    cancelAnimationFrame(dragRaf)
+    dragRaf = 0
+  }
   dragging = false
   dragStops.forEach((s) => s())
   dragStops = []

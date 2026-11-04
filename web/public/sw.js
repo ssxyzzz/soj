@@ -85,7 +85,12 @@ self.addEventListener('install', (event) => {
         const res = await fetch(MANIFEST_URL, { cache: 'no-store' })
         if (!res.ok) return
         const m = await res.json()
-        const files = [...(m.assets || []), ...(m.entries || [])]
+        // v0.65 预热收敛：剔除 admin 专属懒 chunk（仅管理端可达，普通用户永不请求）
+        // 与 KaTeX 字体（题面出公式时浏览器按字形按需取，预热 1.2MB 全族纯属挤占
+        // 发版窗口的共享管道）。两类件运行时仍走正常 cache-first，需要时自会入缓存。
+        const files = [...(m.assets || []), ...(m.entries || [])].filter(
+          (f) => !/\/assets\/Admin[\w.-]*\.(js|css)$/.test(f) && !/KaTeX_.*\.(woff2?|ttf)$/.test(f),
+        )
         const cache = await caches.open(CACHE)
         for (let i = 0; i < files.length; i += 2) {
           await Promise.all(

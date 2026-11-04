@@ -7,10 +7,11 @@
 // v0.49 双模式 + 建议表服务端分页（验收期调整）：页面只持有当前页 ≤100 条建议——
 // 全量快照（2000 题级）整包进 2s 轮询是卡顿根源；勾选为当前页独立语义，翻页即清，
 // 不做跨页保留。suggestion_total/conflict_total 为全量口径（翻页器与冲突计数）。
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
+import { usePolling } from '@/composables/usePolling'
 import LazySelectCell from '@/components/LazySelectCell.vue'
 import ManualTidyPanel from './ManualTidyPanel.vue'
 import type { TidyKind, TidySuggestion, TidyStatus } from '@/types'
@@ -186,48 +187,42 @@ const selectedCount = computed(() => selected.value.size)
 // ---- 任务生命周期 ----
 
 const pollFails = ref(0)
-let pollTimer: ReturnType<typeof setInterval> | undefined
-
-function stopPoll() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = undefined
+// v0.65 轮询归一（usePolling 全站唯一轮询基建）：2s 拍 + 失败 5 连停 + 终态停，
+// 后台标签自动暂停、作用域卸载自清（原裸 setInterval 后台空转）
+const poll = usePolling(async () => {
+  const ok = await fetchStatus(true)
+  if (!ok) {
+    if (++pollFails.value >= 5) {
+      poll.stop()
+      ElMessage.error('整理状态查询持续失败——请刷新页面查看；任务仍在服务器后台执行')
+    }
+    return
   }
-}
+  pollFails.value = 0
+  if (status.value?.state && status.value.state !== 'running') {
+    poll.stop()
+    if (status.value.state === 'done') {
+      // 全被水位排除是断点续整的正常终态（v0.45 验收期用户反馈「像跳过了扫描」）：
+      // 有建议才请核对差异表；零建议带排除数时明说原因，别让 root 误判成异常
+      if (suggestionTotal.value > 0) {
+        ElMessage.success('整理完成，请核对差异表后勾选应用')
+      } else if (status.value.excluded) {
+        ElMessage.info(`整理完成：${status.value.excluded} 题均已整理过，默认排除、无新建议`)
+      } else {
+        ElMessage.success('整理完成，本次没有产出建议')
+      }
+    } else if (status.value.state === 'cancelled') {
+      ElMessage.info('整理已取消（已完成部分照常可勾选应用）')
+    } else {
+      ElMessage.error(`整理失败：${status.value.error || '未知错误'}`)
+    }
+    syncSelection(suggestions.value)
+  }
+}, 2000)
 
 function startPoll() {
-  stopPoll()
   pollFails.value = 0
-  pollTimer = setInterval(async () => {
-    const ok = await fetchStatus(true)
-    if (!ok) {
-      if (++pollFails.value >= 5) {
-        stopPoll()
-        ElMessage.error('整理状态查询持续失败——请刷新页面查看；任务仍在服务器后台执行')
-      }
-      return
-    }
-    pollFails.value = 0
-    if (status.value?.state && status.value.state !== 'running') {
-      stopPoll()
-      if (status.value.state === 'done') {
-        // 全被水位排除是断点续整的正常终态（v0.45 验收期用户反馈「像跳过了扫描」）：
-        // 有建议才请核对差异表；零建议带排除数时明说原因，别让 root 误判成异常
-        if (suggestionTotal.value > 0) {
-          ElMessage.success('整理完成，请核对差异表后勾选应用')
-        } else if (status.value.excluded) {
-          ElMessage.info(`整理完成：${status.value.excluded} 题均已整理过，默认排除、无新建议`)
-        } else {
-          ElMessage.success('整理完成，本次没有产出建议')
-        }
-      } else if (status.value.state === 'cancelled') {
-        ElMessage.info('整理已取消（已完成部分照常可勾选应用）')
-      } else {
-        ElMessage.error(`整理失败：${status.value.error || '未知错误'}`)
-      }
-      syncSelection(suggestions.value)
-    }
-  }, 2000)
+  poll.restart()
 }
 
 // 翻页 / 「只看冲突」切换：终态下按新条件拉取对应切片（轮询进行中由轮询自然带新页），
@@ -331,7 +326,7 @@ onMounted(async () => {
   if (ok && status.value?.state === 'running') startPoll()
   else if (ok && done.value) syncSelection(suggestions.value)
 })
-onUnmounted(stopPoll)
+// 卸载清理由 usePolling 作用域 dispose 接管（v0.65）
 </script>
 
 <template>

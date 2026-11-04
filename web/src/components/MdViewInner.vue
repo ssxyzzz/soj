@@ -66,8 +66,10 @@ async function render() {
   el.value.innerHTML = props.html ?? ''
   if (!el.value.childNodes.length) return
   try {
-    await highlightCode(el.value)
-    await renderMath(el.value)
+    // v0.65 增强并行：hljs 与 KaTeX 作用于不同节点集互不依赖，Promise.all 并行——
+    // 原串行 await 瀑布（hljs chunk → 高亮 → katex chunk → CSS → 渲染）在慢链路上
+    // 首次打开含代码+公式的题面要多等整条链
+    await Promise.all([highlightCode(el.value), renderMath(el.value)])
   } catch {
     // 增强失败（子资源加载不了）：正文已就位，公式/高亮退化展示
   }

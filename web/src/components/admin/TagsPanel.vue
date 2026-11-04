@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { problemApi, tagApi } from '@/api'
+import { useDirtyFlag } from '@/composables/useDirtyFlag'
 import { onRowWheel } from '@/composables/useHorizontalWheel'
 import { useListener } from '@/composables/useWindowListener'
 import type { ProblemListItem, TagNode, TagRefProblem } from '@/types'
@@ -52,8 +53,15 @@ const adding = ref<{ parentId: number; name: string } | null>(null) // parentId 
 
 let tempId = 0 // 新节点临时 id 发生器（-1, -2, ...）
 
-const dirty = computed(() => JSON.stringify(draft.value) !== savedJson.value)
+// v0.65 起走 useDirtyFlag（全站唯一实现，与题单编辑同款）：击键/拖动零 stringify、
+// 300ms 防抖比对；保存与载入复位基线后立即重查
+const { dirty, recheck: recheckDirty } = useDirtyFlag(() => draft.value, () => savedJson.value)
 watch(dirty, (v) => emit('update:dirty', v), { immediate: true })
+
+function setSavedBaseline() {
+  savedJson.value = JSON.stringify(draft.value)
+  recheckDirty()
+}
 
 const total = computed(() => {
   const walk = (list: DraftNode[]): number => list.reduce((s, n) => s + 1 + walk(n.children), 0)
@@ -485,7 +493,7 @@ onMounted(async () => {
     const r = await tagApi.adminTree(props.tree)
     draft.value = fromServer(r.nodes)
     counts.value = r.counts
-    savedJson.value = JSON.stringify(draft.value)
+    setSavedBaseline()
   } catch {
     // 错误提示已由 axios 拦截器统一弹出
   } finally {
@@ -672,7 +680,7 @@ async function doSave() {
     const fresh = await tagApi.adminTree(props.tree)
     draft.value = fromServer(fresh.nodes)
     counts.value = fresh.counts
-    savedJson.value = JSON.stringify(draft.value)
+    setSavedBaseline()
     path.value = []
     await tagStore.load()
   } catch (e) {

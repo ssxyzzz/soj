@@ -110,12 +110,16 @@ const form = reactive({
   memory_limit_mb: props.initial.memory_limit_mb ?? 256,
   compare: props.initial.compare ?? 'exact',
   float_tolerance: props.initial.float_tolerance ?? 0.0001,
-  statement: props.initial.statement ?? '',
   file_io_name: props.initial.file_io_name ?? '',
   tag_ids: props.initial.tag_ids ?? [],
   challenge_time_sec: props.initial.challenge_time_sec ?? 0,
   video_url: props.initial.video_url ?? '',
 })
+
+// 题面拆出主表单 reactive（v0.65 输入热路径）：整段 markdown 每击键写入 form.statement
+// 会令整个 39KB 表单（tooltip/上传卡/标签选择器全量）逐键重渲——独立 ref 后每次
+// 击键只触发题面就绪徽标两处 computed，表单其余子树静默；校验/保存处合并读取
+const statement = ref(props.initial.statement ?? '')
 
 // 时限输入以秒为单位（站点展示口径统一用 s），提交/存储仍为毫秒
 const timeLimitSec = computed({
@@ -166,13 +170,13 @@ function changeType(v: string) {
 // 发布卡完成度清单（只做展示，拦截仍以 payload() 校验为准）
 const catReady = computed(() => !tagsRequired.value || form.tag_ids.length > 0)
 const statementReady = computed(() =>
-  form.type === 'objective' ? objQuestions.value.length > 0 : !!form.statement.trim(),
+  form.type === 'objective' ? objQuestions.value.length > 0 : !!statement.value.trim(),
 )
 const statementNote = computed(() =>
   form.type === 'objective'
     ? `客观题 · 小题 ${objQuestions.value.length} 道`
-    : form.statement.trim()
-      ? `题面已编辑（约 ${form.statement.length} 字）`
+    : statement.value.trim()
+      ? `题面已编辑（约 ${statement.value.length} 字）`
       : '题面未填写',
 )
 
@@ -255,11 +259,11 @@ function payload(): ProblemFormPayload | null {
     return null
   }
   // 客观题的题面是「整题说明（可选）」，不强制填写；必填项转由小题列表承担（下方 validate）
-  if (form.type !== 'objective' && !form.statement.trim()) {
+  if (form.type !== 'objective' && !statement.value.trim()) {
     ElMessage.warning('请填写题面')
     return null
   }
-  if (contentBytes(form.statement) > MAX_CONTENT_BYTES) {
+  if (contentBytes(statement.value) > MAX_CONTENT_BYTES) {
     ElMessage.error('题面过长（上限 256KB）')
     return null
   }
@@ -287,7 +291,7 @@ function payload(): ProblemFormPayload | null {
   return {
     ...form,
     title: form.title.trim(),
-    statement: form.statement,
+    statement: statement.value,
     file_io_name: form.file_io_name.trim(),
     tag_ids: [...form.tag_ids],
     meta_tag_ids: [...form.meta_tag_ids],
@@ -439,7 +443,7 @@ function onSubmitClick() {
           </div>
 
           <el-form-item>
-            <MdEditor v-model="form.statement" auto-height />
+            <MdEditor v-model="statement" auto-height />
           </el-form-item>
 
           <!-- 客观题整卷（v0.9.3）：小题列表（增删/排序 + 每题题干/选项/答案/解析/分值） -->

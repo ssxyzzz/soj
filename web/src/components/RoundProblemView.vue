@@ -86,8 +86,15 @@ function contestSupersede(): string {
 async function load() {
   loading.value = true
   try {
-    round.value = await api.value.detail(roundId.value)
-    problem.value = await problemApi.detail(pid.value)
+    // v0.65 三连改并行：round/problem 互不依赖（覆盖/结束判断都在两者到位后做），
+    // loadMine 只依赖路由参数——三请求并发，高延迟链路整页遮罩省 2×RTT
+    const [rd, p] = await Promise.all([
+      api.value.detail(roundId.value),
+      problemApi.detail(pid.value),
+      loadMine(), // 自带 try/catch 不外抛，失败仅清列表
+    ])
+    round.value = rd
+    problem.value = p
     const toContest = contestSupersede()
     if (toContest) {
       router.replace(toContest)
@@ -99,7 +106,6 @@ async function load() {
       router.replace(`/problems/${pid.value}`)
       return
     }
-    await loadMine()
   } catch (err) {
     // 隐藏期 404 也带锁信息（failData）：被比赛覆盖时同样引导进比赛，而不是弹回
     const lock = (err as Error & { data?: { locked?: boolean; lock_kind?: string; contest_id?: number } })?.data

@@ -14,6 +14,7 @@ import CodeEditor from '@/components/CodeEditor.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SelfTestPanel from '@/components/SelfTestPanel.vue'
 import { challengeApi, problemApi, raceApi, submissionApi } from '@/api'
+import { usePolling } from '@/composables/usePolling'
 import { isQueueStatus } from '@/utils/format'
 import { autocompleteOn } from '@/utils/code'
 import { parseIOSamples } from '@/utils/md'
@@ -56,7 +57,23 @@ const ioSamples = computed(() => parseIOSamples(problem.value?.description ?? ''
 // 剩余时间锚在服务端下发的 remaining_ms 上（与主倒计时的时钟偏移处理同款）。
 const raceInfo = ref<ClassRaceView | null>(null)
 let raceAnchorAt = 0
-let raceTimer: number | null = null
+// v0.65 轮询归一：usePolling（后台标签暂停、作用域卸载自清——原裸 setInterval 后台空转）
+const racePoll = usePolling(
+  async () => {
+    if (!raceInfo.value || raceInfo.value.status !== 'running') return false
+    try {
+      raceInfo.value = await raceApi.byID(raceInfo.value.id)
+      raceAnchorAt = Date.now()
+    } catch {
+      /* 网络抖动保旧值，续拍 */
+    }
+  },
+  5000,
+)
+
+function startRacePoll() {
+  racePoll.restart()
+}
 
 const raceRemainMs = computed(() => {
   const r = raceInfo.value
@@ -82,27 +99,8 @@ async function loadRace() {
   }
 }
 
-function startRacePoll() {
-  if (raceTimer != null) return
-  raceTimer = window.setInterval(async () => {
-    if (!raceInfo.value || raceInfo.value.status !== 'running') {
-      stopRacePoll()
-      return
-    }
-    try {
-      raceInfo.value = await raceApi.byID(raceInfo.value.id)
-      raceAnchorAt = Date.now()
-    } catch {
-      /* 网络抖动保旧值 */
-    }
-  }, 5000)
-}
-
 function stopRacePoll() {
-  if (raceTimer != null) {
-    window.clearInterval(raceTimer)
-    raceTimer = null
-  }
+  racePoll.stop()
 }
 
 const LANGS = [

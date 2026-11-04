@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { usePolling } from '@/composables/usePolling'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
@@ -115,8 +115,8 @@ function toggleMute() {
   if (!soundOff.value) playLevelUp() // 开声试音
 }
 // 降临横幅：60s 轮询最近 Lv≥7 升级，未播过的弹一次（localStorage 记最近一条）
+// v0.65 轮询归一：usePolling（后台标签暂停、作用域卸载自清——原裸 setInterval 后台空转）
 const heralds = ref<{ uid: number; level: number; nickname: string; at: string }[]>([])
-let heraldTimer: number | undefined
 async function pollHeralds() {
   if (!userStore.token) return
   try {
@@ -155,6 +155,7 @@ async function loadRecent() {
 }
 
 const badgePoll = usePolling(() => refreshBadge(), 60_000)
+const heraldPoll = usePolling(() => pollHeralds(), 60_000) // 降临横幅轮询（v0.65 归一）
 
 function onBellVisible() {
   loadRecent()
@@ -220,12 +221,8 @@ onMounted(() => {
   badgePoll.start() // 60s 轮询（usePolling：后台标签暂停、卸载自清）
   refreshJade() // 玉余额首刷（v0.33-①）
   pollHeralds()
-  heraldTimer = window.setInterval(pollHeralds, 60_000)
+  heraldPoll.start()
   welcomeOnce()
-})
-
-onBeforeUnmount(() => {
-  if (heraldTimer) clearInterval(heraldTimer)
 })
 
 function onCommand(command: string) {
@@ -418,8 +415,10 @@ function onCommand(command: string) {
   top: 0;
   z-index: 50;
   background: color-mix(in srgb, var(--soj-bg-top) 72%, transparent);
-  -webkit-backdrop-filter: blur(16px) saturate(1.5);
-  backdrop-filter: blur(16px) saturate(1.5);
+  /* v0.65 降档 16px→12px：sticky 顶栏滚动时对背后内容逐帧重采样模糊，12px 视觉
+     仍充分、重采样开销随半径线性下降；背后 fixed 渐变层已随本批改走合成 */
+  -webkit-backdrop-filter: blur(12px) saturate(1.5);
+  backdrop-filter: blur(12px) saturate(1.5);
   border-bottom: 1px solid var(--soj-line);
   padding: 0;
   height: 64px;

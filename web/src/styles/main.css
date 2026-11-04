@@ -444,14 +444,24 @@ body {
     'Helvetica Neue',
     Arial,
     sans-serif;
-  /* v0.19 三层画布（web-design-v3.md §3）：冷白纵向渐变（固定视口）+
-     顶部中央青光晕 + 右上蓝光晕；青色网格层在 body::after（负 z 索引沉底） */
+  /* v0.19 三层画布（web-design-v3.md §3）视觉不变，实现随 v0.65 改造：
+     渐变层从 body background-attachment:fixed 挪到固定定位伪元素（::before）——
+     fixed 背景禁用滚动快速路径（滚动时按视口重绘背景，全站常驻），固定层同
+     视觉走合成；青色网格层仍在 body::after（负 z 索引沉底） */
+  background: #f1f6fd; /* 兜底纯色（渐变层在 ::before，防加载闪白） */
+  color: var(--el-text-color-primary);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
   background:
     radial-gradient(520px 340px at 50% 10%, rgb(var(--soj-teal-soft-rgb) / 0.14), transparent 62%),
     radial-gradient(760px 420px at 90% 6%, rgb(var(--soj-blue-rgb) / 0.05), transparent 60%),
     linear-gradient(#fbfdff, #f1f6fd);
-  background-attachment: fixed;
-  color: var(--el-text-color-primary);
 }
 
 /* v0.19 青网格画布层：44px 格距 1px 双向线，径向渐隐（顶部实、往下淡出至 78% 高度）
@@ -474,8 +484,11 @@ body::after {
    静态青网格与双光晕全站撤下（冷白渐变保留），画布改为「网格在鼠标处显影」——
    无光晕、无涟漪；组件卸载即移除本类；reduced-motion 不注入，静态画布保留 */
 body.ambient-on {
+  background: #f1f6fd; /* 兜底纯色（v0.65 与 body 渐变同改造） */
+}
+
+body.ambient-on::before {
   background: linear-gradient(#fbfdff, #f1f6fd);
-  background-attachment: fixed;
 }
 
 body.ambient-on::after {

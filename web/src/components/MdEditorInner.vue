@@ -136,6 +136,9 @@ async function runPreview() {
   const ctl = new AbortController()
   renderCtl = ctl
   const seq = ++renderSeq
+  // v0.65：loading 只置状态标记不清旧内容——预览组件常驻不卸载（原 v-if 每次防拍
+  // 卸载重挂 MdView + 全篇 hljs/KaTeX 回放，大题面编辑每 300ms 停顿一顿）；旧预览
+  // 留在屏上直至新 HTML 到达，连续性更好
   previewState.value = 'loading'
   try {
     const { html } = await mdApi.render(md, ctl.signal)
@@ -288,7 +291,11 @@ async function uploadFiles(files: FileList | File[]) {
 }
 
 // ---- 分栏拖拽（split 模式，20%–80% 钳制）；document 监听走 useListener（v0.64 病根②收口） ----
+// v0.65 合帧：mousemove 只记最新坐标，rAF 内一次 gBCR 读 + splitPct 写——逐事件
+// 强制布局读 + 双栏（含 CodeMirror）逐事件重排根除
 let dragStops: (() => void)[] = []
+let dragRaf = 0
+let dragPendX = 0
 function startDrag(e: MouseEvent) {
   if (e.button !== 0) return
   e.preventDefault()
@@ -299,13 +306,22 @@ function startDrag(e: MouseEvent) {
   document.body.style.cursor = 'col-resize'
 }
 function onDrag(e: MouseEvent) {
+  dragPendX = e.clientX
+  if (!dragRaf) dragRaf = requestAnimationFrame(applyDrag)
+}
+function applyDrag() {
+  dragRaf = 0
   const host = editorHost.value?.parentElement
   if (!host) return
   const rect = host.getBoundingClientRect()
-  const pct = ((e.clientX - rect.left) / rect.width) * 100
+  const pct = ((dragPendX - rect.left) / rect.width) * 100
   splitPct.value = Math.min(80, Math.max(20, pct))
 }
 function endDrag() {
+  if (dragRaf) {
+    cancelAnimationFrame(dragRaf)
+    dragRaf = 0
+  }
   dragStops.forEach((s) => s())
   dragStops = []
   document.body.style.cursor = ''
@@ -349,8 +365,11 @@ function toggleFullscreen() {
 }
 
 // ---- 高度：autoHeight = 内容自然生长（CSS overflow 方案，无 JS 量高） ----
-// 底部手柄按下进入拖拽：高度随鼠标走（≥140px），松手锁定（userSized）此后内滚
+// 底部手柄按下进入拖拽：高度随鼠标走（≥140px），松手锁定（userSized）此后内滚；
+// v0.65 合帧：mousemove 只记坐标，rAF 内一次写 style.height（逐事件写触发 CM6 重排）
 let resizeStops: (() => void)[] = []
+let resizeRaf = 0
+let resizePendY = 0
 function startResize(e: MouseEvent) {
   if (!props.autoHeight || userSized.value || e.button !== 0 || !rootEl.value) return
   e.preventDefault()
@@ -359,10 +378,18 @@ function startResize(e: MouseEvent) {
   const startH = rootEl.value.getBoundingClientRect().height
   document.body.style.cursor = 'ns-resize'
   const onMove = (ev: MouseEvent) => {
-    if (!rootEl.value) return
-    rootEl.value.style.height = `${Math.max(140, startH + (ev.clientY - startY))}px`
+    resizePendY = startH + (ev.clientY - startY)
+    if (!resizeRaf) resizeRaf = requestAnimationFrame(applyResize)
+  }
+  const applyResize = () => {
+    resizeRaf = 0
+    if (rootEl.value) rootEl.value.style.height = `${Math.max(140, resizePendY)}px`
   }
   const onUp = () => {
+    if (resizeRaf) {
+      cancelAnimationFrame(resizeRaf)
+      resizeRaf = 0
+    }
     resizeStops.forEach((s) => s())
     resizeStops = []
     document.body.style.cursor = ''
@@ -628,9 +655,17 @@ onBeforeUnmount(() => {
       <template v-if="mode === 'split'">
         <div class="md-divider" @mousedown="startDrag" />
         <div ref="previewPane" class="md-preview-pane">
-          <MdView v-if="previewState === 'ok' && previewHtml" :html="previewHtml" />
-          <div v-else-if="previewState === 'idle'" class="md-preview-state">开始输入后此处实时预览</div>
+          <!-- v0.65 常驻不卸载：有内容即挂载（loading 保留旧预览、error 顶部细条提示），
+               原每次防拍 v-if 卸载重挂 = 全篇 hljs/KaTeX 回放 -->
+          <template v-if="previewHtml">
+            <div v-if="previewState === 'error'" class="md-preview-stale">
+              <span>预览更新失败，暂显示旧内容</span>
+              <button type="button" @click="runPreview">重试</button>
+            </div>
+            <MdView :html="previewHtml" />
+          </template>
           <div v-else-if="previewState === 'loading'" class="md-preview-state">渲染中…</div>
+          <div v-else-if="previewState === 'idle'" class="md-preview-state">开始输入后此处实时预览</div>
           <div v-else class="md-preview-state is-error">
             <span>预览暂不可用（网络或频率限制），编辑与保存不受影响</span>
             <button type="button" @click="runPreview">重试</button>
@@ -812,6 +847,19 @@ onBeforeUnmount(() => {
   gap: var(--soj-sp-8);
   color: var(--el-text-color-secondary);
   font-size: var(--soj-fs-body);
+}
+
+/* v0.65 预览常驻后的失败细条：旧内容保留在屏，顶部一行提示 + 重试 */
+.md-preview-stale {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-8);
+  margin-bottom: var(--soj-sp-8);
+  padding: 4px 10px;
+  border-radius: var(--el-border-radius-base);
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+  font-size: var(--soj-fs-small);
 }
 
 .md-preview-state.is-error {

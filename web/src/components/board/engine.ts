@@ -718,6 +718,7 @@ export class BoardModel {
 
   private adopt(d: DocV1): void {
     this.shapes = d.shapes
+    this.invalidateIndexes()
     // id 单调递增不复用：撤销「建图形」后重建不与旧 DOM/引用撞号
     this.idSeq = Math.max(this.idSeq, d.idSeq)
   }
@@ -787,20 +788,37 @@ export class BoardModel {
     return String(max + 1)
   }
 
+  // —— id 索引（v0.65）：get/hitTest/渲染锚点高频路径的 O(1) 查询——数组结构变更
+  //（adopt/delete/load）时整表失效重建，坐标变更不动结构、Map 存引用无需失效
+  private byId: Map<number, Shape> | null = null
+  private nodeIdx: Map<number, NodeShape> | null = null
+
+  private invalidateIndexes(): void {
+    this.byId = null
+    this.nodeIdx = null
+  }
+
   get(id: number): Shape | undefined {
-    return this.shapes.find((s) => s.id === id)
+    if (!this.byId) {
+      this.byId = new Map()
+      for (const s of this.shapes) this.byId.set(s.id, s)
+    }
+    return this.byId.get(id)
   }
 
   // 图形增删一律走 mutate（入史）；delete 仅剩手势期即时删除路径使用
   //（erase 手势收尾 mutateFrom 固化，BoardView deleteCascade 调用）
   delete(ids: Set<number>): void {
     this.shapes = this.shapes.filter((s) => !ids.has(s.id))
+    this.invalidateIndexes()
   }
 
   nodeById(): Map<number, NodeShape> {
-    const m = new Map<number, NodeShape>()
-    for (const s of this.shapes) if (s.type === 'node') m.set(s.id, s)
-    return m
+    if (!this.nodeIdx) {
+      this.nodeIdx = new Map()
+      for (const s of this.shapes) if (s.type === 'node') this.nodeIdx.set(s.id, s)
+    }
+    return this.nodeIdx
   }
 
   // 与选中节点相连的边（拖动节点时跟随平移的渲染组）
@@ -850,6 +868,7 @@ export class BoardModel {
       if (d?.v === 1 && Array.isArray(d.shapes) && typeof d.idSeq === 'number') {
         this.shapes = d.shapes
         this.idSeq = d.idSeq
+        this.invalidateIndexes()
         this.resetHistory() // 换档历史随档清空（旧档 patch 路径对新档无意义）
         return true
       }

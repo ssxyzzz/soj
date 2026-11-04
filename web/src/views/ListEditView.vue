@@ -16,6 +16,7 @@ import RailCard from '@/components/RailCard.vue'
 import SectionProblemsDialog from '@/components/SectionProblemsDialog.vue'
 import SwitchRow from '@/components/SwitchRow.vue'
 import { listApi } from '@/api'
+import { useDirtyFlag } from '@/composables/useDirtyFlag'
 import { useListener } from '@/composables/useWindowListener'
 import type { ListDetail, ListEntryDraft } from '@/types'
 
@@ -31,18 +32,19 @@ const loading = ref(true)
 const saving = ref(false)
 
 // ---- 脏标记：与加载时快照全量比对（结构/标题/简介/隐藏任何变化都算） ----
+// v0.65 起走 useDirtyFlag（全站唯一实现）：击键零 stringify、300ms 防抖比对，
+// 语义保留「改回原值 = 不脏」；takeSnapshot 复位基线后立即重查
 const snapshot = ref('')
+
+const { dirty, recheck: recheckDirty } = useDirtyFlag(
+  () => (snapshot.value ? { title: title.value, intro: intro.value, hidden: hidden.value, chs: chs.value } : null),
+  () => (snapshot.value ? snapshot.value : 'null'), // 未载入（空快照）恒不脏
+)
 
 function takeSnapshot() {
   snapshot.value = JSON.stringify({ title: title.value, intro: intro.value, hidden: hidden.value, chs: chs.value })
+  recheckDirty()
 }
-
-const dirty = computed(() => {
-  return (
-    !!snapshot.value &&
-    JSON.stringify({ title: title.value, intro: intro.value, hidden: hidden.value, chs: chs.value }) !== snapshot.value
-  )
-})
 
 const savedAt = ref('')
 

@@ -161,6 +161,10 @@ const weights: Array<1 | 2 | 3> = [1, 2, 3]
 let drag: DragState | null = null
 let rafId = 0
 let previewFlag = false
+let panFlag = false // v0.65：pan 合帧旗
+let resizeFlag = false // v0.65：resize 合帧旗
+let wheelRaf = 0 // v0.65：滚轮缩放合帧（增量累积，一帧一次 zoomAt）
+let wheelPend: { factor: number; px: number; py: number } | null = null
 
 interface DragState {
   mode: 'draw' | 'move' | 'marquee' | 'pan' | 'erase' | 'link' | 'click' | 'resize'
@@ -187,6 +191,11 @@ interface DragState {
   origShapes?: Shape[]
   origShape?: Shape
   origErased?: { shape: Shape; index: number }[]
+  // v0.65 合帧累积：pan = 未应用的相机增量（世界坐标）、resize = 帧内最新目标框
+  //（resizeShape 幂等可重放，帧内只留最后一次）；erase 不合帧（扫过即删的轨迹语义）
+  pdx?: number
+  pdy?: number
+  resizeTo?: BBox
   // 移动/缩放手势「已产生变更」标记：首帧置位，up 时据此收尾入史
   undoPushed?: boolean
 }
@@ -194,6 +203,29 @@ interface DragState {
 function flush(): void {
   rafId = 0
   if (!renderer) return
+  // v0.65 合帧：pan/resize 的逐事件重活（viewBox 重算=全 SVG 重栅格 / 图形重建+覆盖层
+  // 刷新）合并为每帧至多一次——与 draw/marquee 的 preview 合帧同构
+  if (panFlag) {
+    panFlag = false
+    const d = drag
+    if (d?.mode === 'pan') {
+      cam.x -= d.pdx ?? 0
+      cam.y -= d.pdy ?? 0
+      d.pdx = 0
+      d.pdy = 0
+    }
+  }
+  if (resizeFlag) {
+    resizeFlag = false
+    const d = drag
+    const to = d?.mode === 'resize' ? d.resizeTo : undefined
+    const s = d?.resizeId ? model.get(d.resizeId) : undefined
+    if (d?.mode === 'resize' && s && to && d.resizeFrom) {
+      resizeShape(s, d.resizeFrom, to, d.origPoints)
+      renderer.renderIds(model, [s.id])
+      refreshOverlay()
+    }
+  }
   if (!previewFlag) return
   previewFlag = false
   const d = drag
@@ -218,6 +250,17 @@ function flush(): void {
 
 function schedulePreview(): void {
   previewFlag = true
+  if (!rafId) rafId = requestAnimationFrame(flush)
+}
+
+// v0.65 pan/resize 合帧入口：只立旗，flush（rAF）统一执行
+function schedulePan(): void {
+  panFlag = true
+  if (!rafId) rafId = requestAnimationFrame(flush)
+}
+
+function scheduleResize(): void {
+  resizeFlag = true
   if (!rafId) rafId = requestAnimationFrame(flush)
 }
 
@@ -446,10 +489,13 @@ function onPointerMove(e: PointerEvent): void {
   const d = drag
   switch (d.mode) {
     case 'pan':
-      cam.x -= (e.clientX - d.lpx) / cam.scale
-      cam.y -= (e.clientY - d.lpy) / cam.scale
+      // v0.65 合帧：增量累积到下一帧一次应用（逐事件写 cam = 每事件 viewBox
+      // computed 重算 + 全 SVG 重栅格，触摸板惯性下远超刷新率）
+      d.pdx = (d.pdx ?? 0) + (e.clientX - d.lpx) / cam.scale
+      d.pdy = (d.pdy ?? 0) + (e.clientY - d.lpy) / cam.scale
       d.lpx = e.clientX
       d.lpy = e.clientY
+      schedulePan()
       return
     case 'draw': {
       const draft = d.draft
@@ -510,14 +556,12 @@ function onPointerMove(e: PointerEvent): void {
       const s = model.get(d.resizeId ?? 0)
       const from = d.resizeFrom
       if (!s || !from) return
-      const to: BBox = { x: from.x, y: from.y, w: Math.max(8, w.x - from.x), h: Math.max(8, w.y - from.y) }
+      d.resizeTo = { x: from.x, y: from.y, w: Math.max(8, w.x - from.x), h: Math.max(8, w.y - from.y) }
       if (!d.undoPushed) {
         d.undoPushed = true
         d.origShape = JSON.parse(JSON.stringify(s)) as Shape // 手势基线（单图形）
       }
-      resizeShape(s, from, to, d.origPoints)
-      renderer?.renderIds(model, [s.id])
-      refreshOverlay()
+      scheduleResize() // v0.65 合帧：帧内只记最新目标框，flush 时幂等重放
       return
     }
     case 'link': {
@@ -542,6 +586,10 @@ function onPointerUp(e: PointerEvent): void {
   const w = clampToViewport(toWorld(e))
   switch (d.mode) {
     case 'pan':
+      // v0.65 合帧收尾：up 先于 pending flush 时（drag 已置 null，flush 会跳过），
+      // 残余相机增量在此立即应用，平移不丢尾
+      cam.x -= d.pdx ?? 0
+      cam.y -= d.pdy ?? 0
       return
     case 'draw':
       commitDraft(d, e)
@@ -592,25 +640,27 @@ function onPointerUp(e: PointerEvent): void {
         autosave()
       }
       return
-    case 'resize':
+    case 'resize': {
+      // v0.65 合帧收尾：up 先于 pending flush 时补最后一帧重放，保证 model 与屏幕一致
+      const to = d.resizeTo
+      const cur = d.resizeId ? model.get(d.resizeId) : undefined
+      if (d.undoPushed && cur && to && d.resizeFrom) {
+        resizeShape(cur, d.resizeFrom, to, d.origPoints)
+        renderer?.renderIds(model, [cur.id])
+        refreshOverlay()
+      }
       if (d.undoPushed && d.origShape) {
         // 手势收尾入史：orig 放回基线，确定性重放 resizeShape（from/to/origPoints 均在）
         const orig = d.origShape
         model.mutateFrom(model.docWithOverrides([orig]), (dd) => {
           const ds = dd.shapes.find((x) => x.id === orig.id)
-          if (ds && d.resizeFrom) {
-            resizeShape(
-              ds,
-              d.resizeFrom,
-              { x: d.resizeFrom.x, y: d.resizeFrom.y, w: Math.max(8, w.x - d.resizeFrom.x), h: Math.max(8, w.y - d.resizeFrom.y) },
-              d.origPoints,
-            )
-          }
+          if (ds && to) resizeShape(ds, d.resizeFrom!, to, d.origPoints)
         })
         syncHistory()
         autosave()
       }
       return
+    }
     case 'link':
       commitLink(d, w)
       renderer?.setPreview(null)
@@ -1046,8 +1096,28 @@ function zoomAt(factor: number, px = stage.w / 2, py = stage.h / 2): void {
 }
 
 function onWheel(e: WheelEvent): void {
+  // v0.65 合帧：触摸板/滚轮惯性事件率可远超刷新率，逐事件 zoomAt = 每事件
+  // viewBox 重算 + 全 SVG 重栅格；增量连乘累积（等价逐次应用）、锚点取帧内
+  // 最新事件位置，一帧一次 zoomAt
   const rect = svgEl.value?.getBoundingClientRect()
-  zoomAt(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX - (rect?.left ?? 0), e.clientY - (rect?.top ?? 0))
+  const px = e.clientX - (rect?.left ?? 0)
+  const py = e.clientY - (rect?.top ?? 0)
+  const f = e.deltaY < 0 ? 1.1 : 1 / 1.1
+  if (wheelPend) {
+    wheelPend.factor *= f
+    wheelPend.px = px
+    wheelPend.py = py
+  } else {
+    wheelPend = { factor: f, px, py }
+  }
+  if (!wheelRaf) {
+    wheelRaf = requestAnimationFrame(() => {
+      wheelRaf = 0
+      const p = wheelPend
+      wheelPend = null
+      if (p) zoomAt(p.factor, p.px, p.py)
+    })
+  }
 }
 
 function resetZoom(): void {
@@ -1302,6 +1372,7 @@ onBeforeUnmount(() => {
   ro?.disconnect()
   themeObs?.disconnect()
   if (rafId) cancelAnimationFrame(rafId)
+  if (wheelRaf) cancelAnimationFrame(wheelRaf)
   clearTimeout(saveTimer)
 })
 

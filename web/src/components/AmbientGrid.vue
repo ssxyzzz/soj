@@ -27,15 +27,22 @@ function paint() {
   }
 }
 
+// v0.65 隔帧写：--gx/--gy 变化驱动全视口 mask 重新光栅化（paint 非 composite），
+// 每 2 帧写一次 ≈30fps 更新——lerp 平滑视觉无感，重光栅频率减半；停帧前强制
+// 写终值保证收敛
+let frame = 0
+
 function tick() {
   cx += (tx - cx) * 0.28
   cy += (ty - cy) * 0.28
-  paint()
-  // 追平后停帧省电；下次 mousemove 重启
+  frame++
+  // 追平后停帧省电（写终值收敛）；下次 mousemove 重启
   if (Math.abs(tx - cx) < 0.5 && Math.abs(ty - cy) < 0.5) {
+    paint()
     running = false
     return
   }
+  if ((frame & 1) === 0) paint()
   raf = requestAnimationFrame(tick)
 }
 

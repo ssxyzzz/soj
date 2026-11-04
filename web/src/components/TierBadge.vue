@@ -5,9 +5,31 @@
 // 阅读面与站点统一、不炫；D9 黑金款；第 10 档极境 = 浅色彩虹 + 深金真边框）。
 // 呼吸星/心跳粒子按档位内置配置（位置/尺寸/错拍/外飞向量）；系统「减少动效」时动画退静态、粒子隐藏。
 // 拍板稿 = private_doc/preview/soj-tier-preview-b-heartbeat-v9.html。
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { useLevelsStore } from '@/stores/levels'
+
+// 可视区激活（v0.65 常驻动画降载）：fx 无限动画（box-shadow/背景位不可合成 = 每帧
+// 重绘）只在徽章进入视口时挂类，滚出即停——榜单/列表百颗里视口外那批零开销；
+// 多实例共享单个 IntersectionObserver（v0.62 fitMeasure 全局单波同款模式）。
+let tierIO: IntersectionObserver | null = null
+const tierWatchers = new Map<Element, (v: boolean) => void>()
+function watchTierVisible(el: Element, cb: (v: boolean) => void): () => void {
+  if (!tierIO) {
+    tierIO = new IntersectionObserver(
+      (entries) => {
+        for (const en of entries) tierWatchers.get(en.target)?.(en.isIntersecting)
+      },
+      { rootMargin: '80px' },
+    )
+  }
+  tierWatchers.set(el, cb)
+  tierIO.observe(el)
+  return () => {
+    tierWatchers.delete(el)
+    tierIO?.unobserve(el)
+  }
+}
 
 const props = withDefaults(
   defineProps<{
@@ -16,13 +38,29 @@ const props = withDefaults(
     label?: string // 覆盖默认文案（等级名 / 难度名）
     size?: 'sm' | 'md' | 'lg'
     fx?: boolean // 特效链开关（v0.63）：默认开；百行榜单表格内传 false 静态化——
-    // ulv-fx* 无限动画 + Lv.9/10 粒子在一页百颗时是常驻重绘源，视觉主体色阶胶囊保留
+    // ulv-fx* 无限动画 + Lv.9/10 粒子在一页百颗时是常驻重绘源，视觉主体色阶胶囊保留。
+    // v0.65：开启时再叠加可视区激活（fx 类与星/粒子 DOM 只在进视口后出现）
   }>(),
   { kind: 'difficulty', size: 'sm', label: undefined, fx: true },
 )
 
 const levels = useLevelsStore()
 const clamped = computed(() => Math.min(10, Math.max(1, Math.round(props.tier || 1))))
+const fxOn = ref(false) // 可视才真开（v0.65）
+const rootEl = ref<HTMLElement>()
+let unwatch: (() => void) | null = null
+
+onMounted(() => {
+  if (props.kind === 'level' && props.fx && clamped.value >= 3 && rootEl.value) {
+    unwatch = watchTierVisible(rootEl.value, (v) => {
+      fxOn.value = v
+    })
+  }
+})
+onBeforeUnmount(() => {
+  unwatch?.()
+  unwatch = null
+})
 
 const text = computed(() => {
   if (props.label) return props.label
@@ -34,7 +72,7 @@ const cls = computed(() => {
   if (props.kind === 'level') {
     // 实色 + 特效链（Lv.3 起挂 fx；fx 类按档位递进，极境由 .ulv-10 双类压轴）
     const arr = ['tier-badge', `tier-${props.size}`, 'ulv-tag', `ulv-${clamped.value}`]
-    if (props.fx && clamped.value >= 3) arr.push(`ulv-fx${clamped.value}`)
+    if (fxOn.value && clamped.value >= 3) arr.push(`ulv-fx${clamped.value}`)
     return arr
   }
   return ['tier-badge', `tier-${props.size}`, 'diff-tag', `diff-${clamped.value}`]
@@ -73,9 +111,9 @@ const STARS: Record<number, Array<{ t?: number; l?: number; r?: number; b?: numb
   ],
 }
 
-// 星的定位/错拍内联样式（仅等级 5+ 渲染；fx=false 静态化时不渲染）
+// 星的定位/错拍内联样式（仅等级 5+ 渲染；fx 关闭或视口外不渲染——v0.65 连 DOM 一并省）
 const stars = computed(() => {
-  if (props.kind !== 'level' || !props.fx) return []
+  if (props.kind !== 'level' || !fxOn.value) return []
   return (STARS[clamped.value] ?? []).map((st) => {
     let style = `font-size:${st.s}px;animation-delay:${st.d}s;`
     if (st.t != null) style += `top:${st.t}px;`
@@ -109,9 +147,9 @@ const PARTICLES: Record<
   ],
 }
 
-// 粒子内联样式（颜色/定位/外飞向量；仅 Lv.9+ 渲染；fx=false 静态化时不渲染）
+// 粒子内联样式（颜色/定位/外飞向量；仅 Lv.9+ 渲染；fx 关闭或视口外不渲染——v0.65）
 const particles = computed(() => {
-  if (props.kind !== 'level' || !props.fx) return []
+  if (props.kind !== 'level' || !fxOn.value) return []
   return (PARTICLES[clamped.value] ?? []).map((pt) => {
     let style = `color:${pt.c};--dx:${pt.dx}px;--dy:${pt.dy}px;`
     if (pt.t != null) style += `top:${pt.t}px;`
@@ -125,7 +163,7 @@ const particles = computed(() => {
 </script>
 
 <template>
-  <span v-if="isLevel" class="lvw">
+  <span v-if="isLevel" ref="rootEl" class="lvw">
     <span :class="cls"><slot>{{ text }}</slot><i
       v-for="(st, i) in stars"
       :key="i"
