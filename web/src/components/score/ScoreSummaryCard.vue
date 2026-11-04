@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import RailCard from '@/components/RailCard.vue'
 import UserNameLevel from '@/components/UserNameLevel.vue'
 import type { ScoreBoardView } from './types'
@@ -6,7 +8,7 @@ import type { ScoreBoardView } from './types'
 // 前三名勋章（与排名页 RankView 同一套）
 const medals = ['🥇', '🥈', '🥉']
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     board: ScoreBoardView | null
     title?: string
@@ -27,6 +29,19 @@ withDefaults(
 )
 
 const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
+
+// 副列截断前 N（v0.63 挂载冻结扫尾批）：原 CSS max-height 只是滚动，DOM 全量挂载——
+// 百人场次即百行 UserNameLevel（含常驻动画徽章）。前 10 足够「瞟一眼榜」，
+// 完整榜走「查看全部」弹窗（弹窗自身已分页）。若「我」在前 10 外则追加我的行钉底。
+const TOP_N = 10
+const shownRows = computed(() => {
+  const rows = props.board?.rows ?? []
+  if (rows.length <= TOP_N) return rows
+  const me = rows.find((r) => r.uid === props.myUid)
+  const top = rows.slice(0, TOP_N)
+  return me && !top.includes(me) ? [...top, me] : top
+})
+const totalRows = computed(() => props.board?.rows.length ?? 0)
 </script>
 
 <template>
@@ -64,9 +79,10 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
     <div v-if="!visible" class="empty">{{ emptyText }}</div>
     <div v-else v-loading="loading" class="list">
       <div v-if="!board?.rows.length" class="empty">暂无成绩</div>
-      <!-- v3 sum-li：排名（前三勋章）/ 昵称·等级一体 / 分数；点行查看完整成绩表 -->
+      <!-- v3 sum-li：排名（前三勋章）/ 昵称·等级一体 / 分数；点行查看完整成绩表。
+           v0.63：仅挂前 10（+榜外的我），完整榜进弹窗 -->
       <div
-        v-for="row in board?.rows ?? []"
+        v-for="row in shownRows"
         :key="row.uid"
         class="row"
         :class="{ me: row.uid === myUid }"
@@ -80,6 +96,7 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
         <UserNameLevel :name="row.name" :level="row.level" :uid="row.uid" @click.stop />
         <span class="total">{{ row.total }}</span>
       </div>
+      <div v-if="totalRows > shownRows.length" class="more-hint">共 {{ totalRows }} 人 · 点任意行查看完整成绩表</div>
     </div>
   </RailCard>
 </template>
@@ -97,6 +114,13 @@ const emit = defineEmits<{ (e: 'open'): void; (e: 'refresh'): void }>()
 
 .empty {
   padding: var(--soj-sp-8) 0;
+  color: var(--el-text-color-secondary);
+}
+
+/* 截断提示（v0.63）：榜脚灰字，点行即进完整弹窗 */
+.more-hint {
+  padding: var(--soj-sp-6) var(--soj-sp-10) 0;
+  font-size: var(--soj-fs-12);
   color: var(--el-text-color-secondary);
 }
 

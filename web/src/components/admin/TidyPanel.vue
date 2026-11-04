@@ -11,6 +11,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
+import LazySelectCell from '@/components/LazySelectCell.vue'
 import ManualTidyPanel from './ManualTidyPanel.vue'
 import type { TidyKind, TidySuggestion, TidyStatus } from '@/types'
 
@@ -28,6 +29,8 @@ const MODE_META = {
 
 const mode = ref<keyof typeof MODE_META>('ai')
 const PAGE_SIZE = 100
+// 难度改判十档选项（LazySelectCell 单选 D1..D10）
+const diffOptions = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, label: `D${i + 1}` }))
 
 const KIND_META: Record<TidyKind, { label: string; desc: string }> = {
   difficulty: {
@@ -133,10 +136,19 @@ function clearSelection() {
   })
 }
 
-// 按当前 page/onlyConflict 拉取状态快照（服务端切片）
-async function fetchStatus(): Promise<boolean> {
+// 按当前 page/onlyConflict 拉取状态快照（服务端切片）。runningMerge=true 时（2s 轮询拍）
+// 只就地更新进度字段不整对象替换——轮询期建议表未挂载（v-if done），整替换只会让全部
+// computed 白跑一遍；保持引用稳定，进度条独享重渲染（v0.63 批次2）。
+async function fetchStatus(runningMerge = false): Promise<boolean> {
   try {
-    status.value = await adminApi.tidyStatus(page.value, PAGE_SIZE, onlyConflict.value)
+    const r = await adminApi.tidyStatus(page.value, PAGE_SIZE, onlyConflict.value)
+    if (runningMerge && status.value && status.value.state === 'running' && r.state === 'running') {
+      status.value.total = r.total
+      status.value.done = r.done
+      if (r.excluded !== undefined) status.value.excluded = r.excluded
+    } else {
+      status.value = r
+    }
     return true
   } catch {
     return false
@@ -187,7 +199,7 @@ function startPoll() {
   stopPoll()
   pollFails.value = 0
   pollTimer = setInterval(async () => {
-    const ok = await fetchStatus()
+    const ok = await fetchStatus(true)
     if (!ok) {
       if (++pollFails.value >= 5) {
         stopPoll()
@@ -455,16 +467,14 @@ onUnmounted(stopPoll)
         </el-table-column>
         <el-table-column label="建议（可改判）" width="150">
           <template #default="{ row }">
-            <!-- persistent=false 同 ManualTidyPanel：收起即销毁 popper，别让每行选项随挂载渲染 -->
-            <el-select
-              :model-value="finalDiff.get(row.pid) ?? row.suggest_difficulty"
-              size="small"
-              :persistent="false"
-              :disabled="appliedPids.has(row.pid)"
-              @update:model-value="(v: number) => finalDiff.set(row.pid, v)"
-            >
-              <el-option v-for="d in 10" :key="d" :value="d" :label="`D${d}`" />
-            </el-select>
+            <!-- v0.63 惰性单元格编辑（LazySelectCell）：点格才挂 select，同屏 ≤1 个 -->
+            <LazySelectCell
+              :model-value="finalDiff.get(row.pid) ?? row.suggest_difficulty ?? 3"
+              :options="diffOptions"
+              :readonly="appliedPids.has(row.pid)"
+              empty="D3"
+              @update:model-value="(v: number | number[]) => finalDiff.set((row as TidySuggestion).pid, v as number)"
+            />
           </template>
         </el-table-column>
         <el-table-column label="通过率参考" width="150">

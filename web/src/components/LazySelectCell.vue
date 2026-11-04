@@ -17,8 +17,9 @@ const props = withDefaults(
     options: LazyOpt[]
     multiple?: boolean
     empty?: string // 展示态空值占位
+    readonly?: boolean // 只读态：点击不进入编辑（如已应用行），灰显
   }>(),
-  { multiple: false, empty: '—' },
+  { multiple: false, empty: '—', readonly: false },
 )
 const emit = defineEmits<{ (e: 'update:modelValue', v: number | number[]): void }>()
 
@@ -35,6 +36,7 @@ const text = computed(() =>
 )
 
 function startEdit() {
+  if (props.readonly) return
   editing.value = true
   // automatic-dropdown：聚焦即展开下拉（单选免二次点击；多选 filterable 直接可输入过滤）
   void nextTick(() => selectRef.value?.focus?.())
@@ -74,7 +76,7 @@ function onSingleChange(v?: number) {
   <span
     v-else
     class="lazy-cell"
-    :class="{ empty: !text }"
+    :class="{ empty: !text, ro: readonly }"
     :title="text || undefined"
     @click="startEdit"
   >{{ text || empty }}</span>
@@ -105,6 +107,16 @@ function onSingleChange(v?: number) {
 
 .lazy-cell.empty {
   color: var(--el-text-color-placeholder);
+}
+
+/* 只读态（v0.63）：不可编辑的行内值——无下划线提示、不可点 */
+.lazy-cell.ro {
+  cursor: default;
+}
+
+.lazy-cell.ro:hover {
+  color: inherit;
+  text-decoration: none;
 }
 
 /* 编辑态占满列宽，避免与文本态宽度跳变 */

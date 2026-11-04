@@ -7,6 +7,7 @@ import { classApi, examApi } from '@/api'
 import { createAssignment as apiCreateAssignment, dissolveClass, transferClass, updateClass } from '@/api/classManage'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
+import LazySelectCell from '@/components/LazySelectCell.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
@@ -25,6 +26,11 @@ const router = useRouter()
 const userStore = useUserStore()
 
 const cl = ref<ClassDetail | null>(null)
+// 成员身份编辑选项（v0.63 惰性格）：admin=1 / member=2 数值映射（LazySelectCell 数值型）
+const memberRoleOptions = [
+  { id: 1, label: '班级管理员' },
+  { id: 2, label: '普通成员' },
+]
 const loading = ref(true)
 const section = ref<'assignments' | 'exams' | 'members'>('assignments')
 
@@ -724,15 +730,14 @@ onMounted(load)
               <el-table-column label="身份" width="200">
                 <template #default="{ row }">
                   <el-tag v-if="row.is_owner" size="small" type="warning">建班人</el-tag>
-                  <el-select
+                  <!-- v0.63 惰性单元格编辑：成员全量下发，行内常驻 el-select 在百人班
+                       是冻结源——点格才挂（admin=1/member=2 数值映射，选中即改身份） -->
+                  <LazySelectCell
                     v-else-if="cl.manageable"
-                    :model-value="row.role"
-                    size="small"
-                    @change="(v: string) => changeMemberRole(row as ClassMember, v)"
-                  >
-                    <el-option value="admin" label="班级管理员" />
-                    <el-option value="member" label="普通成员" />
-                  </el-select>
+                    :model-value="row.role === 'admin' ? 1 : 2"
+                    :options="memberRoleOptions"
+                    @update:model-value="(v: number | number[]) => changeMemberRole(row as ClassMember, v === 1 ? 'admin' : 'member')"
+                  />
                   <el-tag v-else size="small" :type="row.role === 'admin' ? 'success' : 'info'">
                     {{ row.role === 'admin' ? '班级管理员' : '成员' }}
                   </el-tag>

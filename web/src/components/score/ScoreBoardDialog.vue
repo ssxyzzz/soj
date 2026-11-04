@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import UserNameLevel from '@/components/UserNameLevel.vue'
@@ -33,6 +34,24 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+
+// 客户端分页（v0.63 挂载冻结扫尾批）：全参赛者 × 全题矩阵一次挂载在百人场次 =
+// 行×题个 ScoreCell 组件实例 + 每题列表头 tooltip，弹窗打开即冻结——50 行/页封顶，
+// 榜单数据整包照拿（导出 CSV/定位我仍是全量口径），只把 DOM 挂载量分页化。
+const PAGE = 50
+const page = ref(1)
+const pagedRows = computed(() => {
+  const rows = props.board?.rows ?? []
+  return rows.slice((page.value - 1) * PAGE, page.value * PAGE)
+})
+// 新榜单/刷新：页码复位，并自动跳到「我」所在页（看榜首先是找自己）
+watch(
+  () => props.board,
+  (b) => {
+    const idx = b ? b.rows.findIndex((r) => r.uid === props.myUid) : -1
+    page.value = idx >= 0 ? Math.floor(idx / PAGE) + 1 : 1
+  },
+)
 
 function cellOf(row: ScoreRowView, p: ScoreProblemView): ScoreCellView {
   return (
@@ -90,7 +109,7 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
       <el-table
         v-if="board?.rows.length"
         stripe
-        :data="board.rows"
+        :data="pagedRows"
         row-key="uid"
         :row-class-name="rowClass as never"
         class="score-table"
@@ -132,6 +151,17 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
         </el-table-column>
       </el-table>
       <el-empty v-else description="暂无成绩" :image-size="60" />
+      <!-- 分页（v0.63）：50 行/页封顶挂载；已自动定位到「我」所在页 -->
+      <div v-if="(board?.rows.length ?? 0) > PAGE" class="pager-row">
+        <el-pagination
+          background
+          layout="prev, pager, next, total"
+          :total="board?.rows.length ?? 0"
+          :page-size="PAGE"
+          :current-page="page"
+          @current-change="(p: number) => (page = p)"
+        />
+      </div>
       <!-- v3 图例：分数格色语义 -->
       <p v-if="board?.rows.length" class="legend">点击分数格可查看该题对应提交；绿色满分 · 黄色部分分 · 红色零分。</p>
     </div>
@@ -180,6 +210,12 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
   color: var(--soj-blue);
   font-weight: var(--soj-fw-bold);
   font-variant-numeric: tabular-nums;
+}
+
+.pager-row {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--soj-sp-10);
 }
 
 .legend {

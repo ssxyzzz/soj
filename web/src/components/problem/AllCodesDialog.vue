@@ -132,7 +132,7 @@ function openOthersDetail(s: Submission) {
   >
     <el-tabs v-model="tab" class="board-tabs">
       <!-- 挑战榜 -->
-      <el-tab-pane label="挑战榜" name="challenge">
+      <el-tab-pane label="挑战榜" name="challenge" lazy>
         <el-table v-loading="boardsLoading" stripe :data="boards?.challenge ?? []" border>
           <el-table-column prop="rank" label="名次" width="70">
             <template #default="{ row }">
@@ -168,7 +168,7 @@ function openOthersDetail(s: Submission) {
       </el-tab-pane>
 
       <!-- 用时榜 -->
-      <el-tab-pane label="用时榜" name="time">
+      <el-tab-pane label="用时榜" name="time" lazy>
         <div v-if="boards && !boards.can_view_boards" class="board-locked">
           该题拿到满分后可查看用时榜与内存榜（挑战榜不受限）
         </div>
@@ -199,7 +199,7 @@ function openOthersDetail(s: Submission) {
       </el-tab-pane>
 
       <!-- 内存榜 -->
-      <el-tab-pane label="内存榜" name="mem">
+      <el-tab-pane label="内存榜" name="mem" lazy>
         <div v-if="boards && !boards.can_view_boards" class="board-locked">
           该题拿到满分后可查看用时榜与内存榜（挑战榜不受限）
         </div>
@@ -230,7 +230,7 @@ function openOthersDetail(s: Submission) {
       </el-tab-pane>
 
       <!-- 全部代码（原「所有代码」） -->
-      <el-tab-pane label="全部代码" name="codes">
+      <el-tab-pane label="全部代码" name="codes" lazy>
         <template v-if="othersView === 'list'">
           <div class="dlg-toolbar">
             <el-radio-group v-model="othersSort" @change="loadOthers(1)">

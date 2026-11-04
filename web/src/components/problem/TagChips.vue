@@ -34,19 +34,30 @@ interface TagRow {
 
 const searching = computed(() => !!search.value.trim())
 
-const rows = computed<TagRow[]>(() => {
+// 搜索命中封顶（v0.63 挂载冻结扫尾批）：知识树 465 节点搜单字可命中上百卡片整行平铺，
+// 截到 SEARCH_CAP 提示打长词；walk 中短路不再扫全树
+const SEARCH_CAP = 60
+const searchHits = computed<{ items: TagItem[]; truncated: boolean } | null>(() => {
   const q = search.value.trim().toLowerCase()
-  if (q) {
-    const hits: TagItem[] = []
-    const walk = (list: TagNode[], depth: number) => {
-      for (const n of list) {
-        if (n.name.toLowerCase().includes(q)) hits.push({ node: n, depth })
-        if (n.children) walk(n.children, depth + 1)
+  if (!q) return null
+  const hits: TagItem[] = []
+  const walk = (list: TagNode[], depth: number): boolean => {
+    for (const n of list) {
+      if (n.name.toLowerCase().includes(q)) {
+        hits.push({ node: n, depth })
+        if (hits.length >= SEARCH_CAP) return false // 满：停扫
       }
+      if (n.children && walk(n.children, depth + 1) === false) return false
     }
-    walk(props.nodes, 0)
-    return [{ items: hits }]
+    return true
   }
+  const full = walk(props.nodes, 0)
+  return { items: hits, truncated: !full }
+})
+
+const rows = computed<TagRow[]>(() => {
+  const h = searchHits.value
+  if (h) return [{ items: h.items }]
   const out: TagRow[] = [{ items: props.nodes.map((n) => ({ node: n, depth: 0 })) }]
   for (let d = 0; d < path.value.length; d++) {
     const next = findNode(props.nodes, path.value[d])?.children
@@ -148,6 +159,10 @@ onBeforeUnmount(() => {
             <span v-if="selected.has(item.node.id)" class="check">✓</span>
           </div>
           <div v-if="!r.items.length" class="dim">没有匹配的标签</div>
+          <!-- v0.63 命中封顶提示：已显示前 SEARCH_CAP 个匹配，继续输入缩小范围 -->
+          <div v-else-if="searching && searchHits?.truncated && i === 0" class="dim tag-cap-hint">
+            已显示前 {{ SEARCH_CAP }} 个匹配，请继续输入缩小范围
+          </div>
         </div>
       </div>
       <!-- 底部两行缓冲：末级展开后鼠标习惯性继续下移查找，进垫片即取消收起计时（见 .tag-flow-pad） -->

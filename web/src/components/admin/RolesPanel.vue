@@ -33,7 +33,8 @@ async function togglePerm(role: RoleInfo, perm: string) {
   const next = cur.includes(perm) ? cur.filter((p) => p !== perm) : [...cur, perm]
   await adminApi.updateRole(role.id, { perms: next })
   permDraft[role.id] = next
-  await reload()
+  // v0.63：勾选只改本地草稿，不整表 reload——权限位/角色集合没变，重拉只会把
+  // 29×N checkbox 矩阵整表重渲染一遍（挂载冻结病理）；改名/删角色/建角色才 reload。
 }
 
 async function renameRole(role: RoleInfo) {
@@ -139,9 +140,8 @@ onMounted(async () => {
       <el-table-column label="权限位" width="200" fixed>
         <template #default="{ row }">
           <div v-if="row.type === 'group'" class="perm-group-row">{{ row.label }}</div>
-          <el-tooltip v-else :content="row.perm.desc" placement="top">
-            <span>{{ row.perm.label }}</span>
-          </el-tooltip>
+          <!-- v0.63 原生 title：29 个 el-tooltip 常驻实例是矩阵挂载成本，一行说明文字原生提示零成本 -->
+          <span v-else :title="row.perm.desc">{{ row.perm.label }}</span>
         </template>
       </el-table-column>
       <el-table-column
@@ -160,20 +160,14 @@ onMounted(async () => {
               </el-tag>
               <template v-else>
                 <el-icon class="col-act" title="改名" @click="renameRole(r)"><Edit /></el-icon>
-                <el-tooltip
-                  :disabled="r.user_count === 0"
-                  content="仍有用户挂靠，请先改派后再删除"
-                  placement="top"
+                <el-icon
+                  class="col-act"
+                  :class="{ 'col-act-disabled': r.user_count > 0 }"
+                  :title="r.user_count > 0 ? '仍有用户挂靠，请先改派后再删除' : '删除角色'"
+                  @click="r.user_count === 0 && removeRole(r)"
                 >
-                  <el-icon
-                    class="col-act"
-                    :class="{ 'col-act-disabled': r.user_count > 0 }"
-                    title="删除角色"
-                    @click="r.user_count === 0 && removeRole(r)"
-                  >
-                    <Delete />
-                  </el-icon>
-                </el-tooltip>
+                  <Delete />
+                </el-icon>
               </template>
             </div>
           </div>

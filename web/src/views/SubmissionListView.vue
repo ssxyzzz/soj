@@ -17,6 +17,13 @@ const route = useRoute()
 const router = useRouter()
 const pageSize = 20
 
+// 状态悬停说明（v0.63 原生 title 化）：含义 + 常见原因拼两行
+function statusTitle(status: string): string | undefined {
+  const d = statusDesc(status)
+  if (!d) return undefined
+  return d.cause ? `${d.meaning}\n常见原因：${d.cause}` : d.meaning
+}
+
 // URL 即状态（v0.39）：挂载从 query 复原筛选与页码，变更回写（reload 包装——各筛选
 // 处理器零改动）；query 仅作复原源，绝不 watch 回读触发请求
 const lq = useListQuery()
@@ -231,21 +238,16 @@ onMounted(() => {
     </div>
 
     <el-card class="tbl-card">
-      <el-table stripe v-loading="loading" :data="list">
+      <!-- v0.63：row-key 复用行组件（5s 轮询整表 data 替换不再全行重挂）；状态说明
+           tooltip 原生 title 化（20 行 × el-tooltip 常驻实例省掉） -->
+      <el-table stripe v-loading="loading" :data="list" row-key="id">
         <el-table-column label="状态" width="140">
           <template #default="{ row }">
-            <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
-              <template #content>
-                <div class="status-tip">
-                  <div>{{ statusDesc(row.status)!.meaning }}</div>
-                  <div v-if="statusDesc(row.status)!.cause">常见原因：{{ statusDesc(row.status)!.cause }}</div>
-                </div>
-              </template>
-              <span class="status-tag clickable" @click.stop="openDetail(row.id)">
-                <SubStatus :status="row.status" :score="row.score" />
-              </span>
-            </el-tooltip>
-            <span v-else class="status-tag clickable" @click.stop="openDetail(row.id)">
+            <span
+              class="status-tag clickable"
+              :title="statusTitle(row.status)"
+              @click.stop="openDetail(row.id)"
+            >
               <SubStatus :status="row.status" :score="row.score" />
             </span>
           </template>

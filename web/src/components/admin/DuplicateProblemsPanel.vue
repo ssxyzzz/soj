@@ -2,6 +2,8 @@
 // 重复题扫描面板（v0.18.1 立项；v0.47 换血相似度判重）：按「标题 + 题面」归一化
 // 相似度（≥80%）分组一键扫描全库，组内一键标重复/取消（学生端立即不可见）——
 // 只列不自动删，改题/隐藏等处置仍由管理员在题目编辑页自行完成。
+// v0.63 挂载冻结扫尾批：组默认折叠（v-if 懒挂载）——扫描结果全量返回、组数无上限，
+// 每组一张 el-table 常驻挂载在重复题多的库即面板冻结；组头点开才建表。
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 
@@ -13,12 +15,21 @@ const loading = ref(false)
 const scanned = ref(false)
 // 行级标记进行中（一键标重复按钮的 loading）
 const marking = ref<number>(0)
+// 展开态按组索引记（v0.63）：默认全折叠；重扫后清空
+const openGroups = ref(new Set<number>())
+function toggleGroup(i: number) {
+  const s = new Set(openGroups.value)
+  if (s.has(i)) s.delete(i)
+  else s.add(i)
+  openGroups.value = s
+}
 
 async function scan() {
   loading.value = true
   try {
     const r = await adminApi.duplicateProblems()
     groups.value = r.groups
+    openGroups.value = new Set()
     scanned.value = true
   } finally {
     loading.value = false
@@ -74,13 +85,14 @@ onMounted(scan)
         按「标题 + 题面」归一化相似度 ≥80% 判重，共 {{ groups.length }} 组疑似重复；行内一键标重复/取消（学生端立即不可见），也可点题号进编辑页改题——系统不会自动删除。
       </div>
       <div v-for="(g, i) in groups" :key="i" class="dup-group">
-        <div class="dup-title">
+        <button type="button" class="dup-title dup-toggle" @click="toggleGroup(i)">
           <el-tag type="danger" size="small">{{ g.problems.length }} 题重复</el-tag>
           <el-tag type="warning" size="small">相似度 {{ Math.round((g.similarity ?? 0) * 100) }}%</el-tag>
           <span class="dup-name">{{ g.title || '（无标题）' }}</span>
-        </div>
-        <div v-if="g.preview" class="dup-preview dim">{{ g.preview }}…</div>
-        <el-table :data="g.problems" size="small">
+          <span class="dup-count">{{ openGroups.has(i) ? '收起' : `展开 ${g.problems.length} 题` }}</span>
+        </button>
+        <div v-if="g.preview && openGroups.has(i)" class="dup-preview dim">{{ g.preview }}…</div>
+        <el-table v-if="openGroups.has(i)" :data="g.problems" size="small">
           <el-table-column label="题号" width="120">
             <template #default="{ row }">
               <router-link :to="`/problems/${row.id}/edit`" target="_blank" class="pid-link">#{{ row.id }}</router-link>
@@ -142,6 +154,28 @@ onMounted(scan)
   align-items: center;
   gap: var(--soj-sp-8);
   margin-bottom: var(--soj-sp-6);
+}
+
+/* 组头即折叠钮（v0.63）：整行可点展开/收起，右侧提示文本 */
+.dup-toggle {
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dup-toggle:hover .dup-name {
+  color: var(--soj-blue);
+}
+
+.dup-count {
+  margin-left: auto;
+  flex: none;
+  color: var(--soj-blue);
+  font-size: var(--soj-fs-13);
 }
 
 .dup-name {

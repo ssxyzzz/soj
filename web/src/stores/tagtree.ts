@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 
 import { tagApi } from '@/api'
@@ -15,6 +15,9 @@ import type { TagNode } from '@/types'
 //   ② 失败负缓存：拉取失败 30s 内不再重试（失败后 loaded 恒 false、每次导航都重拉，
 //      是上述 195 次循环在代码里唯一可复现的机制）；
 //   ③ TTL 10 分钟：过期后旧数据先用、后台静默刷新（stale-while-revalidate）。
+//
+// v0.63：nodes 用 shallowRef——树是低频整体替换数据（load() 整包重赋值、消费端全
+// 只读、root 编辑走 TagsPanel 本地 draft），深代理 465 节点只为只读是纯开销。
 
 // 成功缓存有效期：树变更频率 = root 手改，10 分钟足够鲜
 const TREE_TTL_MS = 10 * 60 * 1000
@@ -23,7 +26,7 @@ const TREE_FAIL_COOLDOWN_MS = 30 * 1000
 
 export function treeStoreOf(kind: 'knowledge' | 'meta', id: string) {
   return defineStore(id, () => {
-    const nodes = ref<TagNode[]>([])
+    const nodes = shallowRef<TagNode[]>([])
     const loaded = ref(false)
     let fetching: Promise<void> | null = null
     let loadedAt = 0

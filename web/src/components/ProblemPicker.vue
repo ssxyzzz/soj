@@ -4,7 +4,7 @@
 // v0.26.1；TagFilter 标签多选；无分页、搜索驱动、单次 100 条；排除隐藏题维持现口径）；
 // 右列 = 已选清单（拖动 ⠿ 排序 / 删除，沿用调整题目弹窗交互）。
 // v-model 为带标题的已选数组（保序）；已选中的隐藏题（组织者 edit_problems）原样保留展示。
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import { problemApi } from '@/api'
 import TagFilter from '@/components/problem/TagFilter.vue'
@@ -40,10 +40,12 @@ watch([q, tags], () => {
   debounce = setTimeout(search, 400)
 })
 
-const pickedIds = () => new Set(props.modelValue.map((p) => p.id))
+// 已选 id 集（v0.63 计算一次）：候选行 class/checkbox 两处每行各调一次 isPicked，
+// 原每调用重建 Set = O(候选 × 已选)；已选变化才重算。
+const pickedSet = computed(() => new Set(props.modelValue.map((p) => p.id)))
 
 function isPicked(id: number): boolean {
-  return pickedIds().has(id)
+  return pickedSet.value.has(id)
 }
 
 function toggle(p: ProblemListItem) {

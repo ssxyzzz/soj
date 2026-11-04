@@ -1,7 +1,11 @@
 <script setup lang="ts">
-// 客观题作答卡（v0.9.3 多小题 + 内联化）：整卷逐题渲染——每题题干 + 作答控件，
-// 底部一次提交。题库详情与比赛/考试做题页共用；提交动作由父组件接手。
-import { reactive, watch } from 'vue'
+// 客观题作答卡（v0.9.3 多小题 + 内联化；v0.63 渐进挂载）：整卷逐题渲染——每题题干 +
+// 作答控件，底部一次提交。题库详情与比赛/考试做题页共用；提交动作由父组件接手。
+// v0.63 挂载冻结扫尾批：题干 MdView（KaTeX/hljs 增强）+ 每题 4~8 个带边框选项控件
+// 在 N 题整卷一次挂载是作答页冻结根源——改**渐进挂载**：题头（轻）全渲染常驻，题干与
+// 控件只在滚到视口 ±1200px 时挂载，挂过不卸（作答态在组件 state 不在 DOM，卸载本就
+// 无损；不卸则滚动零跳动、向上滚零重挂）。作答 UX 零变化。
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import MdView from '@/components/MdView.vue'
@@ -22,6 +26,31 @@ const emit = defineEmits<{
 const picks = reactive<number[][]>([])
 const fills = reactive<string[][]>([])
 
+// ---- 渐进挂载（v0.63）：视口附近的题才挂题干+控件，挂过保留 ----
+const rootEl = ref<HTMLElement>()
+const mountedQ = reactive(new Set<number>())
+let io: IntersectionObserver | null = null
+
+function observeItems() {
+  if (!io || !rootEl.value) return
+  for (const el of rootEl.value.querySelectorAll<HTMLElement>('.obj-item')) {
+    io.observe(el)
+  }
+}
+
+onMounted(() => {
+  io = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) mountedQ.add(Number((e.target as HTMLElement).dataset.qi))
+      }
+    },
+    { rootMargin: '1200px 0px' }, // 上下预挂一屏多，滚到前已就绪
+  )
+  observeItems()
+})
+onBeforeUnmount(() => io?.disconnect())
+
 function reset() {
   picks.length = 0
   fills.length = 0
@@ -29,6 +58,8 @@ function reset() {
     picks.push([])
     fills.push(new Array(q.blank_count || 0).fill(''))
   }
+  mountedQ.clear() // 换卷/重置：挂载窗口回到视口
+  void nextTick(observeItems)
 }
 
 watch(() => props.questions, reset, { immediate: true, deep: false })
@@ -87,12 +118,15 @@ function doSubmit() {
       </div>
     </template>
 
-    <div v-for="(q, qi) in questions" :key="qi" class="obj-item">
+    <div ref="rootEl" class="obj-list">
+    <div v-for="(q, qi) in questions" :key="qi" class="obj-item" :data-qi="qi">
       <div class="obj-item-head">
         <span class="obj-idx">第 {{ qi + 1 }} 题</span>
         <el-tag size="small" class="ptype-tag">{{ kindLabel(q.kind) }}</el-tag>
         <span class="dim obj-score">{{ q.score }} 分</span>
       </div>
+      <!-- v0.63 渐进挂载：题干与控件滚到附近才建（挂过不卸）；未挂时只留轻占位 -->
+      <template v-if="mountedQ.has(qi)">
       <div v-if="q.stem" class="obj-stem"><MdView :html="q.stem_html" /></div>
 
       <!-- 填空：逐空输入 -->
@@ -135,6 +169,9 @@ function doSubmit() {
           </el-checkbox>
         </div>
       </template>
+      </template>
+      <div v-else class="obj-pending dim">滚动到此处展示本题</div>
+    </div>
     </div>
 
     <div class="obj-foot">
@@ -150,6 +187,12 @@ function doSubmit() {
 <style scoped>
 .obj-answer-card {
   margin-top: var(--soj-sp-16);
+}
+
+/* 未挂载题的轻占位（v0.63 渐进挂载）：给滚动一个最小高度感，不与真实高度对齐（挂载即替换） */
+.obj-pending {
+  padding: var(--soj-sp-10) 0;
+  font-size: var(--soj-fs-13);
 }
 
 .obj-head {

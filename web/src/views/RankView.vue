@@ -231,7 +231,9 @@ onMounted(() => {
         <template v-else>
           <el-table-column label="等级" width="150">
             <template #default="{ row }">
-              <TierBadge v-if="row.level" :tier="row.level" kind="level" />
+              <!-- v0.63 表内静态化（fx=false）：百行 × Lv≥3 特效链是常驻重绘源；
+                   领奖台前三（:186）保留特效 -->
+              <TierBadge v-if="row.level" :tier="row.level" kind="level" :fx="false" />
               <span v-else class="dim">—</span>
             </template>
           </el-table-column>

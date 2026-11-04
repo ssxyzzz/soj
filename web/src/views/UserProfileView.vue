@@ -133,6 +133,16 @@ const groups = computed(() => {
 const sel = ref(0)
 const effSel = computed(() => (groups.value.some((g) => g.d === sel.value) ? sel.value : groups.value[0]?.d ?? 0))
 const selItems = computed(() => groups.value.find((g) => g.d === effSel.value)?.items ?? [])
+// 组内截断（v0.63 挂载冻结扫尾批）：重度用户单难度档 AC 数百题整组渲染无虚拟化——
+// 前 GROUP_N 条 + 展开按钮；切档/换窗收起复位
+const GROUP_N = 50
+const groupExpanded = ref(false)
+const shownItems = computed(() =>
+  groupExpanded.value ? selItems.value : selItems.value.slice(0, GROUP_N),
+)
+watch([sel, win, () => page.value?.id], () => {
+  groupExpanded.value = false
+})
 
 // 柱高按真实做题数线性等比（2026-10-27 用户拍板，弃最高档归一口径）：
 // 每题 1px、初始4px、240px 封顶（236 题满高；到顶后靠柱顶数字区分）；零档 4px 灰桩。
@@ -267,13 +277,17 @@ function openDetail(id: number) {
               <span class="dcount mono">{{ selItems.length }} 题</span>
             </div>
             <div class="glist">
-              <div v-for="e in selItems" :key="e.pid" class="prow">
+              <div v-for="e in shownItems" :key="e.pid" class="prow">
                 <router-link class="plink" :to="`/problems/${e.pid}`">
                   <span class="mono pid">P{{ e.pid }}</span> {{ e.title }}
                 </router-link>
                 <el-tag v-if="e.hidden" size="small" type="danger" effect="plain" class="hid">隐藏</el-tag>
                 <span class="when mono">{{ fmtDate(e.first_ac_at) }}</span>
               </div>
+              <!-- v0.63 截断展开钮：重度用户单档数百题不整组挂载 -->
+              <button v-if="selItems.length > GROUP_N" type="button" class="gmore" @click="groupExpanded = !groupExpanded">
+                {{ groupExpanded ? '收起' : `展开全部 ${selItems.length} 题` }}
+              </button>
             </div>
           </div>
         </div>
@@ -600,6 +614,23 @@ function openDetail(id: number) {
 
 .glist {
   padding: var(--soj-sp-2) var(--soj-sp-6);
+}
+
+/* 截断展开钮（v0.63）：整行文本钮 */
+.gmore {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: var(--soj-sp-10);
+  font: inherit;
+  font-size: var(--soj-fs-13);
+  color: var(--soj-blue);
+  cursor: pointer;
+}
+
+.gmore:hover {
+  text-decoration: underline;
 }
 
 .prow {

@@ -15,8 +15,10 @@ const props = withDefaults(
     kind?: 'level' | 'difficulty'
     label?: string // 覆盖默认文案（等级名 / 难度名）
     size?: 'sm' | 'md' | 'lg'
+    fx?: boolean // 特效链开关（v0.63）：默认开；百行榜单表格内传 false 静态化——
+    // ulv-fx* 无限动画 + Lv.9/10 粒子在一页百颗时是常驻重绘源，视觉主体色阶胶囊保留
   }>(),
-  { kind: 'difficulty', size: 'sm', label: undefined },
+  { kind: 'difficulty', size: 'sm', label: undefined, fx: true },
 )
 
 const levels = useLevelsStore()
@@ -32,7 +34,7 @@ const cls = computed(() => {
   if (props.kind === 'level') {
     // 实色 + 特效链（Lv.3 起挂 fx；fx 类按档位递进，极境由 .ulv-10 双类压轴）
     const arr = ['tier-badge', `tier-${props.size}`, 'ulv-tag', `ulv-${clamped.value}`]
-    if (clamped.value >= 3) arr.push(`ulv-fx${clamped.value}`)
+    if (props.fx && clamped.value >= 3) arr.push(`ulv-fx${clamped.value}`)
     return arr
   }
   return ['tier-badge', `tier-${props.size}`, 'diff-tag', `diff-${clamped.value}`]
@@ -71,9 +73,9 @@ const STARS: Record<number, Array<{ t?: number; l?: number; r?: number; b?: numb
   ],
 }
 
-// 星的定位/错拍内联样式（仅等级 5+ 渲染）
+// 星的定位/错拍内联样式（仅等级 5+ 渲染；fx=false 静态化时不渲染）
 const stars = computed(() => {
-  if (props.kind !== 'level') return []
+  if (props.kind !== 'level' || !props.fx) return []
   return (STARS[clamped.value] ?? []).map((st) => {
     let style = `font-size:${st.s}px;animation-delay:${st.d}s;`
     if (st.t != null) style += `top:${st.t}px;`
@@ -107,9 +109,9 @@ const PARTICLES: Record<
   ],
 }
 
-// 粒子内联样式（颜色/定位/外飞向量；仅 Lv.9+ 渲染）
+// 粒子内联样式（颜色/定位/外飞向量；仅 Lv.9+ 渲染；fx=false 静态化时不渲染）
 const particles = computed(() => {
-  if (props.kind !== 'level') return []
+  if (props.kind !== 'level' || !props.fx) return []
   return (PARTICLES[clamped.value] ?? []).map((pt) => {
     let style = `color:${pt.c};--dx:${pt.dx}px;--dy:${pt.dy}px;`
     if (pt.t != null) style += `top:${pt.t}px;`

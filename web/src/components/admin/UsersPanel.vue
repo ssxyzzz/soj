@@ -1,9 +1,11 @@
 <script setup lang="ts">
 // 用户管理面板（v3-full 重制）：panel-h（标题 + 搜索胶囊 + 新建）+ 按角色分组的用户表
-// （2026-10-27 拍板：普通用户组默认收起，其余展开；组头点击折叠）。
+//（2026-10-27 拍板：普通用户组默认收起，其余展开；组头点击折叠）。
 // 数据一次拉全量（循环分页，page_size 100）后本地分组/过滤——搜索零请求、组不会被分页切碎。
+// v0.63 挂载冻结扫尾批：搜索命中封顶（SEARCH_CAP，防首键全站用户整表挂载）+ 组内分页
+//（GROUP_PAGE，防大组无界渲染）——两道闸把 DOM 上限从「全站用户数」收到「组页大小」。
 // 角色胶囊色：root 红 / admin 橙 / teacher 蓝 / 其余（自定义角色、default）灰。
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { UploadUserFile } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -40,7 +42,10 @@ async function load() {
   }
 }
 
-// 搜索本地过滤（用户名 / 昵称，与原服务端口径一致），零请求即时出结果
+// 搜索本地过滤（用户名 / 昵称，与原服务端口径一致），零请求即时出结果。
+// 命中封顶（v0.63）：常见字首键命中全站用户时整表挂载是面板冻结根源，截到 SEARCH_CAP
+// 并在头行明示「匹配 N 人，仅显示前 200」——要找的人不在前 200 就把词打长一点。
+const SEARCH_CAP = 200
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   if (!kw) return all.value
@@ -48,12 +53,17 @@ const filtered = computed(() => {
     (u) => u.username.toLowerCase().includes(kw) || (u.nickname ?? '').toLowerCase().includes(kw),
   )
 })
+const shown = computed(() => {
+  const list = filtered.value
+  return list.length > SEARCH_CAP ? list.slice(0, SEARCH_CAP) : list
+})
+const hiddenByCap = computed(() => filtered.value.length - shown.value.length)
 
 // 按角色分组：顺序沿用角色 store 的 roleGroups（root→admin→自定义→default 垫底），
-// 不在 store 里的角色（已删自定义角色等）追加末尾；空组不显示
+// 不在 store 里的角色（已删自定义角色等）追加末尾；空组不显示。分组吃封顶后的 shown。
 const groups = computed(() => {
   const byRole = new Map<string, AdminUser[]>()
-  for (const u of filtered.value) {
+  for (const u of shown.value) {
     const arr = byRole.get(u.role)
     if (arr) arr.push(u)
     else byRole.set(u.role, [u])
@@ -79,6 +89,18 @@ function toggle(role: string) {
 // 搜索时强制全部展开（折叠会藏住匹配项）；清空搜索恢复各自折叠态
 const forceExpand = computed(() => !!keyword.value.trim())
 const expanded = (role: string) => forceExpand.value || isOpen(role)
+
+// ---- 组内分页（v0.63）：大组（default 动辄全站学生）不再一次建整组表格 ----
+const GROUP_PAGE = 50
+const groupPage = reactive<Record<string, number>>({})
+function groupSlice(role: string, users: AdminUser[]): AdminUser[] {
+  const p = groupPage[role] ?? 1
+  return users.slice((p - 1) * GROUP_PAGE, p * GROUP_PAGE)
+}
+// 换搜索词 / 重拉数据：组页码复位（结果集变了，旧页码无意义）
+watch(keyword, () => {
+  for (const k of Object.keys(groupPage)) delete groupPage[k]
+})
 
 // v3 role-chip 色映射：root 红 / admin 橙 / teacher 蓝 / 其余灰
 function roleClass(role: string): string {
@@ -504,7 +526,10 @@ defineExpose({ refresh: () => load() })
     <!-- v3 panel-h：标题 + 计数 + 右侧搜索胶囊 + 新建 -->
     <div class="panel-h panel-head">
       <span class="pt">编辑用户</span>
-      <span class="dim count">共 {{ filtered.length }} 人</span>
+      <span class="dim count">
+        <template v-if="hiddenByCap > 0">匹配 {{ filtered.length }} 人，仅显示前 {{ SEARCH_CAP }}（请把关键词打长一点）</template>
+        <template v-else>共 {{ filtered.length }} 人</template>
+      </span>
       <div class="acts">
         <label class="soj-input head-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
@@ -522,7 +547,7 @@ defineExpose({ refresh: () => load() })
         <span class="dim gcount">{{ g.users.length }} 人</span>
         <el-icon class="chev" :class="{ open: expanded(g.role) }"><ArrowDown /></el-icon>
       </button>
-      <el-table v-if="expanded(g.role)" v-loading="loading" :data="g.users">
+      <el-table v-if="expanded(g.role)" v-loading="loading" :data="groupSlice(g.role, g.users)">
         <el-table-column label="ID" width="80">
           <template #default="{ row }">
             <span class="mono dim">{{ row.id }}</span>
@@ -552,6 +577,18 @@ defineExpose({ refresh: () => load() })
           </template>
         </el-table-column>
       </el-table>
+      <!-- 组内分页（v0.63）：大组 50/页，防无界渲染 -->
+      <div v-if="expanded(g.role) && g.users.length > GROUP_PAGE" class="group-pager">
+        <el-pagination
+          small
+          background
+          layout="prev, pager, next"
+          :total="g.users.length"
+          :page-size="GROUP_PAGE"
+          :current-page="groupPage[g.role] ?? 1"
+          @current-change="(p: number) => (groupPage[g.role] = p)"
+        />
+      </div>
     </template>
 
     <el-empty
@@ -889,6 +926,13 @@ defineExpose({ refresh: () => load() })
 
 .gcount {
   font-size: var(--soj-fs-13);
+}
+
+/* 组内分页条（v0.63）：右贴组头下沿，小号不抢戏 */
+.group-pager {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--soj-sp-4) var(--soj-sp-6) var(--soj-sp-8);
 }
 
 .chev {
