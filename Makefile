@@ -20,8 +20,10 @@ up: check ## 构建发版并对齐镜像（= check + bin + image：先过代码�
 	# 2026-11-04 根修：原 `up -d --build soj` 会把 depends_on 的 sandbox 一并拖进构建图，
 	# 例行发版被 sandbox 基础镜像（Docker Hub）可达性绑架；拆成两步，发版只重建 soj。
 	# sandbox 镜像缺失时 up 仍会按 build: 自动补建，全新机器行为不变。
+	# 同日二修：up 必须显式带 judge——分进程后 soj 不再 depends_on judge（解耦本意），
+	# 漏带的生产实锤：soj 已切 workers=0 而 judge 未建，判题能力归零约一分钟。
 	SOJ_VERSION=$(VERSION) docker compose build soj
-	docker compose up -d soj
+	docker compose up -d soj judge
 
 down: ## 停止并移除容器（数据卷保留）
 	docker compose down
@@ -40,7 +42,7 @@ backup: ## 备份 MongoDB 与测试数据到 ./backups/
 
 image: ## 重建 soj 镜像并重启容器（不编译前端：嵌入的是 webui/dist 现有产物——单独用它部署前先 make web-building，否则拿旧前端；make up 已含构建与对齐）
 	SOJ_VERSION=$(VERSION) docker compose build soj
-	docker compose up -d soj
+	docker compose up -d soj judge
 
 bin: ## 快速编译发版，不过门禁不重建镜像（仅限开发机调试；服务器例行发版一律 make up）
 	./scripts/web-building.sh
