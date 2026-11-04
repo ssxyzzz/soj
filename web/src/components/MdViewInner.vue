@@ -33,16 +33,20 @@ async function renderMath(root: HTMLElement) {
 }
 
 // hljs 高亮 + 行号（结构 vditor-linenumber：每行一个空 span，::before counter 画
-// 数字；代码文本不动，复制不受影响）。@/hljs 精简包（core + 判题/题面常用语言）
+// 数字；代码文本不动，复制不受影响）。@/hljs 精简包（core + 判题/题面常用语言）。
+// 未注册语言先查后跳（v0.62）：题面样例习惯用 input1/output1 之类围栏名，hljs 对
+// 未知语言会连发「找不到语言 / 回退无高亮」两条 warn——getLanguage 预检后静默
+// 保持纯文本（样例 IO 本就该纯文本展示）。
 async function highlightCode(root: HTMLElement) {
   const codes = root.querySelectorAll<HTMLElement>('pre > code[class*="language-"]')
   if (!codes.length) return
   const { default: hljs } = await import('@/hljs')
   codes.forEach((code) => {
+    const lang = /language-([\w-]+)/.exec(code.className)?.[1]
     try {
-      hljs.highlightElement(code)
+      if (lang && hljs.getLanguage(lang)) hljs.highlightElement(code)
     } catch {
-      // 未知语言：保持纯文本
+      // 高亮异常：保持纯文本
     }
     code.classList.add('vditor-linenumber')
     const rows = document.createElement('span')

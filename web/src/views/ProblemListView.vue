@@ -448,13 +448,13 @@ onMounted(() => {
           </el-table-column>
           <el-table-column label="通过率" width="88">
             <template #default="{ row }">
-              <el-tooltip
+              <!-- 原生 title（v0.62 挂载冻结根治批）：50 行 × el-tooltip 实例是题库刷新
+                   卡的同构成分，一行文案用原生提示零成本承载 -->
+              <span
                 v-if="row.submit_count"
-                :content="`AC ${row.accepted_count ?? 0} / 提交 ${row.submit_count}`"
-                placement="top"
-              >
-                <span class="mono">{{ acceptRate(row) }}</span>
-              </el-tooltip>
+                class="mono"
+                :title="`AC ${row.accepted_count ?? 0} / 提交 ${row.submit_count}`"
+              >{{ acceptRate(row) }}</span>
               <span v-else class="dim">—</span>
             </template>
           </el-table-column>

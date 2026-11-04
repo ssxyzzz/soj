@@ -80,6 +80,7 @@ declare module 'vue' {
     FitTags: typeof import('./components/problem/FitTags.vue')['default']
     HomeAmbient: typeof import('./components/HomeAmbient.vue')['default']
     InlineEdit: typeof import('./components/InlineEdit.vue')['default']
+    LazySelectCell: typeof import('./components/LazySelectCell.vue')['default']
     LevelPanel: typeof import('./components/admin/LevelPanel.vue')['default']
     ManualTidyPanel: typeof import('./components/admin/ManualTidyPanel.vue')['default']
     MdEditor: typeof import('./components/MdEditor.vue')['default']

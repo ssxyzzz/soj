@@ -1,13 +1,17 @@
 <script setup lang="ts">
-// 手动整理（v0.49，plan §2.49）：分页题目表（每页 100 题）行内手改难度 / 知识点 /
-// 来源标签——不经 AI、无建议环节，保存走 /admin/tidy/manual（最终值整体替换 + 按
-// 字段对应 kind 打 tidiedAt 水位：保存过 = 已整理，下次 AI 整理默认跳过，redo 可重跑）。
+// 手动整理（v0.49，plan §2.49；v0.62 挂载冻结根治批改惰性单元格编辑）：分页题目表
+//（每页 100 题）行内手改难度 / 知识点 / 来源标签——不经 AI、无建议环节，保存走
+// /admin/tidy/manual（最终值整体替换 + 按字段对应 kind 打 tidiedAt 水位：保存过 =
+// 已整理，下次 AI 整理默认跳过，redo 可重跑）。
 // 草稿模型：行快照（服务器值）+ 编辑副本（drafts，按 pid 记，翻页/搜索不丢未保存修改），
 // 脏 = 副本与快照逐字段比对；只提交变更字段，未触碰的未设难度（0）不会误发。
+// v0.62：三列编辑改 LazySelectCell——默认文本态、点格才挂 el-select（同屏 ≤1 个），
+// 替代 100 行 × 3 常驻选择器（实测挂载冻结 ~940ms 的根源；全树选项也只在编辑瞬间挂载）。
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 
 import { adminApi } from '@/api'
+import LazySelectCell from '@/components/LazySelectCell.vue'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { useMetaTreeStore } from '@/stores/metaTree'
 import type { TagNode, TidyApplyItem, TidyManualProblem } from '@/types'
@@ -49,6 +53,8 @@ function flatten(nodes: TagNode[], path: string[] = []): TagOpt[] {
 
 const tagOptions = computed<TagOpt[]>(() => flatten(tagStore.nodes))
 const metaOptions = computed<TagOpt[]>(() => flatten(metaStore.nodes))
+// 难度固定十档（LazySelectCell 单选展示 D1..D10，0 = 未设置）
+const diffOptions = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, label: `D${i + 1}` }))
 
 function ensureDrafts(list: TidyManualProblem[]) {
   for (const row of list) {
@@ -166,53 +172,37 @@ onMounted(() => {
     <el-table v-loading="loading" :data="rows" size="small">
       <el-table-column prop="id" label="题号" width="76" />
       <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-      <!-- persistent=false：收起即销毁下拉 popper——否则每行选项随挂载整树渲染进 DOM
-           （100 行 × 全树 465 选项 = 4.6 万 el-option 实例，生产实测页首要挂 5s） -->
+      <!-- v0.62 惰性单元格编辑：默认文本态，点格才挂 el-select（同屏 ≤1 个，含全树
+           465 项的选项列表也只在编辑瞬间挂载）——替代 100 行 × 3 常驻选择器的 ~940ms
+           挂载冻结（persistent=false 只救了选项 DOM，选择器脚手架本身才是冻结大头） -->
       <el-table-column label="难度" width="108">
         <template #default="{ row }">
-          <el-select
-            :model-value="draftOf(row as TidyManualProblem).difficulty || undefined"
-            placeholder="未设置"
-            size="small"
-            :persistent="false"
-            @update:model-value="(v?: number) => (draftOf(row as TidyManualProblem).difficulty = v ?? 0)"
-          >
-            <el-option v-for="d in 10" :key="d" :value="d" :label="`D${d}`" />
-          </el-select>
+          <LazySelectCell
+            :model-value="draftOf(row as TidyManualProblem).difficulty"
+            :options="diffOptions"
+            empty="未设置"
+            @update:model-value="(v: number | number[]) => (draftOf(row as TidyManualProblem).difficulty = (v as number) ?? 0)"
+          />
         </template>
       </el-table-column>
       <el-table-column label="知识点" min-width="200">
         <template #default="{ row }">
-          <el-select
-            v-model="draftOf(row as TidyManualProblem).tags"
+          <LazySelectCell
+            :model-value="draftOf(row as TidyManualProblem).tags"
+            :options="tagOptions"
             multiple
-            filterable
-            clearable
-            collapse-tags
-            collapse-tags-tooltip
-            :persistent="false"
-            size="small"
-            placeholder="—"
-          >
-            <el-option v-for="o in tagOptions" :key="o.id" :value="o.id" :label="o.label" />
-          </el-select>
+            @update:model-value="(v: number | number[]) => (draftOf(row as TidyManualProblem).tags = [...(v as number[])])"
+          />
         </template>
       </el-table-column>
       <el-table-column label="来源标签" min-width="200">
         <template #default="{ row }">
-          <el-select
-            v-model="draftOf(row as TidyManualProblem).meta_tags"
+          <LazySelectCell
+            :model-value="draftOf(row as TidyManualProblem).meta_tags"
+            :options="metaOptions"
             multiple
-            filterable
-            clearable
-            collapse-tags
-            collapse-tags-tooltip
-            :persistent="false"
-            size="small"
-            placeholder="—"
-          >
-            <el-option v-for="o in metaOptions" :key="o.id" :value="o.id" :label="o.label" />
-          </el-select>
+            @update:model-value="(v: number | number[]) => (draftOf(row as TidyManualProblem).meta_tags = [...(v as number[])])"
+          />
         </template>
       </el-table-column>
       <el-table-column label="状态" width="80">

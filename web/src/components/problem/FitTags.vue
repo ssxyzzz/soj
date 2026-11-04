@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { registerSink, scheduleMeasure, unregisterSink } from '@/utils/fitMeasure'
 import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
 
@@ -9,6 +10,12 @@ import { useTagTreeStore } from '@/stores/tagtree'
 // 行尾 +N 汇总；悬停整格 50ms 用同款样式展示全部标签。
 // tree（2026-10-25 双树）：knowledge = 知识树（默认），meta = 来源标签树——题表
 // 「知识点/标签」列头点击切换时同一列复用本组件，两树 API 同构。
+//
+// v0.62 挂载冻结根治批：测量改全局单波批调度（utils/fitMeasure——读写分离 + 共享
+// ResizeObserver + fonts.ready 全站一波），替代每实例各自 measure/RO/二波测量，
+// 消掉 50 行规模挂载期的多轮交错强制布局；tooltip 改「仅溢出行挂载」——展示态零
+// el-tooltip 实例（每实例 ~1ms 脚手架 × 行数是题库刷新卡的实测成分之一），溢出行
+// 悬停弹层体验不变。
 const props = withDefaults(
   defineProps<{ ids: number[]; tree?: 'knowledge' | 'meta' }>(),
   { tree: 'knowledge' },
@@ -18,7 +25,7 @@ watch(() => props.tree, () => tagStore.value.ensure(), { immediate: true })
 
 const box = ref<HTMLElement>()
 const visible = ref(props.ids.length)
-let ro: ResizeObserver | undefined
+let nextVisible = props.ids.length
 
 // 层级优先级排序（levelOf 未入树标签默认一级）；ES2019+ sort 稳定，同级保序
 const sortedIds = computed(() => [...props.ids].sort((a, b) => tagStore.value.levelOf(a) - tagStore.value.levelOf(b)))
@@ -26,11 +33,15 @@ const sortedIds = computed(() => [...props.ids].sort((a, b) => tagStore.value.le
 const overflow = computed(() => visible.value < props.ids.length)
 const hidden = computed(() => props.ids.length - visible.value)
 
-function measure() {
+// 量宽只读阶段：算出能放几颗存入 nextVisible，不碰响应式（批调度统一先读后写）
+function measureRead() {
   const el = box.value
   if (!el) return
   const avail = el.clientWidth
-  if (!avail) return
+  if (!avail) {
+    nextVisible = props.ids.length // 不可见（display:none）：全显占位，可见后共享 RO 会再测
+    return
+  }
   const tags = Array.from(el.querySelectorAll<HTMLElement>('.fit-tag'))
   const GAP = 6
   const fitCount = (reserve: number) => {
@@ -49,29 +60,37 @@ function measure() {
     const badge = el.querySelector<HTMLElement>('.fit-more')
     count = fitCount((badge?.offsetWidth ?? 30) + GAP)
   }
-  visible.value = count
+  nextVisible = count
+}
+function measureWrite() {
+  if (visible.value !== nextVisible) visible.value = nextVisible
 }
 
-function schedule() {
-  visible.value = props.ids.length
-  nextTick(measure)
+const sink = { read: measureRead, write: measureWrite }
+let curEl: HTMLElement | null = null
+function bind() {
+  if (curEl) unregisterSink(curEl, sink)
+  curEl = box.value ?? null
+  if (curEl) registerSink(curEl, sink)
 }
 
-watch(() => props.ids, schedule)
-
-onMounted(() => {
-  ro = new ResizeObserver(() => measure())
-  if (box.value) ro.observe(box.value)
-  document.fonts?.ready.then(() => measure())
-  measure()
+onMounted(bind)
+// overflow 翻转会让 tooltip/纯 box 两分支互切重建元素：重新绑定共享 RO 观测新元素
+watch(overflow, () => void nextTick(bind))
+onBeforeUnmount(() => {
+  if (curEl) unregisterSink(curEl, sink)
 })
 
-onBeforeUnmount(() => ro?.disconnect())
+watch(() => props.ids, () => {
+  visible.value = props.ids.length
+  scheduleMeasure(sink)
+})
 </script>
 
 <template>
-  <!-- tooltip 包住整格：标签栏任一处悬停 50ms 展示全部标签（同层级色样式） -->
-  <el-tooltip :show-after="50" :disabled="!overflow" placement="top" effect="light">
+  <!-- 悬停弹层：仅溢出行挂载 el-tooltip（v0.62——展示态零 tooltip 实例）；两分支内部
+       结构需同步改 -->
+  <el-tooltip v-if="overflow" :show-after="50" placement="top" effect="light">
     <template #content>
       <div class="fit-pop">
         <el-tag
@@ -101,6 +120,21 @@ onBeforeUnmount(() => ro?.disconnect())
       <span v-else class="dim">—</span>
     </div>
   </el-tooltip>
+  <div v-else ref="box" class="fit-tags">
+    <template v-if="sortedIds.length">
+      <el-tag
+        v-for="(id, i) in sortedIds"
+        :key="id"
+        size="small"
+        class="fit-tag"
+        :class="[`lv-${tagStore.levelOf(id)}`, { 'fit-hide': i >= visible }]"
+      >
+        {{ tagStore.nameOf(id) }}
+      </el-tag>
+      <el-tag v-if="hidden > 0" size="small" type="info" class="fit-more">+{{ hidden }}</el-tag>
+    </template>
+    <span v-else class="dim">—</span>
+  </div>
 </template>
 
 <style scoped>

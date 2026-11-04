@@ -1,10 +1,14 @@
 <script setup lang="ts">
-// 客观题小题编辑器（v0.9.3）：一道客观题 = 多道小问（单选/多选/判断/填空混合）。
-// 负责小题列表的增删/移动与每题内容（题干/选项/答案/填空/解析/分值），
-// 校验（含填空占位数）后由父组件序列化为 question_json 提交。
-import { computed, ref } from 'vue'
+// 客观题小题编辑器（v0.9.3；v0.62 挂载冻结根治批改小题折叠懒挂载）：一道客观题 =
+// 多道小问（单选/多选/判断/填空混合）。负责小题列表的增删/移动与每题内容
+//（题干/选项/答案/填空/解析/分值），校验（含填空占位数）后由父组件序列化为
+// question_json 提交。
+// v0.62：每小题 2 个 MdEditor（CodeMirror）常驻挂载在 N 题规模秒级冻结——改小题
+// 卡片可折叠（默认仅首题展开、新增即展开、YAML 导入后全部折叠），折叠只留
+// 题型/分值/题干预览一行头。
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ArrowDown, ArrowUp, Delete, Plus } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, CaretRight, Delete, Plus } from '@element-plus/icons-vue'
 
 import { problemApi } from '@/api'
 import { downloadFile } from '@/api/download'
@@ -15,6 +19,19 @@ const props = defineProps<{ modelValue: ObjectiveQuestionDraft[]; pid?: number }
 const emit = defineEmits<{ (e: 'update:modelValue', v: ObjectiveQuestionDraft[]): void }>()
 
 const yamlInput = ref<HTMLInputElement>()
+
+// ---- 小题折叠态（v0.62）：按索引记（patch 每次编辑都换对象，对象身份不可靠）----
+const openQ = ref(new Set<number>())
+function toggleOpen(qi: number) {
+  const s = new Set(openQ.value)
+  if (s.has(qi)) s.delete(qi)
+  else s.add(qi)
+  openQ.value = s
+}
+// 题干纯文本预览（折叠头）：剥 Markdown 记号取前 60 字
+function stemPreview(q: ObjectiveQuestionDraft): string {
+  return q.stem.replace(/[#>*`~_[\]()!|-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60)
+}
 
 const kindLabel: Record<ObjectiveKind, string> = {
   single: '单选题',
@@ -73,6 +90,7 @@ async function onYamlFile(e: Event) {
     const r = await problemApi.parseObjectiveYaml(await file.text())
     const list = r.questions.map(toDraft)
     update(list)
+    openQ.value = new Set() // 整卷导入默认全折叠（秒开预览列表），逐题展开编辑
     ElMessage.success(`已导入 ${list.length} 道小题，请确认后保存`)
   } catch {
     // 解析/校验错误由 axios 拦截器统一提示
@@ -117,7 +135,9 @@ function setAnswer(qi: number, answer: number[]) {
 }
 
 function add() {
+  const idx = props.modelValue.length // 新题落在末尾（emit 后 props 才回流，先取旧长度）
   update([...props.modelValue, blankDraft()])
+  openQ.value = new Set([...openQ.value, idx]) // 新增即展开直接可编辑
 }
 
 function remove(i: number) {
@@ -128,6 +148,10 @@ function remove(i: number) {
   const list = [...props.modelValue]
   list.splice(i, 1)
   update(list)
+  // 折叠态按索引记：删题后大于 i 的索引整体前移一位
+  const s = new Set<number>()
+  for (const k of openQ.value) if (k !== i) s.add(k > i ? k - 1 : k)
+  openQ.value = s
 }
 
 function move(i: number, delta: number) {
@@ -136,6 +160,15 @@ function move(i: number, delta: number) {
   const list = [...props.modelValue]
   ;[list[i], list[j]] = [list[j], list[i]]
   update(list)
+  // 折叠态随题交换：i/j 两索引的展开标记互换
+  const s = new Set(openQ.value)
+  const bi = s.has(i)
+  const bj = s.has(j)
+  if (bi) s.add(j)
+  else s.delete(j)
+  if (bj) s.add(i)
+  else s.delete(i)
+  openQ.value = s
 }
 
 // 改题型：重置互斥状态（选项/答案/空位）
@@ -208,6 +241,11 @@ function setCaseSensitive(qi: number, bi: number, v: boolean) {
 const scoreSum = computed(() => props.modelValue.reduce((n, q) => n + (q.score || 0), 0))
 const countBlanks = (md: string) => (md.match(/_{4,}/g) ?? []).length
 
+// 进编辑页默认只展开首题（其余折叠，按需展开；v0.62 懒挂载）
+onMounted(() => {
+  if (props.modelValue.length) openQ.value = new Set([0])
+})
+
 // 校验整卷（供父组件在提交前调用）；返回 null = 通过
 function validate(): string | null {
   const list = props.modelValue
@@ -272,15 +310,23 @@ defineExpose({ validate, blankDraft })
     <el-card v-for="(q, qi) in modelValue" :key="qi" class="obj-q" shadow="never">
       <template #header>
         <div class="obj-q-head">
-          <span class="obj-q-idx">第 {{ qi + 1 }} 题</span>
+          <button type="button" class="q-fold" :title="openQ.has(qi) ? '收起小题' : '展开小题'" @click="toggleOpen(qi)">
+            <el-icon class="q-caret" :class="{ open: openQ.has(qi) }"><CaretRight /></el-icon>
+            <span class="obj-q-idx">第 {{ qi + 1 }} 题</span>
+          </button>
+          <!-- 折叠摘要（v0.62）：题型 · 分值 · 题干纯文本预览；展开时显示编辑控件 -->
+          <span v-if="!openQ.has(qi)" class="q-brief">
+            {{ kindLabel[q.kind] }} · {{ q.score || '?' }} 分<template v-if="stemPreview(q)"> · {{ stemPreview(q) }}</template>
+          </span>
           <el-radio-group
+            v-else
             size="small"
             :model-value="q.kind"
             @change="(v?: string | number | boolean) => changeKind(qi, v as ObjectiveKind)"
           >
             <el-radio-button v-for="(lbl, k) in kindLabel" :key="k" :value="k">{{ lbl }}</el-radio-button>
           </el-radio-group>
-          <span class="obj-q-ops">
+          <span v-if="openQ.has(qi)" class="obj-q-ops">
             <el-input-number
               :model-value="q.score"
               :min="1"
@@ -298,6 +344,9 @@ defineExpose({ validate, blankDraft })
         </div>
       </template>
 
+      <!-- v0.62 懒挂载：折叠时完全不建编辑器（每小题 2 个 CodeMirror + 表单件，
+           N 题常驻挂载在 20+ 题即秒级冻结） -->
+      <template v-if="openQ.has(qi)">
       <el-form-item label="题干" required>
         <MdEditor
           :model-value="q.stem"
@@ -391,6 +440,7 @@ defineExpose({ validate, blankDraft })
           @update:model-value="(v: string) => setField(qi, 'explanation', v)"
         />
       </el-form-item>
+      </template>
     </el-card>
   </div>
 </template>
@@ -433,6 +483,37 @@ defineExpose({ validate, blankDraft })
   align-items: center;
   gap: var(--soj-sp-12);
   flex-wrap: wrap;
+}
+
+/* 折叠钮（v0.62）：行内零样式按钮 + 旋转箭头；折叠摘要吃满余宽省略号 */
+.q-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--soj-sp-4);
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.q-caret {
+  transition: transform 0.15s;
+}
+
+.q-caret.open {
+  transform: rotate(90deg);
+}
+
+.q-brief {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  color: var(--el-text-color-secondary);
 }
 
 .obj-q-idx {

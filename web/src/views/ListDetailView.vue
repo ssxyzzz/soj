@@ -234,7 +234,9 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                 <span class="ccount mono">{{ chapterCount(ch).solved }}/{{ chapterCount(ch).total }}</span>
                 <span class="tg">{{ expanded[`ch:${ch.no}`] ? '收起' : '展开' }}</span>
               </button>
-              <div v-show="expanded[`ch:${ch.no}`]" class="cbody">
+              <!-- v-if 懒挂载（v0.62 挂载冻结根治批）：折叠章不建组件树（原 v-show 全量
+                   挂载，大题单 300~600 题 = 同量 FitTags/表格一次建完） -->
+              <div v-if="expanded[`ch:${ch.no}`]" class="cbody">
                 <!-- 章直挂题 -->
                 <el-table v-if="ch.problems.length" :data="ch.problems" class="ptable">
                   <el-table-column label="状态" width="140">
@@ -292,7 +294,8 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                     <span class="ccount mono">{{ sectionCount(sec).solved }}/{{ sectionCount(sec).total }}</span>
                     <span class="tg">{{ expanded[`sec:${ch.no}:${sec.no}`] ? '收起' : '展开' }}</span>
                   </button>
-                  <div v-show="expanded[`sec:${ch.no}:${sec.no}`]" class="sec-table">
+                  <!-- v-if 懒挂载（v0.62）：同章节折叠体口径，折叠小节不建表格 -->
+                  <div v-if="expanded[`sec:${ch.no}:${sec.no}`]" class="sec-table">
                     <el-table v-if="sec.problems.length" :data="sec.problems" class="ptable">
                       <el-table-column label="状态" width="140">
                         <template #default="{ row }">
