@@ -167,6 +167,7 @@ const poll = usePolling(
   2000,
   {
     immediate: true,
+    background: true, // worker 定时器驱动：切走/最小化不受后台节流钳速（v0.71 生产实锤）
     maxDurationMs: 30 * 60_000,
     onExpire: () => {
       failMsg.value = '等待超时，请稍后重试'

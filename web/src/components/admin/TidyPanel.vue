@@ -284,7 +284,9 @@ const poll = usePolling(async () => {
     }
     syncSelection(suggestions.value)
   }
-}, 2000)
+  // background: true——worker 定时器驱动，切走标签页不受后台节流钳速（v0.71 生产实锤：
+  // 后台标签 setTimeout 被钳到约 1 次/分钟，进度条看似卡死而服务端批次 0-10s/批）
+}, 2000, { background: true })
 
 function startPoll() {
   pollFails.value = 0

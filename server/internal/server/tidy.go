@@ -787,7 +787,12 @@ func (h *Handlers) tidyAIChat(ctx context.Context, uid int64, kind string, pid i
 	if err != nil {
 		rec.Err = truncateTail(err.Error(), 300)
 	}
-	h.repo.RecordAiCall(ctx, rec)
+	// 审计写库用独立短超时 ctx：任务取消路径上 job ctx 已取消，在途调用被中断的
+	// 错误记录若沿用原 ctx 写库会静默丢失（v0.71 生产日志实锤——取消瞬间的报错
+	// 无审计可查），脱离原 ctx 才能留下「这批为何没产出建议」的痕迹
+	actx, acancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer acancel()
+	h.repo.RecordAiCall(actx, rec)
 	if err != nil {
 		return nil, err
 	}
