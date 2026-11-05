@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { problemApi, tagApi } from '@/api'
+import TierBadge from '@/components/TierBadge.vue'
 import { useDirtyFlag } from '@/composables/useDirtyFlag'
 import { onRowWheel } from '@/composables/useHorizontalWheel'
 import { useListener } from '@/composables/useWindowListener'
@@ -923,11 +924,24 @@ async function unbindCurrent() {
           <el-button link size="small" @click="tagProblems = null">收起</el-button>
         </div>
       </div>
-      <div v-if="tagProblems.list.length" class="tp-links">
-        <router-link v-for="p in tagProblems.list" :key="p.id" :to="`/problems/${p.id}`" target="_blank">
-          #{{ p.id }} {{ p.title }}
-        </router-link>
-      </div>
+      <el-table v-if="tagProblems.list.length" stripe :data="tagProblems.list" size="small" class="tp-table">
+        <el-table-column label="ID" width="90">
+          <template #default="{ row }">
+            <router-link :to="`/problems/${row.id}`" target="_blank" class="tlink">#{{ row.id }}</router-link>
+          </template>
+        </el-table-column>
+        <el-table-column label="题目" min-width="240">
+          <template #default="{ row }">
+            <router-link :to="`/problems/${row.id}`" target="_blank" class="tlink">{{ row.title }}</router-link>
+          </template>
+        </el-table-column>
+        <el-table-column label="难度" width="120">
+          <template #default="{ row }">
+            <TierBadge v-if="row.difficulty != null" :tier="row.difficulty" kind="difficulty" />
+            <span v-else class="dim">（无）</span>
+          </template>
+        </el-table-column>
+      </el-table>
       <div v-else class="dim">（还没有题目使用此{{ noun }}）</div>
     </div>
 
@@ -1204,21 +1218,6 @@ async function unbindCurrent() {
 /* 组内相邻按钮间距统一走 gap（Element 相邻按钮默认 margin-left 会与 gap 叠成 24px） */
 .tp-actions .el-button + .el-button {
   margin-left: 0;
-}
-
-.tp-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--soj-sp-4) var(--soj-sp-16);
-}
-
-.tp-links a {
-  color: var(--el-color-primary);
-  text-decoration: none;
-}
-
-.tp-links a:hover {
-  text-decoration: underline;
 }
 
 /* 拦截提示行：alert 占满剩余宽度，「一键解绑全部」按钮右侧同行 */

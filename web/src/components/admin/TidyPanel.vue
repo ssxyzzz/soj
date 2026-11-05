@@ -532,7 +532,11 @@ onMounted(async () => {
       >
         <el-table-column type="selection" width="42" />
         <el-table-column prop="pid" label="题号" width="76" />
-        <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+        <el-table-column label="标题" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <router-link :to="`/problems/${row.pid}`" target="_blank" class="tlink">{{ row.title }}</router-link>
+          </template>
+        </el-table-column>
         <el-table-column label="现难度" width="86">
           <template #default="{ row }">
             <span v-if="row.has_difficulty" class="mono">D{{ row.cur_difficulty }}</span>
@@ -581,7 +585,11 @@ onMounted(async () => {
         size="small"
       >
         <el-table-column prop="pid" label="题号" width="76" />
-        <el-table-column prop="title" label="标题" min-width="170" show-overflow-tooltip />
+        <el-table-column label="标题" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">
+            <router-link :to="`/problems/${row.pid}`" target="_blank" class="tlink">{{ row.title }}</router-link>
+          </template>
+        </el-table-column>
         <el-table-column label="现有" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ (row.cur_tag_names ?? []).join('、') || '—' }}</template>
         </el-table-column>
@@ -629,7 +637,11 @@ onMounted(async () => {
       >
         <el-table-column type="selection" width="42" />
         <el-table-column prop="pid" label="题号" width="76" />
-        <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+        <el-table-column label="标题" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            <router-link :to="`/problems/${row.pid}`" target="_blank" class="tlink">{{ row.title }}</router-link>
+          </template>
+        </el-table-column>
         <el-table-column label="现来源" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ (row.cur_meta_names ?? []).join('、') || '—' }}</template>
         </el-table-column>

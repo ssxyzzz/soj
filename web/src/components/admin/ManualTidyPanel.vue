@@ -171,7 +171,11 @@ onMounted(() => {
 
     <el-table v-loading="loading" :data="rows" size="small">
       <el-table-column prop="id" label="题号" width="76" />
-      <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
+      <el-table-column label="标题" min-width="200" show-overflow-tooltip>
+        <template #default="{ row }">
+          <router-link :to="`/problems/${row.id}`" target="_blank" class="tlink">{{ row.title }}</router-link>
+        </template>
+      </el-table-column>
       <!-- v0.62 惰性单元格编辑：默认文本态，点格才挂 el-select（同屏 ≤1 个，含全树
            465 项的选项列表也只在编辑瞬间挂载）——替代 100 行 × 3 常驻选择器的 ~940ms
            挂载冻结（persistent=false 只救了选项 DOM，选择器脚手架本身才是冻结大头） -->

@@ -2726,3 +2726,14 @@ a.clink {
 a.clink:hover {
   color: var(--el-color-primary);
 }
+
+/* ---- 数据表标题链接（a.tlink，2026-11-05 随题库维护面板表格化批）：站点链接色常显 +
+   hover 下划线，与 clink（卡片标题、hover 才显色）区分——表格行内多链接、需一眼可点 ---- */
+a.tlink {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+
+a.tlink:hover {
+  text-decoration: underline;
+}
