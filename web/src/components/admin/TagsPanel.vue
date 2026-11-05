@@ -719,12 +719,42 @@ async function unbind(row?: TagRefProblem) {
       blockedProblems.value = problems.filter((p) => p.id !== row.id)
       ElMessage.success(`已从「#${row.id} ${row.title}」解绑`)
     } else {
+      // 一键全部：明细整体清空（逐行路径由上面的 filter 逐条清），拦截原因消失即自动重试保存
+      blockedProblems.value = []
       ElMessage.success(`已从 ${ids.length} 道题解绑`)
     }
     if (!blockedProblems.value?.length) {
       blockedProblems.value = null
       await doSave()
     }
+  } finally {
+    unbinding.value = false
+  }
+}
+
+// 一键解绑当前列出的知识点/标签（题目列表右上角按钮）：从所有直接引用它的题目上
+// 摘除该节点（其余节点不动），动手前二次确认（批量改题目）。成功后角标本地归零
+// （$pull 只动了此节点，其余节点计数不受影响；不重拉 adminTree 以免覆盖未保存草稿），
+// 并刷新题目列表（归零后展示空态）。
+async function unbindCurrent() {
+  const tp = tagProblems.value
+  const n = tp ? countOf(tp.id) : 0
+  if (!tp || tp.id <= 0 || n <= 0) return
+  try {
+    await ElMessageBox.confirm(
+      `将从 ${n} 道题上解绑「${tp.name}」（题目其余${noun.value}不受影响），解绑后即可删除。确定？`,
+      '一键解绑',
+      { type: 'warning', confirmButtonText: '解绑', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  unbinding.value = true
+  try {
+    const r = await tagApi.unbindAll([tp.id], props.tree)
+    counts.value = { ...counts.value, [tp.id]: 0 }
+    ElMessage.success(`已从 ${r.unbound} 道题解绑`)
+    await fetchTagProblems(tp.id, tp.name, 1)
   } finally {
     unbinding.value = false
   }
@@ -751,7 +781,7 @@ async function unbind(row?: TagRefProblem) {
     <el-alert type="info" :closable="false" class="howto">
       <p>
         悬停展开下一级；单击列出包含此{{ noun }}的题目；双击改名（回车确认）；点右侧 × 删除；长按拖动换位；
-        悬停行尾或空{{ noun }}下方的 ＋ 新增。修改后点右上角「保存{{ treeName }}」生效，被题目使用的{{ noun }}需先解绑才能删除。
+        悬停行尾或空{{ noun }}下方的 ＋ 新增。修改后点右上角「保存{{ treeName }}」生效；被题目使用的{{ noun }}可在下方题目列表一键解绑，解绑后才能删除。
       </p>
     </el-alert>
 
@@ -869,16 +899,29 @@ async function unbind(row?: TagRefProblem) {
     <div v-if="tagProblems" class="tag-problems">
       <div class="tp-head">
         <span>包含{{ noun }}「{{ tagProblems.name }}」的题目：{{ tagProblems.total }} 道</span>
-        <el-pagination
-          v-if="tagProblems.total > PAGE_SIZE"
-          v-model:current-page="problemsPage"
-          :page-size="PAGE_SIZE"
-          :total="tagProblems.total"
-          layout="prev, pager, next"
-          size="small"
-          @current-change="onProblemsPage"
-        />
-        <el-button link size="small" @click="tagProblems = null">收起</el-button>
+        <div class="tp-actions">
+          <el-pagination
+            v-if="tagProblems.total > PAGE_SIZE"
+            v-model:current-page="problemsPage"
+            :page-size="PAGE_SIZE"
+            :total="tagProblems.total"
+            layout="prev, pager, next"
+            size="small"
+            @current-change="onProblemsPage"
+          />
+          <el-button
+            v-if="tagProblems.id > 0 && countOf(tagProblems.id) > 0"
+            type="warning"
+            plain
+            size="small"
+            :loading="unbinding"
+            :title="`从所有引用题目上解绑「${tagProblems.name}」（其余${noun}不受影响）`"
+            @click="unbindCurrent"
+          >
+            一键解绑
+          </el-button>
+          <el-button link size="small" @click="tagProblems = null">收起</el-button>
+        </div>
       </div>
       <div v-if="tagProblems.list.length" class="tp-links">
         <router-link v-for="p in tagProblems.list" :key="p.id" :to="`/problems/${p.id}`" target="_blank">
@@ -1150,6 +1193,17 @@ async function unbind(row?: TagRefProblem) {
   justify-content: space-between;
   gap: var(--soj-sp-12);
   margin-bottom: var(--soj-sp-6);
+}
+
+.tp-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-12);
+}
+
+/* 组内相邻按钮间距统一走 gap（Element 相邻按钮默认 margin-left 会与 gap 叠成 24px） */
+.tp-actions .el-button + .el-button {
+  margin-left: 0;
 }
 
 .tp-links {

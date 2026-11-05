@@ -154,16 +154,18 @@ func (h *Handlers) AdminReplaceTagTree(c *gin.Context) {
 	ok(c, gin.H{"count": len(final)})
 }
 
-// AdminUnbindTags root 从指定题目批量摘除指定标签（标签树保存被删拦截后的
-// 「一键解绑全部 / 逐题解绑」）：$pull 只动列出的标签，题目其余标签保留。
-// 上限：单次 ≤500 题（拦截明细规模即题目引用规模，正常远小于此）。
+// AdminUnbindTags root 从题目批量摘除指定标签（$pull 只动列出的标签，题目其余标签保留），
+// 两种模式共用本端点（?tree= 区分双树）：
+//   - problem_ids 非空：只从指定题目摘除（标签树保存被删拦截后的「一键解绑全部 / 逐题解绑」），
+//     上限单次 ≤500 题（拦截明细规模即题目引用规模，正常远小于此）；
+//   - problem_ids 缺省：从所有引用题目上摘除（题库维护面板题目列表「一键解绑」，解绑后即可删除节点）。
 func (h *Handlers) AdminUnbindTags(c *gin.Context) {
 	var req struct {
 		ProblemIDs []int64 `json:"problem_ids"`
 		TagIDs     []int64 `json:"tag_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil ||
-		len(req.ProblemIDs) == 0 || len(req.ProblemIDs) > 500 || len(req.TagIDs) == 0 {
+		len(req.ProblemIDs) > 500 || len(req.TagIDs) == 0 {
 		fail(c, http.StatusBadRequest, "参数错误")
 		return
 	}
@@ -173,7 +175,15 @@ func (h *Handlers) AdminUnbindTags(c *gin.Context) {
 			return
 		}
 	}
-	n, err := h.repo.UnbindTagsField(c.Request.Context(), treeField(c.Query("tree")), req.ProblemIDs, req.TagIDs)
+	var (
+		n   int64
+		err error
+	)
+	if len(req.ProblemIDs) == 0 {
+		n, err = h.repo.UnbindAllTagsField(c.Request.Context(), treeField(c.Query("tree")), req.TagIDs)
+	} else {
+		n, err = h.repo.UnbindTagsField(c.Request.Context(), treeField(c.Query("tree")), req.ProblemIDs, req.TagIDs)
+	}
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "解绑失败")
 		return

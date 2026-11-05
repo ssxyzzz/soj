@@ -397,6 +397,12 @@ export const tagApi = {
       tree ? `/admin/tagtree/unbind?tree=${tree}` : '/admin/tagtree/unbind',
       { problem_ids: problemIds, tag_ids: tagIds },
     ),
+  // 一键解绑（题库维护面板题目列表用）：不带 problem_ids = 从所有直接引用的题目上摘除该节点
+  unbindAll: (tagIds: number[], tree?: 'knowledge' | 'meta') =>
+    post<{ unbound: number }>(
+      tree ? `/admin/tagtree/unbind?tree=${tree}` : '/admin/tagtree/unbind',
+      { tag_ids: tagIds },
+    ),
 }
 
 // 题包导入（v0.15 统一格式）：独立 /import 页按来源（soj|hydro）适配；problem.create 权限

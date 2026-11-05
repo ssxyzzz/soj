@@ -271,6 +271,7 @@ type RepoAPI interface {
 	TestDataDownloadedToday(ctx context.Context, uid int64, exclude []int64) (int64, error)
 	ToggleDiscussLike(ctx context.Context, targetType string, targetID, uid int64) (liked bool, count int64, err error)
 	TransferClass(ctx context.Context, classID, fromUID, toUID int64) error
+	UnbindAllTagsField(ctx context.Context, field string, tagIDs []int64) (int64, error)
 	UnbindEmail(ctx context.Context, uid int64) error
 	UnbindTagsField(ctx context.Context, field string, problemIDs, tagIDs []int64) (int64, error)
 	UnfoldDiscussTarget(ctx context.Context, targetType string, targetID int64) error

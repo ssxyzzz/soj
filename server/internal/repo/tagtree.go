@@ -262,6 +262,21 @@ func (r *Repo) UnbindTagsField(ctx context.Context, field string, problemIDs, ta
 	return res.ModifiedCount, nil
 }
 
+// UnbindAllTagsField 从所有引用题目上摘除指定节点（不限题目集合，题库维护面板
+// 题目列表「一键解绑」用；$pull 只动目标数组，题目其余节点保留）。返回实际改动题数。
+func (r *Repo) UnbindAllTagsField(ctx context.Context, field string, tagIDs []int64) (int64, error) {
+	if len(tagIDs) == 0 {
+		return 0, nil
+	}
+	res, err := r.problems.UpdateMany(ctx,
+		bson.M{field: bson.M{"$in": tagIDs}},
+		bson.M{"$pull": bson.M{field: bson.M{"$in": tagIDs}}})
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
 // ValidateTagRefs 校验节点 ID 全部存在于标签树（建题/编辑元数据直传 ID 的入口用）。
 func (r *Repo) ValidateTagRefs(ctx context.Context, ids []int64) error {
 	if len(ids) == 0 {

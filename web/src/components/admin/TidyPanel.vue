@@ -4,6 +4,8 @@
 // 三类任务共用单任务骨架（run → 2s 轮询 → 差异表 → apply），照 BackupPanel
 // 轮询范式（失败计数超限复位按钮，v0.37）。冲突题置顶 + 默认不勾 + 可改判是本面板灵魂：
 // AI 档与通过率档并列展示由 root 拍板（plan 2026-10-31 三拍板）。
+// v0.68 知识点勾选细分：知识点表退役整行勾选，新增/移除两维独立勾选采纳（默认两维全勾 =
+// 拆分前「有建议即整行勾」语义）——只勾新增时现有标签原样保留，不勾移除就不移除。
 // v0.49 双模式 + 建议表服务端分页（验收期调整）：页面只持有当前页 ≤100 条建议——
 // 全量快照（2000 题级）整包进 2s 轮询是卡顿根源；勾选为当前页独立语义，翻页即清，
 // 不做跨页保留。suggestion_total/conflict_total 为全量口径（翻页器与冲突计数）。
@@ -14,7 +16,7 @@ import { adminApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
 import LazySelectCell from '@/components/LazySelectCell.vue'
 import ManualTidyPanel from './ManualTidyPanel.vue'
-import type { TidyKind, TidySuggestion, TidyStatus } from '@/types'
+import type { TidyApplyItem, TidyKind, TidySuggestion, TidyStatus } from '@/types'
 
 // 模式卡（v0.49）：AI整理（建议流）/ 手动整理（直改流）
 const MODE_META = {
@@ -40,7 +42,7 @@ const KIND_META: Record<TidyKind, { label: string; desc: string }> = {
   },
   knowledge: {
     label: '知识点',
-    desc: 'AI 从知识树候选集中选题（逐字一致），幻觉/歧义/树外名一律丢弃不自动建节点；现有标签认为无关的会出移除建议。',
+    desc: 'AI 从知识树候选集中选题（逐字一致），幻觉/歧义/树外名一律丢弃不自动建节点；现有标签认为无关的会出移除建议。新增/移除两列各自勾选采纳，可只采纳其一。',
   },
   meta: {
     label: '来源标签',
@@ -58,8 +60,12 @@ const applying = ref(false)
 const appliedPids = ref(new Set<number>())
 const onlyConflict = ref(false) // 难度表「只看冲突」筛选
 
-// 勾选（pid → true）与难度改判（pid → 最终值，默认建议值）
+// 勾选三件套：selected = 待应用行集（难度/来源 = 表格整行勾；知识点 = 两维并集，
+// 应用按钮与计数口径），selAdd/selRm = 知识点新增/移除两维采纳集（v0.68 拆分，pid → true）；
+// finalDiff = 难度改判（pid → 最终值，默认建议值）
 const selected = ref(new Set<number>())
+const selAdd = ref(new Set<number>())
+const selRm = ref(new Set<number>())
 const finalDiff = ref(new Map<number, number>())
 const tableRef = ref()
 
@@ -93,16 +99,17 @@ const pageLabel = computed(() => {
   return ` · 当前第 ${lo}–${hi} 条`
 })
 
-// 勾选默认值（plan 拍板）：难度=未设且非冲突才勾；知识点=有增/移建议才勾；来源=有建议且与现值不同才勾
+// 整行勾选默认值（plan 拍板）：难度=未设且非冲突才勾；来源=有建议且与现值不同才勾。
+// 知识点不走整行勾选（v0.68 拆新增/移除两维，默认值见 syncSelection knowledge 分支）
 function defaultChecked(s: TidySuggestion): boolean {
   if (appliedPids.value.has(s.pid)) return false
   switch (s.kind) {
     case 'difficulty':
       return !s.has_difficulty && !s.conflict
-    case 'knowledge':
-      return !!(s.add_tag_ids?.length || s.remove_tag_ids?.length)
     case 'meta':
       return !s.no_clue && !!s.suggest_meta_ids && !sameSet(s.cur_meta_ids, s.suggest_meta_ids)
+    default:
+      return false
   }
 }
 
@@ -113,6 +120,18 @@ function sameSet(a?: number[], b?: number[]): boolean {
 }
 
 function syncSelection(rows: TidySuggestion[]) {
+  if (jobKind.value === 'knowledge') {
+    // 拆分默认值：新增/移除两维各自默认全勾（= 拆分前「有建议即整行勾」的等价语义），
+    // root 逐维退勾；无内置 selection 列，无需 toggleRowSelection 回放
+    selAdd.value = new Set(
+      rows.filter((s) => !appliedPids.value.has(s.pid) && s.add_tag_ids?.length).map((s) => s.pid),
+    )
+    selRm.value = new Set(
+      rows.filter((s) => !appliedPids.value.has(s.pid) && s.remove_tag_ids?.length).map((s) => s.pid),
+    )
+    selected.value = new Set([...selAdd.value, ...selRm.value])
+    return
+  }
   selected.value = new Set(rows.filter(defaultChecked).map((s) => s.pid))
   // 难度改判初始值 = 建议值
   finalDiff.value = new Map(
@@ -130,6 +149,8 @@ function syncSelection(rows: TidySuggestion[]) {
 
 function clearSelection() {
   selected.value = new Set()
+  selAdd.value = new Set()
+  selRm.value = new Set()
   void nextTick(() => {
     for (const row of tableRows.value) {
       tableRef.value?.toggleRowSelection(row, false)
@@ -162,6 +183,21 @@ function onSelectionChange(rows: TidySuggestion[]) {
 }
 
 function selectAllVisible() {
+  if (jobKind.value === 'knowledge') {
+    // 两维各自全勾（仅限有该维建议的行——无新增建议的行不存在新增勾选；
+    // 跳过已应用行：其勾选框已禁用，程序化再勾与禁用态自相矛盾）
+    const add = new Set(selAdd.value)
+    const rm = new Set(selRm.value)
+    for (const row of tableRows.value) {
+      if (appliedPids.value.has(row.pid)) continue
+      if (row.add_tag_ids?.length) add.add(row.pid)
+      if (row.remove_tag_ids?.length) rm.add(row.pid)
+    }
+    selAdd.value = add
+    selRm.value = rm
+    selected.value = new Set([...add, ...rm])
+    return
+  }
   const target = new Set<number>()
   for (const row of tableRows.value) target.add(row.pid)
   selected.value = target
@@ -171,6 +207,26 @@ function selectAllVisible() {
 }
 
 function invertVisible() {
+  if (jobKind.value === 'knowledge') {
+    // 两维各自在「有该维建议」的行内取反（无该维建议的行不凭空造勾；跳过已应用行，同全选）
+    const add = new Set(selAdd.value)
+    const rm = new Set(selRm.value)
+    for (const row of tableRows.value) {
+      if (appliedPids.value.has(row.pid)) continue
+      if (row.add_tag_ids?.length) {
+        if (add.has(row.pid)) add.delete(row.pid)
+        else add.add(row.pid)
+      }
+      if (row.remove_tag_ids?.length) {
+        if (rm.has(row.pid)) rm.delete(row.pid)
+        else rm.add(row.pid)
+      }
+    }
+    selAdd.value = add
+    selRm.value = rm
+    selected.value = new Set([...add, ...rm])
+    return
+  }
   // 同 syncSelection 的快照纪律：先算目标集整体赋值，再按 target 常量回放
   const target = new Set<number>()
   for (const row of tableRows.value) {
@@ -180,6 +236,16 @@ function invertVisible() {
   void nextTick(() => {
     for (const row of tableRows.value) tableRef.value?.toggleRowSelection(row, target.has(row.pid))
   })
+}
+
+// 知识点单维勾选切换（v0.68）：两维独立；selected 恒 = 两维并集（不变式，应用/计数口径）
+function toggleKnowledge(pid: number, part: 'add' | 'rm', on: boolean) {
+  const next = new Set(part === 'add' ? selAdd.value : selRm.value)
+  if (on) next.add(pid)
+  else next.delete(pid)
+  if (part === 'add') selAdd.value = next
+  else selRm.value = next
+  selected.value = new Set([...selAdd.value, ...selRm.value])
 }
 
 const selectedCount = computed(() => selected.value.size)
@@ -265,28 +331,38 @@ async function cancelTidy() {
 
 async function applySelected() {
   if (!jobKind.value || !selected.value.size) return
-  const items = suggestions.value
-    .filter((s) => selected.value.has(s.pid))
-    .map((s) => {
-      switch (s.kind) {
-        case 'difficulty':
-          return { pid: s.pid, difficulty: finalDiff.value.get(s.pid) ?? s.suggest_difficulty ?? 3 }
-        case 'knowledge': {
-          // 最终集 = (现有 ∪ 新增) − 移除
-          const rm = new Set(s.remove_tag_ids ?? [])
-          const set = new Set<number>([...(s.cur_tag_ids ?? []), ...(s.add_tag_ids ?? [])])
-          for (const id of rm) set.delete(id)
-          return { pid: s.pid, tags: [...set] }
-        }
-        case 'meta':
-          return { pid: s.pid, meta_tags: [...(s.suggest_meta_ids ?? [])] }
+  const items: TidyApplyItem[] = []
+  for (const s of suggestions.value) {
+    if (!selected.value.has(s.pid)) continue
+    switch (s.kind) {
+      case 'difficulty':
+        items.push({ pid: s.pid, difficulty: finalDiff.value.get(s.pid) ?? s.suggest_difficulty ?? 3 })
+        break
+      case 'knowledge': {
+        // 最终集按勾选维度拼（v0.68）：并 add、减 rm，两维独立可只采纳其一；
+        // 两维全不勾 = 该行不应用（selected 并集不变式下不出现，守卫兜底）
+        const add = selAdd.value.has(s.pid)
+        const rm = selRm.value.has(s.pid)
+        if (!add && !rm) break
+        const set = new Set<number>(s.cur_tag_ids ?? [])
+        if (add) for (const id of s.add_tag_ids ?? []) set.add(id)
+        if (rm) for (const id of s.remove_tag_ids ?? []) set.delete(id)
+        items.push({ pid: s.pid, tags: [...set] })
+        break
       }
-    })
+      case 'meta':
+        items.push({ pid: s.pid, meta_tags: [...(s.suggest_meta_ids ?? [])] })
+        break
+    }
+  }
+  if (!items.length) return
   applying.value = true
   try {
     const r = await adminApi.tidyApply(jobKind.value, items)
     for (const it of items) appliedPids.value.add(it.pid)
     selected.value = new Set()
+    selAdd.value = new Set()
+    selRm.value = new Set()
     ElMessage.success(r.message || `已应用 ${r.applied} 题`)
     void nextTick(() => {
       for (const row of tableRows.value) {
@@ -315,6 +391,8 @@ async function discardResults() {
   }
   status.value = null
   selected.value = new Set()
+  selAdd.value = new Set()
+  selRm.value = new Set()
   appliedPids.value = new Set()
   finalDiff.value = new Map()
   onlyConflict.value = false
@@ -431,6 +509,7 @@ onMounted(async () => {
         </template>
         <span class="muted">
           已勾选 <b>{{ selectedCount }}</b> / {{ suggestionTotal }} 题{{ pageLabel }}
+          <template v-if="jobKind === 'knowledge' && (selAdd.size || selRm.size)">（新增 {{ selAdd.size }} · 移除 {{ selRm.size }}）</template>
           <template v-if="status?.excluded"> · 已排除 {{ status.excluded }} 题整理过的</template>
           <template v-if="appliedPids.size"> · 已应用 {{ appliedPids.size }} 题</template>
           <template v-if="rangeLabel"> · {{ rangeLabel }}</template>
@@ -492,33 +571,45 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
 
-      <!-- 知识点：现有 / 新增 / 移除 / 丢弃 -->
+      <!-- 知识点：现有 / 新增（独立勾选）/ 移除（独立勾选）/ 丢弃。v0.68 勾选细分：
+           退役整行选择列，新增与移除两维各自勾选采纳——不勾移除就不移除，
+           只勾新增时现有标签原样保留；全选可见/反选对两维各自生效 -->
       <el-table
         v-else-if="jobKind === 'knowledge'"
         ref="tableRef"
         :data="tableRows"
         size="small"
-        @selection-change="onSelectionChange"
       >
-        <el-table-column type="selection" width="42" />
         <el-table-column prop="pid" label="题号" width="76" />
-        <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
-        <el-table-column label="现有" min-width="150" show-overflow-tooltip>
+        <el-table-column prop="title" label="标题" min-width="170" show-overflow-tooltip />
+        <el-table-column label="现有" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">{{ (row.cur_tag_names ?? []).join('、') || '—' }}</template>
         </el-table-column>
-        <el-table-column label="新增" min-width="140">
+        <el-table-column label="新增（勾选采纳）" min-width="150">
           <template #default="{ row }">
-            <template v-if="row.add_tag_names?.length">
+            <div v-if="row.add_tag_names?.length" class="part-cell">
+              <el-checkbox
+                class="part-check"
+                :model-value="selAdd.has(row.pid)"
+                :disabled="appliedPids.has(row.pid)"
+                @update:model-value="(v: boolean | string | number) => toggleKnowledge((row as TidySuggestion).pid, 'add', v === true)"
+              />
               <el-tag v-for="n in row.add_tag_names" :key="n" size="small" type="success" class="tag-gap">{{ n }}</el-tag>
-            </template>
+            </div>
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="移除" min-width="140">
+        <el-table-column label="移除（勾选采纳）" min-width="150">
           <template #default="{ row }">
-            <template v-if="row.remove_tag_names?.length">
+            <div v-if="row.remove_tag_names?.length" class="part-cell">
+              <el-checkbox
+                class="part-check"
+                :model-value="selRm.has(row.pid)"
+                :disabled="appliedPids.has(row.pid)"
+                @update:model-value="(v: boolean | string | number) => toggleKnowledge((row as TidySuggestion).pid, 'rm', v === true)"
+              />
               <el-tag v-for="n in row.remove_tag_names" :key="n" size="small" type="danger" class="tag-gap">{{ n }}</el-tag>
-            </template>
+            </div>
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
@@ -685,6 +776,18 @@ onMounted(async () => {
 
 .tag-gap {
   margin: 0 var(--soj-sp-4) var(--soj-sp-4) 0;
+}
+
+/* 拆分勾选格（v0.68）：勾选框与标签顶行对齐（small tag 高 20px，checkbox 默认 32px 偏高） */
+.part-cell {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.part-check {
+  height: 20px;
+  margin-right: var(--soj-sp-6);
 }
 
 .warn-text {
