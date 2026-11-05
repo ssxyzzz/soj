@@ -235,26 +235,53 @@ function invertSel() {
 
 // ---- 应用到大纲草稿（不写库；保存走大纲页整体 PATCH） ----
 
+// 全草稿挂载索引（应用前防重）：任何叶已挂的题不再追加——同一批建议被二次应用
+//（如「查看上次结果」重放、先后两批建议落点不同）不再产生同节/跨节双挂
+//（v0.71.2 生产实锤：建议集未消费 + applyAppend 纯 push，整单每题两遍）
+function mountIndexOf(): Set<number> {
+  const s = new Set<number>()
+  for (const ch of props.chs) {
+    for (const p of ch.problems) s.add(p.id)
+    for (const sec of ch.children) for (const p of sec.problems) s.add(p.id)
+  }
+  return s
+}
+
 function apply() {
   const s = suggest.value
   if (!s || !sel.value.size) return
+  let skipped = 0
   if (includeMounted.value) applyRearrange(s)
-  else applyAppend(s)
+  else skipped = applyAppend(s)
+  // 建议集消费：应用后不再提供「查看上次结果」重放同一批建议（防重复应用）
+  const applied = sel.value.size
+  suggest.value = null
+  hasLast.value = false
+  sel.value = new Set()
   close()
-  ElMessage.success(`已按整理结果更新大纲草稿（${sel.value.size} 题），核对后点「保存」生效`)
+  ElMessage.success(
+    `已按整理结果更新大纲草稿（${applied} 题${skipped ? `，跳过已挂载 ${skipped} 题` : ''}），核对后点「保存」生效`,
+  )
 }
 
-// 保持原挂载：各叶已有不动，勾选新题按难度升序追加在末尾
-function applyAppend(s: ListOrganizeSuggest) {
+// 保持原挂载：各叶已有不动，勾选的新题按难度升序追加在末尾；已在草稿任何叶挂载的
+// 建议跳过（返回跳过数）
+function applyAppend(s: ListOrganizeSuggest): number {
+  const mounted = mountIndexOf()
+  let skipped = 0
   for (const g of s.groups) {
     const node = leafOf(g.key)
     if (!node) continue
-    const add = (g.items ?? [])
-      .filter((it) => sel.value.has(it.pid))
-      .sort(byDiffAsc)
-      .map((it) => ({ id: it.pid, title: it.title, hidden: it.hidden || undefined }))
-    node.problems.push(...add)
+    for (const it of (g.items ?? []).filter((it) => sel.value.has(it.pid)).sort(byDiffAsc)) {
+      if (mounted.has(it.pid)) {
+        skipped++
+        continue
+      }
+      node.problems.push({ id: it.pid, title: it.title, hidden: it.hidden || undefined })
+      mounted.add(it.pid) // 防御：建议集内异常重复也只落一次
+    }
   }
+  return skipped
 }
 
 // 纳入 AI 重排：叶内 = [该叶勾选建议（含从别叶挪来的已挂题），难度升序] +

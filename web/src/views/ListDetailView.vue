@@ -117,6 +117,9 @@ const allExpanded = computed(() => {
 
 // 目录卡：小节列表的展开态（默认展开）；章/节点击即跳
 const tocOpen = ref<Record<string, boolean>>({})
+// 目录卡默认收起（v0.71.2，用户拍板）：展开后超 420px 出内部滚动条（编辑页目录同款）
+const tocCardOpen = ref(false)
+const secTotal = computed(() => detail.value?.chapters.reduce((n, c) => n + c.sections.length, 0) ?? 0)
 
 // 目录跳转目标闪蓝提示（v0.70）：rAF 时 v-if 懒挂载已完成，挂 .flash 类
 // （::before 覆盖层 700ms 后摘类、0.9s 淡出），滚过去一眼能找到落点
@@ -412,17 +415,22 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
             <p v-if="detail.hidden" class="hint">隐藏中：学生端看不到本题单，仅你与 root 可见。</p>
           </RailCard>
 
-          <!-- 重要信息：章节目录（吸顶跟随；章/节点击即跳；组可收起展开） -->
+          <!-- 重要信息：章节目录（吸顶跟随；默认收起，展开超高出内部滚动条；
+               章/节点击即跳并自动展开；小节随 v0.70 折叠口径默认收起） -->
           <RailCard ov="目录" title="章节目录" class="aside-card toc-card">
-            <div class="toc">
+            <button class="toc-toggle" @click="tocCardOpen = !tocCardOpen">
+              <span class="toc-chevron" :class="{ open: tocCardOpen }">▸</span>
+              <span class="toc-title">{{ detail.chapters.length }} 章{{ secTotal ? ` · ${secTotal} 节` : '' }}</span>
+            </button>
+            <div v-show="tocCardOpen" class="toc">
               <div v-for="ch in detail.chapters" :key="ch.no" class="toc-group">
                 <div class="toc-chap">
                   <button
                     v-if="ch.sections.length"
                     class="toc-chevron"
-                    :class="{ open: tocOpen[ch.no] !== false }"
-                    :title="tocOpen[ch.no] !== false ? '收起小节' : '展开小节'"
-                    @click="tocOpen[ch.no] = tocOpen[ch.no] === false ? true : false"
+                    :class="{ open: tocOpen[ch.no] === true }"
+                    :title="tocOpen[ch.no] === true ? '收起小节' : '展开小节'"
+                    @click="tocOpen[ch.no] = tocOpen[ch.no] === true ? false : true"
                   >
 ▸
 </button>
@@ -431,7 +439,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                     <span class="toc-title">{{ ch.title }}</span>
                   </button>
                 </div>
-                <div v-show="tocOpen[ch.no] !== false" class="toc-sub">
+                <div v-show="tocOpen[ch.no] === true" class="toc-sub">
                   <button v-for="sec in ch.sections" :key="sec.no" class="toc-row sub" @click="jumpToSec(ch, sec)">
                     <span class="cno mono">{{ sec.no }}</span>
                     <span class="toc-title">{{ sec.title }}</span>
@@ -876,6 +884,33 @@ a.ptitle:hover {
   display: flex;
   flex-direction: column;
   gap: var(--soj-sp-2);
+  /* 展开超 420px 出内部滚动条（编辑页章节目录同款口径） */
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+/* 目录卡收起/展开切换行（v0.70 折叠语言：三角灰→蓝 + 计数） */
+.toc-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-8);
+  width: 100%;
+  border: none;
+  background: none;
+  padding: var(--soj-sp-4) var(--soj-sp-8);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--soj-fs-14);
+  color: var(--soj-navy);
+}
+
+.toc-toggle:hover {
+  background: var(--soj-surface-3);
+}
+
+.toc-toggle + .toc {
+  margin-top: var(--soj-sp-4);
 }
 
 .toc-row {
