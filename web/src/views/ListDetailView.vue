@@ -4,6 +4,9 @@
 // Tab「题目」= 章节折叠（组头 = 自动编号 + 标题 + x/y 渐变小进度条）+ 组内 el-table
 //（题库表格语言：状态/题号/题目/难度 四列；小节做跨列组行）；Tab「排名」= 完成排名
 //（并列跳号、榜外 me 补算、每页 100 名）。副列按 web-design.md：管理卡 → 目录 → 说明。
+// 折叠面（v0.70 重设计，拍板预览 = private_doc/preview/list-collapse-redesign-preview.html）：
+// 默认静默（章头 surface-2 / 节条白行+发丝线+缩进），展开态才上蓝信号（蓝浅底+左蓝条+
+// 三角变色+胶囊加深）；目录跳转目标行闪蓝。提案前旧案「蓝青渐变底+常驻蓝竖条」退役。
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -115,14 +118,24 @@ const allExpanded = computed(() => {
 // 目录卡：小节列表的展开态（默认展开）；章/节点击即跳
 const tocOpen = ref<Record<string, boolean>>({})
 
+// 目录跳转目标闪蓝提示（v0.70）：rAF 时 v-if 懒挂载已完成，挂 .flash 类
+// （::before 覆盖层 700ms 后摘类、0.9s 淡出），滚过去一眼能找到落点
+function flashTarget(id: string) {
+  requestAnimationFrame(() => {
+    const el = document.getElementById(id)
+    if (!el) return
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el.classList.add('flash')
+    window.setTimeout(() => el.classList.remove('flash'), 700)
+  })
+}
+
 function jumpTo(ch: ListChapter) {
   expanded.value[`ch:${ch.no}`] = true
   for (const s of ch.sections) expanded.value[`sec:${ch.no}:${s.no}`] = true
   tocOpen.value[ch.no] = true
   tab.value = 'problems'
-  requestAnimationFrame(() => {
-    document.getElementById(`chap-${ch.no}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  })
+  flashTarget(`chap-${ch.no}`)
 }
 
 function jumpToSec(ch: ListChapter, sec: ListChapter['sections'][number]) {
@@ -130,9 +143,7 @@ function jumpToSec(ch: ListChapter, sec: ListChapter['sections'][number]) {
   expanded.value[`sec:${ch.no}:${sec.no}`] = true
   tocOpen.value[ch.no] = true
   tab.value = 'problems'
-  requestAnimationFrame(() => {
-    document.getElementById(`sec-${ch.no}-${sec.no}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  })
+  flashTarget(`sec-${ch.no}-${sec.no}`)
 }
 
 // ---- 排名 Tab ----
@@ -221,7 +232,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
           />
           <div v-else class="chapters">
             <div v-for="ch in detail.chapters" :id="`chap-${ch.no}`" :key="ch.no" class="chapter">
-              <button class="chead" @click="toggle(`ch:${ch.no}`)">
+              <button class="chead" :class="{ open: expanded[`ch:${ch.no}`] }" @click="toggle(`ch:${ch.no}`)">
                 <span class="tri" :class="{ open: expanded[`ch:${ch.no}`] }" />
                 <span class="cno mono">{{ ch.no }}</span>
                 <span class="ctitle">
@@ -278,7 +289,12 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
 
                 <!-- 小节：独立折叠条 + 各自表格（表头在小节内） -->
                 <div v-for="sec in ch.sections" :key="sec.no" class="sec-block">
-                  <button :id="`sec-${ch.no}-${sec.no}`" class="sbar" @click="toggle(`sec:${ch.no}:${sec.no}`)">
+                  <button
+                    :id="`sec-${ch.no}-${sec.no}`"
+                    class="sbar"
+                    :class="{ open: expanded[`sec:${ch.no}:${sec.no}`] }"
+                    @click="toggle(`sec:${ch.no}:${sec.no}`)"
+                  >
                     <span class="tri sm" :class="{ open: expanded[`sec:${ch.no}:${sec.no}`] }" />
                     <span class="cno mono">{{ sec.no }}</span>
                     <span class="stitle">
@@ -545,23 +561,50 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
   overflow: hidden;
 }
 
-/* 组头：蓝调渐变底 + 主蓝竖条强调章节名；悬停明显加深 */
+/* 组头（v0.70）：默认静默 surface-2，展开态蓝浅底 + 左蓝条出现；悬停各加深一档 */
 .chead {
+  position: relative;
   width: 100%;
   display: flex;
   align-items: center;
   gap: var(--soj-sp-10);
   padding: var(--soj-sp-20) var(--soj-sp-16);
   min-height: 70px;
-  background: linear-gradient(90deg, rgb(var(--soj-blue-hi-rgb) / 0.12), rgb(var(--soj-teal-rgb) / 0.06));
+  background: var(--soj-surface-2);
   border: none;
-  border-left: 3px solid var(--soj-blue);
+  border-left: 3px solid transparent;
   cursor: pointer;
   text-align: left;
+  transition: background 0.15s;
 }
 
 .chead:hover {
-  background: linear-gradient(90deg, rgb(var(--soj-blue-hi-rgb) / 0.22), rgb(var(--soj-teal-rgb) / 0.12));
+  background: var(--soj-surface-3);
+}
+
+.chead.open {
+  background: rgb(var(--soj-blue-rgb) / 0.045);
+  border-left-color: var(--soj-blue);
+}
+
+.chead.open:hover {
+  background: rgb(var(--soj-blue-rgb) / 0.08);
+}
+
+/* 章号软蓝序号章（v0.70）：层级锚点，展开态加深一档（小节序号仍为裸数字转灰） */
+.chead .cno {
+  min-width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 7px;
+  background: rgb(var(--soj-blue-rgb) / 0.09);
+}
+
+.chead.open .cno {
+  background: rgb(var(--soj-blue-rgb) / 0.16);
 }
 
 .cno {
@@ -606,6 +649,11 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
   background: linear-gradient(90deg, var(--soj-blue-hi), var(--soj-teal));
 }
 
+/* 章头进度轨道随头底加深一档（surface-2 头上原轨道色不可见）；小节条白底仍用 surface-2 */
+.chead .cbar {
+  background: rgb(var(--soj-blue-rgb) / 0.1);
+}
+
 .ccount {
   flex: none;
   font-size: var(--soj-fs-12);
@@ -614,18 +662,25 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
   text-align: right;
 }
 
-/* 组头右侧两字开关（拍板 2：不要超小图标） */
+/* 组头右侧两字开关（拍板 2：不要超小图标）升级软蓝胶囊（v0.70）：像按钮、点感明确，
+   展开态加深一档；两字等宽不跳动 */
 .tg {
   flex: none;
+  padding: var(--soj-sp-4) var(--soj-sp-12);
+  border-radius: var(--soj-radius-pill);
+  background: rgb(var(--soj-blue-rgb) / 0.08);
   font-size: var(--soj-fs-12);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-blue);
-  min-width: 26px;
-  text-align: right;
+  text-align: center;
+}
+
+.open .tg {
+  background: rgb(var(--soj-blue-rgb) / 0.15);
 }
 
 .cbody {
-  padding: 0 0 var(--soj-sp-2);
+  padding: 0;
 }
 
 /* 表格内题目链接与内联标签 */
@@ -643,44 +698,63 @@ a.ptitle:hover {
   cursor: not-allowed;
 }
 
-/* 可点展开三角形（章节/小节通用）：大号明显指示 */
+/* 可点展开三角形（章节/小节通用）：大号明显指示；收起灰、展开蓝（方向+颜色双信号） */
 .tri {
   flex: none;
   width: 0;
   height: 0;
-  border-left: 8px solid var(--soj-blue);
+  border-left: 8px solid var(--soj-ink-3);
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
-  transition: transform 0.2s;
+  transition:
+    transform 0.2s,
+    border-left-color 0.2s;
 }
 
 .tri.open {
   transform: rotate(90deg);
+  border-left-color: var(--soj-blue);
 }
 
-/* 小节折叠条：行高对齐章节组头原高；独立成条、各自带表 */
-.sec-block + .sec-block,
-.ptable + .sec-block,
-.sec-block + .ptable {
-  margin-top: var(--soj-sp-2);
+/* 小节折叠条：行高对齐章节组头原高；白行 + 发丝线分隔 + 缩进（对齐章标题之下，
+   层级靠结构表达），独立成条、各自带表；展开态更浅蓝底 + 左蓝条（条宽与章头一致） */
+.sec-block {
+  border-top: 1px solid var(--soj-line);
 }
 
 .sbar {
+  position: relative;
   width: 100%;
   display: flex;
   align-items: center;
   gap: var(--soj-sp-10);
   padding: var(--soj-sp-12) var(--soj-sp-16);
+  padding-left: var(--soj-sp-48);
   min-height: 48px;
-  background: rgb(var(--soj-blue-hi-rgb) / 0.06);
+  background: var(--soj-white);
   border: none;
-  border-left: 3px solid var(--soj-blue);
+  border-left: 3px solid transparent;
   cursor: pointer;
   text-align: left;
+  transition: background 0.15s;
 }
 
 .sbar:hover {
-  background: rgb(var(--soj-blue-hi-rgb) / 0.13);
+  background: var(--soj-surface-2);
+}
+
+.sbar.open {
+  background: rgb(var(--soj-blue-rgb) / 0.035);
+  border-left-color: var(--soj-blue);
+}
+
+/* 小节序号转灰让层级，展开态回主蓝 */
+.sbar .cno {
+  color: var(--soj-ink-3);
+}
+
+.sbar.open .cno {
+  color: var(--soj-blue);
 }
 
 .sbar .tri {
@@ -700,16 +774,35 @@ a.ptitle:hover {
   white-space: nowrap;
 }
 
-.sec-table {
-  padding-bottom: var(--soj-sp-2);
-}
-
 .sempty,
 .cempty {
   margin: 0;
   padding: var(--soj-sp-12) var(--soj-sp-16);
   font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
+}
+
+/* 空节提示随小节条缩进对齐 */
+.sempty {
+  padding-left: var(--soj-sp-48);
+}
+
+/* 目录跳转目标闪蓝（v0.70）：::before 覆盖层淡出、不动布局；jumpTo 里挂/摘 .flash */
+.chead::before,
+.sbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--soj-blue-hi-rgb) / 0.22);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.9s ease-out;
+}
+
+.chead.flash::before,
+.sbar.flash::before {
+  opacity: 1;
+  transition: none;
 }
 
 .cdesc {
