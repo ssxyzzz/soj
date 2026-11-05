@@ -218,6 +218,12 @@ func Run(ctx context.Context, deps *Deps) {
 		api.POST("/lists/reorder", AuthRequired(h), RequirePerm(repo.PermListReorder), h.ReorderLists)
 		api.PATCH("/lists/:id", AuthRequired(h), h.UpdateList)  // handler 内 listManageable
 		api.DELETE("/lists/:id", AuthRequired(h), h.DeleteList) // handler 内 listManageable
+		// 题单 AI 一键整理（v0.71）：任务只产建议（按叶分组），预览勾选后由前端写编辑
+		// 草稿再走整体 PATCH——本组端点不写 lists；权限同编辑（handler 内 listManageable）
+		api.POST("/lists/:id/organize/run", AuthRequired(h), h.ListOrganizeRun)
+		api.GET("/lists/:id/organize/status", AuthRequired(h), h.ListOrganizeStatus)
+		api.GET("/lists/:id/organize/suggestions", AuthRequired(h), h.ListOrganizeSuggestions)
+		api.POST("/lists/:id/organize/cancel", AuthRequired(h), h.ListOrganizeCancel)
 
 		// 班级（登录后可见；成员/邀请码等按身份返回）
 		api.GET("/classes", AuthRequired(h), h.ListClasses)

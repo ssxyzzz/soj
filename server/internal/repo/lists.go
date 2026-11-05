@@ -64,12 +64,22 @@ func ValidateListShape(chapters []ListEntry) error {
 		if len(ch.Children) > 0 && len(ch.Problems) > 0 {
 			return fmt.Errorf("章「%s」不能同时包含小节和题目（单章不混挂）", strings.TrimSpace(ch.Title))
 		}
+		for _, pid := range ch.Problems {
+			if pid <= 0 {
+				return fmt.Errorf("章「%s」存在非法题号（pid ≤ 0，多为提交数据缺字段被绑成零值）", strings.TrimSpace(ch.Title))
+			}
+		}
 		for _, sec := range ch.Children {
 			if err := validateNode(sec, "小节"); err != nil {
 				return err
 			}
 			if len(sec.Children) > 0 {
 				return fmt.Errorf("小节「%s」下不能再分子级（章节最多两层）", strings.TrimSpace(sec.Title))
+			}
+			for _, pid := range sec.Problems {
+				if pid <= 0 {
+					return fmt.Errorf("小节「%s」存在非法题号（pid ≤ 0，多为提交数据缺字段被绑成零值）", strings.TrimSpace(sec.Title))
+				}
 			}
 		}
 	}

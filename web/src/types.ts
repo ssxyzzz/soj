@@ -727,6 +727,63 @@ export interface ListFlat {
   skipped_hidden: number
 }
 
+// ---------- 题单 AI 一键整理（v0.71，POST /lists/:id/organize/*） ----------
+
+// 整理建议条目（叶分组预览行）
+export interface ListOrganizeItem {
+  pid: number
+  title: string
+  difficulty: number
+  hidden?: boolean // 应用进草稿时保真红标
+  mounted?: boolean // 发起时已挂在本题单（include_mounted 模式的重排对象）
+}
+
+// 叶分组建议（groups 顺序 = 大纲叶序，前端按序直渲染）
+export interface ListOrganizeGroup {
+  key: string // 'ch:i' | 'sec:i-j'（与编辑器草稿叶口径一致）
+  label: string
+  items: ListOrganizeItem[]
+}
+
+// 终态建议全量（done 全量 / cancelled 部分保留；failed 由 status 呈现不进此形态）
+export interface ListOrganizeSuggest {
+  state: 'done' | 'cancelled'
+  total: number
+  done: number
+  failed_batches: number
+  groups: ListOrganizeGroup[]
+  unmatched: ListOrganizeItem[]
+}
+
+// 任务进度（轻量轮询快照；无本列表任务 = { state: 'idle' }；建议不进轮询响应）
+export interface ListOrganizeStatus {
+  state: 'idle' | 'running' | 'done' | 'cancelled' | 'failed'
+  list_id?: number
+  include_mounted?: boolean
+  from?: number // 题号范围（0 = 不限）
+  to?: number
+  total?: number
+  done?: number
+  failed_batches?: number
+  error?: string
+  by?: string
+  started_at?: string
+  ended_at?: string
+}
+
+// 发起参数：chapters 传编辑草稿当前值（未保存结构也参与）；题号/难度/知识点/来源
+// 筛选同为题库拉取侧条件（维内并集、维间交集，同题库列表页口径），include_mounted
+// 纳入的已挂题不受收窄（含隐藏/重复）
+export interface ListOrganizeRunBody {
+  chapters: ListEntry[]
+  include_mounted?: boolean
+  from?: number
+  to?: number
+  difficulty?: number[]
+  tags?: number[]
+  meta?: number[]
+}
+
 // ---------- 个人设置（v0.4.8） ----------
 
 // 用户偏好：跟随账号存储，前端消费（默认语言/代码模板/MD 编辑模式）

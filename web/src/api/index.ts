@@ -60,6 +60,9 @@ import type {
   ListEntry,
   ListRankResult,
   ListFlat,
+  ListOrganizeRunBody,
+  ListOrganizeStatus,
+  ListOrganizeSuggest,
   BoardsResult,
   ChallengeStartResult,
   ChallengeSessionView,
@@ -489,6 +492,13 @@ export const listApi = {
   ) => patch<{ updated: number }>(`/lists/${id}`, body),
   remove: (id: number) => del<{ deleted: number }>(`/lists/${id}`),
   reorder: (ids: number[]) => post<{ updated: number }>('/lists/reorder', { ids }),
+  // 题单 AI 一键整理（v0.71）：任务只产建议（按叶分组），预览勾选后由前端写编辑草稿
+  //（emit dirty → 既有整体 PATCH 保存）；status 轻量轮询，suggestions 完成后一次性拉全量
+  organizeRun: (id: number, body: ListOrganizeRunBody) =>
+    post<{ started: boolean }>(`/lists/${id}/organize/run`, body),
+  organizeStatus: (id: number) => get<ListOrganizeStatus>(`/lists/${id}/organize/status`),
+  organizeSuggestions: (id: number) => get<ListOrganizeSuggest>(`/lists/${id}/organize/suggestions`),
+  organizeCancel: (id: number) => post<{ cancel_requested: boolean }>(`/lists/${id}/organize/cancel`),
 }
 
 export const classApi = {

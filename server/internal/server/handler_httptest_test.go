@@ -23,6 +23,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"soj/internal/auth"
+	"soj/internal/ai"
 	"soj/internal/config"
 	"soj/internal/repo"
 )
@@ -42,6 +43,8 @@ type fakeRepo struct {
 
 	metaTreeNodes []repo.TagNode // 题库整理（v0.43）meta 任务：来源树种子（GetMetaTagTree/MatchMetaTags 用）
 	tagTreeNodes  []repo.TagNode // 手动整理（v0.49）：知识树种子（ValidateTagRefs 用）
+	lists         map[int64]*repo.ProblemList // 题单 AI 一键整理（v0.71）：题单种子（GetProblemList 用）
+	aiCfg         *ai.Config                  // AI 供应商配置种子（GetAIConfig 用；无启用档 = 未配置）
 
 	// 题库三视角：捕获 server 传给 repo 的过滤契约 + 回放列表
 	lastFilter *repo.ProblemListFilter
@@ -291,7 +294,9 @@ func baseFake() *fakeRepo {
 		users:      map[int64]*repo.User{},
 		roles:      map[string]*repo.Role{},
 		problems:   map[int64]*repo.Problem{},
+		lists:      map[int64]*repo.ProblemList{},
 		settings:   &repo.SystemSettings{RateLimitPerMinute: 100},
+		aiCfg:      &ai.Config{},
 		bestScores: map[int64]int{},
 		jadeBal:    map[int64]int64{},
 	}

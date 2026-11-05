@@ -82,6 +82,7 @@ declare module 'vue' {
     InlineEdit: typeof import('./components/InlineEdit.vue')['default']
     LazySelectCell: typeof import('./components/LazySelectCell.vue')['default']
     LevelPanel: typeof import('./components/admin/LevelPanel.vue')['default']
+    ListOrganizeDialog: typeof import('./components/ListOrganizeDialog.vue')['default']
     ManualTidyPanel: typeof import('./components/admin/ManualTidyPanel.vue')['default']
     MdEditor: typeof import('./components/MdEditor.vue')['default']
     MdEditorInner: typeof import('./components/MdEditorInner.vue')['default']

@@ -11,6 +11,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import MdEditor from '@/components/MdEditor.vue'
 import InlineEdit from '@/components/InlineEdit.vue'
+import ListOrganizeDialog from '@/components/ListOrganizeDialog.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import SectionProblemsDialog from '@/components/SectionProblemsDialog.vue'
@@ -18,6 +19,7 @@ import SwitchRow from '@/components/SwitchRow.vue'
 import { listApi } from '@/api'
 import { useDirtyFlag } from '@/composables/useDirtyFlag'
 import { useListener } from '@/composables/useWindowListener'
+import { draftToChapters } from '@/utils/listDraft'
 import type { ListDetail, ListEntryDraft } from '@/types'
 
 const route = useRoute()
@@ -174,6 +176,9 @@ function openDialog(key: string) {
   dialogKey.value = key
 }
 
+// ---- AI 一键整理弹窗（v0.71）：任务只产建议，应用写本页 chs 草稿再走保存管道 ----
+const organizeOpen = ref(false)
+
 // ---- 大纲拖拽（章排序 / 小节章内排序与跨章移动，不混挂守卫沿用） ----
 const dragKey = ref<string | null>(null)
 const dropKey = ref<string | null>(null)
@@ -327,20 +332,7 @@ async function save() {
   }
   saving.value = true
   try {
-    const chapters = chs.value.map((c) => {
-      const base = { title: c.title.trim(), desc: c.desc.trim() }
-      if (c.children.length) {
-        return {
-          ...base,
-          children: c.children.map((s) => ({
-            title: s.title.trim(),
-            desc: s.desc.trim(),
-            problems: s.problems.map((p) => p.id),
-          })),
-        }
-      }
-      return { ...base, problems: c.problems.map((p) => p.id) }
-    })
+    const chapters = draftToChapters(chs.value)
     await listApi.update(id, { title: title.value.trim(), intro: intro.value, hidden: hidden.value, chapters })
     takeSnapshot()
     savedAt.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -387,6 +379,11 @@ async function removeList() {
           <div class="outline-head">
             <b>章节</b>
             <span class="dim">{{ chs.length }} 章</span>
+            <el-tooltip content="AI 结合题面把题库题目归入章/节，预览确认后写入草稿" placement="top">
+              <span class="head-organize">
+                <el-button size="small" plain :disabled="!chs.length" @click="organizeOpen = true">AI 整理</el-button>
+              </span>
+            </el-tooltip>
             <el-button size="small" type="primary" plain @click="addChapter">＋ 新章节</el-button>
           </div>
 
@@ -529,6 +526,8 @@ async function removeList() {
       @update:node-key="dialogKey = $event"
       @close="dialogKey = null"
     />
+
+    <ListOrganizeDialog v-model="organizeOpen" :list-id="id" :chs="chs" />
   </div>
 </template>
 
@@ -569,7 +568,8 @@ async function removeList() {
   color: var(--soj-navy);
 }
 
-.outline-head .el-button {
+/* auto margin 落在 AI 整理包裹层：与「＋ 新章节」成对靠右，AI 整理在其左侧（用户拍板） */
+.outline-head .head-organize {
   margin-left: auto;
 }
 

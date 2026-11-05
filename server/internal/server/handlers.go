@@ -70,6 +70,11 @@ type Handlers struct {
 	// AI/规则只产建议，apply 确认后才写库
 	tidyMu   sync.Mutex
 	tidyTask *tidyJob
+
+	// 题单 AI 一键整理（v0.71）：创建者手动触发，与题库整理同款单任务骨架——
+	// 任务只产建议（按叶分组），预览勾选后由前端写编辑草稿（整体 PATCH 保存）
+	organizeMu   sync.Mutex
+	organizeTask *listOrganizeJob
 }
 
 // wakeJudge 提交/重测入队后唤醒判题 worker（多进程部署收不到，靠 1s 轮询兜底）。

@@ -33,6 +33,9 @@ func TestValidateListShape(t *testing.T) {
 		{"单章混挂", []ListEntry{{Title: "章", Problems: []int64{1}, Children: []ListEntry{{Title: "节"}}}}},
 		{"三层嵌套", []ListEntry{{Title: "章", Children: []ListEntry{{Title: "节", Children: []ListEntry{{Title: "子节"}}}}}}},
 		{"节标题空", []ListEntry{{Title: "章", Children: []ListEntry{{Title: ""}}}}},
+		// v0.71：pid ≤ 0 拒绝（提交数据缺字段被绑成零值的最后闸门——走查实锤整单挂载写废）
+		{"章直挂零值题号", []ListEntry{{Title: "章", Problems: []int64{0}}}},
+		{"节内负值题号", []ListEntry{{Title: "章", Children: []ListEntry{{Title: "节", Problems: []int64{-1}}}}}},
 	}
 	for _, c := range cases {
 		if err := ValidateListShape(c.in); err == nil {
