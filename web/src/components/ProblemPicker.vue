@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// 统一选题器（v0.7.3）：创建比赛 / 发起考试 / 布置作业 / 调整题目四处共用。
+// 统一选题器（v0.7.3）：创建比赛 / 发起考试 / 布置作业 / 调整题目等六处共用。
 // 左列 = 候选多选（搜索框走题库 q 参数：标题/题号/知识点/标签名——命中节点子树计入，
 // v0.26.1；TagFilter 标签多选；无分页、搜索驱动、单次 100 条；排除隐藏题维持现口径）；
 // 右列 = 已选清单（拖动 ⠿ 排序 / 删除，沿用调整题目弹窗交互）。
 // v-model 为带标题的已选数组（保序）；已选中的隐藏题（组织者 edit_problems）原样保留展示。
+// 搜索行右侧内嵌「按题号导入」（v0.73）：粘贴题号批量并入已选，去重保序。
 import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 
 import { problemApi } from '@/api'
 import TagFilter from '@/components/problem/TagFilter.vue'
@@ -62,6 +64,27 @@ function removeAt(i: number) {
   emit('update:modelValue', next)
 }
 
+// 按题号导入（v0.73）：服务端已剔除隐藏/重复题，这里按题号去重保序追加进已选尾部
+function mergeImported(items: { id: number; title: string }[]) {
+  const next = [...props.modelValue]
+  let added = 0
+  let dup = 0
+  for (const it of items) {
+    if (next.some((p) => p.id === it.id)) {
+      dup++
+      continue
+    }
+    next.push({ id: it.id, title: it.title })
+    added++
+  }
+  if (!added) {
+    ElMessage.warning(`导入的 ${dup} 题均已在已选中`)
+    return
+  }
+  emit('update:modelValue', next)
+  ElMessage.success(`已导入 ${added} 题${dup ? `，${dup} 题已在已选中跳过` : ''}`)
+}
+
 function onDragStart(i: number) {
   dragIndex.value = i
 }
@@ -86,6 +109,7 @@ onMounted(search)
   <div class="picker">
     <div class="picker-search">
       <el-input v-model="q" placeholder="搜索标题、题号、知识点或标签" clearable />
+      <ImportByIdsDialog @import="mergeImported" />
     </div>
     <div class="picker-tags">
       <TagFilter :selected="tags" @change="(ids: number[]) => (tags = ids)" />
@@ -162,7 +186,15 @@ onMounted(search)
 }
 
 .picker-search {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-8);
   margin-bottom: var(--soj-sp-8);
+}
+
+.picker-search :deep(.el-input) {
+  flex: 1;
+  min-width: 0;
 }
 
 .picker-cols {

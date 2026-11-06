@@ -816,7 +816,7 @@ onMounted(load)
         </el-form-item>
         <el-form-item>
           <template #label>
-            <TipLabel label="作业题目" tip="可先创建后在作业页调整；支持从题单复制" />
+            <TipLabel label="作业题目" tip="可先创建后在作业页调整；支持从题单复制，或按题号导入（粘贴一串题号一键加入）" />
           </template>
           <div class="picker-block">
             <CopyFromListButton @merge="mergeFromList" />

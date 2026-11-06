@@ -166,6 +166,7 @@ func Run(ctx context.Context, deps *Deps) {
 
 		api.GET("/problems", AuthOptional(h), h.ListProblems)
 		api.GET("/problems/:id", AuthOptional(h), h.GetProblem)
+		api.GET("/problems/batch", AuthRequired(h), h.GetProblemsBatch)
 		api.GET("/problems/:id/submissions", AuthRequired(h), h.ListProblemSubmissions)
 		api.GET("/problems/:id/my-submissions", AuthRequired(h), h.MyProblemSubmissions)
 		// 挑战模式（v0.23）：会话三接口（计时权威在服务端）+ 自测直跑 + 题内三榜

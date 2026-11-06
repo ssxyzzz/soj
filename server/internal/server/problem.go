@@ -359,6 +359,44 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 	ok(c, resp)
 }
 
+// maxBatchImportIDs 选题器「按题号导入」单次题号上限：与候选搜索单次 100 条同量级。
+const maxBatchImportIDs = 100
+
+// batchSummaries 组装按题号导入结果：保序拆成可见 items 与无效 invalid 两桶，
+// 缺失 / 隐藏 / 重复统一计为无效不区分——与详情页对无「题库全量可见」视角一律不可见的
+// 口径一致，不新增隐藏题存在性探测面。纯函数（v0.73 单测覆盖）。
+func batchSummaries(ids []int64, sums map[int64]*repo.ProblemSummary) ([]gin.H, []int64) {
+	items := make([]gin.H, 0, len(ids))
+	invalid := make([]int64, 0)
+	for _, id := range ids {
+		p := sums[id]
+		if p == nil || p.Hidden || p.Duplicate {
+			invalid = append(invalid, id)
+			continue
+		}
+		items = append(items, gin.H{"id": p.ID, "title": p.Title})
+	}
+	return items, invalid
+}
+
+// GetProblemsBatch 按题号批量取题目摘要（v0.73 选题器「按题号导入」）：ids=逗号分隔
+// 题号（parsePositiveIDList 去重保序、单次上限 100）。登录即可用（选题均为管理场景）；
+// 可见题出 id+title，缺失/隐藏/重复进 invalid 由前端提示「不存在或未公开」并忽略。
+func (h *Handlers) GetProblemsBatch(c *gin.Context) {
+	ids, err := parsePositiveIDList(c.Query("ids"), maxBatchImportIDs)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	sums, err := h.repo.ProblemSummariesByIDs(c.Request.Context(), ids)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取题目失败")
+		return
+	}
+	items, invalid := batchSummaries(ids, sums)
+	ok(c, gin.H{"items": items, "invalid": invalid})
+}
+
 // SetProblemStatement 编辑题面（Markdown；权限同隐藏设置：root 任意题；admin 仅自己导入的题）。
 func (h *Handlers) SetProblemStatement(c *gin.Context) {
 	id, okID := parseID(c, "id")

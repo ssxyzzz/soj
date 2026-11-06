@@ -79,6 +79,7 @@ declare module 'vue' {
     FeastOverlay: typeof import('./components/game/FeastOverlay.vue')['default']
     FitTags: typeof import('./components/problem/FitTags.vue')['default']
     HomeAmbient: typeof import('./components/HomeAmbient.vue')['default']
+    ImportByIdsDialog: typeof import('./components/ImportByIdsDialog.vue')['default']
     InlineEdit: typeof import('./components/InlineEdit.vue')['default']
     LazySelectCell: typeof import('./components/LazySelectCell.vue')['default']
     LevelPanel: typeof import('./components/admin/LevelPanel.vue')['default']

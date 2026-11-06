@@ -298,6 +298,8 @@ export const problemApi = {
       ...(state ? { state } : {}),
     }),
   detail: (id: number) => get<ProblemDetail>(`/problems/${id}`),
+  // 按题号批量取摘要（v0.73 选题器「按题号导入」）：invalid = 不存在/隐藏/重复的题号（统一不区分）
+  batch: (ids: number[]) => get<{ items: { id: number; title: string }[]; invalid: number[] }>('/problems/batch', { ids: ids.join(',') }),
   paper: (id: number) => get<PaperData>(`/problems/${id}/paper`),
   create: (form: FormData, onProgress?: (pct: number) => void) =>
     client
