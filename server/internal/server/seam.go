@@ -268,7 +268,7 @@ type RepoAPI interface {
 	TagRefProblemsField(ctx context.Context, field string, tagIDs []int64) ([]*repo.Problem, error)
 	TagUsageCountsField(ctx context.Context, field string) (map[int64]int64, error)
 	TestDataDownloadAllowed(ctx context.Context, uid, pid int64, limit int) (bool, error)
-	TestDataDownloadedToday(ctx context.Context, uid int64, exclude []int64) (int64, error)
+	TestDataDownloadedInWeek(ctx context.Context, uid int64, exclude []int64) (int64, error)
 	ToggleDiscussLike(ctx context.Context, targetType string, targetID, uid int64) (liked bool, count int64, err error)
 	TransferClass(ctx context.Context, classID, fromUID, toUID int64) error
 	UnbindAllTagsField(ctx context.Context, field string, tagIDs []int64) (int64, error)

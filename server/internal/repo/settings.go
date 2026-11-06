@@ -19,9 +19,10 @@ type SystemSettings struct {
 	// HomeNoticeHtml 写入时渲染缓存（v0.53 渲染收口）：匿名首页直发 html，
 	// 访客不再为看公告下载渲染引擎；md 永远是事实源
 	HomeNoticeHtml string `bson:"homeNoticeHtml,omitempty"`
-	// 每日每用户可下载数据的题目数上限（problem.data.download 权限位持有者受此限额）。
-	// 指针区分「旧文档未设置」与「显式 0」：nil = 未设置按默认；0 = 不限制；>0 = 每日上限。
-	DataDownloadDailyLimit *int `bson:"dataDownloadDailyLimit,omitempty"`
+	// 每周每用户可下载数据的题目数上限（v0.72.1 每日改每周，problem.data.download 权限位持有者受此限额）。
+	// 指针区分「旧文档未设置」与「显式 0」：nil = 未设置按默认；0 = 不限制；>0 = 每周上限。
+	// 旧字段 dataDownloadDailyLimit（每日口径）已退役：保留不读写零迁移，存量值不搬（窗口语义已变）。
+	DataDownloadWeeklyLimit *int `bson:"dataDownloadWeeklyLimit,omitempty"`
 	// 代码自动补全的解锁等级（v0.11）：等级 ≥ 该值才能开启自动补全；nil = 未设置按默认 5。
 	AutocompleteMinLevel *int `bson:"autocompleteMinLevel,omitempty"`
 	// 是否开放自助注册；nil = 未设置按默认开放（存量部署行为不变）。关闭后建号走用户管理。
@@ -143,9 +144,9 @@ func (s *SystemSettings) OpenSchool() bool   { return s.ProfileEdit == nil || s.
 func (s *SystemSettings) OpenRegion() bool   { return s.ProfileEdit == nil || s.ProfileEdit.Region }
 
 const (
-	DefaultRateLimitPerMinute   = 3
-	DefaultDataDownloadDayLimit = 5
-	DefaultAutocompleteMinLevel = 4
+	DefaultRateLimitPerMinute    = 3
+	DefaultDataDownloadWeekLimit = 5
+	DefaultAutocompleteMinLevel  = 4
 	DefaultAllowRegister        = true
 	DefaultBatchImportProblemMB = 100  // 单题数据 100MB
 	DefaultBatchImportZipMB     = 2048 // 整包 zip 2GB
@@ -195,12 +196,12 @@ func downloadLimitPtr(v int) *int { return &v }
 func boolPtr(v bool) *bool        { return &v }
 func int64Ptr(v int64) *int64     { return &v }
 
-// DownloadDailyLimit 限额取值：未设置回默认（存量 settings 文档无此字段时为 nil）。
-func (s *SystemSettings) DownloadDailyLimit() int {
-	if s.DataDownloadDailyLimit == nil || *s.DataDownloadDailyLimit < 0 {
-		return DefaultDataDownloadDayLimit
+// DownloadWeeklyLimit 限额取值：未设置回默认（存量 settings 文档无此字段时为 nil）。
+func (s *SystemSettings) DownloadWeeklyLimit() int {
+	if s.DataDownloadWeeklyLimit == nil || *s.DataDownloadWeeklyLimit < 0 {
+		return DefaultDataDownloadWeekLimit
 	}
-	return *s.DataDownloadDailyLimit
+	return *s.DataDownloadWeeklyLimit
 }
 
 // settingsCacheTTL 系统设置缓存有效期：设置变更的最长可见延迟（Update 走写穿失效，
@@ -233,9 +234,9 @@ func (r *Repo) loadSystemSettings(ctx context.Context) (*SystemSettings, error) 
 	err := r.db.Collection("settings").FindOne(ctx, bson.M{"_id": "system"}).Decode(&s)
 	if IsNotFound(err) {
 		return &SystemSettings{
-			RateLimitPerMinute:     DefaultRateLimitPerMinute,
-			DataDownloadDailyLimit: downloadLimitPtr(DefaultDataDownloadDayLimit),
-			AllowRegister:          boolPtr(DefaultAllowRegister),
+			RateLimitPerMinute:      DefaultRateLimitPerMinute,
+			DataDownloadWeeklyLimit: downloadLimitPtr(DefaultDataDownloadWeekLimit),
+			AllowRegister:           boolPtr(DefaultAllowRegister),
 		}, nil
 	}
 	if err != nil {
@@ -244,8 +245,8 @@ func (r *Repo) loadSystemSettings(ctx context.Context) (*SystemSettings, error) 
 	if s.RateLimitPerMinute <= 0 {
 		s.RateLimitPerMinute = DefaultRateLimitPerMinute
 	}
-	if s.DataDownloadDailyLimit == nil {
-		s.DataDownloadDailyLimit = downloadLimitPtr(DefaultDataDownloadDayLimit)
+	if s.DataDownloadWeeklyLimit == nil {
+		s.DataDownloadWeeklyLimit = downloadLimitPtr(DefaultDataDownloadWeekLimit)
 	}
 	if s.AutocompleteMinLevel == nil || *s.AutocompleteMinLevel < 1 || *s.AutocompleteMinLevel > 10 {
 		s.AutocompleteMinLevel = intPtr(DefaultAutocompleteMinLevel)
@@ -657,7 +658,7 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"rateLimitPerMinute":      s.RateLimitPerMinute,
 			"homeNotice":              s.HomeNotice,
 			"homeNoticeHtml":          mdrender.Render(s.HomeNotice), // 写入时渲染（v0.53 渲染收口）
-			"dataDownloadDailyLimit":  s.DownloadDailyLimit(),
+			"dataDownloadWeeklyLimit": s.DownloadWeeklyLimit(),
 			"autocompleteMinLevel":    s.MinAutocompleteLevel(),
 			"allowRegister":           s.RegistrationOpen(),
 			"icpNumber":               s.IcpNumber,
@@ -758,22 +759,35 @@ func (s *SystemSettings) RegistrationOpen() bool {
 	return *s.AllowRegister
 }
 
-// TestDataDownloadAllowed 每日下载限额判断：limit 0 = 不限制；>0 时当天已下载的不同题数
-// 达到上限且本题不在其中则拒绝（同一题当天重复下载不重复计数）。
+// weekStartDay 本自然周起点（周一）的 day 字符串（YYYY-MM-DD，字典序即时间序）。
+// 周窗口（v0.72.1 每日改每周）：计数本周一以来下载的不同题数，周一重置、学生可预期。
+func weekStartDay(t time.Time) string {
+	wd := int(t.Weekday())
+	if wd == 0 {
+		wd = 7 // 周日按一周第 7 天算，回退到本周一
+	}
+	return t.AddDate(0, 0, -(wd - 1)).Format("2006-01-02")
+}
+
+// TestDataDownloadAllowed 每周下载限额判断：limit 0 = 不限制；>0 时本周（周一起）
+// 已下载的不同题数达到上限且本题不在其中则拒绝（同题同天记录去重 + Distinct 计数，
+// 同题跨天重复下载也不重复计数）。
 func (r *Repo) TestDataDownloadAllowed(ctx context.Context, uid, pid int64, limit int) (bool, error) {
 	if limit <= 0 {
 		return true, nil
 	}
-	n, err := r.db.Collection("dataDownloads").CountDocuments(ctx, bson.M{
-		"uid": uid, "day": time.Now().Format("2006-01-02"), "pid": bson.M{"$ne": pid},
-	})
+	var vals []int64
+	err := r.db.Collection("dataDownloads").Distinct(ctx, "pid", bson.M{
+		"uid": uid, "day": bson.M{"$gte": weekStartDay(time.Now())}, "pid": bson.M{"$ne": pid},
+	}).Decode(&vals)
 	if err != nil {
 		return false, err
 	}
-	return n < int64(limit), nil
+	return int64(len(vals)) < int64(limit), nil
 }
 
-// RecordTestDataDownload 记录一次下载（按 uid+pid+day 去重，同题当天重复下载不新增计数）。
+// RecordTestDataDownload 记录一次下载（按 uid+pid+day 去重，同题当天重复下载不新增记录；
+// 周窗口计数靠查询侧 Distinct pid，记录粒度不变）。
 func (r *Repo) RecordTestDataDownload(ctx context.Context, uid, pid int64) error {
 	_, err := r.db.Collection("dataDownloads").UpdateOne(ctx,
 		bson.M{"uid": uid, "pid": pid, "day": time.Now().Format("2006-01-02")},
@@ -783,10 +797,10 @@ func (r *Repo) RecordTestDataDownload(ctx context.Context, uid, pid int64) error
 	return err
 }
 
-// TestDataDownloadedToday 当天已下载的不同题数（exclude 里的题不计——多题打包导出
-// 的合并预检用：选中数与剩余额度比较，选中的题本来就在本次放行范围）。
-func (r *Repo) TestDataDownloadedToday(ctx context.Context, uid int64, exclude []int64) (int64, error) {
-	filter := bson.M{"uid": uid, "day": time.Now().Format("2006-01-02")}
+// TestDataDownloadedInWeek 本周（周一起）已下载的不同题数（exclude 里的题不计——多题
+// 打包导出的合并预检用：选中数与剩余额度比较，选中的题本来就在本次放行范围）。
+func (r *Repo) TestDataDownloadedInWeek(ctx context.Context, uid int64, exclude []int64) (int64, error) {
+	filter := bson.M{"uid": uid, "day": bson.M{"$gte": weekStartDay(time.Now())}}
 	if len(exclude) > 0 {
 		filter["pid"] = bson.M{"$nin": exclude}
 	}

@@ -7,7 +7,7 @@ import { adminApi } from '@/api'
 import { useSiteStore } from '@/stores/site'
 
 const rateLimit = ref(3)
-// 每日可下载数据的题目数（0 = 不限制）；作用于拥有「下载数据」权限位的用户
+// 每周可下载数据的题目数（v0.72.1 每日改每周，0 = 不限制）；作用于拥有「下载数据」权限位的用户
 const dataDownloadLimit = ref(5)
 // 代码自动补全解锁等级（v0.11）：等级 ≥ 该值才能开启自动补全（缺省 4）
 const autocompleteMinLevel = ref(4)
@@ -42,7 +42,7 @@ onMounted(async () => {
   try {
     const s = await adminApi.getSettings()
     rateLimit.value = s.rate_limit_per_minute
-    dataDownloadLimit.value = s.data_download_daily_limit
+    dataDownloadLimit.value = s.data_download_weekly_limit
     autocompleteMinLevel.value = s.autocomplete_min_level
     icpNumber.value = s.icp_number || ''
     mpsNumber.value = s.mps_number || ''
@@ -70,7 +70,7 @@ async function save() {
   try {
     await adminApi.updateSettings({
       rate_limit_per_minute: rateLimit.value,
-      data_download_daily_limit: dataDownloadLimit.value,
+      data_download_weekly_limit: dataDownloadLimit.value,
       autocomplete_min_level: autocompleteMinLevel.value,
       icp_number: icpNumber.value.trim(),
       mps_number: mpsNumber.value.trim(),
@@ -116,7 +116,7 @@ async function save() {
       </el-form-item>
       <el-form-item>
         <template #label>
-          <TipLabel label="每日可下载数据的题目数" tip="0 为不限制；限定拥有「下载数据」权限位的用户每天最多下载几道题的数据包（同题重复下载不重复计数）" />
+          <TipLabel label="每周可下载数据的题目数" tip="0 为不限制；限定拥有「下载数据」权限位的用户每周最多下载几道题的数据包（自然周周一起算、周一重置；同题重复下载不重复计数）" />
         </template>
         <el-input-number v-model="dataDownloadLimit" :min="0" :max="1000" />
       </el-form-item>

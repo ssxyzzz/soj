@@ -357,7 +357,7 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 	ok(c, gin.H{
 		"rate_limit_per_minute":     s.RateLimitPerMinute,
 		"home_notice":               s.HomeNotice,
-		"data_download_daily_limit": s.DownloadDailyLimit(),
+		"data_download_weekly_limit": s.DownloadWeeklyLimit(),
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
@@ -457,7 +457,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	var req struct {
 		RateLimitPerMinute     *int    `json:"rate_limit_per_minute"`
 		HomeNotice             *string `json:"home_notice"`
-		DataDownloadDailyLimit *int    `json:"data_download_daily_limit"`
+		DataDownloadWeeklyLimit *int    `json:"data_download_weekly_limit"`
 		AutocompleteMinLevel   *int    `json:"autocomplete_min_level"`
 		AllowRegister          *bool   `json:"allow_register"`
 		IcpNumber              *string `json:"icp_number"`
@@ -527,12 +527,12 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.HomeNotice = *req.HomeNotice
 	}
-	if req.DataDownloadDailyLimit != nil {
-		if *req.DataDownloadDailyLimit < 0 || *req.DataDownloadDailyLimit > 1000 {
-			fail(c, http.StatusBadRequest, "每日可下载数据的题目数需在 0-1000 之间（0 为不限制）")
+	if req.DataDownloadWeeklyLimit != nil {
+		if *req.DataDownloadWeeklyLimit < 0 || *req.DataDownloadWeeklyLimit > 1000 {
+			fail(c, http.StatusBadRequest, "每周可下载数据的题目数需在 0-1000 之间（0 为不限制）")
 			return
 		}
-		s.DataDownloadDailyLimit = req.DataDownloadDailyLimit
+		s.DataDownloadWeeklyLimit = req.DataDownloadWeeklyLimit
 	}
 	if req.AutocompleteMinLevel != nil {
 		if !repo.ValidDifficulty(*req.AutocompleteMinLevel) {
@@ -815,7 +815,7 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 	ok(c, gin.H{
 		"rate_limit_per_minute":     s.RateLimitPerMinute,
 		"home_notice":               s.HomeNotice,
-		"data_download_daily_limit": s.DownloadDailyLimit(),
+		"data_download_weekly_limit": s.DownloadWeeklyLimit(),
 		"autocomplete_min_level":    s.MinAutocompleteLevel(),
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,

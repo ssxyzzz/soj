@@ -11,7 +11,7 @@ const (
 	PermProblemCreate        = "problem.create"         // 新建/导入题目
 	PermProblemEditOwn       = "problem.edit.own"       // 编辑自己导入的题目（题面/隐藏）
 	PermProblemEditAll       = "problem.edit.all"       // 编辑任意题目
-	PermProblemDataDownload  = "problem.data.download"  // 下载题目测试数据包（每日可下载题数受系统设置限额）
+	PermProblemDataDownload  = "problem.data.download"  // 下载题目测试数据包（每周可下载题数受系统设置限额）
 	PermContestBankCreate    = "contest.bank.create"    // 创建主题库比赛
 	PermContestScoreView     = "contest.score.view"     // 查看比赛/考试成绩表（root/admin 默认开启，default 无）
 	PermContestScoreDetail   = "contest.score.detail"   // 比赛成绩表详情：点看他人某题提交明细与代码（root/admin 默认开启，default 无）
@@ -75,7 +75,7 @@ var PermCatalog = []PermInfo{
 	{PermProblemCreate, "新建题目", "新建/导入题目（网页出题功能上线后生效）", "problem"},
 	{PermProblemEditOwn, "编辑自己的题目", "编辑自己导入的题目的题面与隐藏标记", "problem"},
 	{PermProblemEditAll, "编辑任意题目", "不受题目属主限制", "problem"},
-	{PermProblemDataDownload, "下载数据", "下载题目测试数据包（zip，含造数据脚本等存档文件）；每日可下载题数由系统设置限定，无此权限不可下载", "problem"},
+	{PermProblemDataDownload, "下载数据", "下载题目测试数据包（zip，含造数据脚本等存档文件）；每周可下载题数由系统设置限定，无此权限不可下载", "problem"},
 	{PermSolutionManage, "题解管理", "置顶题解、删除他人题解（满分用户均可发布自己的题解）", "problem"},
 	{PermContestBankCreate, "创建主题库比赛", "发起全站比赛", "contest"},
 	{PermContestScoreView, "查看比赛/考试成绩表", "可查看比赛与考试的成绩表（各题得分与排名）；仍受场次「开启成绩表」开关与结果发布状态约束，组织者不受限。default 角色默认无此位", "contest"},

@@ -1193,7 +1193,7 @@ export interface NotifyPrefsResult {
 export interface AdminSettings {
   rate_limit_per_minute: number
   home_notice: string
-  data_download_daily_limit: number
+  data_download_weekly_limit: number
   autocomplete_min_level: number
   allow_register: boolean
   icp_number: string

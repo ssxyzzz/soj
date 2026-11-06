@@ -270,7 +270,7 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}); err != nil {
 		return err
 	}
-	// 数据包下载记账（v0.8.3）：每日限额按 (uid, day) 数不同题；同题同天重复下载去重
+	// 数据包下载记账（v0.8.3；v0.72.1 窗口每日改每周）：按 (uid, day) 记不同题，周窗口查询侧 Distinct pid 计数（同题跨天不重复计数）
 	_, err = r.db.Collection("dataDownloads").Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "day", Value: 1}}},
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "pid", Value: 1}, {Key: "day", Value: 1}}, Options: options.Index().SetUnique(true)},

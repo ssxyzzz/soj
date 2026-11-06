@@ -868,14 +868,14 @@ func (h *Handlers) DownloadProblemTestdata(c *gin.Context) {
 			fail(c, http.StatusInternalServerError, "读取设置失败")
 			return
 		}
-		if limit := setting.DownloadDailyLimit(); limit > 0 {
+		if limit := setting.DownloadWeeklyLimit(); limit > 0 {
 			allowed, err := h.repo.TestDataDownloadAllowed(c.Request.Context(), uid, id, limit)
 			if err != nil {
 				fail(c, http.StatusInternalServerError, "限额校验失败")
 				return
 			}
 			if !allowed {
-				fail(c, http.StatusForbidden, fmt.Sprintf("已达每日下载数据上限（%d 题/天），请明日再试", limit))
+				fail(c, http.StatusForbidden, fmt.Sprintf("已达每周下载数据上限（%d 题/周），下周一重置后再试", limit))
 				return
 			}
 		}
@@ -1005,7 +1005,7 @@ func parsePositiveIDList(raw string, cap int) ([]int64, error) {
 
 // ExportProblems 多题打包导出（v0.18.1）：GET /api/problems/export?ids=1,2,3。
 // 根下每题一个目录（<id>_<安全标题>/），内容与单题「下载数据」同一权威渲染内核。
-// problem.data.download 权限位；每日限额合并预检（选中数 > 当日剩余即拒），
+// problem.data.download 权限位；每周限额合并预检（选中数 > 本周剩余即拒），
 // 打包交付后按题记账（同题同天去重、root 不限不记账）。题目已删/读失败跳过不中断整批，
 // 无数据的非客观题照常出壳包（多选批量不做单题 404）。
 func (h *Handlers) ExportProblems(c *gin.Context) {
@@ -1021,15 +1021,15 @@ func (h *Handlers) ExportProblems(c *gin.Context) {
 			fail(c, http.StatusInternalServerError, "读取设置失败")
 			return
 		}
-		if limit := setting.DownloadDailyLimit(); limit > 0 {
-			done, err := h.repo.TestDataDownloadedToday(c.Request.Context(), uid, ids)
+		if limit := setting.DownloadWeeklyLimit(); limit > 0 {
+			done, err := h.repo.TestDataDownloadedInWeek(c.Request.Context(), uid, ids)
 			if err != nil {
 				fail(c, http.StatusInternalServerError, "限额校验失败")
 				return
 			}
 			if remaining := int64(limit) - done; int64(len(ids)) > remaining {
 				fail(c, http.StatusForbidden, fmt.Sprintf(
-					"今日数据下载限额剩 %d 题（上限 %d/天），已选 %d 题，请减少勾选或明日再试",
+					"本周数据下载限额剩 %d 题（上限 %d/周），已选 %d 题，请减少勾选或下周一再试",
 					remaining, limit, len(ids)))
 				return
 			}
