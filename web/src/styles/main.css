@@ -1606,6 +1606,18 @@ samp {
   overflow: auto;
 }
 
+/* 全站下拉主档 32→40（v0.73.2 补全 v0.20 控件主档口径）：EP 2.8 重写版 select
+   wrapper 写死 min-height 32px、不消费 --el-component-size，导致下拉与输入/按钮
+   不等高（做题台工具栏用户实拍实锤，ProblemForm 局部先例上收）；small 档随后
+   重申保持紧凑表格档 */
+.el-select .el-select__wrapper {
+  min-height: 40px;
+}
+
+.el-select--small .el-select__wrapper {
+  min-height: 24px;
+}
+
 /* 小号下拉选择器（管理后台角色选择等）：字号对齐全站 14px（EP small 为 12px） */
 .el-select--small .el-select__wrapper {
   font-size: var(--soj-fs-body);

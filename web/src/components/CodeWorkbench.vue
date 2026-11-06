@@ -267,8 +267,9 @@ onBeforeUnmount(() => {
   flex: none;
 }
 
-/* 工具栏整行等高：select/字号框走全局 --el-component-size 40px，
-   按钮弃用 small 档（34px）并钉在 40px，与左侧控件完全对齐（2026-10-26 验收调整） */
+/* 工具栏整行等高（40px）：按钮钉 40px；下拉主档走 main.css 全站
+   .el-select__wrapper min-height 40（v0.73.2，EP 2.8 select 不吃 component-size）；
+   字号框吃 --el-component-size 40。六控件顶底对齐 */
 .wb-actions .el-button {
   height: 40px;
 }

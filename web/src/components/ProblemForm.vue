@@ -1062,11 +1062,9 @@ function onSubmitClick() {
   width: 200px;
 }
 
-/* 类型下拉与标题输入同档：EP 2.8 重写版 select 写死 32px/14px，不吃全站
-   --el-component-size(40)/--el-font-size-base(15) 两 token（输入框吃到才 40/15）；
-   此处对齐主档，min-height 撑高、文字垂直居中 */
+/* 类型下拉字号对齐主档 15px（EP 2.8 重写版 select 写死 14px；min-height 40 已随
+   v0.73.2 上收 main.css 全站 .el-select__wrapper 规则，此处不再重复） */
 .identity-type-select :deep(.el-select__wrapper) {
-  min-height: var(--el-component-size);
   font-size: var(--soj-fs-body);
 }
 
