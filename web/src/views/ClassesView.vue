@@ -207,12 +207,15 @@ onMounted(load)
           >
             <div class="name-row">
               <h3 class="name"><RouterLink :to="classHref(c)" class="clink" @click.stop>{{ c.name }}</RouterLink></h3>
-              <span v-if="c.private" class="cl-chip lock">🔒 私密</span>
-              <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口。
-                   私密徽章与身份徽章互相独立（2026-10-25：私密班的建班人不再丢「xxx的班」） -->
-              <span v-if="c.owner_id === userStore.uid" class="cl-chip joined">{{ c.owner_name }}的班</span>
-              <span v-else-if="c.joined" class="cl-chip joined">✓ 已加入</span>
-              <el-button v-else size="small" type="primary" link @click.stop="openJoin(c)">加入</el-button>
+              <!-- 身份徽章组（v0.73.1 拍板）：右对齐贴置顶钮左侧，名称加粗放大后不再同挤左侧 -->
+              <div class="chips">
+                <span v-if="c.private" class="cl-chip lock">🔒 私密</span>
+                <!-- 建班人视角显示「xxx的班」；其余成员已加入，非成员给加入入口。
+                     私密徽章与身份徽章互相独立（2026-10-25：私密班的建班人不再丢「xxx的班」） -->
+                <span v-if="c.owner_id === userStore.uid" class="cl-chip joined">{{ c.owner_name }}的班</span>
+                <span v-else-if="c.joined" class="cl-chip joined">✓ 已加入</span>
+                <el-button v-else size="small" type="primary" link @click.stop="openJoin(c)">加入</el-button>
+              </div>
               <!-- 置顶钮：锚名称行右缘垂直居中（2026-10-26 拍板：与首行平齐、与六点同列） -->
               <button
                 v-if="c.joined"
@@ -320,6 +323,14 @@ onMounted(load)
   flex-wrap: wrap;
 }
 
+/* 身份徽章组：右对齐贴置顶钮左侧（徽章可多枚，组内同款间距） */
+.chips {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-8);
+  margin-left: auto;
+}
+
 /* 置顶钮与六点手柄（2026-10-26 拍板）：各自锚定所在行右缘垂直居中——置顶对齐
    名称行、六点对齐信息行；同宽盒子（20px）同 right 锚点保证竖对齐同列。
    行右侧预留 var(--soj-sp-24)，长名称/长信息不钻到图标下面 */
@@ -397,7 +408,7 @@ onMounted(load)
   margin: 0;
   cursor: pointer;
   color: var(--soj-navy);
-  font-size: var(--soj-fs-16);
+  font-size: var(--soj-fs-20); /* v0.73.1 拍板：卡片名 16→20 调大醒目 */
   font-weight: var(--soj-fw-heavy);
 }
 

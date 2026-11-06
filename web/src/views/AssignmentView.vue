@@ -371,10 +371,11 @@ onMounted(() => {
     </el-dialog>
 
     <el-dialog v-model="showAdjust" title="调整作业题目" width="960" top="5vh">
-      <div class="copy-row">
-        <CopyFromListButton @merge="mergeFromList" />
-      </div>
-      <ProblemPicker v-model="editList" />
+      <ProblemPicker v-model="editList">
+        <template #actions>
+          <CopyFromListButton @merge="mergeFromList" />
+        </template>
+      </ProblemPicker>
       <template #footer>
         <el-button @click="showAdjust = false">取消</el-button>
         <el-button type="primary" :loading="savingOrder" @click="saveOrder">保存</el-button>
@@ -405,11 +406,6 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* 「从题单复制」按钮行与下方选题器留出间距（2026-10-26：原贴在一起） */
-.copy-row {
-  margin-bottom: var(--soj-sp-10);
-}
-
 .title-row {
   display: flex;
   align-items: center;

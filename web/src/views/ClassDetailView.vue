@@ -818,10 +818,11 @@ onMounted(load)
           <template #label>
             <TipLabel label="作业题目" tip="可先创建后在作业页调整；支持从题单复制，或按题号导入（粘贴一串题号一键加入）" />
           </template>
-          <div class="picker-block">
-            <CopyFromListButton @merge="mergeFromList" />
-            <ProblemPicker v-model="assignmentForm.picked" />
-          </div>
+          <ProblemPicker v-model="assignmentForm.picked">
+            <template #actions>
+              <CopyFromListButton @merge="mergeFromList" />
+            </template>
+          </ProblemPicker>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -1013,15 +1014,6 @@ onMounted(load)
   color: var(--soj-ink-3);
   line-height: 1.7;
   margin: var(--soj-sp-8) 0 0;
-}
-
-/* 作业选题区：复制按钮行 + 选题器 */
-.picker-block {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--soj-sp-8);
-  align-items: flex-start;
 }
 
 .hint.center {

@@ -109,6 +109,8 @@ onMounted(search)
   <div class="picker">
     <div class="picker-search">
       <el-input v-model="q" placeholder="搜索标题、题号、知识点或标签" clearable />
+      <!-- actions 插槽（v0.73.1）：宿主按需并入搜索行右侧按钮组（作业两处放从题单复制，与按题号导入并排） -->
+      <slot name="actions" />
       <ImportByIdsDialog @import="mergeImported" />
     </div>
     <div class="picker-tags">
