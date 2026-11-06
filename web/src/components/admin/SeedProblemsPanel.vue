@@ -91,7 +91,7 @@ onMounted(load)
   <el-card v-loading="loading">
     <template #header>
       <div class="panel-header">
-        <span>种子题管理</span>
+        <TipLabel label="种子题管理" tip="重部署与启动播种同口径（数字前缀按题号、无前缀按标题；补缺不覆盖）；清除将连带删除提交/挑战/题解/题目讨论" />
         <div class="panel-actions">
           <el-button size="small" :loading="deploying" :disabled="!rows.length" @click="deploy">
             重新部署种子题
@@ -116,7 +116,6 @@ onMounted(load)
         <el-tag :type="status?.marked ? 'success' : 'info'" size="small" class="seed-mark">
           {{ status?.marked ? '启动自动播种已标记' : '启动自动播种未标记' }}
         </el-tag>
-        ——重部署与启动播种同口径（数字前缀按题号、无前缀按标题；补缺不覆盖）；清除将连带删除提交/挑战/题解/题目讨论。
       </div>
 
       <el-alert

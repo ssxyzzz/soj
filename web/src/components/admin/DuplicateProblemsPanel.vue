@@ -68,7 +68,7 @@ onMounted(scan)
   <el-card v-loading="loading">
     <template #header>
       <div class="panel-header">
-        <span>重复题扫描</span>
+        <TipLabel label="重复题扫描" tip="扫描口径：标题与题面（markdown）归一化后相似度 ≥80% 视为一组疑似重复。行内一键标重复/取消（学生端立即不可见），也可点题号进编辑页改题——系统不会自动删除" />
         <el-button size="small" :loading="loading" @click="scan">重新扫描</el-button>
       </div>
     </template>
@@ -81,9 +81,6 @@ onMounted(scan)
       description="扫描口径：标题与题面（markdown）归一化后相似度 ≥80% 的题目视为一组疑似重复。"
     />
     <template v-else>
-      <div class="dim scan-hint">
-        按「标题 + 题面」归一化相似度 ≥80% 判重，共 {{ groups.length }} 组疑似重复；行内一键标重复/取消（学生端立即不可见），也可点题号进编辑页改题——系统不会自动删除。
-      </div>
       <div v-for="(g, i) in groups" :key="i" class="dup-group">
         <button type="button" class="dup-title dup-toggle" @click="toggleGroup(i)">
           <el-tag type="danger" size="small">{{ g.problems.length }} 题重复</el-tag>
@@ -136,10 +133,6 @@ onMounted(scan)
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.scan-hint {
-  margin-bottom: var(--soj-sp-12);
 }
 
 .dup-group {

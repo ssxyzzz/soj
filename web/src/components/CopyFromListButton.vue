@@ -76,7 +76,13 @@ async function confirm() {
 <template>
   <span class="copy-wrap">
     <el-button size="small" @click="show = true">从题单复制</el-button>
-    <el-dialog v-model="show" title="从题单复制题目" width="520" append-to-body>
+    <el-dialog v-model="show" width="520" append-to-body>
+      <template #header>
+        <TipLabel
+          label="从题单复制题目"
+          tip="按所选范围（整个题单 / 指定章节 / 指定小节）依题单顺序合并进「已选」；同一题只保留一次；隐藏题自动跳过并提示数量"
+        />
+      </template>
       <div class="cascade">
         <el-select v-model="listId" filterable placeholder="选择题单" style="width: 100%" @change="onListChange">
           <el-option v-for="l in lists" :key="l.id" :value="l.id" :label="`${l.title}（${l.problem_count} 题）`" />
@@ -102,9 +108,6 @@ async function confirm() {
           />
         </el-select>
       </div>
-      <p class="hint">
-        按所选范围（整个题单 / 指定章节 / 指定小节）依题单顺序合并进「已选」；同一题只保留一次；隐藏题自动跳过并提示数量。
-      </p>
       <template #footer>
         <el-button @click="show = false">取消</el-button>
         <el-button type="primary" :loading="loading" @click="confirm">复制</el-button>
@@ -118,11 +121,5 @@ async function confirm() {
   display: flex;
   flex-direction: column;
   gap: var(--soj-sp-8);
-}
-
-.hint {
-  margin: var(--soj-sp-10) 0 0;
-  font-size: var(--soj-fs-12);
-  color: var(--soj-ink-3);
 }
 </style>

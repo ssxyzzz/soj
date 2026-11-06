@@ -7,7 +7,7 @@
 // 提交动作 emit 给调用方——新增 = POST /problems 一次交齐；
 // 编辑 = statement / meta / testdata 分步（编辑模式的 zip 为可选的整包替换）。
 import { computed, reactive, ref } from 'vue'
-import { QuestionFilled, UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
@@ -332,12 +332,10 @@ function onSubmitClick() {
 
             <el-form-item class="identity-type">
               <template #label>
-                <span class="label-with-tip">
-                  题目类型
-                  <el-tooltip placement="top" content="传统题=编程评测；客观题=选择/填空；函数题=补全函数；交互题=双向通信。创建后不可更改">
-                    <el-icon class="dim"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </span>
+                <TipLabel
+                  label="题目类型"
+                  tip="传统题=编程评测；客观题=选择/填空；函数题=补全函数；交互题=双向通信。创建后不可更改"
+                />
               </template>
               <el-select
                 :model-value="form.type"
@@ -362,10 +360,7 @@ function onSubmitClick() {
             </span>
             <div class="card-head-text">
               <div class="card-title">
-                分类
-                <el-tooltip placement="top" content="知识点 / 难度影响推荐与经验；标签用于筛选与试卷打印">
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
+                <TipLabel label="分类" tip="知识点 / 难度影响推荐与经验；标签用于筛选与试卷打印" />
               </div>
             </div>
           </div>
@@ -430,14 +425,12 @@ function onSubmitClick() {
               <div class="card-title">
                 {{ form.type === 'objective' ? '整卷说明' : '题面' }}
                 <span v-if="form.type !== 'objective'" class="req">*</span>
-                <el-tooltip
-                  placement="top"
-                  :content="form.type === 'objective'
+                <TipLabel
+                  label=""
+                  :tip="form.type === 'objective'
                     ? '可选；小题的题干在下方小题列表里填写'
                     : 'Markdown 编辑，可直接粘贴/拖入图片，公式用 $$…$$'"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
+                />
               </div>
             </div>
           </div>
@@ -498,15 +491,12 @@ function onSubmitClick() {
             </span>
             <div class="card-head-text">
               <div class="card-title">
-                测试数据
-                <el-tooltip
-                  placement="top"
-                  :content="mode === 'create'
+                <TipLabel
+                  label="测试数据"
+                  :tip="mode === 'create'
                     ? '不上传可先创建；zip 里 data/ 下的数据对保持原名'
                     : '新 zip 整包替换数据与配置；zip 里 data/ 下的数据对保持原名'"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
+                />
               </div>
             </div>
           </div>
@@ -566,13 +556,7 @@ function onSubmitClick() {
           <el-form-item>
             <div class="field-group">
               <div class="field-label">
-                文件名（可选）
-                <el-tooltip
-                  placement="top"
-                  content="仅考试启用文件 IO 时生效；留空默认 problem"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
+                <TipLabel label="文件名（可选）" tip="仅考试启用文件 IO 时生效；留空默认 problem" />
               </div>
               <el-input v-model="form.file_io_name" placeholder="problem" maxlength="32" class="fileio-input" />
               <span v-if="fileIOHint" class="dim fileio-now">
@@ -586,15 +570,10 @@ function onSubmitClick() {
 
           <el-form-item>
             <template #label>
-              <span class="label-with-tip">
-                比对模式
-                <el-tooltip
-                  placement="top"
-                  content="全文比对：输出与答案完全一致；宽容比对：忽略空白差异，数字允许小误差"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </span>
+              <TipLabel
+                label="比对模式"
+                tip="全文比对：输出与答案完全一致；宽容比对：忽略空白差异，数字允许小误差"
+              />
             </template>
             <el-radio-group v-model="form.compare">
               <el-radio-button value="exact">全文比对</el-radio-button>
@@ -607,15 +586,10 @@ function onSubmitClick() {
 
           <el-form-item>
             <template #label>
-              <span class="label-with-tip">
-                挑战时长（可选）
-                <el-tooltip
-                  placement="top"
-                  content="挑战模式的限时；留空按难度默认（难度 × 5 分钟），可配 60–14400 秒"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </span>
+              <TipLabel
+                label="挑战时长（可选）"
+                tip="挑战模式的限时；留空按难度默认（难度 × 5 分钟），可配 60–14400 秒"
+              />
             </template>
             <div class="limits">
               <el-input-number
@@ -632,15 +606,10 @@ function onSubmitClick() {
 
           <el-form-item>
             <template #label>
-              <span class="label-with-tip">
-                视频讲解链接（可选）
-                <el-tooltip
-                  placement="top"
-                  content="答案解析卡的视频：B 站视频页链接或 mp4 直链；与题解同门槛（满分可见）"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </span>
+              <TipLabel
+                label="视频讲解链接（可选）"
+                tip="答案解析卡的视频：B 站视频页链接或 mp4 直链；与题解同门槛（满分可见）"
+              />
             </template>
             <el-input
               v-model="form.video_url"
@@ -651,12 +620,7 @@ function onSubmitClick() {
 
           <el-form-item v-if="mode === 'create'">
             <template #label>
-              <span class="label-with-tip">
-                自定义校验器（可选）
-                <el-tooltip placement="top" content="配置后判题由校验器决定；细节可在题目页调整">
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </span>
+              <TipLabel label="自定义校验器（可选）" tip="配置后判题由校验器决定；细节可在题目页调整" />
             </template>
             <el-upload
               v-model:file-list="checkerList"
@@ -674,12 +638,7 @@ function onSubmitClick() {
           <template v-if="form.type === 'function' && mode === 'create'">
             <el-form-item>
               <template #label>
-                <span class="label-with-tip">
-                驱动器 driver.cpp
-                <el-tooltip placement="top" content="含 main，调用学生实现的函数；也可放进 zip 根目录">
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-                </span>
+                <TipLabel label="驱动器 driver.cpp" tip="含 main，调用学生实现的函数；也可放进 zip 根目录" />
               </template>
               <el-upload
                 v-model:file-list="driverList"
@@ -692,12 +651,7 @@ function onSubmitClick() {
             </el-form-item>
             <el-form-item>
               <template #label>
-                <span class="label-with-tip">
-                  学生模板 template.cpp（可选）
-                  <el-tooltip placement="top" content="学生提交时编辑器预填的代码">
-                    <el-icon class="dim"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </span>
+                <TipLabel label="学生模板 template.cpp（可选）" tip="学生提交时编辑器预填的代码" />
               </template>
               <el-upload
                 v-model:file-list="templateList"
@@ -713,15 +667,7 @@ function onSubmitClick() {
           <!-- 交互题（v0.9.2）：interactor 上传（创建模式随表单；编辑页走即时上传） -->
           <el-form-item v-if="form.type === 'interactive' && mode === 'create'">
             <template #label>
-              <span class="label-with-tip">
-                交互器 interactor.cpp
-                <el-tooltip
-                  placement="top"
-                  content="与选手程序双向通信判题；也可放进 zip 根目录"
-                >
-                  <el-icon class="dim"><QuestionFilled /></el-icon>
-                </el-tooltip>
-              </span>
+              <TipLabel label="交互器 interactor.cpp" tip="与选手程序双向通信判题；也可放进 zip 根目录" />
             </template>
             <el-upload v-model:file-list="interactorList" accept=".cpp" :limit="1" :auto-upload="false">
               <el-button>选择 interactor.cpp</el-button>
@@ -1129,13 +1075,6 @@ function onSubmitClick() {
     flex-direction: column;
     gap: 0;
   }
-}
-
-/* label 插槽内的图标/提示与标签文字垂直居中（label 为块级布局，行内元素默认按基线对齐会偏高） */
-.label-with-tip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--soj-sp-4);
 }
 
 @media (max-width: 992px) {

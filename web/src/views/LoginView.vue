@@ -189,9 +189,8 @@ async function submitForgot() {
           <el-form-item :label="mode === 'register' ? '密码（8-64 位，不含弱口令）' : '密码'">
             <el-input v-model="form.password" type="password" show-password placeholder="至少 8 位" />
           </el-form-item>
-          <div v-if="mode === 'login'" class="login-row">
-            <span class="dim">验证码登录请联系管理员</span>
-            <el-link v-if="site.passwordResetEnabled" type="primary" :underline="false" @click="openForgot">忘记密码？</el-link>
+          <div v-if="mode === 'login' && site.passwordResetEnabled" class="login-row">
+            <el-link type="primary" :underline="false" @click="openForgot">忘记密码？</el-link>
           </div>
           <el-button type="primary" class="submit" :loading="loading" @click="submit">
             {{ mode === 'login' ? '登 录' : '注 册' }}
@@ -211,8 +210,11 @@ async function submitForgot() {
     <!-- 忘记密码：用户名/邮箱 → 发码（防枚举统一提示）→ 验证码 + 新密码×2 -->
     <el-dialog v-model="fpOpen" title="找回密码" width="420px">
       <el-form label-position="top">
-        <el-form-item label="用户名或邮箱">
-          <el-input v-model="fpForm.account" placeholder="绑定邮箱优先，填用户名则向其绑定邮箱发码" />
+        <el-form-item>
+          <template #label>
+            <TipLabel label="用户名或邮箱" tip="绑定邮箱优先；填用户名则向其绑定邮箱发码" />
+          </template>
+          <el-input v-model="fpForm.account" placeholder="注册用户名或已绑定邮箱" />
         </el-form-item>
         <el-form-item label="邮箱验证码">
           <div class="code-row">

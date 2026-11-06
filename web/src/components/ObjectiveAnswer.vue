@@ -113,8 +113,7 @@ function doSubmit() {
   <el-card class="obj-answer-card">
     <template #header>
       <div class="obj-head">
-        <span>作答（共 {{ questions.length }} 题）</span>
-        <span class="dim obj-note">提交即判分，按题给分；满分后可查看解析</span>
+        <TipLabel label="作答" :tip="`共 ${questions.length} 题；提交即判分，按题给分，满分后可查看解析`" />
       </div>
     </template>
 
@@ -176,7 +175,7 @@ function doSubmit() {
 
     <div class="obj-foot">
       <span v-if="disabled" class="dim">{{ disabledReason }}</span>
-      <span v-else class="dim">多选为全对制：与正确答案完全一致才得分</span>
+      <TipLabel v-else tip="多选为全对制：与正确答案完全一致才得分" />
       <el-button type="primary" :disabled="disabled" :loading="submitting" @click="doSubmit">
         提交答案
       </el-button>
@@ -201,10 +200,6 @@ function doSubmit() {
   justify-content: space-between;
   gap: var(--soj-sp-12);
   font-weight: var(--soj-fw-emphasis);
-}
-
-.obj-note {
-  font-weight: var(--soj-fw-regular);
 }
 
 .obj-item {

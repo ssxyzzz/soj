@@ -215,17 +215,17 @@ watch(
         </el-form-item>
         <!-- 玉奖池（v0.33-①）：双池默认 0 不发；仅教师/admin/root 可见可改 -->
         <template v-if="canJade">
-          <el-form-item label="玉奖池 · 名次奖池">
+          <el-form-item>
+            <template #label>
+              <TipLabel label="玉奖池 · 名次奖池" tip="成绩发布时按最终榜单结算：真正参赛（得分 > 0）人数 × 获奖比例 = 名次名额，线性递减瓜分本池（0 = 不发）" />
+            </template>
             <el-input-number v-model="jadePool" :min="0" :max="1000000" :step="50" style="width: 180px" />
-            <span class="dim" style="margin-left: var(--soj-sp-8)">
-              成绩发布时按最终榜单结算：真正参赛（得分&gt;0）人数 × 获奖比例 = 名次名额，线性递减瓜分本池（0 = 不发）
-            </span>
           </el-form-item>
-          <el-form-item label="玉奖池 · 参与奖池">
+          <el-form-item>
+            <template #label>
+              <TipLabel label="玉奖池 · 参与奖池" tip="得分 > 0 但未获名次奖的参赛者均分本池；无人可领时自动滚入名次奖池" />
+            </template>
             <el-input-number v-model="jadePartPool" :min="0" :max="1000000" :step="10" style="width: 180px" />
-            <span class="dim" style="margin-left: var(--soj-sp-8)">
-              得分&gt;0 但未获名次奖的参赛者均分本池；无人可领时自动滚入名次奖池
-            </span>
           </el-form-item>
         </template>
       </el-form>
@@ -233,7 +233,6 @@ watch(
 
     <template v-else>
       <ProblemPicker v-model="editList" />
-      <div class="dim">拖动 ⠿ 调整顺序，右侧「删除」移除；保存后一次性生效。</div>
     </template>
 
     <template #footer>

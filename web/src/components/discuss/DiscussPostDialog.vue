@@ -129,22 +129,20 @@ async function submit() {
 <template>
   <el-dialog
     v-model="visible"
-    :title="isEdit ? '编辑话题' : '发起讨论'"
     width="760px"
     top="5vh"
     :close-on-click-modal="false"
     destroy-on-close
   >
+    <template #header>
+      <TipLabel
+        :label="isEdit ? '编辑话题' : '发起讨论'"
+        :tip="isProblem ? '题内讨论仅交流思路，完整 AC 代码请发布题解；不支持图片' : undefined"
+      />
+    </template>
     <el-alert
       v-if="scope === 'contest' && contestRunning && !contestOrganizer"
       title="比赛进行中：你的提问仅组织者可见，组织者可选择公开答复"
-      type="info"
-      :closable="false"
-      class="post-tip"
-    />
-    <el-alert
-      v-else-if="isProblem"
-      title="题内讨论仅交流思路，完整 AC 代码请发布题解；不支持图片"
       type="info"
       :closable="false"
       class="post-tip"
@@ -159,7 +157,7 @@ async function submit() {
       <el-input v-model="relatedInput" placeholder="相关题号（可选，逗号分隔，如 12, 35）" />
     </div>
     <div v-if="canBounty" class="post-row bounty-row">
-      <span class="bounty-label">悬赏</span>
+      <TipLabel label="悬赏" tip="发布即冻结等额玉，打赏给有帮助的回复，14 天无打赏自动退回；0 = 不挂悬赏" />
       <el-input-number
         v-model="bounty"
         :min="0"
@@ -167,9 +165,7 @@ async function submit() {
         :step="5"
         style="width: 160px"
       />
-      <span class="post-hint" style="margin-top: 0">
-        玉（余额 {{ myBalance }}；发布即冻结，打赏给有帮助的回复，14 天无打赏自动退回，0 = 不挂悬赏）
-      </span>
+      <span class="post-hint" style="margin-top: 0">玉 · 余额 {{ myBalance }}</span>
     </div>
     <MdEditor v-model="content" :height="isProblem ? '320px' : '380px'" variant="compact" />
     <template #footer>

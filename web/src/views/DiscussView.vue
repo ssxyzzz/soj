@@ -107,13 +107,16 @@ onMounted(async () => {
     </template>
 
     <template #aside>
-      <RailCard v-if="canPost" ov="分享" title="发起讨论" class="aside-card">
+      <RailCard v-if="canPost" ov="分享" class="aside-card">
+        <template #head>
+          <div class="rail-ov">分享</div>
+          <div class="rail-t">
+            <TipLabel label="发起讨论" tip="分享学习经验、刷题路线或知识讲解；发帖必选类型，新号有冷静期，请勿灌水" />
+          </div>
+        </template>
         <el-button type="primary" style="width: 100%" :disabled="disabled" @click="postVisible = true">
           ✏️ 发帖
         </el-button>
-        <p class="hint">
-          分享学习经验、刷题路线或知识讲解；发帖必选类型，新号有冷静期，请勿灌水。
-        </p>
       </RailCard>
       <RailCard v-if="disabled" ov="提示" title="讨论区已锁定" class="aside-card">
         <p class="hint">{{ disabledReason }}</p>

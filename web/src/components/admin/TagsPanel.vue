@@ -766,7 +766,10 @@ async function unbindCurrent() {
   <el-card v-loading="loading">
     <template #header>
       <div class="panel-header">
-        <span>{{ treeName }}</span>
+        <TipLabel
+          :label="treeName"
+          :tip="`悬停展开下一级；单击列出包含此${noun}的题目；双击改名（回车确认）；点右侧 × 删除；长按拖动换位；悬停行尾或空${noun}下方的 ＋ 新增。修改后点右上角「保存${treeName}」生效；被题目使用的${noun}可在下方题目列表一键解绑，解绑后才能删除`"
+        />
         <div class="header-actions">
           <el-tag v-if="dirty" type="warning" size="small">未保存</el-tag>
           <span class="dim">{{ total }} 个{{ noun }}</span>
@@ -779,12 +782,6 @@ async function unbindCurrent() {
         </div>
       </div>
     </template>
-    <el-alert type="info" :closable="false" class="howto">
-      <p>
-        悬停展开下一级；单击列出包含此{{ noun }}的题目；双击改名（回车确认）；点右侧 × 删除；长按拖动换位；
-        悬停行尾或空{{ noun }}下方的 ＋ 新增。修改后点右上角「保存{{ treeName }}」生效；被题目使用的{{ noun }}可在下方题目列表一键解绑，解绑后才能删除。
-      </p>
-    </el-alert>
 
     <el-input v-model="search" class="tag-search" clearable :placeholder="`搜索${noun}…`" />
     <div class="tag-board" @click.self="exitFloating" @mouseleave="scheduleHoverClear">
@@ -1010,14 +1007,6 @@ async function unbindCurrent() {
 
 .import-input {
   display: none; /* 隐藏的 CSV 选择器，由「导入标签树」按钮触发 */
-}
-
-.howto {
-  margin-bottom: var(--soj-sp-12);
-}
-
-.howto p {
-  margin: var(--soj-sp-2) 0;
 }
 
 .tag-search {

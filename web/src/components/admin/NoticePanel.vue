@@ -61,7 +61,7 @@ async function broadcast() {
   <el-card>
     <template #header>
       <div class="head">
-        <span>首页公告（留空则首页不展示）</span>
+        <TipLabel label="首页公告" tip="留空则首页不展示" />
         <el-button type="primary" :loading="savingNotice" @click="saveNotice">保存公告</el-button>
       </div>
     </template>
@@ -73,7 +73,7 @@ async function broadcast() {
   <el-card v-if="userStore.can('notify.broadcast')" style="margin-top: var(--soj-sp-16)">
     <template #header>
       <div class="head">
-        <span>全站通知广播（推送到全员消息中心，受每日频次限制）</span>
+        <TipLabel label="全站通知广播" tip="推送到全员消息中心，受每日频次限制" />
         <el-button type="primary" :loading="broadcasting" @click="broadcast">发送广播</el-button>
       </div>
     </template>

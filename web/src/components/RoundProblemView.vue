@@ -330,7 +330,18 @@ watch(
           </div>
         </RailCard>
 
-        <RailCard ov="提交" title="本题操作" class="aside-card">
+        <RailCard ov="提交" class="aside-card">
+          <template #head>
+            <div class="rail-ov">提交</div>
+            <div class="rail-t">
+              <TipLabel
+                label="本题操作"
+                :tip="!revealed
+                  ? 'OI 赛制：赛时只记录提交次数不出分；「我的提交」仅显示已记录，可点开查看自己的代码'
+                  : undefined"
+              />
+            </div>
+          </template>
           <div class="entry-actions">
             <template v-if="showSubmitWays && !isObjective">
               <el-tooltip
@@ -357,7 +368,6 @@ watch(
             <el-button v-if="canViewOthers" style="width: 100%" @click="showOthers = true">所有代码</el-button>
             <div v-if="!running" class="hint center">{{ name }}未在进行中</div>
           </div>
-          <p v-if="!revealed" class="hint">隐藏期内不出分，「我的提交」仅显示已记录，可查看自己的代码。</p>
         </RailCard>
 
         <!-- 答案解析（v0.23）：视频讲解默认可看，文字题解满分∨老师门槛，两钮同款白底黑字；
@@ -438,9 +448,6 @@ watch(
             </el-table-column>
           </el-table>
           <el-empty v-if="!mine.length" description="还没有提交" :image-size="48" />
-          <div v-if="mine.length && !revealed" class="dim center mine-hint">
-            隐藏期内不出分，点击行可查看自己的代码
-          </div>
         </template>
         <template v-else-if="mineDetail">
           <el-button class="mb8" @click="mineView = 'list'">← 返回列表</el-button>
@@ -569,10 +576,5 @@ watch(
 
 .center {
   text-align: center;
-}
-
-/* 我的提交弹窗脚注 */
-.mine-hint {
-  margin-top: var(--soj-sp-8);
 }
 </style>

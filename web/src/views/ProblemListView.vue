@@ -482,7 +482,16 @@ onMounted(() => {
       </el-card>
 
     <template #aside>
-      <RailCard v-if="userStore.can('problem.create') || canExport" ov="管理" title="题目管理" class="aside-card">
+      <RailCard v-if="userStore.can('problem.create') || canExport" ov="管理" class="aside-card">
+        <template #head>
+          <div class="rail-ov">管理</div>
+          <div class="rail-t">
+            <TipLabel
+              label="题目管理"
+              tip="新增题在表单里写题面、zip 只收数据/配置；题包（含题面）批量导入走「导入题目」。打包导出：勾选跨翻页/筛选保留，导出目录 = 题号_标题，受每日限额约束"
+            />
+          </div>
+        </template>
         <div class="entry-actions">
           <el-button v-if="userStore.can('problem.create')" type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
           <el-button v-if="userStore.can('problem.create')" style="width: 100%" @click="router.push('/import')">导入题目</el-button>
@@ -508,10 +517,6 @@ onMounted(() => {
             </template>
           </template>
         </div>
-        <p class="hint">
-          <template v-if="picking">勾选跨翻页/筛选保留；导出目录 = 题号_标题，受每日限额约束</template>
-          <template v-else>新增题在表单里写题面、zip 只收数据/配置；题包（含题面）批量导入走「导入题目」。</template>
-        </p>
       </RailCard>
 
       <!-- v3「我的 · 数据概览」：kv 四格 + 七天 spark（未登录给登录入口） -->

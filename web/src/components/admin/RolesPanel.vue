@@ -124,17 +124,10 @@ onMounted(async () => {
   <el-card>
     <template #header>
       <div class="head">
-        <span>角色管理</span>
+        <TipLabel label="角色管理" tip="角色 = 一组权限位，按首页/题库/比赛/班级/排名/提交记录/用户/管理后台分类展示（暂无权限位的分类不显示）。勾选即保存、对所有挂靠用户即刻生效；root 为代码级超角色不可修改（整列锁定）；删除自定义角色前需先改派其挂靠用户" />
         <el-button type="primary" size="small" @click="showCreateRole = true">新建角色</el-button>
       </div>
     </template>
-    <el-alert
-      class="role-alert"
-      type="info"
-      :closable="false"
-      show-icon
-      title="角色 = 一组权限位。按首页/题库/比赛/班级/排名/提交记录/用户/管理后台分类展示（暂无权限位的分类不显示）。勾选即保存、对所有挂靠用户即刻生效；root 为代码级超角色不可修改（整列锁定）；删除自定义角色前需先改派其挂靠用户。"
-    />
 
     <el-table :data="permRows" border size="small" class="perm-matrix" :span-method="permSpanMethod">
       <el-table-column label="权限位" width="200" fixed>
@@ -215,10 +208,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.role-alert {
-  margin-top: var(--soj-sp-4);
-}
-
 .perm-matrix {
   margin-top: var(--soj-sp-12);
 }

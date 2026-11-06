@@ -244,9 +244,12 @@ onMounted(load)
       </el-row>
 
     <template #aside>
-      <RailCard v-if="canCreate()" ov="管理" title="班级管理" class="aside-card">
+      <RailCard v-if="canCreate()" ov="管理" class="aside-card">
+        <template #head>
+          <div class="rail-ov">管理</div>
+          <div class="rail-t"><TipLabel label="班级管理" tip="创建后生成 4 位邀请码，学生凭码入班；可见性口径见下方「可见性」说明卡" /></div>
+        </template>
         <el-button type="primary" style="width: 100%" @click="showCreate = true">创建班级</el-button>
-        <p class="hint">创建后生成 4 位邀请码，学生凭码入班；公开班级全站可见，私密班级仅成员可见。</p>
       </RailCard>
 
       <RailCard ov="入口" title="邀请码加入" class="aside-card">

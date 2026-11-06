@@ -271,7 +271,7 @@ function validate(): string | null {
     }
   }
   const sum = list.reduce((n, q) => n + (q.score || 0), 0)
-  if (list.some((q) => (q.score || 0) <= 0)) return '每道小题的分值必须为正数（留空会自动等分，但这里请先填好）'
+  if (list.some((q) => (q.score || 0) <= 0)) return '每道小题的分值必须为正数'
   if (sum !== 100) return `各小题分值合计必须为 100，当前为 ${sum}`
   return null
 }
@@ -347,7 +347,15 @@ defineExpose({ validate, blankDraft })
       <!-- v0.62 懒挂载：折叠时完全不建编辑器（每小题 2 个 CodeMirror + 表单件，
            N 题常驻挂载在 20+ 题即秒级冻结） -->
       <template v-if="openQ.has(qi)">
-      <el-form-item label="题干" required>
+      <el-form-item required>
+        <template #label>
+          <TipLabel
+            v-if="q.kind === 'blank'"
+            label="题干"
+            tip="用连续 4 个以上下划线（____）标记空位，第 N 个空位对应下方第 N 空的答案"
+          />
+          <template v-else>题干</template>
+        </template>
         <MdEditor
           :model-value="q.stem"
           variant="compact"
@@ -355,9 +363,6 @@ defineExpose({ validate, blankDraft })
           :height="'120px'"
           @update:model-value="(v: string) => setField(qi, 'stem', v)"
         />
-        <div v-if="q.kind === 'blank'" class="dim obj-hint">
-          用连续 4 个以上下划线（____）标记空位，第 N 个空位对应下方第 N 空的答案
-        </div>
       </el-form-item>
 
       <!-- 选择/判断：选项与正确答案 -->
@@ -548,9 +553,5 @@ defineExpose({ validate, blankDraft })
 .obj-blank-idx {
   flex: 0 0 auto;
   color: var(--el-text-color-secondary);
-}
-
-.obj-hint {
-  margin-top: var(--soj-sp-6);
 }
 </style>

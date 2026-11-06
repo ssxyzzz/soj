@@ -161,6 +161,7 @@ onMounted(() => {
 <template>
   <div class="manual">
     <div class="toolbar">
+      <TipLabel tip="保存计入「已整理」水位：保存过的题下次 AI 整理（本面板上方卡片）默认跳过，勾选「重新整理已整理过的题」可重跑；翻页 / 搜索不会丢失未保存的修改" />
       <el-input v-model="q" class="search" placeholder="搜索题号或标题" clearable />
       <span class="muted">共 {{ total }} 题 · 每页 {{ PAGE_SIZE }} 题</span>
       <span class="spacer" />
@@ -226,9 +227,6 @@ onMounted(() => {
         @current-change="onPage"
       />
     </div>
-    <div class="muted note">
-      保存计入「已整理」水位：保存过的题下次 AI 整理默认跳过（勾选「重新整理已整理过的题」可重跑）；翻页 / 搜索不会丢失未保存的修改。
-    </div>
   </div>
 </template>
 
@@ -245,11 +243,6 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   margin-top: var(--soj-sp-12);
-}
-
-.note {
-  margin-top: var(--soj-sp-10);
-  font-size: var(--soj-fs-13); /* --soj-fs-secondary 未定义，原兜底 13px 即 fs-13 */
 }
 
 .muted {

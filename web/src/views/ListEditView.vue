@@ -377,7 +377,7 @@ async function removeList() {
 
         <div class="card outline-card">
           <div class="outline-head">
-            <b>章节</b>
+            <b>章节<TipLabel tip="⠿ 拖拽排序（小节可跨章移动）；点标题/描述就地编辑" /></b>
             <span class="dim">{{ chs.length }} 章</span>
             <el-tooltip content="AI 结合题面把题库题目归入章/节，预览确认后写入草稿" placement="top">
               <span class="head-organize">
@@ -477,8 +477,6 @@ async function removeList() {
               </template>
             </template>
           </div>
-
-          <p v-if="chs.length" class="outline-hint dim">⠿ 拖拽排序（小节可跨章移动）· 点标题/描述就地编辑 · 点小节行管理题目</p>
         </div>
       </div>
 
@@ -675,11 +673,6 @@ async function removeList() {
 
 .ol-acts .el-button + .el-button {
   margin-left: var(--soj-sp-8);
-}
-
-.outline-hint {
-  margin: var(--soj-sp-12) var(--soj-sp-2) 0;
-  font-size: var(--soj-fs-13);
 }
 
 /* ---- 右栏 ---- */

@@ -147,8 +147,7 @@ onMounted(() => {
     <!-- 主列：余额 + 流水 -->
     <div class="card jcard">
       <div class="panel-h">
-        <span class="pt">当前余额</span>
-        <span class="dim jtip">首次通过题目得玉（难度定额 + 稀有掉落），比赛奖池随成绩发布结算</span>
+        <TipLabel label="当前余额" tip="首次通过题目得玉（难度定额 + 稀有掉落），比赛奖池随成绩发布结算" />
       </div>
       <div class="jbody">
         <div class="jade-balance">
@@ -271,10 +270,6 @@ onMounted(() => {
 
 .jcard {
   padding: var(--soj-sp-20) var(--soj-sp-24);
-}
-
-.jtip {
-  font-size: var(--soj-fs-13);
 }
 
 .jade-pager {

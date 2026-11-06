@@ -129,6 +129,7 @@ declare module 'vue' {
     TagsPanel: typeof import('./components/admin/TagsPanel.vue')['default']
     TidyPanel: typeof import('./components/admin/TidyPanel.vue')['default']
     TierBadge: typeof import('./components/TierBadge.vue')['default']
+    TipLabel: typeof import('./components/TipLabel.vue')['default']
     UserNameLevel: typeof import('./components/UserNameLevel.vue')['default']
     UsersPanel: typeof import('./components/admin/UsersPanel.vue')['default']
     UserSubmissionsDialog: typeof import('./components/score/UserSubmissionsDialog.vue')['default']

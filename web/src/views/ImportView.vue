@@ -6,7 +6,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { QuestionFilled, UploadFilled } from '@element-plus/icons-vue'
+import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile } from 'element-plus'
 
 import { importApi } from '@/api'
@@ -221,22 +221,19 @@ const finishedIssues = computed(() =>
   <PageShell class="import-shell">
     <div class="page-head">
       <div class="kicker">IMPORT</div>
-      <h1 class="page-title">导入题目<small>题包（含题面）统一入口 · 题号一律自动分配</small></h1>
+      <h1 class="page-title">导入题目<small>题包（含题面）统一入口</small></h1>
     </div>
     <el-card>
       <template #header>
         <div class="panel-h step-head">
-          <span class="pt">第一步 · 选择来源</span>
+          <TipLabel
+            label="第一步 · 选择来源"
+            tip="题包（含题面）统一入口；建题/编辑页的 zip 只收 data/ 数据与配置、不导题面。单题包（zip 根即题目目录）与多题包（根下每目录一题）均可，混装混格式均可。目录名数字前缀默认忽略、题号自动取号；SOJ 来源可开「已存在题号跳过」按前缀题号落库"
+          />
           <span v-if="running" class="sub-status yellow"><span class="dot yellow"></span>{{ stateLabel }}（{{ status.done }}/{{ status.total }}）</span>
           <el-tag v-else-if="finished" size="small" :type="status.state === 'done' ? 'success' : 'info'">{{ stateLabel }}</el-tag>
         </div>
       </template>
-
-      <div class="dim tip">
-        题包（含题面）统一入口；建题/编辑页的 zip 只收 data/ 数据与配置、不导题面。
-        单题包（zip 根即题目目录）与多题包（根下每目录一题）均可，混装混格式均可；
-        目录名数字前缀不指定题号，题号一律自动分配。
-      </div>
 
       <!-- 第一步：选来源（每来源独立适配器，不做混合嗅探；v0.18.2 表单常驻：终态后直接换包再导） -->
       <div v-if="!running" class="source-grid">
@@ -282,31 +279,19 @@ const finishedIssues = computed(() =>
 
       <div class="switch-row">
         <el-switch v-model="skipSameTitle" :disabled="running" />
-        <span>同标题跳过</span>
-        <el-tooltip placement="top" content="开启后题库里已有同标题题的目录直接跳过（迁移场景防手抖重复导）；默认关 = 同标题照样新建新题">
-          <el-icon class="dim"><QuestionFilled /></el-icon>
-        </el-tooltip>
+        <TipLabel label="同标题跳过" tip="开启后题库里已有同标题题的目录直接跳过（迁移场景防手抖重复导）；默认关 = 同标题照样新建新题" />
       </div>
       <div class="switch-row">
         <el-switch v-model="defaultHidden" :disabled="running" />
-        <span>导入后默认隐藏</span>
-        <el-tooltip placement="top" content="导入的题默认公开可见；开启后未在 yaml 里声明 hidden 的题一律先隐藏，整理完再放开">
-          <el-icon class="dim"><QuestionFilled /></el-icon>
-        </el-tooltip>
+        <TipLabel label="导入后默认隐藏" tip="导入的题默认公开可见；开启后未在 yaml 里声明 hidden 的题一律先隐藏，整理完再放开" />
       </div>
       <div v-if="source === 'soj'" class="switch-row">
         <el-switch v-model="skipExistingPID" :disabled="running" />
-        <span>已存在题号跳过</span>
-        <el-tooltip placement="top" content="目录名带题号前缀（题号_标题 或 题号 标题，Windows 直接压缩的包多为空格）：开启后按前缀题号落库、已存在的题号直接跳过（防导出包重复导回造成重复题，不覆盖既有题）；关闭则忽略前缀、一律自动取号新建">
-          <el-icon class="dim"><QuestionFilled /></el-icon>
-        </el-tooltip>
+        <TipLabel label="已存在题号跳过" tip="目录名带题号前缀（题号_标题 或 题号 标题，Windows 直接压缩的包多为空格）：开启后按前缀题号落库、已存在的题号直接跳过（防导出包重复导回造成重复题，不覆盖既有题）；关闭则忽略前缀、一律自动取号新建" />
       </div>
       <div class="switch-row">
         <el-switch v-model="transferImages" :disabled="running" />
-        <span>题面外链图转存</span>
-        <el-tooltip placement="top" content="开启后导入时自动把题面里引用的外站图片下载为本题自有资产（随题备份/迁移，不再依赖外站）；下载失败或超限（单图 5MB / 单题 20MB）自动保留外链。包内 assets/ 目录的图片始终随包导入，不受本开关影响">
-          <el-icon class="dim"><QuestionFilled /></el-icon>
-        </el-tooltip>
+        <TipLabel label="题面外链图转存" tip="开启后导入时自动把题面里引用的外站图片下载为本题自有资产（随题备份/迁移，不再依赖外站）；下载失败或超限（单图 5MB / 单题 20MB）自动保留外链。包内 assets/ 目录的图片始终随包导入，不受本开关影响" />
       </div>
 
       <!-- v0.18.2 上传实时进度（onUploadProgress；巨型包上传期不再是盲转圈）+ v3 pbar -->
@@ -382,11 +367,6 @@ const finishedIssues = computed(() =>
 </template>
 
 <style scoped>
-.tip {
-  margin-bottom: var(--soj-sp-14);
-  line-height: 1.7;
-}
-
 .source-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -375,7 +375,6 @@ onMounted(() => {
         <CopyFromListButton @merge="mergeFromList" />
       </div>
       <ProblemPicker v-model="editList" />
-      <div class="dim">拖动 ⠿ 调整顺序，右侧「删除」移除；点下方保存一次性生效</div>
       <template #footer>
         <el-button @click="showAdjust = false">取消</el-button>
         <el-button type="primary" :loading="savingOrder" @click="saveOrder">保存</el-button>

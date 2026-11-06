@@ -1,8 +1,7 @@
 <script setup lang="ts">
 // 场景开关行（v0.7.3 统一形态）：标签文字 + 问号小图标（悬浮 tooltip 详细说明）—— 右侧开关。
 // 创建比赛 / 发起考试弹窗共用；比赛/考试详情管理卡的三行 scene-row 为同款形态（先行落地）。
-import { QuestionFilled } from '@element-plus/icons-vue'
-
+// v0.72 问号部分收编 TipLabel 唯一实现。
 withDefaults(
   defineProps<{
     label: string
@@ -17,12 +16,8 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 
 <template>
   <div class="switch-row">
-    <span class="label-with-tip">
-      {{ label }}
-      <el-tooltip v-if="tip" placement="top" :content="tip">
-        <el-icon class="dim"><QuestionFilled /></el-icon>
-      </el-tooltip>
-    </span>
+    <TipLabel v-if="tip" :label="label" :tip="tip" />
+    <span v-else>{{ label }}</span>
     <el-switch
       :model-value="modelValue"
       :disabled="disabled"
@@ -37,11 +32,5 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
   align-items: center;
   justify-content: space-between;
   gap: var(--soj-sp-8);
-}
-
-.label-with-tip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--soj-sp-4);
 }
 </style>

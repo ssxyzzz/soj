@@ -285,7 +285,7 @@ watch(
           <CodePane :code="sub.code" :language="sub.language" />
         </template>
         <template v-if="sub.detail?.length">
-          <div class="detail-sub">测试点明细</div>
+          <div class="detail-sub">测试点明细<TipLabel tip="悬停状态徽章可查看该结果说明与常见原因（溢出、数组越界、未处理多组数据等）" /></div>
           <el-table stripe :data="sortedDetail" size="small" border>
             <el-table-column prop="index" label="测试点" width="90" />
             <el-table-column label="结果" width="110">
@@ -305,7 +305,6 @@ watch(
               <template #default="{ row }">{{ row.memory_kb ? fmtMem(row.memory_kb) : '' }}</template>
             </el-table-column>
           </el-table>
-          <p class="foot-hint">常见原因：溢出、数组越界、未处理多组数据；悬停状态徽章可查看说明。</p>
         </template>
         <template v-else-if="sub.error_info">
           <div class="detail-sub">错误信息</div>
@@ -383,12 +382,6 @@ watch(
 
 .lk-danger {
   color: var(--soj-wa);
-}
-
-.foot-hint {
-  margin: var(--soj-sp-12) 0 0;
-  font-size: var(--soj-fs-13);
-  color: var(--soj-ink-3);
 }
 
 @media (max-width: 768px) {

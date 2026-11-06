@@ -196,7 +196,10 @@ defineExpose({ refresh: load })
 <template>
   <div v-if="enabled" class="ai-tutor" v-loading="loading">
     <div class="ai-head">
-      <span class="ai-badge">✦ {{ tutorName }}（AI 助教）</span>
+      <span class="ai-head-l">
+        <span class="ai-badge">✦ {{ tutorName }}（AI 助教）</span>
+        <TipLabel tip="「AI 找 bug」入口在「我的提交」里点开未通过的提交" />
+      </span>
       <!-- daily_left -1 = 不限次（root / 后台配 0），2026-10-30 分层口径 -->
       <span class="dim ai-daily">{{ dailyLeft < 0 ? '不限次' : `今日剩余 ${dailyLeft} 次` }}</span>
     </div>
@@ -213,9 +216,6 @@ defineExpose({ refresh: load })
         <el-icon v-else-if="levels[meta.n - 1]" class="ai-btn-state" :size="16"><Lock /></el-icon>
       </el-button>
     </div>
-    <p class="dim ai-foot">
-      「{{ tutorName }} 找 bug」：在「我的提交」里点开未通过的提交。
-    </p>
 
     <!-- 结果弹窗（2026-10-30 拍板）：内容不铺在卡内；查看免费、重新生成每次计费；
          动作在右上角（重新生成 / 关闭） -->
@@ -258,6 +258,12 @@ defineExpose({ refresh: load })
   margin: -12px -20px 0;
   padding: 0 var(--soj-sp-20) var(--soj-sp-4);
   border-bottom: 1px solid var(--el-card-border-color, var(--el-border-color-light));
+}
+
+.ai-head-l {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--soj-sp-4);
 }
 
 .ai-badge {
@@ -305,11 +311,6 @@ defineExpose({ refresh: load })
 
 .ai-btn .ai-btn-state.ok {
   color: var(--el-color-success);
-}
-
-.ai-foot {
-  font-size: var(--soj-fs-12);
-  margin: 0;
 }
 
 /* 结果弹窗头：标题居左、动作（重新生成/关闭）居右上角（拍板 C） */

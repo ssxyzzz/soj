@@ -68,45 +68,47 @@ async function save() {
       </div>
     </template>
     <el-form label-position="left" label-width="220px" style="max-width: 680px">
-      <el-form-item label="允许自助注册">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="允许自助注册" tip="关闭后登录页不再提供注册入口，建号请走「用户管理」；已注册账号不受影响" />
+        </template>
         <el-switch v-model="allowRegister" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          关闭后登录页不再提供注册入口，建号请走「用户管理」；已注册账号不受影响
-        </span>
       </el-form-item>
-      <el-form-item label="注册验证方式">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="注册验证方式" tip="邮箱模式：注册表单出「邮箱 + 验证码」，邮箱唯一绑定；改完注册页刷新生效" />
+        </template>
         <el-radio-group v-model="registerVerifyMode">
-          <el-radio-button value="none">无（现状）</el-radio-button>
+          <el-radio-button value="none">无</el-radio-button>
           <el-radio-button value="email">邮箱验证码</el-radio-button>
         </el-radio-group>
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          邮箱模式：注册表单出「邮箱 + 验证码」，邮箱唯一绑定；改完注册页刷新生效
-        </span>
       </el-form-item>
-      <el-form-item label="忘记密码自助找回">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="忘记密码自助找回" tip="开启后登录页出现「忘记密码」入口（验证码重置，防枚举）；关闭时学生找回请联系老师重置" />
+        </template>
         <el-switch v-model="passwordResetEnabled" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          开启后登录页出现「忘记密码」入口（验证码重置，防枚举）；关闭时学生找回请联系老师重置
-        </span>
       </el-form-item>
 
       <el-divider content-position="left">邮箱通道（验证码 / 找回 / 通知）</el-divider>
-      <el-form-item label="发信通道">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="发信通道" tip="log 模式验证码不外发、打服务端日志（开发调试/校内人工转告）；切 smtp 后配置不完整将拒绝启动" />
+        </template>
         <el-radio-group v-model="mailChannel">
           <el-radio-button value="log">log（打日志，人工转告）</el-radio-button>
           <el-radio-button value="smtp">SMTP（真实发信）</el-radio-button>
         </el-radio-group>
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          log 模式验证码不外发、打服务端日志（开发调试/校内人工转告）；切 smtp 后配置不完整将拒绝启动
-        </span>
       </el-form-item>
       <template v-if="mailChannel === 'smtp'">
         <el-form-item label="SMTP 主机">
           <el-input v-model="smtpHost" placeholder="如 smtp.qq.com" style="max-width: 320px" />
         </el-form-item>
-        <el-form-item label="SMTP 端口">
+        <el-form-item>
+          <template #label>
+            <TipLabel label="SMTP 端口" tip="常见 465（SSL）/ 587（STARTTLS）" />
+          </template>
           <el-input-number v-model="smtpPort" :min="1" :max="65535" />
-          <span class="dim" style="margin-left: var(--soj-sp-8)">常见 465（SSL）/ 587（STARTTLS）</span>
         </el-form-item>
         <el-form-item label="SMTP 账号">
           <el-input v-model="smtpUsername" style="max-width: 320px" />

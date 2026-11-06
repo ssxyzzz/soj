@@ -84,11 +84,13 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
 <template>
   <el-dialog
     :model-value="modelValue"
-    :title="title"
     width="1200"
     top="4vh"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
+    <template #header>
+      <TipLabel :label="title" tip="点击分数格可查看该题对应提交；绿色满分 · 橙色部分分 · 红色零分" />
+    </template>
     <div class="toolbar">
       <span class="dim">共 {{ board?.rows.length ?? 0 }} 人 · {{ board?.problems.length ?? 0 }} 题</span>
       <span class="actions">
@@ -162,8 +164,6 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
           @current-change="(p: number) => (page = p)"
         />
       </div>
-      <!-- v3 图例：分数格色语义 -->
-      <p v-if="board?.rows.length" class="legend">点击分数格可查看该题对应提交；绿色满分 · 黄色部分分 · 红色零分。</p>
     </div>
   </el-dialog>
 </template>
@@ -216,11 +216,5 @@ function rowClass({ row }: { row: ScoreRowView }): { 'me-row': boolean } {
   display: flex;
   justify-content: center;
   margin-top: var(--soj-sp-10);
-}
-
-.legend {
-  margin: var(--soj-sp-12) 0 0;
-  font-size: var(--soj-fs-13);
-  color: var(--soj-ink-3);
 }
 </style>

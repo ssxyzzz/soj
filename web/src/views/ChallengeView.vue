@@ -520,7 +520,7 @@ function swallow(e: Event) {
         </div>
         <div class="chal-foot">
           <span class="chal-verdict" v-if="verdict">上次递交：{{ verdict }}</span>
-          <span class="chal-hint">挑战中禁止粘贴、拖入与选中文本；撤销/重做不受限</span>
+          <TipLabel tip="挑战中禁止粘贴、拖入与选中文本；撤销/重做不受限" />
           <el-button
             type="primary"
             class="chal-submit"
@@ -719,12 +719,6 @@ function swallow(e: Event) {
   font-size: var(--soj-fs-13);
   font-weight: var(--soj-fw-bold);
   color: var(--soj-danger);
-}
-.chal-hint {
-  flex: 1;
-  text-align: right;
-  font-size: var(--soj-fs-12);
-  color: var(--soj-mut);
 }
 .chal-submit {
   min-width: 132px;

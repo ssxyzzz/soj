@@ -331,18 +331,18 @@ function rewriteLeaf(
 <template>
   <el-dialog
     v-model="visible"
-    title="AI 整理到题单"
     width="1080px"
     top="4vh"
     @update:model-value="(v: boolean) => !v && close()"
   >
+    <template #header>
+      <TipLabel
+        label="AI 整理到题单"
+        tip="AI 结合题面与章节标题/描述的语义，把题库题目归入下方章/小节（难度、知识点、来源标签作参考），节内按难度升序排布。整理只产建议，预览勾选确认后才写入大纲草稿，点「保存」前可随时反悔"
+      />
+    </template>
     <!-- ① 配置 -->
     <div v-if="step === 'config'" class="lo-config">
-      <p class="lo-lead dim">
-        AI 会结合题面与章节标题/描述的语义，把题库题目归入下方的章/小节（难度、知识点、来源标签作参考），
-        节内按难度升序排布。整理只产建议，预览勾选确认后才写入大纲草稿，点「保存」前可随时反悔。
-      </p>
-
       <div v-if="hasLast" class="lo-last">
         <span>上一次整理已完成</span>
         <el-button link type="primary" @click="loadPreview">查看上次结果</el-button>
@@ -379,12 +379,15 @@ function rewriteLeaf(
       <div class="lo-block">
         <div class="fl">已挂题目</div>
         <el-radio-group v-model="includeMounted">
-          <el-radio :value="false">保持原挂载，只加新题</el-radio>
-          <el-radio :value="true">纳入 AI 重排（全单按难度重排）</el-radio>
+          <el-radio :value="false">
+            保持原挂载，只加新题
+            <TipLabel tip="已挂的题（含隐藏/重复）一律不动，只把题库里未挂的新题归入章/节" />
+          </el-radio>
+          <el-radio :value="true">
+            纳入 AI 重排（全单按难度重排）
+            <TipLabel tip="已挂题（含隐藏/重复）全部进入 AI 重排；不勾选的建议题保持原挂载不动" />
+          </el-radio>
         </el-radio-group>
-        <p class="lo-hint dim">
-          {{ includeMounted ? '已挂题（含隐藏/重复）全部进入 AI 重排；不勾选的建议题保持原挂载不动。' : '已挂的题一律不动，只把题库里未挂的新题归入章/节。' }}
-        </p>
       </div>
     </div>
 
@@ -483,11 +486,6 @@ function rewriteLeaf(
 </template>
 
 <style scoped>
-.lo-lead {
-  margin: 0 0 var(--soj-sp-12);
-  line-height: 1.7;
-}
-
 .lo-last {
   display: flex;
   align-items: center;
@@ -540,11 +538,6 @@ function rewriteLeaf(
   display: flex;
   flex-direction: column;
   gap: var(--soj-sp-8);
-}
-
-.lo-hint {
-  margin: var(--soj-sp-6) 0 0;
-  font-size: var(--soj-fs-13);
 }
 
 .lo-running {

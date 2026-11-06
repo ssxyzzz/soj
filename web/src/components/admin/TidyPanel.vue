@@ -465,7 +465,7 @@ onMounted(async () => {
             <el-input-number v-model="rangeTo" :min="1" :controls="false" placeholder="结束" class="range-input" />
             <span class="muted">留空 = 全库</span>
           </span>
-          <span class="muted">默认只整理未整理过的（已应用的自动排除，从后继续）；可指定题号范围只扫部分题；只产建议不写库，勾选确认后才应用。</span>
+          <TipLabel tip="默认只整理未整理过的（已应用的自动排除，从后继续）；可指定题号范围只扫部分题；只产建议不写库，勾选确认后才应用" />
         </div>
       </template>
       <ManualTidyPanel v-else />

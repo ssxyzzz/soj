@@ -382,13 +382,16 @@ onMounted(() => {
         </RailCard>
 
         <!-- 讨论入口（v0.24）：仅主题库比赛配讨论区（考试不配，考试题走题内讨论赛时锁定） -->
-        <RailCard v-if="kind === 'contest' && site.discussContestEnabled" ov="互动" title="比赛讨论" class="aside-card">
+        <RailCard v-if="kind === 'contest' && site.discussContestEnabled" ov="互动" class="aside-card">
+          <template #head>
+            <div class="rail-ov">互动</div>
+            <div class="rail-t"><TipLabel label="比赛讨论" tip="赛时提问仅组织者可见，可被升格公开答复；赛后转公开复盘" /></div>
+          </template>
           <div class="entry-actions">
             <el-button type="primary" plain style="width: 100%" @click="showDiscuss = true">
               进入讨论区
             </el-button>
           </div>
-          <p class="range dim">赛时提问仅组织者可见，可被升格公开答复；赛后转公开复盘。</p>
         </RailCard>
 
         <ScoreSummaryCard
@@ -485,14 +488,6 @@ onMounted(() => {
 }
 
 .mt8 {
-  margin-top: var(--soj-sp-8);
-}
-
-/* v3 .tc-range：起止时间行 */
-.range {
-  font-size: var(--soj-fs-12);
-  color: var(--soj-ink-3);
-  text-align: center;
   margin-top: var(--soj-sp-8);
 }
 </style>

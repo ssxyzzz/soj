@@ -66,7 +66,7 @@ const pageTitle = computed(() =>
 )
 const pageSub = computed(() =>
   ({
-    level: '按等级与经验排序 · 每页 100 名',
+    level: '按等级与经验排序 · 每页 100 名 · 等级实时聚合，调整难度全员等级自动跟随',
     solve: '按通过题数排序 · 每页 100 名',
     combo: `跨日累计连续 AC，WA/断更清零 · 同题重交不涨 · 按${comboBy.value === 'best' ? '历史' : '当前'}连击排序`,
     streak: '每天至少 AC 一题，断更清零 · 当前天数',
@@ -263,7 +263,6 @@ onMounted(() => {
 
     <div class="rank-footer">
       <span>SOJ · 在线判题系统</span>
-      <span>等级实时聚合，调整难度全员等级自动跟随</span>
     </div>
   </div>
 </template>

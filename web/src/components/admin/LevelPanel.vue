@@ -103,7 +103,7 @@ function diffChipClass(i: number): Record<string, boolean> {
       </div>
     </template>
 
-    <div class="section-title">等级名称（Lv.1–10，站点文案可自定义；色块即徽章实时预览）</div>
+    <div class="section-title"><TipLabel label="等级名称" tip="Lv.1–10，站点文案可自定义；色块即徽章实时预览" /></div>
     <div class="names-grid">
       <div v-for="(label, i) in form.names" :key="i" class="name-cell">
         <span class="tier-chip" :class="chipClass(i)">Lv.{{ i + 1 }}</span>
@@ -111,7 +111,7 @@ function diffChipClass(i: number): Record<string, boolean> {
       </div>
     </div>
 
-    <div class="section-title">升级阈值（累计经验；默认 = 每档同难度题约 200 题；两行五列与上方名称区对应，Lv.1 起步档恒为 0）</div>
+    <div class="section-title"><TipLabel label="升级阈值" tip="累计经验；默认 = 每档同难度题约 200 题；两行五列与上方名称区对应，Lv.1 起步档恒为 0" /></div>
     <div class="thresholds-grid">
       <div class="threshold-cell">
         <span class="tier-chip" :class="chipClass(0)">Lv.1</span>
@@ -123,7 +123,7 @@ function diffChipClass(i: number): Record<string, boolean> {
       </div>
     </div>
 
-    <div class="section-title">衰减系数（打低于当前等级的题按系数折算经验；低 ≥4 级恒为 0）</div>
+    <div class="section-title"><TipLabel label="衰减系数" tip="打低于当前等级的题按系数折算经验；低 ≥4 级恒为 0" /></div>
     <div class="decay-row">
       <span class="dim">低 1 级</span>
       <el-input-number v-model="form.decay1" :min="0" :max="1" :step="0.05" :precision="2" :controls="false" />
@@ -142,7 +142,7 @@ function diffChipClass(i: number): Record<string, boolean> {
       </div>
     </template>
 
-    <div class="section-title">难度名称（难度 1–10 档的展示文字，默认与等级名相同、可独立修改；题库徽章/筛选与建题选择器均显示此名）</div>
+    <div class="section-title"><TipLabel label="难度名称" tip="难度 1–10 档的展示文字，默认与等级名相同、可独立修改；题库徽章/筛选与建题选择器均显示此名" /></div>
     <div class="names-grid">
       <div v-for="(label, i) in form.difficulty_names" :key="i" class="name-cell">
         <span class="tier-chip" :class="diffChipClass(i)">{{ form.difficulty_names[i] }}</span>
@@ -150,7 +150,7 @@ function diffChipClass(i: number): Record<string, boolean> {
       </div>
     </div>
 
-    <div class="section-title">难度说明（每档各一条，逐行展示在题库「难度说明」说明卡；留空 = 该档不显示）</div>
+    <div class="section-title"><TipLabel label="难度说明" tip="每档各一条，逐行展示在题库「难度说明」说明卡；留空 = 该档不显示" /></div>
     <div class="notes-list">
       <div v-for="i in 10" :key="i" class="note-cell">
         <span class="tier-chip" :class="diffChipClass(i - 1)">{{ form.difficulty_names[i - 1] }}</span>

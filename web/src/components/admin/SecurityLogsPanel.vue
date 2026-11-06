@@ -56,8 +56,7 @@ onMounted(load)
   <el-card shadow="never">
     <template #header>
       <div class="head">
-        <span>安全日志</span>
-        <span class="dim">登录与账号安全事件流水，保留 90 天</span>
+        <TipLabel label="安全日志" tip="登录与账号安全事件流水，保留 90 天" />
       </div>
     </template>
 

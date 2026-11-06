@@ -304,7 +304,6 @@ onMounted(() => {
 
     <div class="sub-footer">
       <span>SOJ · 在线判题系统</span>
-      <span>点击提交号查看逐点评测详情</span>
     </div>
 
     <SubmissionDetailDialog v-model="showDetail" :submission-id="detailId" />

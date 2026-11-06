@@ -598,7 +598,13 @@ defineExpose({ refresh: () => load() })
     />
 
     <!-- 批量建号·中文花名册（v0.34 两段式）：上传识别 → 预览确认（id/用户名可改）→ 建号导出 -->
-    <el-dialog v-model="showImport" title="批量导入用户" width="920" @closed="resetImport">
+    <el-dialog v-model="showImport" width="920" @closed="resetImport">
+      <template #header>
+        <TipLabel
+          label="批量导入用户"
+          tip="下载模板 → 填写花名册（id、姓名必填；性别/年级/学校/地区/角色选填）→ 上传识别。用户名默认 = 姓名拼音 + id（张三 1001 → zhangsan1001，多音字可在预览里改）；初始密码每人随机生成（密码列填了用填的），建号后导出表格发放；id 可留空自动补空分配（从注册起点起按序回填未占用号，预览表可见可改）。支持 GBK/UTF-8 编码（Excel 直接另存的 CSV 可用）"
+        />
+      </template>
       <el-steps :active="importStep" align-finish style="margin-bottom: var(--soj-sp-16)">
         <el-step title="上传花名册" />
         <el-step title="预览确认" />
@@ -607,17 +613,6 @@ defineExpose({ refresh: () => load() })
 
       <!-- 第一步：下载模板 → 填表 → 上传识别 -->
       <template v-if="importStep === 1">
-        <el-alert
-          title="下载模板 → 填写花名册（id、姓名必填；性别/年级/学校/地区/角色选填）→ 上传识别"
-          type="info"
-          :closable="false"
-          style="margin-bottom: var(--soj-sp-14)"
-        />
-        <p class="dim" style="margin: 0 0 var(--soj-sp-10)">
-          用户名默认 = 姓名拼音 + id（张三 1001 → zhangsan1001，多音字可在预览里改）；初始密码每人随机生成
-          （密码列填了用填的），建号后导出表格发放；id 即站内用户 ID，可留空自动补空分配（从注册起点起按序回填未占用号；预览表可见可改，与已占用号冲突会标红提示）。
-          支持 GBK/UTF-8 编码（Excel 直接另存的 CSV 可用）。
-        </p>
         <div class="import-actions">
           <el-button @click="downloadTemplate">⬇ 下载模板</el-button>
           <el-upload
@@ -710,7 +705,10 @@ defineExpose({ refresh: () => load() })
         <el-form-item label="昵称">
           <el-input v-model="createForm.nickname" placeholder="默认与用户名相同" />
         </el-form-item>
-        <el-form-item label="用户 ID">
+        <el-form-item>
+          <template #label>
+            <TipLabel label="用户 ID" tip="留空自动分配：从注册起点起按序补未占用的号（起点见系统设置）；手动指定/改 ID 占用的号自动跳过" />
+          </template>
           <el-input-number
             v-model="createForm.id"
             :min="1"
@@ -719,7 +717,6 @@ defineExpose({ refresh: () => load() })
             placeholder="留空自动分配"
             style="width: 240px"
           />
-          <span class="dim" style="margin-left: var(--soj-sp-8)">留空自动分配：从注册起点起按序补未占用的号（起点见系统设置）；手动指定/改 ID 占用的号自动跳过</span>
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="createForm.role" style="width: 100%">
@@ -826,14 +823,12 @@ defineExpose({ refresh: () => load() })
             <el-input v-model="editForm.confirm" type="password" show-password placeholder="再次输入新密码" />
           </el-form-item>
         </div>
-        <p class="dim" style="margin: -6px 0 0">
-          资料修改不受学生端「资料自改开关」限制；年级每年 9 月 1 日自动晋级（高一升高二…高三→已毕业）；
-          改 ID 走独立二次确认（全部记录跨集合迁移、旧登录态失效），角色变更即时生效并留安全审计。
-        </p>
       </el-form>
 
       <!-- 经验调整：当前等级徽章 + 正加负减 + 可选备注，独立提交 -->
-      <el-divider content-position="left">经验调整</el-divider>
+      <el-divider content-position="left">
+        <TipLabel label="经验调整" tip="资料修改不受学生端「资料自改开关」限制；年级每年 9 月 1 日自动晋级（高一升高二…高三→已毕业）；改 ID 走独立二次确认（全部记录跨集合迁移、旧登录态失效），角色变更即时生效并留安全审计。经验/玉调整：正数增加、负数减少；经验单次 ±1000000 以内，玉扣减不透支" />
+      </el-divider>
       <div class="xp-current">
         <template v-if="xpInfo">
           <TierBadge :tier="xpInfo.level" kind="level" size="md" />
@@ -857,11 +852,12 @@ defineExpose({ refresh: () => load() })
         />
         <el-button type="primary" :loading="xpSaving" @click="submitXp">调整经验</el-button>
       </div>
-      <p class="adj-hint dim">正数增加、负数减少；单次 ±1000000 以内</p>
 
       <!-- 玉调整（v0.33-①，root）：当前余额 + 正加负减 + 必填原因，独立提交 -->
       <template v-if="canJade">
-        <el-divider content-position="left">玉调整</el-divider>
+        <el-divider content-position="left">
+          <TipLabel label="玉调整" tip="正数增加、负数减少（扣减不透支）" />
+        </el-divider>
         <div class="xp-current">
           <span v-if="jadeBalance !== null" class="xp-nums">当前余额 <b>{{ jadeBalance }}</b> 玉</span>
           <span v-else class="xp-loading">读取余额中…</span>
@@ -876,7 +872,6 @@ defineExpose({ refresh: () => load() })
           />
           <el-button type="success" :loading="jadeSaving" @click="submitJade">调整玉</el-button>
         </div>
-        <p class="adj-hint dim">正数增加、负数减少（扣减不透支）</p>
       </template>
 
       <template #footer>
@@ -980,11 +975,6 @@ defineExpose({ refresh: () => load() })
 
 .adj-row .el-input {
   flex: 1;
-}
-
-.adj-hint {
-  margin: var(--soj-sp-6) 0 0;
-  font-size: var(--soj-fs-12);
 }
 
 /* 绑定信息行（v0.16）：信息在左、root 解绑按钮在右 */

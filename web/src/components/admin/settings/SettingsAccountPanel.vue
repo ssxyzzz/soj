@@ -96,15 +96,18 @@ function fmtNext(at: string | undefined) {
     </template>
     <el-form label-position="left" label-width="220px" style="max-width: 680px">
       <el-divider content-position="left">账号</el-divider>
-      <el-form-item label="注册取号起点">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="注册取号起点" tip="自动分配的用户 ID 从该号起按序补空（默认 100，随机注册/手动指定/改 ID 留下的空缺按序回填）；起点以下号段不参与；调大即时生效，调小按新起点重扫；手动指定 ID 不受此限" />
+        </template>
         <el-input-number v-model="userSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          自动分配的用户 ID 从该号起按序补空（默认 100，随机注册/手动指定/改 ID 留下的空缺按序回填）；起点以下号段不参与；调大即时生效，调小按新起点重扫；手动指定 ID 不受此限
-        </span>
       </el-form-item>
 
-      <el-divider content-position="left">资料自改（v0.34）</el-divider>
-      <el-form-item label="允许本人修改的字段">
+      <el-divider content-position="left">资料自改</el-divider>
+      <el-form-item>
+        <template #label>
+          <TipLabel label="允许本人修改的字段" tip="关闭 = 学生端该字段只读（保存不生效）；root 用户管理编辑不受限。昵称同时受角色权限位 user.nickname.edit 约束（双闸）；QQ / 邮箱不锁。年级关闭后仍会每年自动晋级" />
+        </template>
         <div class="pe-switches">
           <label v-for="f in profileFields" :key="f.k" class="pe-sw">
             <el-switch v-model="profileEdit[f.k]" />
@@ -112,24 +115,15 @@ function fmtNext(at: string | undefined) {
           </label>
         </div>
       </el-form-item>
-      <el-form-item>
-        <span class="dim">
-          关闭 = 学生端该字段只读（保存不生效）；root 用户管理编辑不受限。昵称同时受角色权限位
-          user.nickname.edit 约束（双闸）；QQ / 邮箱不锁。年级关闭后仍会每年自动晋级。
-        </span>
-      </el-form-item>
 
-      <el-divider content-position="left">年级自动晋级（v0.34）</el-divider>
+      <el-divider content-position="left">
+        <TipLabel label="年级自动晋级" tip="一年级 → 六年级 → 初一 → 初三 → 高一 → 高三 → 已毕业，每年 9/1 自动进一档；花名册/编辑里的年级别名（如 7 / 七年级）入库即归一为标准名（初一）" />
+      </el-divider>
       <el-form-item label="当前学年">
         <span v-if="promo">
           {{ promo.current_year }}–{{ promo.current_year + 1 }} 学年 · 下次自动晋级 {{ fmtNext(promo.next_at) }}（每年 9 月 1 日）
         </span>
         <span v-else class="dim">读取中…</span>
-      </el-form-item>
-      <el-form-item label="晋级规则">
-        <span class="dim">
-          一年级 → 六年级 → 初一 → 初三 → 高一 → 高三 → 已毕业，每年 9/1 自动进一档；花名册/编辑里的年级别名（如 7 / 七年级）入库即归一为标准名（初一）
-        </span>
       </el-form-item>
       <el-form-item label="各档位在册">
         <span v-if="promo && promoTotal" class="grade-counts">
@@ -144,14 +138,18 @@ function fmtNext(at: string | undefined) {
         <span v-else class="dim">暂无设年级的用户</span>
       </el-form-item>
 
-      <el-divider content-position="left">站内通知（v0.24）</el-divider>
-      <el-form-item label="通知保留天数">
+      <el-divider content-position="left">站内通知</el-divider>
+      <el-form-item>
+        <template #label>
+          <TipLabel label="通知保留天数" tip="站内通知过期自动清理（改动只影响新通知）" />
+        </template>
         <el-input-number v-model="notifyRetentionDays" :min="7" :max="365" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">站内通知过期自动清理（改动只影响新通知）</span>
       </el-form-item>
-      <el-form-item label="全站广播每日上限">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="全站广播每日上限" tip="root 全员公告的每日频次上限（0 = 不限制）" />
+        </template>
         <el-input-number v-model="notifyBroadcastPerDay" :min="0" :max="100" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">root 全员公告的每日频次上限（0 = 不限制）</span>
       </el-form-item>
     </el-form>
   </el-card>

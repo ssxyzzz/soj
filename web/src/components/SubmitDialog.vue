@@ -75,6 +75,7 @@ function doSubmit() {
       <el-select :model-value="lang" style="width: 240px" @change="changeLang">
         <el-option v-for="o in allowedLangs" :key="o.value" :value="o.value" :label="o.label" />
       </el-select>
+      <TipLabel tip="评测在沙箱中运行；提交间隔受全站限速约束" />
       <span v-if="disabled" class="dim">{{ disabledReason }}</span>
     </div>
     <CodeEditor
@@ -86,7 +87,6 @@ function doSubmit() {
       height="520px"
       placeholder="在此编写或粘贴你的代码"
     />
-    <p class="hint">提交间隔受全站限速约束；评测在 go-judge 沙箱中运行。</p>
     <template #footer>
       <el-button @click="emit('update:modelValue', false)">取消</el-button>
       <el-button type="primary" :disabled="disabled" :loading="submitting" @click="doSubmit">提交评测</el-button>
@@ -107,12 +107,5 @@ function doSubmit() {
   font-size: var(--soj-fs-13);
   font-weight: var(--soj-fw-emphasis);
   color: var(--soj-ink-2);
-}
-
-.hint {
-  margin: var(--soj-sp-12) 0 0;
-  font-size: var(--soj-fs-13);
-  color: var(--soj-ink-3);
-  line-height: 1.7;
 }
 </style>

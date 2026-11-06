@@ -170,12 +170,18 @@ async function create() {
 
     <template #aside>
       <!-- 管理卡（2026-10-26 用户拍板：主副列两列，新建题单挪右列） -->
-      <RailCard ov="管理" title="题单管理" class="aside-card">
-        <template v-if="canCreate">
-          <el-button type="primary" style="width: 100%" @click="create">新建题单</el-button>
-          <p class="hint">创建后进编辑器按章节组织题目；编辑与删除仅限创建者。</p>
+      <RailCard ov="管理" class="aside-card">
+        <template #head>
+          <div class="rail-ov">管理</div>
+          <div class="rail-t">
+            <TipLabel
+              label="题单管理"
+              tip="创建后进编辑器按章节组织题目；编辑与删除仅限创建者。题单由老师创建维护，有权限位的账号可在角色管理中开通「题单管理」"
+            />
+          </div>
         </template>
-        <p v-else class="hint">题单由老师创建维护；有权限位的账号可在角色管理中开通「题单管理」。</p>
+        <el-button v-if="canCreate" type="primary" style="width: 100%" @click="create">新建题单</el-button>
+        <p v-else class="hint">你暂无「题单管理」权限位。</p>
       </RailCard>
       <RailCard ov="说明" title="口径" class="aside-card">
         <p class="hint">「已完成」= 拿到满分（AC）；隐藏题不计入进度；同名次并列跳号。</p>

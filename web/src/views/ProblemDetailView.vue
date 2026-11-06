@@ -503,9 +503,17 @@ onUnmounted(stopPolling)
         <RailCard
           v-if="!problem.locked && (problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions || aiEnabled)"
           ov="解析"
-          :title="aiEnabled ? undefined : '答案解析'"
           :class="['aside-card', { 'ai-headless': aiEnabled }]"
         >
+          <template #head>
+            <div class="rail-ov">解析</div>
+            <div v-if="!aiEnabled" class="rail-t">
+              <TipLabel
+                label="答案解析"
+                tip="文字题解满分（或老师）可见；未达标可花玉解锁，首次通过后免费，解锁即时生效、永久可见"
+              />
+            </div>
+          </template>
           <AiTutorPanel v-if="userStore.token" :pid="problem.id" class="ai-in-solution" @enabled="aiEnabled = $event" />
           <template v-if="problem.solution_video_url || problem.can_view_solutions || canUnlockSolutions">
             <div v-if="aiEnabled" class="sol-sec-h">答案解析</div>
@@ -516,23 +524,23 @@ onUnmounted(stopPolling)
                 花 {{ problem.solution_unlock_price }} 玉解锁文字题解
               </el-button>
             </div>
-            <p v-if="canUnlockSolutions" class="hint">
-              首次通过后免费；解锁即时生效、永久可见本题全部文字题解。
-            </p>
           </template>
         </RailCard>
 
         <!-- 讨论入口（v0.24）：题内思路讨论弹窗；赛时整题锁定（服务端闸门，弹窗内提示） -->
-        <RailCard v-if="!problem.locked && site.discussProblemEnabled" ov="互助" title="本题讨论" class="aside-card">
+        <RailCard v-if="!problem.locked && site.discussProblemEnabled" ov="互助" class="aside-card">
+          <template #head>
+            <div class="rail-ov">互助</div>
+            <div class="rail-t"><TipLabel label="本题讨论" tip="交流思路、求助与纠错；代码块按讨论门槛展示" /></div>
+          </template>
           <div class="entry-actions">
             <el-button type="primary" plain @click="showDiscuss = true">讨论本题</el-button>
           </div>
-          <p class="hint">交流思路、求助与纠错；代码块按讨论门槛展示。</p>
         </RailCard>
 
         <RailCard ov="说明" title="评测须知" class="aside-card">
           <p class="hint">
-            代码在 go-judge 沙箱中编译运行，全文比对输出；提交间隔受全站限速约束。请勿读写约定之外的文件。
+            代码在沙箱中编译运行；判分方式以题面为准（默认全文比对，部分题采用宽容比对 / 校验器 / 客观题判分）；提交间隔受全站限速约束，请勿读写约定之外的文件。
           </p>
         </RailCard>
       </template>

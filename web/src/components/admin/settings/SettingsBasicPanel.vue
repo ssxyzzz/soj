@@ -107,124 +107,160 @@ async function save() {
       </div>
     </template>
     <el-form label-position="left" label-width="220px" style="max-width: 680px">
-      <el-form-item label="普通用户每分钟提交上限">
+      <el-divider content-position="left">判题与下载</el-divider>
+      <el-form-item>
+        <template #label>
+          <TipLabel label="每分钟提交上限" tip="普通用户的全站提交频率闸门（次/分钟）" />
+        </template>
         <el-input-number v-model="rateLimit" :min="1" :max="60" />
       </el-form-item>
-      <el-form-item label="每日可下载数据的题目数">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="每日可下载数据的题目数" tip="0 为不限制；限定拥有「下载数据」权限位的用户每天最多下载几道题的数据包（同题重复下载不重复计数）" />
+        </template>
         <el-input-number v-model="dataDownloadLimit" :min="0" :max="1000" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          0 为不限制；限定拥有「下载数据」权限位的用户每天最多下载几道题的数据包（同题重复下载不重复计数）
-        </span>
       </el-form-item>
-      <el-form-item label="代码自动补全解锁等级">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="代码自动补全解锁等级" tip="学生等级达到该档后才能在设置里开启代码自动补全（1–10）" />
+        </template>
         <el-input-number v-model="autocompleteMinLevel" :min="1" :max="10" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          学生等级达到该档后才能在设置里开启代码自动补全（1–10）
-        </span>
       </el-form-item>
-      <el-form-item label="批量导入单题数据上限（MB）">
+
+      <el-divider content-position="left">批量导入</el-divider>
+      <el-form-item>
+        <template #label>
+          <TipLabel label="单题数据上限（MB）" tip="后台「导入题目」页单道题数据的体积上限，超限该题跳过" />
+        </template>
         <el-input-number v-model="batchProblemMB" :min="1" :max="4096" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          后台「导入题目」页单道题数据的体积上限，超限该题跳过（v0.15）
-        </span>
       </el-form-item>
-      <el-form-item label="批量导入整包上限（MB）">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="整包上限（MB）" tip="单次上传题包 zip 的体积上限；题多请分批传" />
+        </template>
         <el-input-number v-model="batchZipMB" :min="1" :max="8192" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">单次上传题包 zip 的体积上限；题多请分批传</span>
       </el-form-item>
-      <el-form-item label="自动题号起点">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="自动题号起点" tip="无前缀自动取号的最小题号（默认 1001）；1~起点-1 的保留段留给带题号的导入题包；调大即时生效、只前进不回退；导入/建题指定题号不受此限" />
+        </template>
         <el-input-number v-model="problemSeqStart" :min="1" :max="1000000000" :controls="false" style="width: 160px" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          无前缀自动取号的最小题号（默认 1001）；1~起点-1 的保留段留给带题号的导入题包；调大即时生效、只前进不回退；导入/建题指定题号不受此限
-        </span>
       </el-form-item>
-      <el-form-item label="货币名">
+
+      <el-divider content-position="left">玉经济</el-divider>
+      <el-form-item>
+        <template #label>
+          <TipLabel label="货币名" tip="做题奖励货币的名称（1–6 个字，如：玉 / 金币 / 钻石 / 奖励币），导航栏、流水、商店等全站文案统一显示" />
+        </template>
         <el-input
           v-model="currencyName"
           placeholder="玉"
           maxlength="6"
           style="width: 120px"
         />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          做题奖励货币的名称（1–6 个字，如：玉 / 金币 / 钻石 / 奖励币），导航栏、流水、商店等全站文案统一显示
-        </span>
       </el-form-item>
-      <el-form-item label="比赛奖池获奖比例（%）">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="比赛奖池获奖比例（%）" tip="真正参赛（得分 > 0）人数 × 该比例 = 名次奖名额（向上取整，至少 1 人），名次奖按线性递减瓜分名次奖池" />
+        </template>
         <el-input-number v-model="jadeAwardRatePct" :min="1" :max="100" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          真正参赛（得分 &gt; 0）人数 × 该比例 = 名次奖名额（向上取整，至少 1 人），名次奖按线性递减瓜分名次奖池
-        </span>
       </el-form-item>
-      <el-form-item label="玉折扣阶梯（Lv5–10）">
-        <div style="display: flex; gap: var(--soj-sp-8); align-items: center; flex-wrap: wrap">
-          <span v-for="(label, i) in ['Lv5', 'Lv6', 'Lv7', 'Lv8', 'Lv9', 'Lv10']" :key="label" style="display: inline-flex; align-items: center; gap: var(--soj-sp-4)">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="玉折扣阶梯（Lv5–10）" tip="消费折扣只作用于题解解锁与 AI 助教（悬赏是玉流转、实物一律原价）；Lv5 起生效，越高越便宜，逐档不能高于上一档（保存时自动校正）" />
+        </template>
+        <div class="disc-grid">
+          <span v-for="(label, i) in ['Lv5', 'Lv6', 'Lv7', 'Lv8', 'Lv9', 'Lv10']" :key="label" class="disc-cell">
             {{ label }}
             <el-input-number v-model="jadeDiscount[i]" :min="10" :max="100" size="small" style="width: 90px" />
             %
           </span>
         </div>
-        <span class="dim" style="display: block; margin-top: var(--soj-sp-4)">
-          消费折扣只作用于题解解锁与 AI 助教（悬赏是玉流转、实物一律原价）；Lv5 起生效，越高越便宜，逐档不能高于上一档（保存时自动校正）
-        </span>
       </el-form-item>
-      <el-form-item label="题解解锁价系数">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="题解解锁价系数" tip="解锁价 = 题目难度 × 系数（默认 5，D10 = 50 玉）；首次通过后免费" />
+        </template>
         <el-input-number v-model="unlockMult" :min="1" :max="100" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          解锁价 = 题目难度 × 系数（默认 5，D10 = 50 玉）；首次通过后免费
-        </span>
       </el-form-item>
-      <el-form-item label="悬赏额上下限（玉）">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="悬赏额上下限（玉）" tip="发帖挂悬赏的范围（默认 5～500，另受余额约束）" />
+        </template>
         <el-input-number v-model="bountyMin" :min="1" :max="100000" style="width: 130px" />
           ～
         <el-input-number v-model="bountyMax" :min="1" :max="1000000" style="width: 140px" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">发帖挂悬赏的范围（默认 5～500，另受余额约束）</span>
       </el-form-item>
-      <el-form-item label="开放实物兑换">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="开放实物兑换" tip="开启后在「玉」页面右列显示实物兑换区（物品目录与学生订单）" />
+        </template>
         <el-switch v-model="shopEnabled" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          开启后在「玉」页面右列显示实物兑换区（物品目录与学生订单）</span>
       </el-form-item>
-      <el-form-item label="连击玉加成">
-        <div style="display: flex; gap: var(--soj-sp-8); align-items: center; flex-wrap: wrap">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="连击玉加成" tip="连续 AC 跨日累计（WA/断更清零、同题重交不涨）；默认每 10 连击 +10%、100 连击 ×2.0 封顶。与升维祝福/每日一题/复仇/PK 名次同为倍率，发放时只取最高一项，不连乘（峰值 ×2）" />
+        </template>
+        <div class="combo-row">
           每满
           <el-input-number v-model="jadeComboStep" :min="1" :max="1000" size="small" style="width: 90px" />
           连击 +<el-input-number v-model="jadeComboPct" :min="1" :max="100" size="small" style="width: 80px" />
           %，封顶 +<el-input-number v-model="jadeComboCapPct" :min="0" :max="900" size="small" style="width: 90px" />%
         </div>
-        <span class="dim" style="display: block; margin-top: var(--soj-sp-4)">
-          连续 AC 跨日累计（WA/断更清零、同题重交不涨）；默认每 10 连击 +10%、100 连击 ×2.0 封顶。
-          与升维祝福/每日一题/复仇/PK 名次同为倍率，发放时只取最高一项，不连乘（峰值 ×2）
-        </span>
       </el-form-item>
-      <el-form-item label="每日复仇窗口（小时）">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="每日复仇窗口（小时）" tip="最早一次错误提交距今满该时长才可复仇（默认 24 = 隔夜订正；当日顺路做对无加成）；每日仅 1 个复仇名额" />
+        </template>
         <el-input-number v-model="jadeRevengeHours" :min="1" :max="720" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          最早一次错误提交距今满该时长才可复仇（默认 24 = 隔夜订正；当日顺路做对无加成）；每日仅 1 个复仇名额
-        </span>
       </el-form-item>
-      <el-form-item label="ICP 备案号">
+
+      <el-divider content-position="left">备案信息</el-divider>
+      <el-form-item>
+        <template #label>
+          <TipLabel label="ICP 备案号" tip="备案通过后填入，页脚展示并链接工信部备案系统；留空不展示" />
+        </template>
         <el-input
           v-model="icpNumber"
-          placeholder="如 皖ICP备2026000000号-1（留空不展示）"
+          placeholder="如 皖ICP备2026000000号-1"
           maxlength="64"
           style="max-width: 320px"
         />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          备案通过后填入，页脚展示并链接工信部备案系统；留空不展示
-        </span>
       </el-form-item>
-      <el-form-item label="公安网备号">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="公安网备号" tip="备案通过后填入，页脚展示；号内数字自动生成公安部备案查询链接；留空不展示" />
+        </template>
         <el-input
           v-model="mpsNumber"
-          placeholder="如 皖公网安备34010000000001号（留空不展示）"
+          placeholder="如 皖公网安备34010000000001号"
           maxlength="64"
           style="max-width: 320px"
         />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          备案通过后填入，页脚展示；号内数字自动生成公安部备案查询链接；留空不展示
-        </span>
       </el-form-item>
     </el-form>
   </el-card>
 </template>
 
+<style scoped>
+/* 玉折扣阶梯：3 列对齐网格（Lv5–7 / Lv8–10 两行，格内 Lv 徽字 + 输入 + %） */
+.disc-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, max-content));
+  gap: var(--soj-sp-8) var(--soj-sp-20);
+}
+
+.disc-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--soj-sp-4);
+}
+
+/* 连击加成行：文字与三个小输入混排 */
+.combo-row {
+  display: flex;
+  gap: var(--soj-sp-8);
+  align-items: center;
+  flex-wrap: wrap;
+}
+</style>

@@ -112,7 +112,8 @@ async function loadCalls(idx = 0) {
   }
 }
 
-const kindText: Record<string, string> = { hint1: '提示①', hint2: '提示②', hint3: '提示③', debug: '找 bug' }
+// 类型名对齐学生端 AiTutorPanel 现行两级（理解题目/算法思路）；hint3 为旧三级方案遗留，仅旧审计行回退显示
+const kindText: Record<string, string> = { hint1: '理解题目', hint2: '算法思路', hint3: '实现要点（旧）', debug: '找 bug' }
 
 onMounted(() => {
   load()
@@ -123,7 +124,7 @@ onMounted(() => {
 <template>
   <el-card v-loading="loading">
     <div class="panel-h panel-head">
-      <span class="pt">AI 助教</span>
+      <TipLabel label="AI 助教" tip="未配置可用的供应商时，学生端 AI 入口整体隐藏。Key 只写不回显：已配置的档位留空 Key 即保留原值" />
       <div class="acts" style="margin-left: auto; display: flex; gap: var(--soj-sp-8)">
         <el-button @click="addProvider('GLM')">+ GLM</el-button>
         <el-button @click="addProvider('DeepSeek')">+ DeepSeek</el-button>
@@ -131,11 +132,6 @@ onMounted(() => {
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </div>
     </div>
-
-    <el-alert
-      title="未配置可用的供应商时，学生端 AI 入口整体隐藏。Key 只写不回显：已配置的档位留空 Key 即保留原值。"
-      type="info" :closable="false" style="margin-bottom: var(--soj-sp-14)"
-    />
 
     <el-table :data="providers" size="small" empty-text="还没有供应商——用上方 GLM / DeepSeek 预设快速添加">
       <el-table-column label="启用" width="60">
@@ -169,27 +165,28 @@ v-model="row.api_key" type="password" show-password
 
     <el-divider content-position="left">计费</el-divider>
     <el-form label-position="left" label-width="190px" style="max-width: 720px">
-      <el-form-item label="AI 名字">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="AI 名字" tip="学生端 AI 助教的称呼（1–12 字，默认「小玉」；面板、找 bug 按钮等文案统一显示）" />
+        </template>
         <el-input v-model="tutorName" maxlength="12" style="width: 180px" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          学生端 AI 助教的称呼（1–12 字，默认「小玉」；面板、找 bug 按钮等文案统一显示）
-        </span>
       </el-form-item>
-      <el-form-item label="每日每人调用上限（次）">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="每日每人调用上限（次）" tip="提示 + 找 bug 合计；学生档（默认 5）" />
+        </template>
         <el-input-number v-model="dailyLimit" :min="1" :max="100" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">提示 + 找 bug 合计；学生档（默认 5）</span>
       </el-form-item>
-      <el-form-item label="特权层每日上限（次）">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="特权层每日上限（次）" tip="教师 / 管理员免费但计次（默认 20）；0 = 不限；root 恒不限次" />
+        </template>
         <el-input-number v-model="staffDailyLimit" :min="0" :max="1000" />
-        <span class="dim" style="margin-left: var(--soj-sp-8)">
-          教师 / 管理员免费但计次（默认 20）；0 = 不限；root 恒不限次
-        </span>
       </el-form-item>
-      <el-form-item label="单价（写死锚定题解解锁价）">
-        <span class="dim">
-          两级提示合计 = 题解价 × 70%（理解:思路 = 1:2 拆分）；找 bug = 题解价 × 90%；均向下取整、最低 1 玉。
-          题解价 = 难度 × 解锁系数（玉经济设置）
-        </span>
+      <el-form-item>
+        <template #label>
+          <TipLabel label="单价" tip="写死锚定题解解锁价：两级提示合计 = 题解价 × 70%（理解:思路 = 1:2 拆分）；找 bug = 题解价 × 90%；均向下取整、最低 1 玉。题解价 = 难度 × 解锁系数（玉经济设置）" />
+        </template>
       </el-form-item>
     </el-form>
 

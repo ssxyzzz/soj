@@ -298,13 +298,12 @@ async function submitBind() {
       <div class="panel-h" style="padding-left: 0"><span class="pt">个人信息</span></div>
       <div class="fbody">
         <div class="frow">
-          <span class="fl">昵称<div class="fd">用于榜单、题解等公开页面</div></span>
+          <span class="fl">昵称<TipLabel tip="用于榜单、题解等公开页面" /></span>
           <div class="fctrl">
             <el-input
               v-model="nickname"
               :disabled="!editable.nickname"
               maxlength="6"
-              placeholder="用于榜单、题解等公开页面展示"
               style="width: 320px"
             />
             <span v-if="!editable.nickname" class="fd-inline">当前角色不允许或管理员已锁定昵称修改，请联系管理员</span>
@@ -336,7 +335,7 @@ async function submitBind() {
           </div>
         </div>
         <div class="frow">
-          <span class="fl">年级<div class="fd">每年 9 月 1 日自动晋级（高三 → 已毕业）</div></span>
+          <span class="fl">年级<TipLabel tip="每年 9 月 1 日自动晋级（高三 → 已毕业）" /></span>
           <div class="fctrl-line">
             <el-select v-model="profileForm.grade" clearable placeholder="未设置" :disabled="!editable.grade" style="width: 320px">
               <el-option v-for="g in GRADE_OPTIONS" :key="g" :value="g" :label="g" />
@@ -383,14 +382,16 @@ async function submitBind() {
 
     <!-- 修改密码 -->
     <el-card shadow="never" class="fcard">
-      <div class="panel-h" style="padding-left: 0"><span class="pt">修改密码</span></div>
+      <div class="panel-h" style="padding-left: 0">
+        <TipLabel label="修改密码" tip="修改成功后需重新登录；该账号在其他设备的登录态也会一并失效" />
+      </div>
       <div class="fbody">
         <div class="frow">
           <span class="fl">原密码</span>
           <el-input v-model="pwdForm.old" type="password" show-password style="width: 320px" />
         </div>
         <div class="frow">
-          <span class="fl">新密码<div class="fd">8-64 位，不含弱口令</div></span>
+          <span class="fl">新密码<TipLabel tip="8-64 位，不含弱口令" /></span>
           <el-input
             v-model="pwdForm.new"
             type="password"
@@ -415,17 +416,13 @@ async function submitBind() {
             <el-button type="primary" size="small" :loading="savingPwd" @click="changePassword">修改密码</el-button>
           </div>
         </div>
-        <div class="frow">
-          <span class="fl"></span>
-          <span class="fd-inline">修改成功后需重新登录；该账号在其他设备的登录态也会一并失效</span>
-        </div>
       </div>
     </el-card>
 
     <!-- 绑定邮箱 -->
     <el-card shadow="never" class="fcard">
       <div class="panel-h" style="padding-left: 0">
-        <span class="pt">绑定邮箱</span>
+        <TipLabel label="绑定邮箱" tip="绑定后可用于找回密码（需管理员开启）；换绑需旧邮箱验证码或密码验证，换绑成功会向原邮箱发通知" />
         <span v-if="email" class="sub-status green"><span class="dot green"></span>已验证</span>
       </div>
       <div class="fbody">
@@ -436,22 +433,19 @@ async function submitBind() {
             <el-button size="small" @click="openBind">{{ email ? '换绑' : '绑定' }}</el-button>
           </div>
         </div>
-        <div class="frow">
-          <span class="fl">换绑须知<div class="fd">需旧邮箱或密码验证</div></span>
-          <span class="fd-inline">绑定后可用于找回密码（需管理员开启）；换绑需验证旧邮箱，换绑成功会向原邮箱发通知</span>
-        </div>
       </div>
     </el-card>
 
     <!-- 通知偏好（v0.24）：站内通知必达；此处只控制是否同时发邮件（1:1 互动类） -->
     <el-card shadow="never" class="fcard">
-      <div class="panel-h" style="padding-left: 0"><span class="pt">通知偏好</span></div>
+      <div class="panel-h" style="padding-left: 0">
+        <TipLabel label="通知偏好" tip="站内通知恒定送达消息中心；此处开关只控制对应互动是否同时发一封邮件提醒" />
+      </div>
       <div class="fbody">
         <div class="frow" v-for="c in notifyCats" :key="c.type">
           <span class="fl">{{ c.label }}</span>
           <div class="fctrl">
             <el-switch v-model="c.enabled" :disabled="!hasEmail" />
-            <span class="fd-inline">同时发一封邮件提醒（站内通知恒定送达消息中心）</span>
           </div>
         </div>
         <div class="frow">
@@ -471,13 +465,13 @@ async function submitBind() {
       <div class="panel-h" style="padding-left: 0"><span class="pt">偏好</span></div>
       <div class="fbody">
         <div class="frow">
-          <span class="fl">默认语言<div class="fd">提交弹窗与在线编程预填</div></span>
+          <span class="fl">默认语言<TipLabel tip="提交弹窗与在线编程预填" /></span>
           <el-select v-model="prefsForm.defaultLang" clearable placeholder="跟随系统默认（C++ 14）" style="width: 320px">
             <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
           </el-select>
         </div>
         <div class="frow frow-top">
-          <span class="fl">代码模板<div class="fd">仅用于在线编程起始代码，留空则全空白</div></span>
+          <span class="fl">代码模板<TipLabel tip="仅用于在线编程起始代码，留空则全空白" /></span>
           <div class="tpl">
             <el-select v-model="tplLang" style="width: 160px">
               <el-option v-for="o in languageOptions" :key="o.value" :value="o.value" :label="o.label" />
@@ -488,24 +482,22 @@ async function submitBind() {
               :rows="8"
               class="mono"
               spellcheck="false"
-              placeholder="留空则在线编程起始为空白，由作答者自行编写"
             />
           </div>
         </div>
         <div class="frow">
-          <span class="fl">代码自动补全<div class="fd">Lv.{{ levels.autocompleteMinLevel() }} 档解锁</div></span>
+          <span class="fl">
+            代码自动补全
+            <TipLabel :tip="`代码编辑器中的关键字 / 词法补全；Lv.${levels.autocompleteMinLevel()} 档解锁，老师角色不受限`" />
+          </span>
           <div class="fctrl">
             <el-switch
               v-model="prefsForm.autocomplete"
               :disabled="!autocompleteAvailable()"
               @change="savePrefs"
             />
-            <span class="fd-inline">
-              {{
-                autocompleteAvailable()
-                  ? '代码编辑器中的关键字 / 词法补全'
-                  : `达到 Lv.${levels.autocompleteMinLevel()} 后可开启自动补全（老师角色不受限）`
-              }}
+            <span v-if="!autocompleteAvailable()" class="fd-inline">
+              达到 Lv.{{ levels.autocompleteMinLevel() }} 后可开启自动补全（老师角色不受限）
             </span>
           </div>
         </div>

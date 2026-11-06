@@ -104,15 +104,16 @@ async function togglePin(s: SolutionItem) {
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="题解"
     width="1020"
     top="4vh"
     @update:model-value="(v: boolean) => emit('update:modelValue', v)"
   >
+    <template #header>
+      <TipLabel label="题解" tip="每人每题限一篇题解；可在列表中编辑你发布的那篇" />
+    </template>
     <div class="dlg-toolbar">
       <span class="dim">共 {{ solutionsTotal }} 篇</span>
       <el-button v-if="!mineId" type="primary" @click="openWriteSolution">发表题解</el-button>
-      <span v-else class="dim">每人每题限一篇题解 · 可在列表中编辑你发布的那篇</span>
     </div>
     <div v-for="s in solutions" :key="s.id" class="solution-item">
       <div class="solution-meta">

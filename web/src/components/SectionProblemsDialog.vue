@@ -200,11 +200,16 @@ function removeAt(i: number) {
 <template>
   <el-dialog
     :model-value="!!nodeKey"
-    :title="crumb || '管理题目'"
     width="1080px"
     top="4vh"
     @update:model-value="(v: boolean) => !v && emit('close')"
   >
+    <template #header>
+      <TipLabel
+        :label="crumb || '管理题目'"
+        tip="已挂其他章节/小节的题不可重复挂载；误删可撤销"
+      />
+    </template>
     <div class="spd-nav">
       <el-button size="small" :disabled="idx <= 0" @click="step(-1)">◀ 上一节</el-button>
       <span class="spd-pos mono">{{ idx + 1 }} / {{ flat.length }}</span>
@@ -277,7 +282,6 @@ function removeAt(i: number) {
     </div>
 
     <template #footer>
-      <span class="spd-foot-hint">已挂其他章节/小节的题不可重复挂载 · 删除可撤销</span>
       <el-button type="primary" @click="emit('close')">完成</el-button>
     </template>
   </el-dialog>
@@ -383,12 +387,5 @@ function removeAt(i: number) {
 
 .del {
   flex: none;
-}
-
-.spd-foot-hint {
-  float: left;
-  color: var(--el-text-color-placeholder);
-  font-size: var(--soj-fs-13);
-  line-height: 32px;
 }
 </style>

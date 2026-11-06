@@ -178,9 +178,12 @@ function openContest(c: ContestListItem) {
       </div>
 
     <template #aside>
-      <RailCard v-if="userStore.can('contest.bank.create')" ov="管理" title="赛事管理" class="aside-card">
+      <RailCard v-if="userStore.can('contest.bank.create')" ov="管理" class="aside-card">
+        <template #head>
+          <div class="rail-ov">管理</div>
+          <div class="rail-t"><TipLabel label="赛事管理" tip="从题库挑选赛题成场；创建后可在详情页调整题目与各项设置" /></div>
+        </template>
         <el-button type="primary" style="width: 100%" @click="showCreate = true">新建比赛</el-button>
-        <p class="hint">从题库挑选赛题成场；创建后可在详情页调整题目与各项设置。</p>
       </RailCard>
 
       <RailCard v-if="nextContest" ov="我的赛程" :title="`下一场 · ${nextContest.title}`" class="aside-card">
@@ -191,9 +194,9 @@ function openContest(c: ContestListItem) {
       <RailCard ov="说明" title="赛制与锁题" class="aside-card">
         <div class="dim rule-text">
           <p>· OI 赛制：赛时正常评测但不出分，只记录提交次数；</p>
-          <p>· 每题满分 100，按测试点 / 子任务计分；</p>
+          <p>· 每题满分 100，编程题按测试点 / 子任务计分，客观题按题给分；</p>
           <p>· 赛后统一出榜，按总分排名；</p>
-          <p>· 比赛期间锁题：请从比赛页提交。</p>
+          <p>· 比赛期间锁题：请进入比赛详情页提交。</p>
         </div>
       </RailCard>
     </template>
@@ -216,7 +219,10 @@ function openContest(c: ContestListItem) {
           style="width: 100%"
         />
       </el-form-item>
-      <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不公开）">
+      <el-form-item>
+        <template #label>
+          <TipLabel label="赛后隐藏期（天）" tip="0 为不隐藏；隐藏期内榜单与提交记录不公开，期满自动放开" />
+        </template>
         <el-input-number v-model="form.hiddenDays" :min="0" :max="7" />
       </el-form-item>
       <el-form-item label="比赛题目" required>

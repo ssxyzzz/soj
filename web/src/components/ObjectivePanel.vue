@@ -80,7 +80,7 @@ function doSubmit() {
       <!-- 填空：逐空输入（题干 ____ 对应第 N 空） -->
       <template v-if="question.kind === 'blank'">
         <div v-for="i in question.blank_count" :key="i" class="blank-row">
-          <span class="blank-idx">第 {{ i }} 空</span>
+          <span class="blank-idx">第 {{ i }} 空<TipLabel tip="题干中的 ____ 空位与各输入框按顺序对应" /></span>
           <el-input
             v-model="blanks[i - 1]"
             :placeholder="`填入第 ${i} 空的答案`"
@@ -88,7 +88,6 @@ function doSubmit() {
             @keyup.enter="doSubmit"
           />
         </div>
-        <div class="dim blank-tip">题干中的 ____ 空位与上方输入框按顺序对应</div>
       </template>
 
       <!-- 选择/判断：选项列表 -->
@@ -115,7 +114,9 @@ function doSubmit() {
             <span class="opt-key">{{ optionLabel(i) }}.</span> {{ opt }}
           </el-checkbox>
         </div>
-        <div v-if="question.kind === 'multiple'" class="dim blank-tip">多选为全对制：与正确答案完全一致才得分</div>
+        <div v-if="question.kind === 'multiple'">
+          <TipLabel tip="多选为全对制：与正确答案完全一致才得分" />
+        </div>
       </template>
 
       <div v-if="disabled" class="dim">{{ disabledReason }}</div>
@@ -163,9 +164,5 @@ function doSubmit() {
 .blank-idx {
   flex: 0 0 auto;
   color: var(--el-text-color-secondary);
-}
-
-.blank-tip {
-  margin-top: var(--soj-sp-6);
 }
 </style>

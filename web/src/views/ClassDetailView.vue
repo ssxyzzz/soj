@@ -752,7 +752,7 @@ onMounted(load)
                 v-model="importText"
                 class="import-input"
                 :rows="2"
-                placeholder="批量导入：输入已注册用户名（输入即联想），用空格 / 逗号 / 换行分隔"
+                placeholder="输入已注册用户名，空格 / 逗号 / 换行分隔"
               />
               <el-button type="primary" :loading="importing" @click="importMembers">导入成员</el-button>
             </div>
@@ -814,7 +814,10 @@ onMounted(load)
         <el-form-item label="作业说明">
           <el-input v-model="assignmentForm.intro" type="textarea" :rows="2" placeholder="选填" />
         </el-form-item>
-        <el-form-item label="作业题目（可先创建后在作业页调整；支持从题单复制）">
+        <el-form-item>
+          <template #label>
+            <TipLabel label="作业题目" tip="可先创建后在作业页调整；支持从题单复制" />
+          </template>
           <div class="picker-block">
             <CopyFromListButton @merge="mergeFromList" />
             <ProblemPicker v-model="assignmentForm.picked" />
@@ -844,7 +847,10 @@ onMounted(load)
             style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="赛后隐藏期（天，0 为不隐藏；隐藏期内榜单与提交记录不公开）">
+        <el-form-item>
+          <template #label>
+            <TipLabel label="赛后隐藏期（天）" tip="0 为不隐藏；隐藏期内榜单与提交记录不公开，期满自动放开" />
+          </template>
           <el-input-number v-model="examForm.hiddenDays" :min="0" :max="7" />
         </el-form-item>
         <el-form-item label="考试题目" required>
@@ -881,7 +887,10 @@ onMounted(load)
     <!-- 发起课堂 PK（v0.42）：全班同题限时手速挑战，时长取题目挑战时长 -->
     <el-dialog v-model="showRace" title="发起课堂 PK" width="960" top="5vh">
       <el-form label-position="top">
-        <el-form-item label="PK 题目（公开、支持挑战且已有测试数据；时长取该题挑战时长）" required>
+        <el-form-item required>
+          <template #label>
+            <TipLabel label="PK 题目" tip="公开、支持挑战且已有测试数据的题；时长取该题挑战时长" />
+          </template>
           <ProblemPicker v-model="raceForm.picked" />
         </el-form-item>
         <el-form-item label="发起时机">

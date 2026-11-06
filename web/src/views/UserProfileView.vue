@@ -321,8 +321,8 @@ function openDetail(id: number) {
         <!-- 知识星图（v0.41，仅本人）：知识点 AC≥3 点亮 -->
         <div v-if="isOwnProfile && stars.length" class="card star-card">
           <div class="done-head">
-            <h3>知识星图</h3>
-            <span class="dim">已点亮 {{ stars.filter((x) => x.lit).length }} / {{ stars.length }} 站 · AC ≥ 3 题点亮</span>
+            <h3><TipLabel label="知识星图" tip="知识点 AC ≥ 3 题点亮" /></h3>
+            <span class="dim">已点亮 {{ stars.filter((x) => x.lit).length }} / {{ stars.length }} 站</span>
           </div>
           <div class="star-grid">
             <div v-for="s in stars" :key="s.tag_id" class="star" :class="{ lit: s.lit }">
@@ -336,8 +336,7 @@ function openDetail(id: number) {
         <!-- 错题本（v0.41，仅本人）：复仇入口 -->
         <div v-if="isOwnProfile && wrongbook.length" class="card wb-card">
           <div class="done-head">
-            <h3>错题本</h3>
-            <span class="dim">每日 1 次复仇 · 24h 前错过的题 ×1.5</span>
+            <h3><TipLabel label="错题本" tip="每日 1 次复仇 · 24h 前错过的题经验 ×1.5" /></h3>
           </div>
           <div class="wb-list">
             <router-link v-for="w in wrongbook" :key="w.pid" class="wb-row" :to="`/problems/${w.pid}`">
@@ -352,7 +351,11 @@ function openDetail(id: number) {
 
         <template #aside>
           <!-- 近期提交：published 投影，点击开评测详情弹窗（权限同详情接口） -->
-          <RailCard ov="记录" title="近期提交" class="aside-card">
+          <RailCard ov="记录" class="aside-card">
+            <template #head>
+              <div class="rail-ov">记录</div>
+              <div class="rail-t"><TipLabel label="近期提交" tip="仅展示公开态提交，点击行查看评测详情" /></div>
+            </template>
             <template v-if="page.recent?.length">
               <div
                 v-for="s in page.recent"
@@ -364,7 +367,6 @@ function openDetail(id: number) {
                 <span class="grow rtitle">{{ s.title }}</span>
                 <span class="t">{{ fmtRel(s.created_at) }}</span>
               </div>
-              <p class="hint">仅展示公开态提交，点击查看评测详情。</p>
             </template>
             <p v-else class="hint">还没有公开的提交记录。</p>
           </RailCard>
