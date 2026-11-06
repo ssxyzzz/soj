@@ -1,3 +1,3 @@
 // 站点版本号（页脚展示用）：发版时改这一处即可。
 // v0.67 起页脚版本随批次 bump（v0.61 起曾连续四版漏 bump，干扰过一次变慢归因排查）。
-export const APP_VERSION = 'v0.73.2'
+export const APP_VERSION = 'v0.74'

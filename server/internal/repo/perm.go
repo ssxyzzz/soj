@@ -8,7 +8,8 @@ package repo
 //   - "管理角色"操作本身不设权限位，路由层硬编码 root，不可授权。
 const (
 	PermProblemViewAll       = "problem.view.all"       // 题库全量可见（隐藏/锁定题）+ 可提交隐藏题
-	PermProblemCreate        = "problem.create"         // 新建/导入题目
+	PermProblemCreate        = "problem.create"         // 新建题目（v0.74 起不含批量导入，见 problem.import）
+	PermProblemImport        = "problem.import"         // 批量导入题目（题包导入及进度/取消，v0.74 自 problem.create 拆分）
 	PermProblemEditOwn       = "problem.edit.own"       // 编辑自己导入的题目（题面/隐藏）
 	PermProblemEditAll       = "problem.edit.all"       // 编辑任意题目
 	PermProblemDataDownload  = "problem.data.download"  // 下载题目测试数据包（每周可下载题数受系统设置限额）
@@ -72,7 +73,8 @@ var PermGroups = []PermGroup{
 // PermCatalog 权限位目录（展示顺序即后台勾选顺序；备份类操作归入管理后台权限）。
 var PermCatalog = []PermInfo{
 	{PermProblemViewAll, "题库全量可见", "可见隐藏题与比赛/考试锁定中的题，可直接向隐藏题提交", "problem"},
-	{PermProblemCreate, "新建题目", "新建/导入题目（网页出题功能上线后生效）", "problem"},
+	{PermProblemCreate, "新建题目", "在题库中网页新建题目（不含批量导入，批量导入见独立位）", "problem"},
+	{PermProblemImport, "批量导入题目", "题包批量导入（来源 soj/hydro）及导入进度查看与取消；不含网页新建（v0.74 自「新建题目」拆分）", "problem"},
 	{PermProblemEditOwn, "编辑自己的题目", "编辑自己导入的题目的题面与隐藏标记", "problem"},
 	{PermProblemEditAll, "编辑任意题目", "不受题目属主限制", "problem"},
 	{PermProblemDataDownload, "下载数据", "下载题目测试数据包（zip，含造数据脚本等存档文件）；每周可下载题数由系统设置限定，无此权限不可下载", "problem"},

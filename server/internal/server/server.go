@@ -245,10 +245,11 @@ func Run(ctx context.Context, deps *Deps) {
 
 			// 网页建题（v0.5.2-1）：problem.create 权限位；元数据编辑沿用 problemEditable 语义
 			authed.POST("/problems", RequirePerm(repo.PermProblemCreate), h.CreateProblem)
-			// 题包批量导入（v0.15 统一格式）：独立 /import 页按来源（SOJ/Hydro）适配；problem.create 权限即可
-			authed.POST("/import", RequirePerm(repo.PermProblemCreate), h.StartImport)
-			authed.GET("/import/status", RequirePerm(repo.PermProblemCreate), h.ImportStatus)
-			authed.POST("/import/cancel", RequirePerm(repo.PermProblemCreate), h.ImportCancel)
+			// 题包批量导入（v0.15 统一格式）：独立 /import 页按来源（SOJ/Hydro）适配；
+			// v0.74 起独立 problem.import 位（自 problem.create 严格拆分，批量导入是重活单独发）
+			authed.POST("/import", RequirePerm(repo.PermProblemImport), h.StartImport)
+			authed.GET("/import/status", RequirePerm(repo.PermProblemImport), h.ImportStatus)
+			authed.POST("/import/cancel", RequirePerm(repo.PermProblemImport), h.ImportCancel)
 			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
 			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
 			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)

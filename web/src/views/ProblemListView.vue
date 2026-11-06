@@ -482,7 +482,7 @@ onMounted(() => {
       </el-card>
 
     <template #aside>
-      <RailCard v-if="userStore.can('problem.create') || canExport" ov="管理" class="aside-card">
+      <RailCard v-if="userStore.can('problem.create') || userStore.can('problem.import') || canExport" ov="管理" class="aside-card">
         <template #head>
           <div class="rail-ov">管理</div>
           <div class="rail-t">
@@ -494,7 +494,7 @@ onMounted(() => {
         </template>
         <div class="entry-actions">
           <el-button v-if="userStore.can('problem.create')" type="primary" style="width: 100%" @click="router.push('/problems/create')">新增题目</el-button>
-          <el-button v-if="userStore.can('problem.create')" style="width: 100%" @click="router.push('/import')">导入题目</el-button>
+          <el-button v-if="userStore.can('problem.import')" style="width: 100%" @click="router.push('/import')">导入题目</el-button>
           <!-- 打包导出（v0.18.1）：点开进入选择模式（左侧勾选框出现），导出或完成退出 -->
           <template v-if="canExport">
             <el-button v-if="!picking" style="width: 100%" @click="picking = true">打包导出</el-button>

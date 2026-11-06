@@ -410,7 +410,7 @@ export const tagApi = {
     ),
 }
 
-// 题包导入（v0.15 统一格式）：独立 /import 页按来源（soj|hydro）适配；problem.create 权限
+// 题包导入（v0.15 统一格式）：独立 /import 页按来源（soj|hydro）适配；problem.import 权限（v0.74 拆分）
 export const importApi = {
   upload: (form: FormData, onProgress?: (pct: number) => void) =>
     client

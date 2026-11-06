@@ -408,7 +408,7 @@ var freshSkipFlags = []string{
 	"roundFlagsV1", "classLeaveV1", "assignmentScoreViewV1", "contestScorePermV1",
 	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
 	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2", "listManageV1",
-	"gradeNoV1", "discussCreatePermV1",
+	"gradeNoV1", "discussCreatePermV1", "problemImportPermV1",
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
@@ -659,6 +659,21 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		slog.Info("admin 角色已补发发讨论贴权限位（discussion.create）", "component", "boot")
+	}
+	if !flagDone("problemImportPermV1") {
+		// v0.74：批量导入题目权限位自 problem.create 严格拆分（新位 problem.import），
+		// 初始归属 admin（root 走 "*" 恒通；default 刻意不给）——存量 admin 补发该位保持
+		// 建题+导入双能力不变；存量自定义角色只勾 problem.create 的自此不含导入，由 root
+		// 在角色管理按需补勾
+		if _, err := r.roles.UpdateOne(ctx,
+			bson.M{"_id": RoleAdmin},
+			bson.M{"$addToSet": bson.M{"perms": PermProblemImport}}); err != nil {
+			return err
+		}
+		if err := setFlag("problemImportPermV1"); err != nil {
+			return err
+		}
+		slog.Info("admin 角色已补发批量导入题目权限位（problem.import）", "component", "boot")
 	}
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次

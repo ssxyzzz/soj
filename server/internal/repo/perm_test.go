@@ -14,6 +14,7 @@ func TestValidPermSet(t *testing.T) {
 		{"空集合法", []string{}, true},
 		{"nil 合法", nil, true},
 		{"目录内合法", []string{PermProblemCreate, PermClassCreate}, true},
+		{"拆分新位合法", []string{PermProblemImport}, true},
 		{"通配符拒绝", []string{PermAll}, false},
 		{"混合通配符拒绝", []string{PermProblemCreate, PermAll}, false},
 		{"目录外拒绝", []string{"problem.delete"}, false},
@@ -40,6 +41,26 @@ func TestEffectivePerms(t *testing.T) {
 	got := EffectivePerms(&Role{ID: "custom", Perms: []string{PermBackupRun, "legacy.perm"}})
 	if !reflect.DeepEqual(got, []string{PermBackupRun}) {
 		t.Errorf("目录外权限位应被过滤，got %v", got)
+	}
+}
+
+func TestBuiltinAdminHasCreateAndImport(t *testing.T) {
+	// v0.74 严格拆分后 admin 内置角色保持建题+导入双能力（存量库由 problemImportPermV1 迁移补发）
+	for _, r := range builtinRoles {
+		if r.ID != RoleAdmin {
+			continue
+		}
+		has := func(p string) bool {
+			for _, x := range r.Perms {
+				if x == p {
+					return true
+				}
+			}
+			return false
+		}
+		if !has(PermProblemCreate) || !has(PermProblemImport) {
+			t.Fatalf("admin 内置角色应同时含建题与批量导入位: %v", r.Perms)
+		}
 	}
 }
 

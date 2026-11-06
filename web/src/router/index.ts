@@ -194,7 +194,7 @@ const router = createRouter({
           path: 'import',
           name: 'import',
           component: () => import('@/views/ImportView.vue'),
-          meta: { title: '导入题目', requiresPerm: 'problem.create' },
+          meta: { title: '导入题目', requiresPerm: 'problem.import' },
         },
       ],
     },
