@@ -141,11 +141,8 @@ function onDragEnd() {
   dragStops = []
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.modelValue) emit('update:modelValue', false)
-}
-
-useListener(document, 'keydown', onKeydown)
+// 全屏退出只走「退出全屏」按钮（v0.76.1 用户拍板）：不再监听 Esc——编辑器里写代码
+// 时 Esc 误触（如清输入框/关候选）直接把整个全屏工作台拍没，代码上下文全丢
 onBeforeUnmount(() => {
   onDragEnd()
   // 全屏开着时卸载（如切路由）：滚动锁兜底恢复，避免底层页面被永久锁死
@@ -186,7 +183,7 @@ onBeforeUnmount(() => {
             {{ selfTestOpen ? '收起自测' : '自测' }}
           </el-button>
           <el-button type="primary" :disabled="disabled" :loading="submitting" @click="doSubmit">提交</el-button>
-          <el-button @click="emit('update:modelValue', false)">退出全屏（Esc）</el-button>
+          <el-button @click="emit('update:modelValue', false)">退出全屏</el-button>
         </div>
       </header>
       <div v-if="disabled" class="wb-disabled">{{ disabledReason }}</div>
