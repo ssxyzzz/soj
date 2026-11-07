@@ -153,6 +153,9 @@ export const CELL_MAX = 12
 export const NODE_R = 18
 export const TREE_GAP_X = 64
 export const TREE_GAP_Y = 92
+// 文字行距系数（v0.76 多行唯一来源）：SVG tspan 逐行与编辑浮层 textarea line-height
+// 共用此值，改一处两侧同步——所见即所得的根基
+export const TEXT_LINE_H = 1.4
 // 坐标重定基阈值：Skia 光栅化 SVG 几何用 float32，实测视口 2644 时内容 |坐标|≳1e8
 // 即画成全空（1e11 处 float32 最小刻度 8192 > 视口宽），1e6 留两个量级安全余量
 export const REBASE_LIMIT = 1e6
@@ -190,6 +193,42 @@ export function textWidth(content: string, size: number): number {
   if (!measureCtx) return content.length * size
   measureCtx.font = `${size}px ${BOARD_FONT}`
   return measureCtx.measureText(content).width
+}
+
+// 多行文字（v0.76）：按 \n 分行的块宽（最长行）与块高（行数×行距）。
+// SVG tspan 逐行与编辑浮层 textarea 同源排布，二者所见即所得
+export function textBlockWidth(content: string, size: number): number {
+  const lines = content.split('\n')
+  return Math.max(...lines.map((l) => textWidth(l, size)))
+}
+
+export function textBlockHeight(content: string, size: number): number {
+  return content.split('\n').length * size * TEXT_LINE_H
+}
+
+// 多行 <text>：tspan 逐行排布（x 恒锚点，dy 步进行距）。baseline==='first' 时首行
+// 基线在锚点（自由文字，与旧单行坐标完全兼容）；'center' 时整块沿锚点垂直居中
+//（节点/单元格/边权，dominant-baseline:central 逐行继承）。单行退化后与旧渲染逐像素一致
+function appendMultiLineText(
+  parent: SVGElement,
+  content: string,
+  paper: string,
+  attrs: Record<string, string | number>,
+  baseline: 'first' | 'center',
+): void {
+  const lines = content.split('\n')
+  const lh = Number(attrs['font-size']) * TEXT_LINE_H
+  const n = lines.length
+  let dy = baseline === 'first' ? 0 : (-(n - 1) / 2) * lh
+  const t = el('text', attrs)
+  for (const line of lines) {
+    const ts = el('tspan', { x: attrs.x, dy: dy.toFixed(1) })
+    ts.textContent = line
+    t.appendChild(ts)
+    dy = lh
+  }
+  halo(t, paper)
+  parent.appendChild(t)
 }
 
 // 行盒内基线偏移 = half-leading + ascent（编辑浮层 textarea 与 SVG 文字基线对齐用）。
@@ -282,10 +321,14 @@ export function renderShapeInto(
       break
     }
     case 'text': {
-      const t = el('text', { x: s.x, y: s.y, fill: color, 'font-size': s.size, 'font-family': BOARD_FONT })
-      t.textContent = s.content
-      halo(t, pal.paper)
-      g.appendChild(t)
+      // 多行（v0.76）：tspan 逐行，首行基线仍在 s.y（单行坐标不变）
+      appendMultiLineText(
+        g,
+        s.content,
+        pal.paper,
+        { x: s.x, y: s.y, fill: color, 'font-size': s.size, 'font-family': BOARD_FONT },
+        'first',
+      )
       break
     }
     case 'table': {
@@ -298,35 +341,41 @@ export function renderShapeInto(
         g.appendChild(el('line', lineAttrs({ x1: s.x, y1: s.y + r * s.ch, x2: s.x + w, y2: s.y + r * s.ch })))
       s.cells.forEach((v, i) => {
         if (!v) return
-        const t = el('text', {
-          x: s.x + (i % s.cols) * s.cw + s.cw / 2,
-          y: s.y + Math.floor(i / s.cols) * s.ch + s.ch / 2,
-          fill: color,
-          'font-size': 14,
-          'font-family': BOARD_FONT,
-          'text-anchor': 'middle',
-          'dominant-baseline': 'central',
-        })
-        t.textContent = v
-        halo(t, pal.paper)
-        g.appendChild(t)
+        appendMultiLineText(
+          g,
+          v,
+          pal.paper,
+          {
+            x: s.x + (i % s.cols) * s.cw + s.cw / 2,
+            y: s.y + Math.floor(i / s.cols) * s.ch + s.ch / 2,
+            fill: color,
+            'font-size': 14,
+            'font-family': BOARD_FONT,
+            'text-anchor': 'middle',
+            'dominant-baseline': 'central',
+          },
+          'center',
+        )
       })
       break
     }
     case 'node': {
       g.appendChild(el('circle', { cx: s.x, cy: s.y, r: s.r, fill: hexToRgba(color, 0.12), stroke: color, 'stroke-width': sw }))
-      const t = el('text', {
-        x: s.x,
-        y: s.y,
-        fill: color,
-        'font-size': 14,
-        'font-family': BOARD_FONT,
-        'text-anchor': 'middle',
-        'dominant-baseline': 'central',
-      })
-      t.textContent = s.label
-      halo(t, pal.paper)
-      g.appendChild(t)
+      appendMultiLineText(
+        g,
+        s.label,
+        pal.paper,
+        {
+          x: s.x,
+          y: s.y,
+          fill: color,
+          'font-size': 14,
+          'font-family': BOARD_FONT,
+          'text-anchor': 'middle',
+          'dominant-baseline': 'central',
+        },
+        'center',
+      )
       break
     }
     case 'edge': {
@@ -345,19 +394,22 @@ export function renderShapeInto(
       g.appendChild(el('line', lineAttrs({ x1, y1, x2, y2 })))
       if (s.directed) appendArrowHead(g, x2, y2, Math.atan2(y2 - y1, x2 - x1), 11 + s.style.weight * 2, 4 + sw, color)
       if (s.label) {
-        // 权重标在边中点沿法线上移 12，白边保证压线可读
-        const t = el('text', {
-          x: ((x1 + x2) / 2 + uy * 12).toFixed(1),
-          y: ((y1 + y2) / 2 - ux * 12).toFixed(1),
-          fill: pal.ink,
-          'font-size': 12,
-          'font-family': BOARD_FONT,
-          'text-anchor': 'middle',
-          'dominant-baseline': 'central',
-        })
-        t.textContent = s.label
-        halo(t, pal.paper)
-        g.appendChild(t)
+        // 权重标在边中点沿法线上移 12，白边保证压线可读；多行整块居中（v0.76）
+        appendMultiLineText(
+          g,
+          s.label,
+          pal.paper,
+          {
+            x: ((x1 + x2) / 2 + uy * 12).toFixed(1),
+            y: ((y1 + y2) / 2 - ux * 12).toFixed(1),
+            fill: pal.ink,
+            'font-size': 12,
+            'font-family': BOARD_FONT,
+            'text-anchor': 'middle',
+            'dominant-baseline': 'central',
+          },
+          'center',
+        )
       }
       break
     }
@@ -415,10 +467,11 @@ export function bboxOf(s: Shape, nodeById: Map<number, NodeShape>): BBox | null 
     case 'ellipse':
       return { x: s.x, y: s.y, w: s.w, h: s.h }
     case 'text': {
-      const w = textWidth(s.content, s.size)
-      // 包围盒高恒等字号（底=基线）：缩放手柄钉光标 1:1 与字形 1:1 才能同时成立；
-      // 曾用 1.35 倍行高，字形 1:1 时手柄以 1.35× 速度逃离光标（文字拖拽脱手的根因）
-      return { x: s.x, y: s.y - s.size, w: Math.max(w, s.size), h: s.size }
+      // 多行（v0.76）：块宽=最长行，块高=首行字高+多行行距；首行底=基线（y 锚点不变），
+      // 单行时与旧坐标逐像素一致。行高只吃 1 倍字号的教训仍在：包围盒高一旦多算行距，
+      // 缩放手柄钉光标 1:1 与字形 1:1 不能同时成立（曾用 1.35 倍行高致文字拖拽脱手）
+      const w = textBlockWidth(s.content, s.size)
+      return { x: s.x, y: s.y - s.size, w: Math.max(w, s.size), h: s.size + (s.content.split('\n').length - 1) * s.size * TEXT_LINE_H }
     }
     case 'table':
       return { x: s.x, y: s.y, w: s.cols * s.cw, h: s.rows * s.ch }
@@ -755,9 +808,10 @@ export class BoardModel {
     this.pushHistory(undoP, redoP)
   }
 
-  /** 手势基线：给定 shape 集合换回手势前拷贝，其余共享现引用（move/resize 用）。 */
+  /** 手势基线：给定 shape 集合换回手势前拷贝，其余换引用拷贝（move/resize/文字编辑用）。
+   * 空 origs 也必须返回数组拷贝而非 this.doc() 活引用：文字编辑实时同步会在手势期
+   * push 进 this.shapes，别名基线会被污染，收尾重放即出重影（v0.76 实测修复）。 */
   docWithOverrides(origs: Shape[]): DocV1 {
-    if (!origs.length) return this.doc()
     const m = new Map(origs.map((o) => [o.id, o]))
     return { v: 1, idSeq: this.idSeq, shapes: this.shapes.map((s) => m.get(s.id) ?? s) }
   }
@@ -806,10 +860,17 @@ export class BoardModel {
     return this.byId.get(id)
   }
 
-  // 图形增删一律走 mutate（入史）；delete 仅剩手势期即时删除路径使用
-  //（erase 手势收尾 mutateFrom 固化，BoardView deleteCascade 调用）
+  // 图形增删一律走 mutate（入史）；delete/insertLive 仅剩手势期即时增删路径使用
+  //（erase 手势收尾 mutateFrom 固化；insertLive 供文字编辑实时同步首字建形，
+  //BoardView 编辑会话收尾同样 mutateFrom 固化一条历史）
   delete(ids: Set<number>): void {
     this.shapes = this.shapes.filter((s) => !ids.has(s.id))
+    this.invalidateIndexes()
+  }
+
+  /** 手势期即时插入（不入史）：文字编辑实时同步建形用，id 已由调用方取自 idSeq。 */
+  insertLive(s: Shape): void {
+    this.shapes.push(s)
     this.invalidateIndexes()
   }
 

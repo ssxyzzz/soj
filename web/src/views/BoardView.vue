@@ -37,6 +37,7 @@ import {
   CELL_W,
   BOARD_FONT,
   NODE_R,
+  TEXT_LINE_H,
   TEXT_SIZE,
   TREE_GAP_X,
   TREE_GAP_Y,
@@ -48,7 +49,8 @@ import {
   renderShapeInto,
   resizeShape,
   textBaselineInBox,
-  textWidth,
+  textBlockHeight,
+  textBlockWidth,
   translateIn,
 } from '@/components/board/engine'
 import { useListener } from '@/composables/useWindowListener'
@@ -774,19 +776,25 @@ function eraseAt(w: { x: number; y: number }): void {
 
 interface EditState {
   kind: 'text' | 'node' | 'cell' | 'edge'
-  shapeId: number // 0 = 新建文字
+  shapeId: number // 当前实时同步的 shape id（新建文字首字落形后回填；清空删形后归 0）
+  origId: number // 打开编辑时的 shape id（0 = 新建文字）；历史固化按它定位基线
   cellIndex: number
   wx: number
   wy: number
   size: number
   style: ShapeStyle
+  base: ReturnType<BoardModel['docWithOverrides']> // 编辑会话基线（打开瞬间的文档，被编辑 shape 为改前拷贝）
 }
 
 const editing = ref<EditState | null>(null)
 const editorText = ref('')
 
-function openEditor(ed: EditState, value: string): void {
-  editing.value = ed
+function openEditor(ed: Omit<EditState, 'base' | 'origId'>, value: string): void {
+  const shapeId = ed.shapeId
+  // 基线：被编辑 shape 换成改前深拷贝（实时同步直改 model 里的对象，基线不受污染——
+  // 与 move/resize 手势 docWithOverrides 同范式）；新建文字整份文档即基线
+  const base = model.docWithOverrides(shapeId ? [structuredClone(model.get(shapeId)!)] : [])
+  editing.value = { ...ed, shapeId, origId: shapeId, base }
   editorText.value = value
   void nextTick(() => {
     editorEl.value?.focus()
@@ -851,21 +859,23 @@ const editorStyle = computed<Record<string, string>>(() => {
   }
   switch (ed.kind) {
     case 'text': {
-      // 编辑框即真实包围盒（所改所得）：SVG 渲染是单行不换行，编辑框同为单行（wrap=off），
-      // 宽度实时随内容测量（与 textWidth/bboxOf 同源），字号原样（去掉 12px 最小钳制），
-      // 行盒=包围盒高且基线经 textBaselineInBox 对齐——编辑所见与提交渲染一致
+      // 编辑框即真实包围盒（所改所得）：SVG 渲染 tspan 逐行（行距 TEXT_LINE_H 唯一来源），
+      // 编辑框同款行高逐行——宽度=最长行实时测量（与 textBlockWidth/bboxOf 同源），
+      // 高度=行数×行距，首行基线经 textBaselineInBox 对齐——编辑所见与画布渲染一致
       const fs = ed.size * cs
-      const w = Math.max(textWidth(editorText.value, ed.size) * cs, ed.size * cs) + 4
+      const lh = fs * TEXT_LINE_H
+      const w = Math.max(textBlockWidth(editorText.value, ed.size) * cs, ed.size * cs) + 4
+      const h = textBlockHeight(editorText.value, ed.size) * cs
       return {
         fontFamily: BOARD_FONT,
         fontSize: `${fs.toFixed(1)}px`,
         color: palette.value[ed.style.color],
         textAlign: 'left',
         left: `${(sx(ed.wx) - 1).toFixed(1)}px`,
-        top: `${(sy(ed.wy) - textBaselineInBox(ed.size, fs) - 1).toFixed(1)}px`,
+        top: `${(sy(ed.wy) - textBaselineInBox(ed.size, lh) - 1).toFixed(1)}px`,
         width: `${w.toFixed(1)}px`,
-        height: `${fs.toFixed(1)}px`,
-        lineHeight: `${fs.toFixed(1)}px`,
+        height: `${h.toFixed(1)}px`,
+        lineHeight: `${lh.toFixed(1)}px`,
         padding: '0',
         whiteSpace: 'pre',
       }
@@ -886,46 +896,44 @@ const editorStyle = computed<Record<string, string>>(() => {
   }
 })
 
-function commitEdit(): void {
+// 编辑实时同步（v0.76）：输入即写回形状并重渲（手势期直改不入史，与 move/resize 同范式），
+// 会话收尾以基线 mutateFrom 固化为一条历史——撤销一步回编辑前，打字不刷 undo 栈。
+// 值取自事件目标（v-model 监听器与自定义 input 的触发次序不作依赖）
+function onEditorInput(e: Event): void {
   const ed = editing.value
   if (!ed) return
-  editing.value = null
-  const val = editorText.value
+  const val = (e.target as HTMLTextAreaElement).value
+  editorText.value = val
   switch (ed.kind) {
     case 'text': {
+      if (!val.trim()) {
+        // 清空即删（Excalidraw 同语义）；还没落形则维持待建状态
+        if (ed.shapeId) {
+          model.delete(new Set([ed.shapeId]))
+          renderer?.removeIds([ed.shapeId])
+          ed.shapeId = 0
+        }
+        break
+      }
       const s = ed.shapeId ? model.get(ed.shapeId) : undefined
-      if (s && s.type === 'text') {
-        if (!val.trim()) {
-          // 清空即删（Excalidraw 同语义）
-          model.mutate((d) => {
-            spliceShapes(d, new Set([s.id]))
-          })
-          renderer?.removeIds([s.id])
-        } else if (val !== s.content) {
-          model.mutate((d) => {
-            const dt = d.shapes.find((x) => x.id === s.id)
-            if (dt && dt.type === 'text') dt.content = val
-          })
+      if (s?.type === 'text') {
+        if (val !== s.content) {
+          s.content = val
           renderer?.renderIds(model, [s.id])
         }
-      } else if (!ed.shapeId && val.trim()) {
-        const t: TextShape = { id: 0, type: 'text', x: ed.wx, y: ed.wy, content: val, size: ed.size, style: ed.style }
-        model.mutate((d) => {
-          t.id = d.idSeq++
-          d.shapes.push(t)
-        })
+      } else {
+        // 首个非空字符落形：idSeq 单调递增不复用，基线 idSeq 较小由 adopt max 兜底
+        const t: TextShape = { id: model.idSeq++, type: 'text', x: ed.wx, y: ed.wy, content: val, size: ed.size, style: ed.style }
+        model.insertLive(t)
         renderer?.upsert(model, t.id)
+        ed.shapeId = t.id
       }
       break
     }
     case 'node': {
       const s = model.get(ed.shapeId)
-      const v = val.trim()
-      if (s?.type === 'node' && v && v !== s.label) {
-        model.mutate((d) => {
-          const dn = d.shapes.find((x) => x.id === s.id)
-          if (dn && dn.type === 'node') dn.label = v
-        })
+      if (s?.type === 'node' && val !== s.label) {
+        s.label = val // 所见即所得：允许清空（圆圈留空，Delete 手势随时可删）
         renderer?.renderIds(model, [s.id])
       }
       break
@@ -933,40 +941,77 @@ function commitEdit(): void {
     case 'cell': {
       const s = model.get(ed.shapeId)
       if (s?.type === 'table' && ed.cellIndex < s.cells.length && val !== s.cells[ed.cellIndex]) {
-        model.mutate((d) => {
-          const dt = d.shapes.find((x) => x.id === s.id)
-          if (dt && dt.type === 'table') dt.cells[ed.cellIndex] = val
-        })
+        s.cells[ed.cellIndex] = val
         renderer?.renderIds(model, [s.id])
       }
       break
     }
     case 'edge': {
       const s = model.get(ed.shapeId)
-      const v = val.trim()
-      if (s?.type === 'edge' && v !== s.label) {
-        model.mutate((d) => {
-          const de = d.shapes.find((x) => x.id === s.id)
-          if (de && de.type === 'edge') de.label = v
-        })
+      if (s?.type === 'edge' && val !== s.label) {
+        s.label = val // 空权重 = 不显示（渲染本就跳过空 label）
         renderer?.renderIds(model, [s.id])
       }
       break
     }
   }
+}
+
+function commitEdit(): void {
+  const ed = editing.value
+  if (!ed) return
+  editing.value = null
+  const val = editorText.value
+  const { kind, origId, cellIndex } = ed
+  if (kind === 'text' && !origId && !val.trim()) return // 新建文字未落形：无事发生
+  // 会话收尾唯一入史口：基线→终态确定性重放（实时同步期间直改的对象此刻被
+  // adopt 换成基线重放的不可变产物，DOM 由下方按需重渲对齐）
+  model.mutateFrom(ed.base, (d) => {
+    switch (kind) {
+      case 'text': {
+        if (!val.trim()) {
+          // 清空即删（Excalidraw 同语义）：origId 在基线中必有（新建删形不可能——落形即有 origId）
+          d.shapes = d.shapes.filter((x) => x.id !== origId)
+          break
+        }
+        if (origId) {
+          const dt = d.shapes.find((x) => x.id === origId)
+          if (dt && dt.type === 'text') dt.content = val
+        } else {
+          // 新建：live 阶段已分配 id（ed.shapeId），回放同一 id 保证 DOM 复用
+          const t: TextShape = { id: ed.shapeId, type: 'text', x: ed.wx, y: ed.wy, content: val, size: ed.size, style: ed.style }
+          d.shapes.push(t)
+          d.idSeq = Math.max(d.idSeq, ed.shapeId + 1)
+        }
+        break
+      }
+      case 'node': {
+        const dn = d.shapes.find((x) => x.id === origId)
+        if (dn && dn.type === 'node') dn.label = val
+        break
+      }
+      case 'cell': {
+        const dt = d.shapes.find((x) => x.id === origId)
+        if (dt && dt.type === 'table' && cellIndex < dt.cells.length) dt.cells[cellIndex] = val
+        break
+      }
+      case 'edge': {
+        const de = d.shapes.find((x) => x.id === origId)
+        if (de && de.type === 'edge') de.label = val
+        break
+      }
+    }
+  })
+  // adopt 换用了基线重放的新对象，涉及形状原位重渲对齐（无变更时 pushHistory 跳过、文档不变）
+  renderer?.renderAll(model)
   syncHistory()
   autosave()
   refreshOverlay()
 }
 
-function cancelEdit(): void {
-  editing.value = null
-  editorText.value = ''
-}
-
 function autosizeEditor(e: Event): void {
-  if (editing.value?.kind === 'cell' || editing.value?.kind === 'text') return
-  // 单元格定高；文字盒随内容实时测量（editorStyle），均不走高度自适应
+  if (editing.value?.kind === 'cell') return
+  // 单元格定高；文字盒高度随内容实时测量（editorStyle），均不走高度自适应
   const t = e.target as HTMLTextAreaElement
   t.style.height = 'auto'
   t.style.height = `${t.scrollHeight}px`
@@ -1456,7 +1501,7 @@ watch(tool, () => {
         <span class="ctx-hint">在画布上按住拖出表格（跟手显示行列），松手生成；双击单元格填写——DP 表直接开讲</span>
       </div>
       <div v-else-if="tool === 'text'" class="ctx-bar">
-        <span class="ctx-hint">点击画布放置文字；双击已有文字修改；选中后 Delete 删除</span>
+        <span class="ctx-hint">点击画布放置文字；双击已有文字修改；输入实时上画布，Enter 换行，Esc / 点击空白完成；选中后 Delete 删除</span>
       </div>
 
       <div ref="stageEl" class="board-stage">
@@ -1472,18 +1517,20 @@ watch(tool, () => {
           @dblclick="onDblClick"
           @wheel.prevent="onWheel"
         />
+        <!-- v0.76：Enter 放行为换行；Esc/失焦/点击空白 = 结束编辑并保留实时内容；
+             输入实时同步画布（onEditorInput 直改形状，收尾 commitEdit 固化一条历史） -->
         <textarea
           v-if="editing"
           ref="editorEl"
           v-model="editorText"
           class="board-editor"
           :style="editorStyle"
-          :wrap="editing.kind === 'text' ? 'off' : 'soft'"
+          wrap="soft"
           @keydown.stop
-          @keydown.enter.exact.prevent="commitEdit"
-          @keydown.esc.prevent="cancelEdit"
+          @keydown.enter.exact.stop
+          @keydown.esc.prevent="commitEdit"
           @blur="commitEdit"
-          @input="autosizeEditor"
+          @input="onEditorInput($event); autosizeEditor($event)"
         />
         <div v-if="tableBar" class="table-bar" :style="tableBarStyle">
           <button type="button" class="tbar-btn" title="末尾加一行" @click="tableResize('row', 1)">+行</button>
