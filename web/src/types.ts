@@ -271,6 +271,7 @@ export interface Submission {
   id: number
   user_id: number
   username: string
+  nickname?: string // 提交列表下发（v0.75）：「选手」列昵称优先展示，缺省回退 username
   problem_id: number
   problem_title: string
   language: string

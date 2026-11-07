@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -189,9 +190,12 @@ func (h *Handlers) ListSubmissions(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取提交记录失败")
 		return
 	}
+	nicks := h.submissionNicknames(c.Request.Context(), list)
 	items := make([]gin.H, 0, len(list))
 	for _, s := range list {
-		items = append(items, submissionJSON(s, false))
+		item := submissionJSON(s, false)
+		item["nickname"] = nicks[s.UID] // 「选手」列昵称优先展示（v0.75），前端用户名兜底
+		items = append(items, item)
 	}
 	ok(c, gin.H{"list": items, "total": total})
 }
@@ -334,9 +338,12 @@ func (h *Handlers) ListProblemSubmissions(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取提交失败")
 		return
 	}
+	nicks := h.submissionNicknames(c.Request.Context(), list)
 	items := make([]gin.H, 0, len(list))
 	for _, s := range list {
-		items = append(items, submissionJSON(s, true))
+		item := submissionJSON(s, true)
+		item["nickname"] = nicks[s.UID] // 所有代码弹窗提交者列昵称优先（前端已按 nickname ∨ username 兜底）
+		items = append(items, item)
 	}
 	ok(c, gin.H{"list": items, "total": total})
 }
@@ -363,6 +370,24 @@ func (h *Handlers) MyProblemSubmissions(c *gin.Context) {
 		items = append(items, submissionJSON(s, true))
 	}
 	ok(c, gin.H{"list": items, "total": total})
+}
+
+// submissionNicknames 批量取列表提交者昵称（「选手」列昵称优先、用户名兜底）：
+// uid 一次 $in（条数受页大小约束，有界）；查询失败降级空表，列表不因昵称挂掉。
+func (h *Handlers) submissionNicknames(ctx context.Context, list []*repo.Submission) map[int64]string {
+	uids := make([]int64, 0, len(list))
+	for _, s := range list {
+		uids = append(uids, s.UID)
+	}
+	users, err := h.repo.GetUsersByIDs(ctx, uids)
+	if err != nil {
+		return map[int64]string{}
+	}
+	out := make(map[int64]string, len(users))
+	for uid, u := range users {
+		out[uid] = u.Nickname
+	}
+	return out
 }
 
 func submissionJSON(s *repo.Submission, withCode bool) gin.H {

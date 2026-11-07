@@ -288,7 +288,12 @@ function openOthersDetail(s: Submission) {
                 </template>
               </template>
             </el-table-column>
-            <el-table-column prop="username" label="提交者" min-width="110" />
+            <el-table-column label="提交者" min-width="110">
+              <template #default="{ row }">
+                <!-- v0.75 昵称优先展示（与榜单列 safeName / 提交记录页同口径），缺省回退用户名 -->
+                {{ row.nickname || row.username }}
+              </template>
+            </el-table-column>
             <el-table-column prop="language" label="语言" width="100" />
             <el-table-column label="总耗时" width="100">
               <template #default="{ row }">

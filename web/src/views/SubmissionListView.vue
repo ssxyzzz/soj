@@ -268,8 +268,9 @@ onMounted(() => {
         </el-table-column>
         <el-table-column prop="username" label="选手" width="120">
           <template #default="{ row }">
-            <!-- v0.17 入口：点用户名进公开主页（tlink 与提交号/题目列同款链接形制） -->
-            <router-link class="tlink" :to="`/users/${row.user_id}`">{{ row.username }}</router-link>
+            <!-- v0.17 入口：点用户名进公开主页（tlink 与提交号/题目列同款链接形制）；
+                 v0.75 昵称优先展示（与榜单页/选手筛选下拉同口径），缺省回退用户名 -->
+            <router-link class="tlink" :to="`/users/${row.user_id}`">{{ row.nickname || row.username }}</router-link>
           </template>
         </el-table-column>
         <el-table-column prop="language" label="语言" width="90" />
