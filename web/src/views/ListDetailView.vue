@@ -38,10 +38,23 @@ async function load() {
   loading.value = true
   try {
     detail.value = await listApi.detail(Number(route.params.id))
+    // v0.82 恢复展开快照（sessionStorage 会话级）：从题单点题离开后浏览器返回，
+    // 章节/小节保持离开时的展开样子；新会话/新标签页无快照，回落默认静默
+    const saved = sessionStorage.getItem(expandKey())
+    if (saved) expanded.value = JSON.parse(saved) as Record<string, boolean>
   } finally {
     loading.value = false
   }
 }
+
+// v0.82 展开快照按题单 id 隔离
+function expandKey(): string {
+  return `soj-list-expand:${route.params.id}`
+}
+
+// 展开/收起/全部展开/目录直达任一变更即写快照（深度 watch，与渲染同源零漏记）
+watch(expanded, (v) => sessionStorage.setItem(expandKey(), JSON.stringify(v)), { deep: true })
+
 onMounted(() => {
   tab.value = lq.str('tab') === 'rank' ? 'rank' : 'problems'
   rankPage.value = lq.num('rp')
