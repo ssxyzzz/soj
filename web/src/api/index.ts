@@ -145,9 +145,6 @@ export async function patch<T>(url: string, body?: unknown): Promise<T> {
   return resp.data.data
 }
 
-/** 裸 axios 实例（download.ts 的 blob 下载用：自动鉴权头 + 401 登出；响应拦截对 blob 静默） */
-export { client }
-
 async function put<T>(url: string, body?: unknown): Promise<T> {
   const resp = await client.put<ApiResponse<T>>(url, body)
   return resp.data.data
