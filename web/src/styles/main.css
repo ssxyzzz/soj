@@ -537,6 +537,9 @@ body.ambient-on::after {
 .el-dialog {
   --el-dialog-border-radius: var(--soj-radius-dialog);
   box-shadow: 0 24px 80px rgba(11, 31, 69, 0.22);
+  /* 全站弹窗窄窗自适应（v0.76.3）：写死 width 的弹窗（960/1020/…共 20+ 处）在窄窗
+     溢出视口（提交代码弹窗用户实测），一处 max-width 统一钳制，宽窗不受影响 */
+  max-width: calc(100vw - 24px);
 }
 
 .el-message-box {
