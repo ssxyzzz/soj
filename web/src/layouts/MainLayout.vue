@@ -716,20 +716,24 @@ function onCommand(command: string) {
   display: inline-flex;
   align-items: center;
   gap: var(--soj-sp-10);
-  /* v0.78 右簇轻量化：描边+阴影退役（描边三连挤是「太挤」根因），hover 浅蓝底对齐
-     左侧导航；右内边距 16 对齐 nav 横向留白，昵称与等级徽章呼吸开 */
+  /* v0.78.1 用户拍板回退：chip 恢复描边重元素——内含彩色头像+发光等级徽章，本就是
+     顶栏身份锚点，描边框住彩块更稳（右簇去描边轻量化只落在管理后台/铃铛两个纯图标
+     件上）；v0.78 的呼吸感改进保留（gap 10 / 右内边距 16 / 昵称 15px / 簇间距 10） */
   margin-left: var(--soj-sp-4);
   padding: var(--soj-sp-4) var(--soj-sp-16) var(--soj-sp-4) var(--soj-sp-4);
   border-radius: 999px;
-  background: transparent;
+  border: 1px solid var(--soj-line);
+  background: var(--el-fill-color-blank);
   cursor: pointer;
-  transition: background-color 0.18s;
+  box-shadow: 0 1px 2px var(--soj-line);
+  transition: box-shadow 0.18s, border-color 0.18s;
   outline: none;
   white-space: nowrap;
 }
 
 .user-chip:hover {
-  background: var(--soj-blue-soft);
+  border-color: var(--soj-blue-line);
+  box-shadow: 0 2px 8px var(--soj-line-2);
 }
 
 .avatar {
