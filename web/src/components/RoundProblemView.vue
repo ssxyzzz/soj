@@ -283,28 +283,30 @@ watch(
          v0.80 用户拍板：统一头卡收进主列（不再 standalone 横跨全宽），副列留给功能卡 -->
     <PageShell v-if="round && problem" :hide-aside="stmtFocus">
       <el-card v-if="!stmtFocus" class="standalone-card round-head" :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }">
-          <!-- v0.77 统一头（拍板②全套统一）：面包屑（考试两段/比赛一段，前段可点直达）
-               + 切题序号一体；「返回xx」按钮与旧「赛事名 / T{序号}」面包屑行退役 -->
-          <PageCrumbs :items="crumbItems" />
-          <div class="sa-head">
-            <div class="sa-time">
-              <span class="sub-status" :class="running ? 'blue' : 'gray'"><span class="dot" :class="running ? 'blue' : 'gray'"></span>{{ statusText }}</span>
+          <!-- v0.77 统一头 + v0.81 用户拍板重排：面包屑行右端 = 时间段+状态（先时间后
+               状态，不单起一行）；第二行 = OI 赛制提示 + 切题序号 -->
+          <div class="rh-top">
+            <PageCrumbs :items="crumbItems" />
+            <div class="rh-meta">
               <span class="rtime">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
-              <span v-if="!revealed" class="rtime">OI 赛制：赛时只记录提交次数，不出分</span>
-              <span class="sw-btns">
-                <span class="sw-lab">切题</span>
-                <button
-                  v-for="(p, i) in round.problems"
-                  :key="p.id"
-                  type="button"
-                  class="sw-btn"
-                  :class="{ on: p.id === pid }"
-                  @click="goProblem(p.id)"
-                >
-                  {{ i + 1 }}
-                </button>
-              </span>
+              <span class="sub-status" :class="running ? 'blue' : 'gray'"><span class="dot" :class="running ? 'blue' : 'gray'"></span>{{ statusText }}</span>
             </div>
+          </div>
+          <div class="rh-sub">
+            <span v-if="!revealed" class="rtime">OI 赛制：赛时只记录提交次数，不出分</span>
+            <span class="sw-btns">
+              <span class="sw-lab">切题</span>
+              <button
+                v-for="(p, i) in round.problems"
+                :key="p.id"
+                type="button"
+                class="sw-btn"
+                :class="{ on: p.id === pid }"
+                @click="goProblem(p.id)"
+              >
+                {{ i + 1 }}
+              </button>
+            </span>
           </div>
       </el-card>
 
@@ -473,9 +475,29 @@ watch(
   margin-bottom: var(--soj-sp-16);
 }
 
-/* v0.77 统一头：面包屑行与切题行间距（Crumbs 自带样式，旧 .crumbs/.sa-title 退役） */
-.round-head :deep(.soj-crumbs) {
-  margin-bottom: var(--soj-sp-10);
+/* v0.81 用户拍板重排：首行 = 面包屑（左）+ 时间段+状态（右，先时间后状态不单起一行） */
+.rh-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--soj-sp-12);
+  flex-wrap: wrap;
+}
+
+.rh-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-12);
+  flex-wrap: wrap;
+}
+
+/* v0.81 第二行：OI 赛制提示 + 切题序号 */
+.rh-sub {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-12);
+  flex-wrap: wrap;
+  margin-top: var(--soj-sp-10);
 }
 
 /* v3 .rtime：--soj-fs-12 弱化说明 */
@@ -484,7 +506,7 @@ watch(
   color: var(--soj-ink-3);
 }
 
-/* v3 .sw-btns：34x32 圆角 10 切题方块钮（并入状态行右侧，v0.77 统一头单行化） */
+/* v3 .sw-btns：34x32 圆角 10 切题方块钮 */
 .sw-btns {
   display: inline-flex;
   gap: var(--soj-sp-6);
@@ -529,13 +551,6 @@ watch(
   color: var(--soj-ink-3);
   line-height: 1.7;
   margin: var(--soj-sp-10) 0 0;
-}
-
-.sa-time {
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-12);
-  flex-wrap: wrap;
 }
 
 .sa-switch {
