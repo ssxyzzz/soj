@@ -458,7 +458,7 @@ onUnmounted(stopPolling)
           class="assign-head"
           :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }"
         >
-          <PageCrumbs compact :items="assignCrumbItems" />
+          <PageCrumbs :items="assignCrumbItems" />
           <div class="sw-row">
             <span class="sw-lab">切题</span>
             <button

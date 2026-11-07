@@ -41,7 +41,7 @@ const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
 const name = computed(() => (props.kind === 'exam' ? '考试' : '比赛'))
 const roundBase = computed(() => `/${props.kind}s`)
 // 统一头面包屑段（v0.77）：考试两段（班级可点回班级）/比赛一段（不挂班级）；末段=
-// 当前题目名（compact 档）；「返回xx」按钮随旧头退役（拍板②）
+// 当前题目名；「返回xx」按钮随旧头退役（拍板②）
 const crumbItems = computed(() => {
   const items: { label: string; to?: string }[] = []
   if (props.kind === 'exam' && round.value?.class_id && round.value.class_name) {
@@ -279,13 +279,13 @@ watch(
 
 <template>
   <div v-loading="loading">
-    <!-- v0.79 题面专注模式：stmtFocus 时独立头与右栏让位，题面铺满 -->
+    <!-- v0.79 题面专注模式：stmtFocus 时独立头与右栏让位，题面铺满。
+         v0.80 用户拍板：统一头卡收进主列（不再 standalone 横跨全宽），副列留给功能卡 -->
     <PageShell v-if="round && problem" :hide-aside="stmtFocus">
-      <template v-if="!stmtFocus" #standalone>
-        <el-card class="standalone-card round-head" :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }">
+      <el-card v-if="!stmtFocus" class="standalone-card round-head" :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }">
           <!-- v0.77 统一头（拍板②全套统一）：面包屑（考试两段/比赛一段，前段可点直达）
                + 切题序号一体；「返回xx」按钮与旧「赛事名 / T{序号}」面包屑行退役 -->
-          <PageCrumbs compact :items="crumbItems" />
+          <PageCrumbs :items="crumbItems" />
           <div class="sa-head">
             <div class="sa-time">
               <span class="sub-status" :class="running ? 'blue' : 'gray'"><span class="dot" :class="running ? 'blue' : 'gray'"></span>{{ statusText }}</span>
@@ -306,8 +306,7 @@ watch(
               </span>
             </div>
           </div>
-        </el-card>
-      </template>
+      </el-card>
 
       <ProblemStatement :problem="problem" :file-io="round.file_io" />
 
@@ -469,8 +468,9 @@ watch(
 </template>
 
 <style scoped>
-.standalone-card {
-  margin-bottom: 0;
+/* v0.80 统一头收进主列：下距对齐原 standalone 行距（16px），与题面衔接 */
+.round-head {
+  margin-bottom: var(--soj-sp-16);
 }
 
 /* v0.77 统一头：面包屑行与切题行间距（Crumbs 自带样式，旧 .crumbs/.sa-title 退役） */
