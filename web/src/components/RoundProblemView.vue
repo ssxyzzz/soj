@@ -9,6 +9,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { contestApi, examApi, problemApi, submissionApi, type RoundKind } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import { usePolling } from '@/composables/usePolling'
+import { useStatementFocus } from '@/composables/useStatementFocus'
 import CodePane from '@/components/CodePane.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageCrumbs from '@/components/PageCrumbs.vue'
@@ -32,6 +33,8 @@ const props = defineProps<{ kind: RoundKind }>()
 
 const route = useRoute()
 const router = useRouter()
+// 题面专注模式（v0.79）：真值时独立头/右栏让位
+const { focused: stmtFocus } = useStatementFocus()
 const userStore = useUserStore()
 
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
@@ -276,8 +279,9 @@ watch(
 
 <template>
   <div v-loading="loading">
-    <PageShell v-if="round && problem">
-      <template #standalone>
+    <!-- v0.79 题面专注模式：stmtFocus 时独立头与右栏让位，题面铺满 -->
+    <PageShell v-if="round && problem" :hide-aside="stmtFocus">
+      <template v-if="!stmtFocus" #standalone>
         <el-card class="standalone-card round-head" :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }">
           <!-- v0.77 统一头（拍板②全套统一）：面包屑（考试两段/比赛一段，前段可点直达）
                + 切题序号一体；「返回xx」按钮与旧「赛事名 / T{序号}」面包屑行退役 -->

@@ -4,12 +4,17 @@ import { computed } from 'vue'
 // 结构 = kicker PROBLEM + 右上 96px 描边空心题号 + 32/800 标题（pid 胶囊 + 标题 +
 // 题型 + 难度）+ prob-meta 分格条（时限/内存/通过数/标签）+ 提示区 + 题面正文。
 // 详情页主列、在线编程左栏共用；标题行右侧扩展位走 #extra 插槽（详情页放隐藏开关）。
+import { Maximize2, Minimize2 } from 'lucide-vue-next'
 import MdView from '@/components/MdView.vue'
 import TierBadge from '@/components/TierBadge.vue'
+import { useStatementFocus } from '@/composables/useStatementFocus'
 import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { fmtMem, fmtSec } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
+
+// 题面专注模式（v0.79）：限制条右端展开/收起钮，点击铺满浏览器视口（隐导航栏+右栏卡片）
+const { focused: stmtFocus, toggle: toggleStmtFocus } = useStatementFocus()
 
 const props = defineProps<{
   problem: ProblemDetail
@@ -113,6 +118,15 @@ const bigNo = computed(() => String(props.problem.id))
           <span class="tag-brief">标签</span>
         </el-tooltip>
       </div>
+          <button
+        type="button"
+        class="focus-btn"
+        :title="stmtFocus ? '退出专注模式 (Esc)' : '专注模式：铺满显示题面'"
+        :aria-label="stmtFocus ? '退出专注模式' : '进入专注模式'"
+        @click="toggleStmtFocus"
+      >
+        <component :is="stmtFocus ? Minimize2 : Maximize2" :size="16" />
+      </button>
     </div>
 
     <el-alert
@@ -149,6 +163,29 @@ const bigNo = computed(() => String(props.problem.id))
 </template>
 
 <style scoped>
+/* v0.79 专注模式钮：限制条最右端（用户圈点位）——margin-left:auto 顶到条尾，
+   左分隔线与 cell+cell 同族；hover 浅蓝底提示可点 */
+.focus-btn {
+  margin-left: auto;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  flex: 0 0 auto;
+  border: none;
+  border-left: 1px solid var(--soj-line);
+  background: transparent;
+  color: var(--soj-ink-2);
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.focus-btn:hover {
+  color: var(--soj-blue);
+  background: var(--soj-blue-soft);
+}
+
 /* v3 .prob-head：kicker + 大标题 + 右上空心题号（绝对定位锚点） */
 .prob-head {
   position: relative;

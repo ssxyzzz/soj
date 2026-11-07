@@ -3,6 +3,9 @@
 // 装不下最小列宽和，与 .page 同步），主列自适应 + 右列 320px 固定（全站统一，无宽副列特例）；
 // 可选「独立行」插槽位于两列之上、顶栏之下（比赛/考试做题页的赛程与切题行）。
 // 窄屏（<992px）右列折到主内容下方，信息不丢。未迁移的旧页面继续用各自的 .page 布局。
+// hideAside（v0.79 题面专注模式）：隐藏右列且主列撑满（题面铺满时传 true）。
+
+defineProps<{ hideAside?: boolean }>()
 </script>
 
 <template>
@@ -14,7 +17,7 @@
       <div class="main-col">
         <slot />
       </div>
-      <aside v-if="$slots.aside" class="side-col">
+      <aside v-if="$slots.aside && !hideAside" class="side-col">
         <slot name="aside" />
       </aside>
     </div>

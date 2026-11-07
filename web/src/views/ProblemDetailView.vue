@@ -9,6 +9,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { assignmentApi, problemApi, submissionApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import { usePolling } from '@/composables/usePolling'
+import { useStatementFocus } from '@/composables/useStatementFocus'
 import CodeEditor from '@/components/CodeEditor.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageCrumbs from '@/components/PageCrumbs.vue'
@@ -38,6 +39,8 @@ import type { AssignmentDetail, ObjectiveAnswer as ObjAnswer, ProblemDetail, Sub
 const route = useRoute()
 const router = useRouter()
 const site = useSiteStore()
+// 题面专注模式（v0.79）：真值时右栏/独立头/面包屑让位，题面铺满
+const { focused: stmtFocus } = useStatementFocus()
 const userStore = useUserStore()
 const feast = useGameFeastStore()
 
@@ -447,11 +450,11 @@ onUnmounted(stopPolling)
 <template>
   <div v-loading="loading">
     <template v-if="problem">
-      <PageShell>
+      <PageShell :hide-aside="stmtFocus">
         <!-- v0.77 作业做题统一头（独立行）：面包屑（班级/作业可点）+ 切题序号，与比赛/
              考试做题页同形态；拉不到作业上下文（直链且非班级成员 403）不渲染，降级普通题页 -->
         <el-card
-          v-if="assignmentCtx && assignmentCtx.id"
+          v-if="assignmentCtx && assignmentCtx.id && !stmtFocus"
           class="assign-head"
           :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }"
         >
@@ -470,7 +473,7 @@ onUnmounted(stopPolling)
             </button>
           </div>
         </el-card>
-        <div v-else class="crumbs">
+        <div v-else-if="!stmtFocus" class="crumbs">
           <router-link to="/problems">题库</router-link>
           ／ <span class="mono">P{{ problem.id }}</span>
         </div>
