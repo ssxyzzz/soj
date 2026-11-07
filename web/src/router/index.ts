@@ -20,6 +20,9 @@ const router = createRouter({
   history: createWebHistory(),
   // URL 即状态（v0.39）：后退/前进恢复上次滚动位置，新导航回顶
   scrollBehavior(_to, _from, savedPosition) {
+    // v0.82.1 题单详情页滚动由页面级快照接管（展开态恢复后再精确定位；vue-router 的
+    // savedPosition 是浏览器陈旧位置，会异步覆盖页面 nextTick 的恢复——ego 实锤 2000 被冲成 31268）
+    if (_to.name === 'list-detail') return false
     return savedPosition ?? { top: 0 }
   },
   routes: [

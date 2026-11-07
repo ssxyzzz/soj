@@ -7,8 +7,9 @@
 // 折叠面（v0.70 重设计，拍板预览 = private_doc/preview/list-collapse-redesign-preview.html）：
 // 默认静默（章头 surface-2 / 节条白行+发丝线+缩进），展开态才上蓝信号（蓝浅底+左蓝条+
 // 三角变色+胶囊加深）；目录跳转目标行闪蓝。提案前旧案「蓝青渐变底+常驻蓝竖条」退役。
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave } from 'vue-router'
 
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -42,6 +43,16 @@ async function load() {
     // 章节/小节保持离开时的展开样子；新会话/新标签页无快照，回落默认静默
     const saved = sessionStorage.getItem(expandKey())
     if (saved) expanded.value = JSON.parse(saved) as Record<string, boolean>
+    // v0.82.1 恢复滚动位置（与展开快照同款会话级）：nextTick 后内容仍在分帧长高
+    //（el-table 行渲染+展开树插入），双 rAF 等布局稳定再滚；Chrome scroll anchoring
+    // 会在内容长高时按锚点调整滚动（ego 实锤快照 2000 被冲成 31268），chapters 子树禁锚
+    const savedY = Number(sessionStorage.getItem(scrollKey()) || 0)
+    await nextTick()
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (savedY > 0) window.scrollTo(0, savedY)
+      }),
+    )
   } finally {
     loading.value = false
   }
@@ -52,14 +63,29 @@ function expandKey(): string {
   return `soj-list-expand:${route.params.id}`
 }
 
+// v0.82.1 滚动位置快照（同会话级同题单隔离）：点题离开时记录视口位置，返回恢复
+function scrollKey(): string {
+  return `soj-list-scroll:${route.params.id}`
+}
+
+onBeforeRouteLeave(() => {
+  sessionStorage.setItem(scrollKey(), String(window.scrollY))
+})
+
 // 展开/收起/全部展开/目录直达任一变更即写快照（深度 watch，与渲染同源零漏记）
 watch(expanded, (v) => sessionStorage.setItem(expandKey(), JSON.stringify(v)), { deep: true })
 
 onMounted(() => {
   tab.value = lq.str('tab') === 'rank' ? 'rank' : 'problems'
   rankPage.value = lq.num('rp')
+  // v0.82.1 接管滚动恢复：浏览器原生 history.scrollRestoration=auto 在 SPA 重挂载场景
+  // 会拿陈旧历史位置异步覆盖（ego 实锤快照 2000 被冲成 31268），本页滚动全由快照管
+  history.scrollRestoration = 'manual'
   load()
   if (tab.value === 'rank') loadRank()
+})
+onBeforeUnmount(() => {
+  history.scrollRestoration = 'auto' // 离开本页还原浏览器默认行为，不影响其他页面
 })
 watch(() => route.params.id, load)
 
@@ -573,6 +599,9 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
   display: flex;
   flex-direction: column;
   gap: var(--soj-sp-10);
+  /* v0.82.1 子树禁滚动锚定：展开/表格分帧渲染长高时 Chrome 锚点调整会把快照恢复的
+     滚动位置冲掉（实测 2000→31268），本页滚动只归滚动快照管 */
+  overflow-anchor: none;
 }
 
 .chapter {
