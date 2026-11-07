@@ -6,11 +6,12 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { problemApi, submissionApi } from '@/api'
+import { assignmentApi, problemApi, submissionApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import { usePolling } from '@/composables/usePolling'
 import CodeEditor from '@/components/CodeEditor.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
+import PageCrumbs from '@/components/PageCrumbs.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import AiTutorPanel from '@/components/AiTutorPanel.vue'
@@ -32,7 +33,7 @@ import { useGameFeastStore } from '@/stores/gameFeast'
 import { pickTaunt } from '@/utils/gameText'
 import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
 import { fmtRel, fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
-import type { ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/types'
+import type { AssignmentDetail, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -64,6 +65,37 @@ function roundProblemRoute(p: { locked?: boolean; lock_kind?: string; contest_id
     : `/contests/${p.contest_id}/problems/${pid}`
 }
 
+// ---------- 作业做题上下文（v0.77 统一头） ----------
+// 路由 assignments/:aid/problems/:id（拍板①新专属路由，与比赛/考试做题页对齐）：
+// 拉到作业详情即渲染「面包屑 + 切题」统一头；直链且非班级成员 403 时置空降级普通题页
+// （立项边界：不挡做题）。普通题库入口无 aid，全程不走此分支。
+const assignmentCtx = ref<AssignmentDetail | null>(null)
+const inAssignment = computed(() => route.name === 'assignment-problem')
+
+const assignCrumbItems = computed(() => {
+  const a = assignmentCtx.value
+  if (!a) return []
+  const items: { label: string; to?: string }[] = [{ label: a.class_name || '班级', to: `/classes/${a.class_id}` }]
+  items.push({ label: a.title, to: `/assignments/${a.id}` })
+  if (problem.value) items.push({ label: problem.value.title })
+  return items
+})
+
+async function loadAssignmentCtx() {
+  assignmentCtx.value = null
+  if (!inAssignment.value) return
+  try {
+    assignmentCtx.value = await assignmentApi.detail(Number(route.params.aid))
+  } catch {
+    assignmentCtx.value = null // 403/不存在：降级普通题页，不挡做题
+  }
+}
+
+function goAssignProblem(pid: number) {
+  if (pid === Number(route.params.id)) return
+  router.push(`/assignments/${route.params.aid}/problems/${pid}`)
+}
+
 const canSetHidden = computed(() => !!problem.value?.can_set_hidden)
 const canSetDuplicate = computed(() => !!problem.value?.can_set_duplicate)
 const submitDisabled = computed(
@@ -75,6 +107,7 @@ const submitDisabled = computed(
 
 async function load() {
   loading.value = true
+  loadAssignmentCtx() // 并行拉作业上下文（自带 try/catch，失败降级不阻塞做题）
   try {
     problem.value = await problemApi.detail(Number(route.params.id))
     const redirect = roundProblemRoute(problem.value)
@@ -90,6 +123,15 @@ async function load() {
     loading.value = false
   }
 }
+
+// 切题导航同组件实例复用（/assignments/:aid/problems/:id 仅 :id 段变化）：三段任一
+// 变化都要重载（曾只比 route.name——切题前后路由名相同导致不重载，URL 变题目不换）
+watch(
+  () => [route.name, route.params.id, route.params.aid] as const,
+  ([nName, nId, nAid], [oName, oId, oAid]) => {
+    if (nName !== oName || nId !== oId || nAid !== oAid) load()
+  },
+)
 
 // 批量重测（v0.7.1）：本题全部已出结果的提交低优先级重排队，不挤占学生新提交
 const rejudgeAllRunning = ref(false)
@@ -406,8 +448,29 @@ onUnmounted(stopPolling)
   <div v-loading="loading">
     <template v-if="problem">
       <PageShell>
-        <!-- v3 面包屑 -->
-        <div class="crumbs">
+        <!-- v0.77 作业做题统一头（独立行）：面包屑（班级/作业可点）+ 切题序号，与比赛/
+             考试做题页同形态；拉不到作业上下文（直链且非班级成员 403）不渲染，降级普通题页 -->
+        <el-card
+          v-if="assignmentCtx && assignmentCtx.id"
+          class="assign-head"
+          :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }"
+        >
+          <PageCrumbs compact :items="assignCrumbItems" />
+          <div class="sw-row">
+            <span class="sw-lab">切题</span>
+            <button
+              v-for="(p, i) in assignmentCtx.problems"
+              :key="p.id"
+              type="button"
+              class="sw-btn"
+              :class="{ on: p.id === Number(route.params.id) }"
+              @click="goAssignProblem(p.id)"
+            >
+              {{ i + 1 }}
+            </button>
+          </div>
+        </el-card>
+        <div v-else class="crumbs">
           <router-link to="/problems">题库</router-link>
           ／ <span class="mono">P{{ problem.id }}</span>
         </div>
@@ -608,6 +671,49 @@ onUnmounted(stopPolling)
 </template>
 
 <style scoped>
+/* v0.77 作业做题统一头（与比赛/考试做题页同形态；sw-btn 样式照搬 RoundProblemView） */
+.assign-head :deep(.soj-crumbs) {
+  margin-bottom: var(--soj-sp-10);
+}
+
+.sw-row {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-6);
+  flex-wrap: wrap;
+}
+
+.sw-lab {
+  font-size: var(--soj-fs-12);
+  color: var(--soj-ink-3);
+  margin-right: var(--soj-sp-2);
+}
+
+.sw-btn {
+  width: 34px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--soj-line-2);
+  background: var(--el-fill-color-blank);
+  font: inherit;
+  font-weight: var(--soj-fw-bold);
+  font-size: var(--soj-fs-13);
+  color: var(--soj-ink-2);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.sw-btn:hover {
+  border-color: var(--soj-blue-line);
+  color: var(--soj-blue);
+}
+
+.sw-btn.on {
+  background: var(--soj-blue);
+  border-color: var(--soj-blue);
+  color: var(--soj-white);
+}
+
 /* v3 .crumbs */
 .crumbs {
   font-size: var(--soj-fs-13);

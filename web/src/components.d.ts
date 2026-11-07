@@ -95,6 +95,7 @@ declare module 'vue' {
     ObjectiveEditor: typeof import('./components/ObjectiveEditor.vue')['default']
     ObjectivePanel: typeof import('./components/ObjectivePanel.vue')['default']
     ObjectiveSolutionCard: typeof import('./components/ObjectiveSolutionCard.vue')['default']
+    PageCrumbs: typeof import('./components/PageCrumbs.vue')['default']
     PageShell: typeof import('./components/PageShell.vue')['default']
     ProblemForm: typeof import('./components/ProblemForm.vue')['default']
     ProblemInfoCard: typeof import('./components/problem/ProblemInfoCard.vue')['default']

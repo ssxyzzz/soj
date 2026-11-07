@@ -7,6 +7,7 @@ import { classApi, examApi } from '@/api'
 import { createAssignment as apiCreateAssignment, dissolveClass, transferClass, updateClass } from '@/api/classManage'
 import MdEditor from '@/components/MdEditor.vue'
 import MdView from '@/components/MdView.vue'
+import PageCrumbs from '@/components/PageCrumbs.vue'
 import LazySelectCell from '@/components/LazySelectCell.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
@@ -536,7 +537,8 @@ onMounted(load)
     <PageShell v-if="cl">
         <el-card>
           <div class="title-row">
-            <h3>{{ cl.name }}</h3>
+            <!-- v0.77 统一面包屑：班级页单段即名称（末段样式承担原 h3 视觉，无链接） -->
+            <PageCrumbs :items="[{ label: cl.name }]" />
             <el-tag v-if="cl.private" size="small" type="warning">私密班</el-tag>
             <el-tag v-if="cl.joined" size="small" type="success">已加入</el-tag>
           </div>

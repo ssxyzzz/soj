@@ -499,6 +499,7 @@ export interface AssignmentProblem {
 export interface AssignmentDetail {
   id: number
   class_id: number
+  class_name?: string // 面包屑首段（v0.77）
   title: string
   intro: string // 作业说明（Markdown，v0.8 起单一事实源）
   intro_html?: string // 渲染缓存（v0.30 写入时渲染；空 = 回退 md 客户端渲染）
@@ -1034,7 +1035,8 @@ export interface ContestDetail {
   hide_during: boolean // v0.7：赛期内对参赛者隐藏结果
   hide_meta?: boolean // 2026-10-27：发布前对参赛者隐藏难度与知识点（比赛默认开）
   result_hidden: boolean // 当前视角是否隐藏结果
-  class_id?: number // 考试归属班级（v0.5.4 起两种详情同构返回）
+  class_id?: number // 考试归属班级（v0.5.4 起两种详情同构返回；比赛恒 0）
+  class_name?: string // 考试班级名（v0.77 面包屑首段；比赛无此段）
   problems?: ContestProblem[]
   /** 玉奖池（v0.33-①，双池默认 0 不发；结算随成绩发布） */
   jade_pool?: number

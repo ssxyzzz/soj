@@ -8,6 +8,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { assignmentApi } from '@/api'
 import { downloadFile } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
+import PageCrumbs from '@/components/PageCrumbs.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import CopyFromListButton from '@/components/CopyFromListButton.vue'
 import TierBadge from '@/components/TierBadge.vue'
@@ -154,7 +155,8 @@ function problemRoute(row: { id: number; contest_id?: number; exam_id?: number }
   } else if (row.contest_id) {
     router.push(`/contests/${row.contest_id}/problems/${row.id}`)
   } else {
-    router.push(`/problems/${row.id}`)
+    // v0.77 作业做题专属路由：面包屑 + 切题（与比赛/考试做题页形态统一）
+    router.push(`/assignments/${route.params.id}/problems/${row.id}`)
   }
 }
 
@@ -250,10 +252,9 @@ onMounted(() => {
       <!-- 名称卡：名称 20px + 说明 -->
       <el-card>
         <div class="assignment-body">
-          <div class="title-row">
-            <span class="big-title">{{ assignment.title }}</span>
-            <el-link class="back" type="primary" @click="router.push(`/classes/${assignment.class_id}`)">返回班级</el-link>
-          </div>
+          <!-- v0.77 统一面包屑：班级可点回班级，末段=作业名（承担原 big-title 视觉）；
+               「返回班级」链接退役（拍板③面包屑替换名称行，导航由面包屑承担） -->
+          <PageCrumbs :items="[{ label: assignment.class_name || '班级', to: `/classes/${assignment.class_id}` }, { label: assignment.title }]" />
           <div v-if="assignment.intro" class="intro">
             <MdView :html="assignment.intro_html ?? ''" />
           </div>
@@ -406,28 +407,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-8);
-  flex-wrap: wrap;
-}
+/* v0.77：title-row/big-title/.back 随面包屑替换名称行退役（Crumbs 组件自带样式） */
 
 /* 随主列撑满卡片，与卡片左右缘对齐 */
 .assignment-body {
   margin: 0;
-}
-
-/* v3 实体大标题：藏蓝 26/800（作业名） */
-.big-title {
-  font-size: var(--soj-fs-entity-detail);
-  font-weight: var(--soj-fw-heavy);
-  letter-spacing: -0.3px;
-  color: var(--soj-navy);
-}
-
-.back {
-  margin-left: auto;
 }
 
 .intro {

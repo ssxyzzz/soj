@@ -11,6 +11,7 @@ import { contestApi, examApi, type RoundKind } from '@/api'
 import { downloadFile } from '@/api/download'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import EditRoundDialog from '@/components/EditRoundDialog.vue'
+import PageCrumbs from '@/components/PageCrumbs.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
@@ -42,6 +43,15 @@ const tagStore = useTagTreeStore()
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
 const name = computed(() => (props.kind === 'exam' ? '考试' : '比赛'))
 const roundBase = computed(() => `/${props.kind}s`)
+// 面包屑段（v0.77）：考试挂班级两段（班级可点回班级），比赛不挂班级单段
+const crumbItems = computed(() => {
+  const items: { label: string; to?: string }[] = []
+  if (props.kind === 'exam' && round.value?.class_id && round.value.class_name) {
+    items.push({ label: round.value.class_name, to: `/classes/${round.value.class_id}` })
+  }
+  items.push({ label: round.value?.title ?? '' })
+  return items
+})
 
 const round = ref<ContestDetail | null>(null)
 const loading = ref(true)
@@ -284,7 +294,9 @@ onMounted(() => {
       <el-card :body-style="{ padding: 'var(--soj-sp-20) var(--soj-sp-24)' }">
         <div class="round-body">
           <div class="title-row">
-            <span class="big-title">{{ round.title }}</span>
+            <!-- v0.77 统一面包屑：考试两段（班级可点回班级）/ 比赛单段（不挂班级，v0.5.4
+                 起班级赛事拆分为 Exam）；末段=赛事名承担原 big-title 视觉 -->
+            <PageCrumbs :items="crumbItems" />
             <span class="sub-status" :class="round.status === 'running' ? 'blue' : round.status === 'scheduled' ? 'yellow' : 'gray'">
               <span class="dot" :class="round.status === 'running' ? 'blue' : round.status === 'scheduled' ? 'yellow' : 'gray'"></span>{{ statusLabel }}
             </span>
@@ -463,13 +475,7 @@ onMounted(() => {
   margin: 0;
 }
 
-/* v3-full 实体大标题：藏蓝 28/850（本地 800，比赛/考试名） */
-.big-title {
-  font-size: var(--soj-fs-entity-detail);
-  font-weight: var(--soj-fw-heavy);
-  letter-spacing: -0.5px;
-  color: var(--soj-navy);
-}
+/* v0.77：.big-title 随面包屑替换名称行退役（赛事名视觉由 Crumbs 末段承担） */
 
 .intro {
   margin: var(--soj-sp-12) 0 var(--soj-sp-4);

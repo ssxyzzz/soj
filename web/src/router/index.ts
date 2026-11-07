@@ -126,6 +126,15 @@ const router = createRouter({
           meta: { title: '作业' },
         },
         {
+          // 作业做题专属路由（v0.77）：面包屑 + 切题统一头，与比赛/考试做题页形态对齐；
+          // 复用 ProblemDetailView（题段参数沿用 :id，作业段 :aid 区分）。
+          // 可见性后端把门（作业详情非班级成员 403 → 前端降级普通题页）
+          path: 'assignments/:aid/problems/:id',
+          name: 'assignment-problem',
+          component: () => import('@/views/ProblemDetailView.vue'),
+          meta: { title: '作业题目' },
+        },
+        {
           path: 'exams/:id',
           name: 'exam-detail',
           component: () => import('@/views/ExamDetailView.vue'),

@@ -208,12 +208,22 @@ func (h *Handlers) roundDetailJSON(c *gin.Context, s roundScope, ct *repo.Contes
 	now := time.Now()
 	status := ct.Status(now)
 
+	// 面包屑（v0.77）：考试挂班级，详情/做题页头部「班级 >>> 考试」首段；比赛不挂班
+	//（ClassID 恒 0，v0.5.4 起班级赛事拆分为 Exam），无此段
+	className := ""
+	if s.Kind == repo.KindExam && ct.ClassID > 0 {
+		if cl, err := h.repo.GetClass(ctx, ct.ClassID); err == nil {
+			className = cl.Name
+		}
+	}
+
 	resp := gin.H{
 		"id":            ct.ID,
 		"title":         ct.Title,
 		"intro":         ct.Intro, // 赛事说明（Markdown，v0.8 起单一事实源）
 		"intro_html":    ct.IntroHtml, // 渲染缓存（v0.30）
 		"class_id":      ct.ClassID,
+		"class_name":    className,
 		"status":        status,
 		"start":         ct.Start,
 		"end":           ct.End,

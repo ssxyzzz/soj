@@ -223,9 +223,11 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 		return
 	}
 	manage := false
+	className := ""
 	cl, err := h.repo.GetClass(ctx, a.ClassID)
 	if err == nil {
 		manage = h.classManageable(c, cl)
+		className = cl.Name // 面包屑（v0.77）：作业详情/做题页头部「班级 >>> 作业」首段
 	}
 
 	lockMap, err := h.loadLockMap(ctx, uid, role)
@@ -333,7 +335,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 		}
 	}
 	resp := gin.H{
-		"id": a.ID, "class_id": a.ClassID, "title": a.Title, "intro": a.Intro, "intro_html": a.IntroHtml,
+		"id": a.ID, "class_id": a.ClassID, "class_name": className, "title": a.Title, "intro": a.Intro, "intro_html": a.IntroHtml,
 		"problems": problems, "manageable": manage,
 	}
 	// 管理员调整题目用完整清单：含赛前/隐藏期/主题库隐藏题，避免保存时悄悄丢失。

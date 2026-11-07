@@ -5,13 +5,13 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft } from '@element-plus/icons-vue'
 
 import { contestApi, examApi, problemApi, submissionApi, type RoundKind } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
 import { usePolling } from '@/composables/usePolling'
 import CodePane from '@/components/CodePane.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
+import PageCrumbs from '@/components/PageCrumbs.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
@@ -37,6 +37,17 @@ const userStore = useUserStore()
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))
 const name = computed(() => (props.kind === 'exam' ? '考试' : '比赛'))
 const roundBase = computed(() => `/${props.kind}s`)
+// 统一头面包屑段（v0.77）：考试两段（班级可点回班级）/比赛一段（不挂班级）；末段=
+// 当前题目名（compact 档）；「返回xx」按钮随旧头退役（拍板②）
+const crumbItems = computed(() => {
+  const items: { label: string; to?: string }[] = []
+  if (props.kind === 'exam' && round.value?.class_id && round.value.class_name) {
+    items.push({ label: round.value.class_name, to: `/classes/${round.value.class_id}` })
+  }
+  if (round.value) items.push({ label: round.value.title, to: `${roundBase.value}/${round.value.id}` })
+  if (problem.value) items.push({ label: problem.value.title })
+  return items
+})
 
 const round = ref<ContestDetail | null>(null)
 const problem = ref<ProblemDetail | null>(null)
@@ -268,15 +279,15 @@ watch(
     <PageShell v-if="round && problem">
       <template #standalone>
         <el-card class="standalone-card round-head" :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }">
+          <!-- v0.77 统一头（拍板②全套统一）：面包屑（考试两段/比赛一段，前段可点直达）
+               + 切题序号一体；「返回xx」按钮与旧「赛事名 / T{序号}」面包屑行退役 -->
+          <PageCrumbs compact :items="crumbItems" />
           <div class="sa-head">
-            <div>
-              <div class="sa-time">
-                <span class="sa-title">{{ round.title }}</span>
-                <span class="sub-status" :class="running ? 'blue' : 'gray'"><span class="dot" :class="running ? 'blue' : 'gray'"></span>{{ statusText }}</span>
-                <span class="rtime">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
-                <span v-if="!revealed" class="rtime">OI 赛制：赛时只记录提交次数，不出分</span>
-              </div>
-              <div class="sw-btns">
+            <div class="sa-time">
+              <span class="sub-status" :class="running ? 'blue' : 'gray'"><span class="dot" :class="running ? 'blue' : 'gray'"></span>{{ statusText }}</span>
+              <span class="rtime">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
+              <span v-if="!revealed" class="rtime">OI 赛制：赛时只记录提交次数，不出分</span>
+              <span class="sw-btns">
                 <span class="sw-lab">切题</span>
                 <button
                   v-for="(p, i) in round.problems"
@@ -288,21 +299,11 @@ watch(
                 >
                   {{ i + 1 }}
                 </button>
-              </div>
+              </span>
             </div>
-            <el-button class="sa-back" size="small" @click="router.push(`${roundBase}/${round.id}`)">
-              <el-icon><ArrowLeft /></el-icon>
-              返回{{ name }}
-            </el-button>
           </div>
         </el-card>
       </template>
-
-      <!-- v3 面包屑：赛事名 / T{序号} -->
-      <div class="crumbs">
-        <router-link :to="`${roundBase}/${round.id}`">{{ round.title }}</router-link>
-        ／ <span class="mono">T{{ (round.problems?.findIndex((p) => p.id === pid) ?? 0) + 1 }}</span>
-      </div>
 
       <ProblemStatement :problem="problem" :file-io="round.file_io" />
 
@@ -468,35 +469,9 @@ watch(
   margin-bottom: 0;
 }
 
-/* v3 .crumbs */
-.crumbs {
-  font-size: var(--soj-fs-13);
-  color: var(--soj-ink-3);
-  margin-bottom: var(--soj-sp-14);
-}
-
-.crumbs a {
-  color: var(--soj-ink-3);
-  text-decoration: none;
-}
-
-.crumbs a:hover {
-  color: var(--soj-blue);
-}
-
-.sa-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--soj-sp-12);
-}
-
-/* v3 .rt：赛名 --soj-fs-16/--soj-fw-heavy */
-.sa-title {
-  font-size: var(--soj-fs-16);
-  font-weight: var(--soj-fw-heavy);
-  letter-spacing: -0.2px;
-  color: var(--soj-navy);
+/* v0.77 统一头：面包屑行与切题行间距（Crumbs 自带样式，旧 .crumbs/.sa-title 退役） */
+.round-head :deep(.soj-crumbs) {
+  margin-bottom: var(--soj-sp-10);
 }
 
 /* v3 .rtime：--soj-fs-12 弱化说明 */
@@ -505,11 +480,11 @@ watch(
   color: var(--soj-ink-3);
 }
 
-/* v3 .sw-btns：34x32 圆角 10 切题方块钮 */
+/* v3 .sw-btns：34x32 圆角 10 切题方块钮（并入状态行右侧，v0.77 统一头单行化） */
 .sw-btns {
-  display: flex;
+  display: inline-flex;
   gap: var(--soj-sp-6);
-  margin-top: var(--soj-sp-10);
+  margin-left: var(--soj-sp-12);
   align-items: center;
   flex-wrap: wrap;
 }
@@ -557,10 +532,6 @@ watch(
   align-items: center;
   gap: var(--soj-sp-12);
   flex-wrap: wrap;
-}
-
-.sa-back {
-  flex: none;
 }
 
 .sa-switch {
