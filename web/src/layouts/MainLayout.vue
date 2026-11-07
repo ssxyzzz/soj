@@ -530,15 +530,18 @@ function onCommand(command: string) {
   font-weight: var(--soj-fw-bold);
 }
 
-/* v3-full .admin-link：独立描边胶囊（激活 = 蓝边蓝字浅蓝底），不再借 el-menu 形态 */
+/* v0.78 右簇轻量化（用户反馈顶栏右侧太挤，参考左侧导航重设计）：描边全部退役——
+   左侧导航是「无描边胶囊 + hover 浅蓝底」的轻语言，右侧三件（管理后台/铃铛/用户
+   chip）旧为描边件挤在 header gap 6px 里，三条边框视觉连成一团；改无描边胶囊与
+   左侧同语言，簇内间距 margin 补至 10px */
 .admin-link {
   flex: 0 0 auto;
-  font-size: var(--soj-fs-14);
+  margin-left: var(--soj-sp-4);
+  font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-emphasis);
   color: var(--soj-ink-2);
-  padding: var(--soj-sp-8) var(--soj-sp-14);
+  padding: var(--soj-sp-8) var(--soj-sp-16);
   border-radius: 999px;
-  border: 1px solid var(--soj-line-2);
   text-decoration: none;
   transition: all 0.18s;
   white-space: nowrap;
@@ -546,21 +549,22 @@ function onCommand(command: string) {
 
 .admin-link:hover,
 .admin-link.on {
-  border-color: var(--soj-blue-line);
   color: var(--soj-blue);
   background: var(--soj-blue-soft);
 }
 
-/* v0.24 通知铃铛：描边圆钮 + 未读角标；hover 下拉面板列表 */
+/* v0.24 通知铃铛：圆钮 + 未读角标；hover 下拉面板列表。v0.78 去描边对齐右簇轻语言，
+   径 34→38 与胶囊簇同高（基线齐平） */
 .bell {
   position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
+  margin-left: var(--soj-sp-4);
   border-radius: 50%;
-  border: 1px solid var(--soj-line-2);
+  border: none;
   background: transparent;
   color: var(--soj-ink-2);
   cursor: pointer;
@@ -571,7 +575,6 @@ function onCommand(command: string) {
 .bell:hover,
 .bell.ringing {
   color: var(--soj-blue);
-  border-color: var(--soj-blue-line);
   background: var(--soj-blue-soft);
 }
 
@@ -708,21 +711,21 @@ function onCommand(command: string) {
 .user-chip {
   display: inline-flex;
   align-items: center;
-  gap: var(--soj-sp-8);
-  padding: var(--soj-sp-4) var(--soj-sp-14) var(--soj-sp-4) var(--soj-sp-4);
+  gap: var(--soj-sp-10);
+  /* v0.78 右簇轻量化：描边+阴影退役（描边三连挤是「太挤」根因），hover 浅蓝底对齐
+     左侧导航；右内边距 16 对齐 nav 横向留白，昵称与等级徽章呼吸开 */
+  margin-left: var(--soj-sp-4);
+  padding: var(--soj-sp-4) var(--soj-sp-16) var(--soj-sp-4) var(--soj-sp-4);
   border-radius: 999px;
-  border: 1px solid var(--soj-line);
-  background: var(--el-fill-color-blank);
+  background: transparent;
   cursor: pointer;
-  box-shadow: 0 1px 2px var(--soj-line);
-  transition: box-shadow 0.18s, border-color 0.18s;
+  transition: background-color 0.18s;
   outline: none;
   white-space: nowrap;
 }
 
 .user-chip:hover {
-  border-color: var(--soj-blue-line);
-  box-shadow: 0 2px 8px var(--soj-line-2);
+  background: var(--soj-blue-soft);
 }
 
 .avatar {
@@ -746,8 +749,9 @@ function onCommand(command: string) {
 }
 
 .uname {
+  /* v0.78 对齐左侧导航字号（15px）：14px 粗体贴等级徽章是「挤」的第二根因 */
   font-weight: var(--soj-fw-bold);
-  font-size: var(--soj-fs-14);
+  font-size: var(--soj-fs-body);
   color: var(--soj-navy);
 }
 
