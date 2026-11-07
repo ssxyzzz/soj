@@ -87,10 +87,13 @@ onMounted(async () => {
   }
   const listSource = (ctx: any) => {
     if (includeFrom(ctx) >= 0) return null // include 上下文不混普通词
-    const word = ctx.matchBefore(/\w*/)
+    // from 含 # 前缀（v0.76.2）：\w 不含 #，旧写法替换范围从 # 之后起，Tab 接受
+    // 「#include …」片段时已打的 # 留在原地拼成 ##include（用户实测）；#? 一并纳入
+    // 后打 i 补全也带 #，validFor 同步放行 # 防逐键重拉源
+    const word = ctx.matchBefore(/#?\w*/)
     if (!word || (word.from === word.to && !ctx.explicit)) return null
     const items = props.language === 'python3' ? PY_COMPLETIONS : CPP_COMPLETIONS
-    return { from: word.from, options: items, validFor: /^\w*$/ }
+    return { from: word.from, options: items, validFor: /^#?\w*$/ }
   }
   const wordSource = (ctx: any) => (includeFrom(ctx) >= 0 ? null : autocompleteMod.completeAnyWord(ctx))
   langComp = new state.Compartment()
