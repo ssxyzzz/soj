@@ -239,8 +239,8 @@ type RepoAPI interface {
 	ReplaceTagTreeDoc(ctx context.Context, docID string, nodes []repo.TagNode) error
 	RequestCancelSubmission(ctx context.Context, sid int64) (string, error)
 	ResolveDiscussReports(ctx context.Context, ids []int64, action string, byUID int64) error
-	RoundLeaderboard(ctx context.Context, kind string, roundID int64, fullScores map[int64]int) ([]*repo.LeaderRow, error)
-	RoundLeaderboardCached(ctx context.Context, kind string, roundID int64, fullScores map[int64]int) ([]*repo.LeaderRow, error)
+	RoundLeaderboard(ctx context.Context, kind string, roundID int64, fullScores map[int64]int, pids []int64) ([]*repo.LeaderRow, error)
+	RoundLeaderboardCached(ctx context.Context, kind string, roundID int64, fullScores map[int64]int, pids []int64) ([]*repo.LeaderRow, error)
 	RoundSubmissionStubs(ctx context.Context, kind string, roundID int64, uid int64) ([]*repo.Submission, error)
 	RoundSubmissions(ctx context.Context, kind string, roundID int64, uid int64) ([]*repo.Submission, error)
 	RoundUserProblemSubmissions(ctx context.Context, kind string, roundID, uid, pid int64) ([]*repo.Submission, error)

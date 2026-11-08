@@ -196,7 +196,7 @@ type ProgressRow struct {
 	Attempt  int // 做过题数
 	Solved   int // 通过题数
 	Total    int // 各题最高分之和
-	Rank     int // 总分降序 → 通过题数降序 → UID 升序
+	Rank     int // 名次：同总分并列跳号（行序：总分降序 → 通过题数降序 → UID 升序）
 }
 
 // AssignmentProgress 老师视角的作业完成情况：
@@ -286,7 +286,8 @@ func (r *Repo) AssignmentProgress(ctx context.Context, a *Assignment, memberUIDs
 			}
 		}
 	}
-	// 统一成绩表排名：总分降序 → 通过题数降序 → UID 升序
+	// 统一成绩表排名：行序 总分降序 → 通过题数降序 → UID 升序（组内展示序）；
+	// 名次同总分并列跳号（同总分继承首位次，如 1,2,3,3,3,6），与题单榜 listRankJump 同范式
 	sort.Slice(rows, func(i, j int) bool {
 		if rows[i].Total != rows[j].Total {
 			return rows[i].Total > rows[j].Total
@@ -297,7 +298,11 @@ func (r *Repo) AssignmentProgress(ctx context.Context, a *Assignment, memberUIDs
 		return rows[i].UID < rows[j].UID
 	})
 	for i, row := range rows {
-		row.Rank = i + 1
+		if i > 0 && row.Total == rows[i-1].Total {
+			row.Rank = rows[i-1].Rank // 同总分并列：继承上一位名次
+		} else {
+			row.Rank = i + 1
+		}
 	}
 	return rows, nil
 }

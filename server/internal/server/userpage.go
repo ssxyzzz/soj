@@ -143,7 +143,7 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 			default:
 				row["result"] = "published"
 				if ct.Scoreboard {
-					if rows, err := h.repo.RoundLeaderboardCached(ctx, repo.KindContest, ct.ID, roundFullScores(ct)); err == nil {
+					if rows, err := h.repo.RoundLeaderboardCached(ctx, repo.KindContest, ct.ID, roundFullScores(ct), roundPIDs(ct)); err == nil {
 						row["total_users"] = len(rows)
 						for i, r := range rows {
 							if r.UID == id {

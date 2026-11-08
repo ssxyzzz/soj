@@ -621,6 +621,15 @@ func contestFullScores(c *Contest) map[int64]int {
 	return m
 }
 
+// contestPIDs 场次题目顺序（T1..Tn），榜单同总分逐题决胜用（server 侧 roundPIDs 同口径）。
+func contestPIDs(c *Contest) []int64 {
+	out := make([]int64, len(c.Problems))
+	for i, cp := range c.Problems {
+		out[i] = cp.PID
+	}
+	return out
+}
+
 // publishRoundJade 比赛发布后的玉结算（PublishDueRounds 钩子，全部尽力而为不阻断发布）：
 // ① 该场满分提交的 (uid,pid) 去重补发首 AC 玉（MaybeAwardJade 全局幂等，赛前练习已发过的跳过）；
 // ② 双奖池结算 settleRoundJadePools。
@@ -670,7 +679,7 @@ func (r *Repo) settleRoundJadePools(ctx context.Context, kind string, c *Contest
 		bson.M{"kind": JadeKindContestRank, "ref": c.ID}); err == nil && n > 0 {
 		return
 	}
-	rows, err := r.RoundLeaderboard(ctx, kind, c.ID, contestFullScores(c))
+	rows, err := r.RoundLeaderboard(ctx, kind, c.ID, contestFullScores(c), contestPIDs(c))
 	if err != nil {
 		slog.Warn("奖池结算读榜失败", "component", "jade", "round", c.ID, "error", err)
 		return

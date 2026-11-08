@@ -968,6 +968,15 @@ func roundFullScores(ct *repo.Contest) map[int64]int {
 	return out
 }
 
+// roundPIDs 场次题目顺序（T1..Tn），榜单同总分逐题决胜用（repo 侧 contestPIDs 同口径）。
+func roundPIDs(ct *repo.Contest) []int64 {
+	out := make([]int64, len(ct.Problems))
+	for i, cp := range ct.Problems {
+		out[i] = cp.PID
+	}
+	return out
+}
+
 // 榜单进程缓存治理（v0.27 长跑体检）：条目是全场「人 × 题」的 MB 级树，键空间随历史
 // 场次只增——TTL 30s 统一新鲜度（赛时与发布后同口径）+ 容量上限防膨胀。
 const (
@@ -1075,7 +1084,7 @@ func (h *Handlers) roundLeaderboard(c *gin.Context, s roundScope) {
 
 // buildLeaderEntry 计算一场榜单条目（组装含等级列）：冷启动同步路径与 SWR 后台刷新共用。
 func (h *Handlers) buildLeaderEntry(ctx context.Context, kind string, ct *repo.Contest) (leaderEntry, error) {
-	rows, err := h.repo.RoundLeaderboard(ctx, kind, ct.ID, roundFullScores(ct))
+	rows, err := h.repo.RoundLeaderboard(ctx, kind, ct.ID, roundFullScores(ct), roundPIDs(ct))
 	if err != nil {
 		return leaderEntry{}, err
 	}
@@ -1165,7 +1174,7 @@ func (h *Handlers) roundExport(c *gin.Context, s roundScope) {
 		fail(c, http.StatusForbidden, "仅组织者可导出成绩")
 		return
 	}
-	rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID, roundFullScores(ct))
+	rows, err := h.repo.RoundLeaderboard(ctx, s.Kind, ct.ID, roundFullScores(ct), roundPIDs(ct))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "计算榜单失败")
 		return

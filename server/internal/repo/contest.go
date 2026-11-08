@@ -329,7 +329,8 @@ type LeaderCell struct {
 	Errors int
 }
 
-// LeaderRow 榜单一行。LastScoring 为最后一次得分提交时间（并列排名依据：早者靠前）。
+// LeaderRow 榜单一行。LastScoring 为最后一次得分提交时间（同总分逐题决胜后的
+// 最终并列依据：早者靠前）。
 type LeaderRow struct {
 	UID         int64
 	Username    string
@@ -338,6 +339,14 @@ type LeaderRow struct {
 	LastScoring time.Time
 	HasScoring  bool
 	Problems    map[int64]*LeaderCell
+}
+
+// leaderCellScore 榜单行在某题的最高分（未提交为 0），同总分逐题决胜用。
+func leaderCellScore(row *LeaderRow, pid int64) int {
+	if c := row.Problems[pid]; c != nil {
+		return c.Score
+	}
+	return 0
 }
 
 // lbCache 已结束公布场次的榜单缓存（v0.26 userpage 收敛）：个人主页比赛历史每场现算
@@ -377,7 +386,7 @@ func invalidateAllLeaderboards() {
 
 // RoundLeaderboardCached RoundLeaderboard 的 60s TTL 缓存版：仅供已结束场次的多读场景
 // （个人主页比赛历史），进行中场次必须用 RoundLeaderboard 现算（出分实时性）。
-func (r *Repo) RoundLeaderboardCached(ctx context.Context, kind string, roundID int64, fullScores map[int64]int) ([]*LeaderRow, error) {
+func (r *Repo) RoundLeaderboardCached(ctx context.Context, kind string, roundID int64, fullScores map[int64]int, pids []int64) ([]*LeaderRow, error) {
 	key := lbCacheKey(kind, roundID)
 	lbMu.Lock()
 	if e, ok := lbCache[key]; ok {
@@ -389,7 +398,7 @@ func (r *Repo) RoundLeaderboardCached(ctx context.Context, kind string, roundID 
 		delete(lbCache, key)
 	}
 	lbMu.Unlock()
-	rows, err := r.RoundLeaderboard(ctx, kind, roundID, fullScores)
+	rows, err := r.RoundLeaderboard(ctx, kind, roundID, fullScores, pids)
 	if err != nil {
 		return nil, err
 	}
@@ -504,9 +513,10 @@ func (r *Repo) UserProblemSubmissions(ctx context.Context, uid, pid int64) ([]*S
 }
 
 // RoundLeaderboard 计算比赛/考试榜单。
-// 排名规则：总分降序 → 最后得分提交时间早者靠前 → 并列。
+// 排名规则：总分降序 → 从最后一题往前逐题比最高分（高者靠前）→ 逐题全同按最后
+// 得分提交时间早者靠前 → UID 升序。pids 为场次题目顺序（T1..Tn），供逐题决胜。
 // fullScores 为每题满分（pid → score），用于统计未满分提交次数（errors）。
-func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64, fullScores map[int64]int) ([]*LeaderRow, error) {
+func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64, fullScores map[int64]int, pids []int64) ([]*LeaderRow, error) {
 	cursor, err := r.submissions.Find(ctx,
 		bson.M{roundsIDField(kind): roundID},
 		options.Find().SetProjection(bson.M{
@@ -584,6 +594,13 @@ func (r *Repo) RoundLeaderboard(ctx context.Context, kind string, roundID int64,
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Total != out[j].Total {
 			return out[i].Total > out[j].Total
+		}
+		// 同总分：从最后一题往前逐题比最高分，高者靠前（2026-11-08 用户定稿）
+		for k := len(pids) - 1; k >= 0; k-- {
+			si, sj := leaderCellScore(out[i], pids[k]), leaderCellScore(out[j], pids[k])
+			if si != sj {
+				return si > sj
+			}
 		}
 		// 都没得过分的并列排后面
 		ti, tj := out[i].LastScoring, out[j].LastScoring
