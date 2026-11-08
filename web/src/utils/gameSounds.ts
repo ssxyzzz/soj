@@ -41,26 +41,31 @@ function tone(c: AudioContext, type: OscillatorType, freq: number, dur: number, 
 }
 
 /** 音效预设：随机 AC 音（8-bit 上行琶音）、PERFECT、SSR、升级、连击变奏、成就、WA 无声 */
+
+// 通过庆祝家族音量减半（v0.83.1 用户反馈「通过的特效音量有点大」）：playAC/Perfect/SSR/Coin
+// 四组 vol 全部 ×0.5（升级 playLevelUp / 成就 playAchievement 非通过链路，不动）
+
+/** 随机 AC 音：连击越高音越亮 */
 export function playAC(combo = 1) {
   const c = ac()
   if (!c) return
-  const base = 440 * Math.pow(2, Math.min(combo, 10) / 12) // 连击越高音越亮
-  tone(c, 'square', base, 0.09, 0, 0.12)
-  tone(c, 'square', base * 1.25, 0.09, 0.08, 0.12)
-  tone(c, 'square', base * 1.5, 0.14, 0.16, 0.12)
+  const base = 440 * Math.pow(2, Math.min(combo, 10) / 12)
+  tone(c, 'square', base, 0.09, 0, 0.06)
+  tone(c, 'square', base * 1.25, 0.09, 0.08, 0.06)
+  tone(c, 'square', base * 1.5, 0.14, 0.16, 0.06)
 }
 
 export function playPerfect() {
   const c = ac()
   if (!c) return
-  ;[523, 659, 784, 1047].forEach((f, i) => tone(c, 'triangle', f, 0.16, i * 0.09, 0.14))
+  ;[523, 659, 784, 1047].forEach((f, i) => tone(c, 'triangle', f, 0.16, i * 0.09, 0.07))
 }
 
 export function playSSR() {
   const c = ac()
   if (!c) return
-  ;[392, 523, 659, 784, 1047, 1319].forEach((f, i) => tone(c, 'sawtooth', f, 0.22, i * 0.11, 0.1))
-  tone(c, 'triangle', 2093, 0.5, 0.66, 0.12)
+  ;[392, 523, 659, 784, 1047, 1319].forEach((f, i) => tone(c, 'sawtooth', f, 0.22, i * 0.11, 0.05))
+  tone(c, 'triangle', 2093, 0.5, 0.66, 0.06)
 }
 
 export function playLevelUp() {
@@ -81,8 +86,8 @@ export function playAchievement() {
 export function playCoin() {
   const c = ac()
   if (!c) return
-  tone(c, 'square', 988, 0.07, 0, 0.1)
-  tone(c, 'square', 1319, 0.18, 0.06, 0.1)
+  tone(c, 'square', 988, 0.07, 0, 0.05)
+  tone(c, 'square', 1319, 0.18, 0.06, 0.05)
 }
 
 /** WA：不发声（拍板——失败不出声），保留接口占位避免调用侧分支 */
