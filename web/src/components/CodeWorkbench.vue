@@ -85,6 +85,12 @@ watch(() => props.modelValue, (open) => {
   }
 })
 
+// 切题清空（v0.83.2 用户拍板）：快速切题后上一题的草稿不带入新题（打开时按 initialCode /
+// 个人模板重新起点）；同题关闭重开保留草稿——在线编程草稿本语义不变
+watch(() => props.problem.id, () => {
+  code.value = ''
+})
+
 function changeLang(l: string) {
   if (!code.value.trim() || code.value === templateFor(lang.value)) code.value = templateFor(l)
   lang.value = l

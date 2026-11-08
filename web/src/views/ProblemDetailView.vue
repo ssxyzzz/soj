@@ -293,14 +293,9 @@ function openWorkbenchEntry() {
 }
 
 // 粘贴提交弹窗（2026-10-25 修复⑥）：副列去内嵌编辑器后的入口。
-// 打开弹窗时仅在未编辑过（空白 / 仍是函数题模板）的情况下回填函数题模板；
-// 个人代码模板只用于在线编程（2026-10-27），此处不再填入。
+// 打开弹窗每次都是干净起点（v0.83.2 用户拍板「点击提交应该清空，不保留上一次的代码」）：
+// 无条件重置——普通题全空、函数题题面学生模板（2026-10-27 设计保留）；个人代码模板只用于在线编程
 const showRailSubmit = ref(false)
-
-const railUntouched = computed(() => {
-  const code = railCode.value
-  return !code.trim() || (!!funcTemplate.value && code === funcTemplate.value)
-})
 
 function openRailSubmit() {
   if (!userStore.token) {
@@ -308,7 +303,7 @@ function openRailSubmit() {
     router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
-  if (railUntouched.value) railCode.value = funcTemplate.value
+  railCode.value = funcTemplate.value
   showRailSubmit.value = true
 }
 
