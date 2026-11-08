@@ -190,6 +190,28 @@ func TestListOrganizeAssignParsing(t *testing.T) {
 	}
 }
 
+// TestListOrganizeContext 题单全局语境（v0.83.3）：标题/简介进 user prompt 顶部；
+// 两者均空不加空段；user prompt 整体含「题单主题」行与章节结构。
+func TestListOrganizeContext(t *testing.T) {
+	if got := listOrganizeContext("", "  "); got != "" {
+		t.Fatalf("全空应返回空串，得到 %q", got)
+	}
+	ctx := listOrganizeContext("基础算法复习（一）", "  按语法点分章  \n")
+	if !strings.Contains(ctx, "题单主题：《基础算法复习（一）》 按语法点分章") {
+		t.Fatalf("语境缺标题/简介：%q", ctx)
+	}
+	if got := listOrganizeContext("", "只有简介"); !strings.Contains(got, "只有简介") || strings.Contains(got, "《") {
+		t.Fatalf("仅简介时不应带书名号：%q", got)
+	}
+	// user prompt 集成：语境在最前、后接章节结构与题目
+	leaves := listOrganizeLeaves([]repo.ListEntry{{Title: "章一"}})
+	user := listOrganizeUser(listOrganizeContext("复习单", ""), listOrganizeLeavesPrompt(leaves),
+		[]*repo.Problem{{ID: 1, Title: "两数之和"}}, nil, nil)
+	if !strings.Contains(user, "题单主题：《复习单》") || !strings.Contains(user, "ch:0 章一") || !strings.Contains(user, "#1 两数之和") {
+		t.Fatalf("user prompt 组装不符：\n%s", user)
+	}
+}
+
 // TestListOrganizeRunValidations run 校验链：chapters 必传且非空、形状校验、难度筛选
 // 越界、AI 供应商未配置、非创建者 403、题单不存在 404。
 func TestListOrganizeRunValidations(t *testing.T) {

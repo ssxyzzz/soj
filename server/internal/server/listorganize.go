@@ -102,6 +102,8 @@ type listOrganizeJob struct {
 	mu             sync.Mutex
 	State          string // running | done | cancelled | failed
 	ListID         int64
+	ListTitle      string // 题单标题/简介（v0.83.3）：AI 归类的全局语境——章/节名与题单主题脱节时有全局兜底
+	ListIntro      string
 	IncludeMounted bool
 	From, To       int64 // 题号范围（0 = 不限），快照带出让发起者记得本次任务边界
 	Total          int
@@ -120,13 +122,14 @@ type listOrganizeJob struct {
 	cancel         context.CancelFunc
 }
 
-func newListOrganizeJob(listID int64, includeMounted bool, from, to int64, leaves []listOrganizeLeaf, scope []*repo.Problem, mounted map[int64]bool, by string, cancel context.CancelFunc) *listOrganizeJob {
+func newListOrganizeJob(listID int64, listTitle, listIntro string, includeMounted bool, from, to int64, leaves []listOrganizeLeaf, scope []*repo.Problem, mounted map[int64]bool, by string, cancel context.CancelFunc) *listOrganizeJob {
 	keys := make(map[string]bool, len(leaves))
 	for _, lf := range leaves {
 		keys[lf.Key] = true
 	}
 	return &listOrganizeJob{
-		State: "running", ListID: listID, IncludeMounted: includeMounted, From: from, To: to,
+		State: "running", ListID: listID, ListTitle: listTitle, ListIntro: listIntro,
+		IncludeMounted: includeMounted, From: from, To: to,
 		Total: len(scope), Leaves: leaves, Keys: keys,
 		Scope: scope, Mounted: mounted,
 		ByName: by, StartedAt: time.Now(), cancel: cancel,
@@ -348,7 +351,7 @@ func (h *Handlers) ListOrganizeRun(c *gin.Context) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	job := newListOrganizeJob(id, req.IncludeMounted, from, to, leaves, scope, mounted, name, cancel)
+	job := newListOrganizeJob(id, l.Title, l.Intro, req.IncludeMounted, from, to, leaves, scope, mounted, name, cancel)
 	h.organizeTask = job
 	h.organizeMu.Unlock()
 
@@ -427,6 +430,8 @@ func (h *Handlers) runListOrganize(ctx context.Context, job *listOrganizeJob, ui
 
 	leafText := listOrganizeLeavesPrompt(job.Leaves)
 	sys := listOrganizeSystem()
+	// 题单全局语境（v0.83.3）：标题/简介进每批 prompt，AI 结合整体主题归类
+	listCtx := listOrganizeContext(job.ListTitle, job.ListIntro)
 
 	var batches [][]*repo.Problem
 	for lo := 0; lo < len(job.Scope); lo += listOrganizeBatchSize {
@@ -451,7 +456,7 @@ func (h *Handlers) runListOrganize(ctx context.Context, job *listOrganizeJob, ui
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			batch := batches[bi]
-			user := listOrganizeUser(leafText, batch, knNames, metaNames)
+			user := listOrganizeUser(listCtx, leafText, batch, knNames, metaNames)
 			resp, err := h.tidyAIChat(ctx, uid, "list_organize", 0, sys, user)
 			if err == nil {
 				var m map[int64]string
@@ -551,7 +556,7 @@ func listOrganizeSystem() string {
 	return `你是信息学竞赛题单的结构化整理专家。给你一个题单的章节结构（若干可挂题的章/小节，均有唯一 key）和一批题目，请把每道题归入语义上最合适的一个章/小节。
 规则：
 1. 每道题恰好输出一条归类；leaf 只能取给出的叶子 key 或 "unmatched"。
-2. 以题目内容（标题、题面）与章节完整语境（章名 › 节名、章/节描述）的语义匹配为主，难度、知识点、来源标签作参考。
+2. 以题目内容（标题、题面）与章节完整语境（章名 › 节名、章/节描述）的语义匹配为主，并结合题单整体主题（标题/简介，如有给出）判断大类方向；难度、知识点、来源标签作参考。
 3. 章节分得细时归入语义最贴切的那一个；确实不属于任何章/小节的题输出 "unmatched"，宁缺毋滥不要硬塞。
 4. 只输出 JSON，格式为 {"assign":[{"pid":<题号>,"leaf":"<叶子key或unmatched>"}]}，不要输出任何其他内容。`
 }
@@ -573,8 +578,32 @@ func listOrganizeLeavesPrompt(leaves []listOrganizeLeaf) string {
 	return b.String()
 }
 
-func listOrganizeUser(leafText string, batch []*repo.Problem, knNames, metaNames map[int64]string) string {
+// listOrganizeContext 题单全局语境（v0.83.3）：标题/简介进 prompt，AI 先知整体主题再归
+// 章节——章/节名与题单主题脱节时有全局兜底。两者均空返回空串（prompt 不加空段）；简介
+// 截 200 runes 封住体量（章节描述校验 ≤128 字，简介 Markdown 可能更长）。
+func listOrganizeContext(title, intro string) string {
+	t, d := strings.TrimSpace(title), strings.TrimSpace(intro)
+	if t == "" && d == "" {
+		return ""
+	}
 	var b strings.Builder
+	b.WriteString("题单主题：")
+	if t != "" {
+		b.WriteString("《" + t + "》")
+	}
+	if d != "" {
+		b.WriteString(" " + truncateTail(d, 200))
+	}
+	b.WriteString("\n")
+	return b.String()
+}
+
+func listOrganizeUser(listCtx, leafText string, batch []*repo.Problem, knNames, metaNames map[int64]string) string {
+	var b strings.Builder
+	if listCtx != "" {
+		b.WriteString(listCtx)
+		b.WriteString("\n")
+	}
 	b.WriteString(leafText)
 	b.WriteString("\n本批题目：\n")
 	for _, p := range batch {
