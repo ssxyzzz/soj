@@ -51,7 +51,7 @@ const { list, total, page, loading, load, reload: baseReload } = usePagedList<Su
     ...(statusFilter.value ? { status: statusFilter.value } : {}),
     ...(langFilter.value ? { language: langFilter.value } : {}),
     ...(userFilter.value ? { user_id: userFilter.value } : {}),
-    ...(mineOnly.value ? { mine: true } : {}),
+    ...(mineOnly.value ? { mine: 1 } : {}), // 后端判 "1"；曾传 boolean 序列化 "true" 失配，开关从未真正过滤
   }),
   { pageSize },
 )

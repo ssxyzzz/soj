@@ -450,7 +450,7 @@ export const submissionApi = {
     problem_id?: number
     status?: string
     language?: string
-    mine?: boolean
+    mine?: number // 后端判 query=="1"，boolean 序列化成 "true" 永不命中（v0.82.3 修复）
     kw?: string
     user_id?: number
   }) => get<SubmissionListResult>('/submissions', { ...params }),
