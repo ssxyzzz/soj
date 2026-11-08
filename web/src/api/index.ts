@@ -88,6 +88,17 @@ client.interceptors.request.use((config) => {
 
 client.interceptors.response.use(
   (resp) => {
+    // 滑动续期（v0.82.7）：服务端对临期 token（剩余 < 3 天）随响应头下发新票——
+    // 仅当本次请求所带 token 仍是当前会话 token 时换存：登出/换号后迟到的续期
+    // 响应、并行请求各自续期的先后覆盖，都被这道同会话校验挡下（不复活/不串号）
+    const renewed = (resp.headers as Record<string, unknown>)['x-renewed-token']
+    if (renewed) {
+      const sent = String(
+        (resp.config?.headers as Record<string, unknown> | undefined)?.Authorization || '',
+      ).replace(/^Bearer /, '')
+      const store = useUserStore()
+      if (sent && sent === store.token) store.renewToken(String(renewed))
+    }
     const body = resp.data as ApiResponse<unknown>
     if (body && typeof body.code === 'number' && body.code !== 0) {
       const message = body.message || '请求失败'

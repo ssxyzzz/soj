@@ -116,6 +116,15 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem('soj_nickname', n)
   }
 
+  // 滑动续期（v0.82.7）：服务端对临期 token（剩余 < 3 天）在响应头 X-Renewed-Token
+  // 下发新票，api 拦截器做同会话校验后调用——仅换 token 本体，登录态其余不动。
+  // 多标签页各自持各自内存 token 独立滑动，localStorage 写最后落者（均为有效票，不串号）。
+  function renewToken(newToken: string) {
+    if (!newToken || newToken === token.value) return
+    token.value = newToken
+    localStorage.setItem('soj_token', newToken)
+  }
+
   // QQ 头像同步（设置页保存 / 布局层 getProfile 回来后调用；空串 = 未绑定回退首字）
   function setAvatarUrl(u: string) {
     avatarUrl.value = u ?? ''
@@ -143,5 +152,5 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem('soj_avatar')
   }
 
-  return { token, uid, nickname, role, perms, prefs, level, isStaff, canOnline, canChallenge, avatarUrl, jadeBalance, jadeCurrency, pwdRemind, canAdmin, can, setLogin, setPrefs, setLevel, setJade, setNickname, setAvatarUrl, logout }
+  return { token, uid, nickname, role, perms, prefs, level, isStaff, canOnline, canChallenge, avatarUrl, jadeBalance, jadeCurrency, pwdRemind, canAdmin, can, setLogin, setPrefs, setLevel, setJade, setNickname, setAvatarUrl, renewToken, logout }
 })

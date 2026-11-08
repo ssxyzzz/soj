@@ -586,7 +586,7 @@ func (h *Handlers) AssignmentUserSubmissions(c *gin.Context) {
 
 // AssignmentExport 作业成绩导出（班级管理员/root，v0.5.6；v0.6.2 起含排名）：
 // 列 = 排名/昵称/各题最高分/总分（最高分合计）/通过题数/做过题数，昵称为空回退用户名；
-// 行序 = 统一成绩表排名（总分降序 → 通过题数降序 → UID 升序）。
+// 行序 = 统一成绩表排名（总分降序 → 通过题数降序 → UID 升序；名次同总分并列跳号）。
 func (h *Handlers) AssignmentExport(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {

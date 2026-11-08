@@ -1,8 +1,10 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -16,6 +18,8 @@ func CORS() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+		// 滑动续期头（v0.82.7）跨域时前端要能读到，一并暴露
+		c.Header("Access-Control-Expose-Headers", "X-Renewed-Token")
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
@@ -37,9 +41,13 @@ func AuthRequired(h *Handlers) gin.HandlerFunc {
 
 // authIdent 登录态校验体（v0.64 从 AuthRequired 抽出供 dlAuth 复用）：失败时已
 // Abort 并返回 false；成功时写入 uid/uname/role/perms 并返回 true。
+// v0.82.7 起附带滑动续期：token 剩余有效期不足 RenewWindow（3 天）时签新票随
+// 响应头 X-Renewed-Token 下发（前端拦截器换存）——活跃会话窗口不断前移，连续
+// 3 天不活跃的 token 自然死亡。新票身份/密码版本取权威值（e.uname/e.pwdVer），
+// 签发失败仅记日志不影响本次请求（旧票此刻仍有效）。
 func (h *Handlers) authIdent(c *gin.Context) bool {
 	token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-	uid, _, tokenPwdVer, err := auth.ParseToken(token, h.cfg.JWTSecret)
+	uid, _, tokenPwdVer, exp, err := auth.ParseToken(token, h.cfg.JWTSecret)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"code": 1, "message": "未登录或登录已过期"})
 		return false
@@ -57,15 +65,23 @@ func (h *Handlers) authIdent(c *gin.Context) bool {
 	c.Set("uname", e.uname)
 	c.Set("role", e.role)
 	c.Set("perms", e.perms)
+	if time.Until(exp) < auth.RenewWindow {
+		if renewed, terr := auth.GenerateToken(uid, e.uname, e.pwdVer, h.cfg.JWTSecret); terr == nil {
+			c.Header("X-Renewed-Token", renewed)
+		} else {
+			slog.Warn("滑动续期签发失败", "component", "auth", "uid", uid, "error", terr)
+		}
+	}
 	return true
 }
 
 // AuthOptional 尝试解析登录态，无论成功与否都放行（用于可选登录的公开接口）。
-// pver 不一致（改密后的旧 token）按未登录处理，静默降级。
+// pver 不一致（改密后的旧 token）按未登录处理，静默降级；不做滑动续期——公开
+// 接口不签票，活跃标签页的 60s 通知轮询（AuthRequired 链）自然覆盖续期。
 func AuthOptional(h *Handlers) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-		if uid, _, tokenPwdVer, err := auth.ParseToken(token, h.cfg.JWTSecret); err == nil {
+		if uid, _, tokenPwdVer, _, err := auth.ParseToken(token, h.cfg.JWTSecret); err == nil {
 			if e, ok := h.loadIdent(c.Request.Context(), uid); ok && e.pwdVer == tokenPwdVer {
 				c.Set("uid", uid)
 				c.Set("uname", e.uname)
