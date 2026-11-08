@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,9 +26,11 @@ func (h *Handlers) notifyRoundCreated(ct *repo.Contest, kind string) {
 		return
 	}
 	what, typ := "比赛", repo.NotifyContest
+	link := "/contests/" + strconv.FormatInt(ct.ID, 10)
 	var uids []int64
 	if kind == repo.KindExam {
 		what, typ = "考试", repo.NotifyExam
+		link = "/exams/" + strconv.FormatInt(ct.ID, 10)
 		if uids, err = h.repo.ClassMemberIDs(ctx, ct.ClassID); err != nil {
 			return
 		}
@@ -38,11 +41,12 @@ func (h *Handlers) notifyRoundCreated(ct *repo.Contest, kind string) {
 		Typ:   typ,
 		Title: what + "「" + truncRunes(ct.Title, 40) + "」已发布",
 		Body:  "开始时间 " + ct.Start.Format("2006-01-02 15:04"),
+		Link:  link,
 		RefID: ct.ID,
 	}, s.NotifyRetentionDaysVal())
 }
 
-func (h *Handlers) notifyAssignmentCreated(classID int64, title string) {
+func (h *Handlers) notifyAssignmentCreated(classID, aid int64, title string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	s, err := h.repo.GetSystemSettings(ctx)
@@ -57,7 +61,8 @@ func (h *Handlers) notifyAssignmentCreated(classID int64, title string) {
 		Typ:   repo.NotifyAssignment,
 		Title: "作业「" + truncRunes(title, 40) + "」已发布",
 		Body:  "老师布置了新作业，快去完成",
-		RefID: classID,
+		Link:  "/assignments/" + strconv.FormatInt(aid, 10),
+		RefID: aid,
 	}, s.NotifyRetentionDaysVal())
 }
 
@@ -101,6 +106,7 @@ func (h *Handlers) scanRoundStarts(ctx context.Context) {
 			Typ:   typ,
 			Title: what + "「" + truncRunes(ct.Title, 40) + "」即将开始",
 			Body:  "开始时间 " + ct.Start.Format("15:04"),
+			Link:  "/" + kind + "s/" + strconv.FormatInt(ct.ID, 10), // /contests/:id、/exams/:id
 			RefID: ct.ID,
 		}, s.NotifyRetentionDaysVal()); err != nil {
 			continue
