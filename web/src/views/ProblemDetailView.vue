@@ -112,12 +112,18 @@ async function load() {
   loading.value = true
   loadAssignmentCtx() // 并行拉作业上下文（自带 try/catch，失败降级不阻塞做题）
   try {
-    problem.value = await problemApi.detail(Number(route.params.id))
-    const redirect = roundProblemRoute(problem.value)
+    const pid = Number(route.params.id)
+    const p = await problemApi.detail(pid)
+    // 快速切题竞态守卫：慢响应落地时路由已指向新题则丢弃（旧响应晚于新题赋值会整页回退旧题）
+    if (pid !== Number(route.params.id)) return
+    problem.value = p
+    const redirect = roundProblemRoute(p)
     if (redirect) {
       router.replace(redirect)
       return
     }
+    // 切题即刷新副列「我的提交」mini 行卡（原先只在挂载/提交后拉，同实例切题时停留旧题数据）
+    loadRecentMine()
   } catch (err) {
     const lock = (err as Error & { data?: { locked?: boolean } })?.data
     const redirect = lock ? roundProblemRoute(lock) : ''
@@ -347,9 +353,8 @@ async function handleObjectiveSubmit(answers: ObjAnswer[]) {
     const r = await submissionApi.createObjective(problem.value.id, answers)
     ElMessage.success(`已提交 #${r.id}`)
     mineDialogRef.value?.refresh(1)
-    loadRecentMine()
     startPolling(r.id)
-    await load()
+    await load() // 行卡随 load() 内的 loadRecentMine 一并刷新
   } catch {
     // 错误提示已由 axios 拦截器统一弹出
   } finally {
@@ -362,11 +367,14 @@ const recentMine = ref<Submission[]>([])
 
 async function loadRecentMine() {
   if (!problem.value || !userStore.token) return
+  const pid = problem.value.id
   try {
-    const r = await problemApi.mySubmissions(problem.value.id, 1, 3)
+    const r = await problemApi.mySubmissions(pid, 1, 3)
+    // 快速切题竞态守卫：响应落地时已换题则丢弃，旧题提交不残留在新题行卡
+    if (problem.value?.id !== pid) return
     recentMine.value = r.list.slice(0, 3)
   } catch {
-    recentMine.value = []
+    if (problem.value?.id === pid) recentMine.value = []
   }
 }
 
@@ -441,7 +449,6 @@ async function toggleDuplicate() {
 
 onMounted(async () => {
   await load()
-  loadRecentMine()
 })
 
 onUnmounted(stopPolling)
