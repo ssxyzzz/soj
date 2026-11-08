@@ -1,18 +1,22 @@
 <script setup lang="ts">
 // 代码对比工具页（v0.47）：双栏贴代码 → @codemirror/merge 分屏/上下 diff，页脚「代码对比」入口。
-// 登录后可用（requiresAuth）；「过滤注释」= 喂 diff 前先过 utils/codeDiff.ts 剥注释——纯注释
-// 差异不算差异，且换行保留、行号与原代码严格对齐。观感与站内代码查看器同源：CM6 高亮 +
+// 登录后可用（requiresAuth）。v0.83 起显示恒为**原文**（原格式 + 注释保留），「过滤注释/忽略
+// 空白」开关只改比对口径——merge 的 diffConfig.override 内先归一两侧再 diff，坐标映射回原文
+// 行边界（utils/codeDiff.ts mapNormalizedChanges）。观感与站内代码查看器同源：CM6 高亮 +
 // 只读态（readOnly + editable:false）+ Consolas 主题，CodeEditor.vue 同款链路全量动态 import。
-import { nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 
 import { ElMessage } from 'element-plus'
 
 import CodeEditor from '@/components/CodeEditor.vue'
 import { languageOptions } from '@/utils/code'
-import { prepareForDiff } from '@/utils/codeDiff'
+import { mapNormalizedChanges, prepareForDiff } from '@/utils/codeDiff'
 
 const lang = ref('cpp')
 const filterComments = ref(true)
+// 忽略空白（v0.83）：同算法两份代码一份格式化一份压缩时整篇标差淹没真差异——字面量外
+// 行内空白移除后仅剩内容差异。Python 缩进即语法禁用（watch 里联动回落）
+const ignoreWs = ref(true)
 const mode = ref<'split' | 'unified'>('split')
 const srcA = ref('') // 参考代码（标程 / 正确版本）
 const srcB = ref('') // 待比代码（学生 / 待查版本）
@@ -53,34 +57,58 @@ function destroyViews() {
 
 async function rebuild() {
   if (!compared.value || !resultEl.value) return
-  const textA = prepareForDiff(srcA.value, lang.value, filterComments.value)
-  const textB = prepareForDiff(srcB.value, lang.value, filterComments.value)
+  // v0.83「原文显示」：merge 展示原文（原格式 + 注释保留），比对口径走 diffConfig.override
+  // ——override 内先按开关归一两侧（行数 1:1），用包内 presentableDiff 求 diff，再把归一
+  // 坐标映射回原文行边界（mapNormalizedChanges）。纯注释差异/空白差异因此不高亮且原文可见。
+  const ws = ignoreWs.value && !wsDisabled.value
+  const strip = filterComments.value
+  const textA = srcA.value
+  const textB = srcB.value
   destroyViews()
-  const [cm, state, vm, merge, language] = await Promise.all([
+  const [cm, state, vm, merge, language, searchZhMod] = await Promise.all([
     import('codemirror'),
     import('@codemirror/state'),
     import('@codemirror/view'),
     import('@codemirror/merge'),
     langExt(lang.value),
+    import('@/utils/cmSearchZh'), // 搜索面板中文化（默认面板英文裸样式；utils/cmSearchZh）
   ])
   if (!resultEl.value) return // chunk 加载期间组件已卸载或已清空
   const theme = buildTheme(vm)
   // 只读态同 CodeEditor：readOnly 挡编辑命令，editable:false 去光标，仍可选中复制
   const readOnly = [state.EditorState.readOnly.of(true), vm.EditorView.editable.of(false)]
+  const diffConfig: import('@codemirror/merge').DiffConfig = {
+    override: (ra, rb) => {
+      const na = prepareForDiff(ra, lang.value, strip, ws)
+      const nb = prepareForDiff(rb, lang.value, strip, ws)
+      const raw = merge.presentableDiff(na, nb, { scanLimit: 500 })
+      return mapNormalizedChanges(ra, rb, na, nb, raw).map(
+        (c) => new merge.Change(c.fromA, c.toA, c.fromB, c.toB),
+      )
+    },
+  }
   if (mode.value === 'split') {
     splitView = new merge.MergeView({
-      a: { doc: textA, extensions: [cm.basicSetup, language, theme, ...readOnly] },
-      b: { doc: textB, extensions: [cm.basicSetup, language, theme, ...readOnly] },
+      a: { doc: textA, extensions: [cm.basicSetup, searchZhMod.searchZh(), language, theme, ...readOnly] },
+      b: { doc: textB, extensions: [cm.basicSetup, searchZhMod.searchZh(), language, theme, ...readOnly] },
       gutter: true,
       highlightChanges: true,
       // 相同段落折叠：长代码只展开差异段附近
       collapseUnchanged: { margin: 3, minSize: 4 },
+      diffConfig,
     })
     resultEl.value.replaceChildren(splitView.dom)
   } else {
     unifiedView = new cm.EditorView({
       doc: textB,
-      extensions: [cm.basicSetup, language, theme, ...readOnly, merge.unifiedMergeView({ original: textA })],
+      extensions: [
+        cm.basicSetup,
+        searchZhMod.searchZh(),
+        language,
+        theme,
+        ...readOnly,
+        merge.unifiedMergeView({ original: textA, diffConfig }),
+      ],
       parent: resultEl.value,
     })
   }
@@ -109,8 +137,18 @@ function clearAll() {
   destroyViews()
 }
 
+// python3 切换时禁用忽略空白：缩进即语法，行首缩进移除会把不同逻辑错误等价——
+// 已开则回落为关（提示一次），开关置灰
+const wsDisabled = computed(() => lang.value === 'python3')
+watch(wsDisabled, (d) => {
+  if (d && ignoreWs.value) {
+    ignoreWs.value = false
+    ElMessage.info('Python 缩进即语法，不支持忽略空白')
+  }
+})
+
 // 语言/过滤/模式变化：已出结果则即时重比（输入文本是唯一真源，结果区不回写）
-watch([lang, filterComments, mode], () => {
+watch([lang, filterComments, ignoreWs, mode], () => {
   if (compared.value) void nextTick().then(rebuild)
 })
 
@@ -121,7 +159,7 @@ onUnmounted(destroyViews)
   <div class="page">
     <div class="page-head">
       <div class="kicker">CODE DIFF</div>
-      <h1 class="page-title">代码对比<small>贴入两份代码查看差异；过滤注释后纯注释差异不再干扰</small></h1>
+      <h1 class="page-title">代码对比<small>贴入两份代码查看差异；开关只改比对口径，差异区始终显示原文</small></h1>
     </div>
 
     <!-- 输入卡：工具栏 + 双栏编辑器 -->
@@ -131,6 +169,11 @@ onUnmounted(destroyViews)
           <el-option v-for="o in languageOptions" :key="o.value" :label="o.label" :value="o.value" />
         </el-select>
         <el-switch v-model="filterComments" active-text="过滤注释" />
+        <el-tooltip content="移除缩进与运算符旁空格再比对（字符串内空格保留）；Python 缩进即语法不可用" placement="top">
+          <span>
+            <el-switch v-model="ignoreWs" :disabled="wsDisabled" active-text="忽略空白" />
+          </span>
+        </el-tooltip>
         <el-radio-group v-model="mode">
           <el-radio-button value="split">分屏对比</el-radio-button>
           <el-radio-button value="unified">上下对比</el-radio-button>
@@ -157,7 +200,13 @@ onUnmounted(destroyViews)
       <div class="result-head">
         <span class="result-title">差异结果</span>
         <span class="result-hint">{{
-          filterComments ? '已过滤注释：纯注释差异不显示，行号与原代码对齐' : '原文对比：注释差异同样标出'
+          [
+            ignoreWs && !wsDisabled ? '忽略空白：空白差异不高亮' : '',
+            filterComments ? '过滤注释：纯注释差异不高亮' : '',
+            ignoreWs || filterComments ? '显示原文' : '原文对比：空白与注释差异同样标出',
+          ]
+            .filter(Boolean)
+            .join('，')
         }}</span>
       </div>
       <div ref="resultEl" class="diff-result"></div>

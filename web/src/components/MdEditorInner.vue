@@ -28,6 +28,7 @@ import { authApi, mdApi } from '@/api'
 import MdView from '@/components/MdView.vue'
 import { useListener } from '@/composables/useWindowListener'
 import { useUserStore } from '@/stores/user'
+import { searchZh } from '@/utils/cmSearchZh'
 
 const props = withDefaults(
   defineProps<{
@@ -482,6 +483,7 @@ onMounted(() => {
       parent: editorHost.value,
       extensions: [
         basicSetup,
+        searchZh(), // 搜索面板中文化（默认面板英文裸样式，用户直拍；utils/cmSearchZh）
         markdown({ codeLanguages: [] }), // GFM（表格/任务列表/删除线）是 lang-markdown 默认开启项
         EditorView.lineWrapping,
         keymap.of([

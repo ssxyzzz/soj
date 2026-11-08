@@ -63,7 +63,7 @@ function buildTheme(vm: any, fontFamily: string, fontSize: number) {
 }
 
 onMounted(async () => {
-  const [cm, state, vm, autocompleteMod, languageMod, commandsMod, lang] = await Promise.all([
+  const [cm, state, vm, autocompleteMod, languageMod, commandsMod, lang, searchZhMod] = await Promise.all([
     import('codemirror'),
     import('@codemirror/state'),
     import('@codemirror/view'),
@@ -71,6 +71,7 @@ onMounted(async () => {
     import('@codemirror/language'),
     import('@codemirror/commands'),
     langExt(props.language),
+    import('@/utils/cmSearchZh'), // 搜索面板中文化（默认面板英文裸样式；utils/cmSearchZh）
   ])
   // 三层补全源（数据在 utils/completions.ts；Ctrl+Space 可显式唤起）：
   // ① include 上下文（#include <…> 内只出标准头，路径字符放宽到 [\w./+]，否则 bits/stdc++.h 打一半即断）
@@ -103,6 +104,7 @@ onMounted(async () => {
   acFactory = () => autocompleteMod.autocompletion({ override: [includeSource, listSource, wordSource] })
   const exts: any[] = [
     cm.basicSetup,
+    searchZhMod.searchZh(),
     langComp.of(lang),
     themeComp.of(buildTheme(vm, props.fontFamily, props.fontSize)),
     languageMod.indentUnit.of('    '), // 缩进单位统一 4 空格（自动缩进与 Tab 插入共用）
