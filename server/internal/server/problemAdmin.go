@@ -576,10 +576,20 @@ func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
 		return
 	}
 	defer os.Remove(tmpZip.Name())
-	if err := extractUploadZip(zips[0], tmpZip.Name()); err != nil {
-		fail(c, http.StatusBadRequest, "数据包不合法："+err.Error())
+	// 上传 zip 原样落盘（修复：此前把解压目标误传成 tmpZip 文件路径，
+	// extractUploadZip 会对文件路径 MkdirAll 导致「not a directory」，接口必坏）
+	fh, err := zips[0].Open()
+	if err != nil {
+		fail(c, http.StatusBadRequest, "读取上传文件失败："+err.Error())
 		return
 	}
+	if _, err = io.Copy(tmpZip, fh); err != nil {
+		tmpZip.Close()
+		fail(c, http.StatusInternalServerError, "保存上传文件失败："+err.Error())
+		return
+	}
+	fh.Close()
+	tmpZip.Close()
 	tmpDir, err := os.MkdirTemp("", "soj-replace-dir-")
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
