@@ -1544,6 +1544,49 @@ strong {
   border-color: var(--el-color-success-light-7);
 }
 
+/* KaTeX 隐藏 MathML 副本不参与划选（v0.84 随题面选中标注暴露的既有渲染瑕疵）：
+   .katex-mathml 视觉上 1px clip 隐藏但仍占选区命中链，拖选跨公式时光标被吸进
+   隐藏节点——选区断跳、跳过后方大片文字。user-select:none 只屏蔽隐藏副本；
+   .katex-html 渲染字形保持原生可选（拖选时公式随选区显示蓝色 = 所见即所得），
+   标注按字形文本节点拆段实现公式局部标色（KaTeX 排版骨架 strut/vlist 不动） */
+.soj-md .md-view-body .katex .katex-mathml {
+  user-select: none;
+}
+
+/* ---- 题面选中标注（v0.84，纯前端不持久化）----
+   MdViewInner（annotatable）注入的 <mark class="md-hl md-hl-{slot}">——动态 DOM
+   无 scope id，样式必须落全局（同 md-copy-btn 先例）。五档荧光浅底在画板五色槽
+   （ink/blue/teal/warning/danger）token 上 color-mix 派生：正文色不变保持可读，
+   navy 主题自动跟随换血；代码块暗底上同为半透明叠色，不遮内容。
+   公式（KaTeX）标注落在 .katex-html 的字形文本节点上（按选中粒度拆段，局部
+   标色），mark 继承公式字号字体，排版骨架（strut/vlist）不动 */
+.soj-md .md-view-body mark.md-hl {
+  background: var(--md-hl);
+  color: inherit;
+  padding: 0;
+  border-radius: 3px;
+}
+
+.md-hl-ink {
+  --md-hl: color-mix(in srgb, var(--soj-ink) 26%, transparent);
+}
+
+.md-hl-blue {
+  --md-hl: color-mix(in srgb, var(--soj-blue) 26%, transparent);
+}
+
+.md-hl-teal {
+  --md-hl: color-mix(in srgb, var(--soj-teal) 26%, transparent);
+}
+
+.md-hl-warning {
+  --md-hl: color-mix(in srgb, var(--soj-warning) 30%, transparent);
+}
+
+.md-hl-danger {
+  --md-hl: color-mix(in srgb, var(--soj-danger) 30%, transparent);
+}
+
 /* 代码显示面统一 --soj-fs-code（正文 × 0.95 ≈ 15.2px）+ 显式等宽字体栈
    （CodeMirror/Vditor 编辑器有自己的字号/字体主题，不受影响） */
 pre,

@@ -8,12 +8,20 @@
 // 契约，与 vditor 本体无关）；行号几何已随批搬入 main.css（vditor-linenumber 家族）。
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import MdMarkBar from '@/components/MdMarkBar.vue'
+import { useStatementMark } from '@/composables/useStatementMark'
 import { bindCopyFeedback } from '@/utils/md'
 
-const props = defineProps<{ html: string }>()
+const props = defineProps<{ html: string; annotatable?: boolean }>()
 
 const el = ref<HTMLDivElement>()
 let unbindCopy: (() => void) | null = null
+
+// 题面选中标注（v0.84）：仅 annotatable 接入（题面唯一入口 ProblemStatement 一处
+// 开启，公告/简介/题解等 MdView 其余使用点不受影响）；annotatable 是建站接线期
+// 常量，setup 一次性判定即可。工具条 Teleport 到 body——fixed 坐标不受容器
+// overflow/层叠上下文影响
+const mark = props.annotatable ? useStatementMark(el) : null
 
 // KaTeX 节点渲染：lute 输出 .language-math 节点，逐个 katex.render（比扫 $ 定界符
 // 精确，不误伤正文 $ 符号）；语法错误保留原文。katex 走 npm 懒 chunk（v0.53 起替代
@@ -64,6 +72,7 @@ async function highlightCode(root: HTMLElement) {
 async function render() {
   if (!el.value) return
   el.value.innerHTML = props.html ?? ''
+  mark?.hide() // 重渲染即抹标注（innerHTML 重写本就清掉），工具条随之撤
   if (!el.value.childNodes.length) return
   try {
     // v0.65 增强并行：hljs 与 KaTeX 作用于不同节点集互不依赖，Promise.all 并行——
@@ -94,6 +103,9 @@ onBeforeUnmount(() => {
   <div class="md-view soj-md md-light">
     <div ref="el" class="md-view-body vditor-reset"></div>
   </div>
+  <Teleport to="body">
+    <MdMarkBar v-if="mark?.state.visible" :style="mark?.state.style" @color="mark?.apply" @erase="mark?.erase" />
+  </Teleport>
 </template>
 
 <style scoped>

@@ -87,6 +87,7 @@ declare module 'vue' {
     ManualTidyPanel: typeof import('./components/admin/ManualTidyPanel.vue')['default']
     MdEditor: typeof import('./components/MdEditor.vue')['default']
     MdEditorInner: typeof import('./components/MdEditorInner.vue')['default']
+    MdMarkBar: typeof import('./components/MdMarkBar.vue')['default']
     MdView: typeof import('./components/MdView.vue')['default']
     MdViewInner: typeof import('./components/MdViewInner.vue')['default']
     MySubmissionsDialog: typeof import('./components/problem/MySubmissionsDialog.vue')['default']

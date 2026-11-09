@@ -6,9 +6,9 @@ import { defineAsyncComponent } from 'vue'
 
 const MdViewInner = defineAsyncComponent(() => import('./MdViewInner.vue'))
 
-defineProps<{ html: string }>()
+defineProps<{ html: string; annotatable?: boolean }>()
 </script>
 
 <template>
-  <MdViewInner :html="html" />
+  <MdViewInner :html="html" :annotatable="annotatable" />
 </template>
