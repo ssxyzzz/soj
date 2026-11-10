@@ -16,8 +16,8 @@ const emit = defineEmits<{ (e: 'color', slot: MarkSlot): void; (e: 'erase'): voi
       v-for="c in MARK_SLOTS"
       :key="c.slot"
       type="button"
-      class="dot"
-      :class="`dot-${c.slot}`"
+      class="mk-dot"
+      :class="`mk-dot-${c.slot}`"
       :title="`标为${c.name}`"
       :aria-label="`标为${c.name}`"
       @mousedown.prevent
@@ -44,7 +44,7 @@ const emit = defineEmits<{ (e: 'color', slot: MarkSlot): void; (e: 'erase'): voi
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 10px;
+  padding: 6px 10px; /* 圆点命中块 28×28 后由 6px 竖 padding 维持工具条原高度（原 7px 内高由 26px 橡皮擦主导） */
   background: var(--soj-white);
   border: 1px solid var(--soj-line-2);
   border-radius: var(--soj-radius-pill);
@@ -52,41 +52,57 @@ const emit = defineEmits<{ (e: 'color', slot: MarkSlot): void; (e: 'erase'): voi
   user-select: none; /* 拖选扫过工具条本身不产生选区 */
 }
 
-/* 圆点：画板 swatch 同款（白描边 + hairline ring），色由 --dot 下发 */
-.dot {
-  width: 18px;
-  height: 18px;
+/* 圆点：画板 swatch 同款视觉（白描边 + hairline ring），色由 --mk-dot 下发。
+   命中区 = 整块 28×28 方形按钮（视觉圆 18px 由 background-clip: content-box +
+   ::before 描边原样还原）——圆点周围一圈空白都算点到该色（v0.90.2 用户拍板）。
+   两个坑实测：①按钮本体不设圆角——border-radius 区域外浏览器不做命中，方块
+   四角会失灵；②类名前缀 mk-dot 避撞 main.css 全局 .dot（状态圆点 6px/50%），
+   全局 display:inline-block 与 50% 圆角曾漏进来让角落命中失效 */
+.mk-dot {
+  width: 28px;
+  height: 28px;
   flex: none;
-  border-radius: var(--soj-radius-pill);
-  border: 2px solid var(--soj-white);
-  box-shadow: 0 0 0 1px var(--soj-line-2);
-  background: var(--dot);
+  display: block;
+  padding: 5px;
+  border: none;
+  background: var(--mk-dot);
+  background-clip: content-box;
   cursor: pointer;
+  position: relative;
   transition: transform 0.15s;
 }
 
-.dot:hover {
+.mk-dot::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: var(--soj-radius-pill);
+  border: 2px solid var(--soj-white);
+  box-shadow: 0 0 0 1px var(--soj-line-2);
+}
+
+.mk-dot:hover {
   transform: scale(1.15);
 }
 
-.dot-ink {
-  --dot: var(--soj-ink);
+.mk-dot-ink {
+  --mk-dot: var(--soj-ink);
 }
 
-.dot-blue {
-  --dot: var(--soj-blue);
+.mk-dot-blue {
+  --mk-dot: var(--soj-blue);
 }
 
-.dot-teal {
-  --dot: var(--soj-teal);
+.mk-dot-teal {
+  --mk-dot: var(--soj-teal);
 }
 
-.dot-warning {
-  --dot: var(--soj-warning);
+.mk-dot-warning {
+  --mk-dot: var(--soj-warning);
 }
 
-.dot-danger {
-  --dot: var(--soj-danger);
+.mk-dot-danger {
+  --mk-dot: var(--soj-danger);
 }
 
 .sep {
