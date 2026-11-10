@@ -38,20 +38,26 @@ async function load() {
     loading.value = false
   }
 }
-// 游戏感批（v0.41）：本人主页加载成就墙 / 知识星图 / 错题本（公开主页不显示）
-const isOwnProfile = computed(() => Number(route.params.id) === (Number(localStorage.getItem('soj_uid')) || -1))
+// 游戏感批（v0.41）：成就墙 / 知识星图 / 错题本三卡随主页数据加载（v0.85 拍板随
+// 公开主页默认可见，不再限本人）；接口按 route id 拉取，隐藏题剔除由服务端按观察者权限收口
 const achs = ref<{ code: string; name: string; desc: string; tier: string; icon: string; unlocked_at?: string }[]>([])
 const achUnlocked = ref(0)
 const stars = ref<{ tag_id: number; name: string; solved: number; lit: boolean }[]>([])
 const wrongbook = ref<{ pid: number; title: string; difficulty: number; best_score: number }[]>([])
 
 async function loadGame() {
-  if (!isOwnProfile.value) return
+  const uid = Number(route.params.id)
+  if (!uid) return
+  // 换人先清旧数据，避免组件复用瞬间闪现上一位用户的三卡
+  achs.value = []
+  achUnlocked.value = 0
+  stars.value = []
+  wrongbook.value = []
   try {
     const [a, sm, wb] = await Promise.all([
-      gameApi.achievements(),
-      gameApi.starmap(),
-      gameApi.wrongbook(1),
+      gameApi.achievements(uid),
+      gameApi.starmap(uid),
+      gameApi.wrongbook(uid, 1),
     ])
     achs.value = a.list
     achUnlocked.value = a.unlocked
@@ -66,7 +72,12 @@ onMounted(() => {
   load()
   void loadGame()
 })
-watch(() => route.params.id, load)
+// 同路由换人（/users/A → /users/B 组件复用）：主页数据与游戏三卡一并重载——
+// loadGame 只在挂载跑一次的话，逛完他人主页再回自己主页时三卡仍是旧人数据（v0.84.1 实测修复）
+watch(() => route.params.id, () => {
+  load()
+  void loadGame()
+})
 
 const avatarChar = computed(() => (page.value?.nickname || page.value?.username || '?').slice(0, 1).toUpperCase())
 // QQ 头像外域失败兜底（v0.37）：qlogo 被墙时裂图——@error 回退首字头像（换人访问随 load 重置）
@@ -133,15 +144,15 @@ const groups = computed(() => {
 const sel = ref(0)
 const effSel = computed(() => (groups.value.some((g) => g.d === sel.value) ? sel.value : groups.value[0]?.d ?? 0))
 const selItems = computed(() => groups.value.find((g) => g.d === effSel.value)?.items ?? [])
-// 组内截断（v0.63 挂载冻结扫尾批）：重度用户单难度档 AC 数百题整组渲染无虚拟化——
-// 前 GROUP_N 条 + 展开按钮；切档/换窗收起复位
-const GROUP_N = 50
-const groupExpanded = ref(false)
+// 组内分页（v0.85 用户拍板，替代 v0.63 截断展开）：每页 20 条，超过一页出翻页器；
+// 切档/换窗/换用户回第一页
+const PAGE_SIZE = 20
+const groupPage = ref(1)
 const shownItems = computed(() =>
-  groupExpanded.value ? selItems.value : selItems.value.slice(0, GROUP_N),
+  selItems.value.slice((groupPage.value - 1) * PAGE_SIZE, groupPage.value * PAGE_SIZE),
 )
 watch([sel, win, () => page.value?.id], () => {
-  groupExpanded.value = false
+  groupPage.value = 1
 })
 
 // 柱高按真实做题数线性等比（2026-10-27 用户拍板，弃最高档归一口径）：
@@ -284,16 +295,23 @@ function openDetail(id: number) {
                 <el-tag v-if="e.hidden" size="small" type="danger" effect="plain" class="hid">隐藏</el-tag>
                 <span class="when mono">{{ fmtDate(e.first_ac_at) }}</span>
               </div>
-              <!-- v0.63 截断展开钮：重度用户单档数百题不整组挂载 -->
-              <button v-if="selItems.length > GROUP_N" type="button" class="gmore" @click="groupExpanded = !groupExpanded">
-                {{ groupExpanded ? '收起' : `展开全部 ${selItems.length} 题` }}
-              </button>
+              <!-- 组内翻页（v0.85）：超过一页才出，样式对齐排行榜 pager -->
+              <div v-if="selItems.length > PAGE_SIZE" class="pager">
+                <el-pagination
+                  background
+                  layout="prev, pager, next"
+                  :total="selItems.length"
+                  :page-size="PAGE_SIZE"
+                  :current-page="groupPage"
+                  @current-change="(p: number) => (groupPage = p)"
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- 成就墙（v0.41，仅本人）：战利品陈列格，四档配色 -->
-        <div v-if="isOwnProfile && achs.length" class="card ach-card">
+        <!-- 成就墙（v0.41；v0.85 随公开主页可见）：战利品陈列格，四档配色 -->
+        <div v-if="achs.length" class="card ach-card">
           <div class="done-head">
             <h3>成就墙</h3>
             <div class="ach-meter" :title="`已解锁 ${achUnlocked} / ${achs.length}`">
@@ -318,8 +336,8 @@ function openDetail(id: number) {
           </div>
         </div>
 
-        <!-- 知识星图（v0.41，仅本人）：知识点 AC≥3 点亮 -->
-        <div v-if="isOwnProfile && stars.length" class="card star-card">
+        <!-- 知识星图（v0.41；v0.85 随公开主页可见）：知识点 AC≥3 点亮 -->
+        <div v-if="stars.length" class="card star-card">
           <div class="done-head">
             <h3><TipLabel label="知识星图" tip="知识点 AC ≥ 3 题点亮" /></h3>
             <span class="dim">已点亮 {{ stars.filter((x) => x.lit).length }} / {{ stars.length }} 站</span>
@@ -333,8 +351,8 @@ function openDetail(id: number) {
           </div>
         </div>
 
-        <!-- 错题本（v0.41，仅本人）：复仇入口 -->
-        <div v-if="isOwnProfile && wrongbook.length" class="card wb-card">
+        <!-- 错题本（v0.41；v0.85 随公开主页可见，首页一屏前 20 条）：复仇入口 -->
+        <div v-if="wrongbook.length" class="card wb-card">
           <div class="done-head">
             <h3><TipLabel label="错题本" tip="每日 1 次复仇 · 24h 前错过的题经验 ×1.5" /></h3>
           </div>
@@ -618,21 +636,12 @@ function openDetail(id: number) {
   padding: var(--soj-sp-2) var(--soj-sp-6);
 }
 
-/* 截断展开钮（v0.63）：整行文本钮 */
-.gmore {
-  display: block;
-  width: 100%;
-  border: 0;
-  background: none;
-  padding: var(--soj-sp-10);
-  font: inherit;
-  font-size: var(--soj-fs-13);
-  color: var(--soj-blue);
-  cursor: pointer;
-}
-
-.gmore:hover {
-  text-decoration: underline;
+/* 组内分页器（v0.85 替代截断展开，与其他列表页一致：右对齐） */
+.pager {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--soj-sp-16);
+  padding-bottom: var(--soj-sp-2);
 }
 
 .prow {

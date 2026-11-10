@@ -191,15 +191,17 @@ export const gameApi = {
       solved_today?: number
     }>('/daily'),
   revenge: () => get<{ list: RevengeRow[]; used: boolean }>('/me/revenge'),
-  wrongbook: (page = 1) => get<{ list: RevengeRow[] }>('/me/wrongbook', { page }),
-  achievements: () =>
+  // 公开主页游戏三卡（v0.85 随主页公开，uid = 主页主人）：成就墙 / 星图 / 错题本
+  wrongbook: (uid: number, page = 1) => get<{ list: RevengeRow[] }>(`/users/${uid}/wrongbook`, { page }),
+  achievements: (uid: number) =>
     get<{
       list: { code: string; name: string; desc: string; tier: string; icon: string; unlocked_at?: string }[]
       unlocked: number
-    }>('/me/achievements'),
-  starmap: () => get<{ list: { tag_id: number; name: string; solved: number; lit: boolean }[]; lit: number }>(
-    '/me/starmap',
-  ),
+    }>(`/users/${uid}/achievements`),
+  starmap: (uid: number) =>
+    get<{ list: { tag_id: number; name: string; solved: number; lit: boolean }[]; lit: number }>(
+      `/users/${uid}/starmap`,
+    ),
   heralds: () =>
     get<{ list: { uid: number; level: number; nickname: string; at: string }[] }>('/heralds'),
   gameRank: (type: 'combo' | 'streak', by: 'best' | 'cur' = 'best') =>

@@ -41,6 +41,10 @@ type fakeRepo struct {
 	isMember bool
 	jadeBal  map[int64]int64
 
+	// 公开主页游戏三卡（v0.85）契约挂钩：捕获 starmap 隐藏口径参数、回放错题行
+	lastStarIncludeHidden bool
+	wbRows                []repo.RevengeRow
+
 	metaTreeNodes []repo.TagNode // 题库整理（v0.43）meta 任务：来源树种子（GetMetaTagTree/MatchMetaTags 用）
 	tagTreeNodes  []repo.TagNode // 手动整理（v0.49）：知识树种子（ValidateTagRefs 用）
 	lists         map[int64]*repo.ProblemList // 题单 AI 一键整理（v0.71）：题单种子（GetProblemList 用）
@@ -259,6 +263,10 @@ func testEngine(h *Handlers) *gin.Engine {
 	authed.GET("/admin/users/:id/jade", RequireRoot(), h.AdminUserJade)
 	authed.POST("/admin/users/:id/jade-adjust", RequireRoot(), h.AdminJadeAdjust)
 	authed.GET("/me/jade", h.MyJade)
+	// 公开主页游戏三卡（v0.85）：与生产同口径挂 AuthRequired
+	authed.GET("/users/:id/achievements", h.UserAchievements)
+	authed.GET("/users/:id/starmap", h.UserStarMap)
+	authed.GET("/users/:id/wrongbook", h.UserWrongbook)
 	return r
 }
 

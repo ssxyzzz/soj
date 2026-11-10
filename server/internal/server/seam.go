@@ -78,7 +78,7 @@ type RepoAPI interface {
 	GetGameStats(ctx context.Context, uid int64) (*repo.GameStats, error)
 	IsTodayDaily(ctx context.Context, pid int64) bool
 	RecentHeralds(ctx context.Context, limit int) ([]repo.HeraldRow, error)
-	StarMap(ctx context.Context, uid int64) ([]repo.StarNode, error)
+	StarMap(ctx context.Context, uid int64, includeHidden bool) ([]repo.StarNode, error)
 	CountDailySolved(ctx context.Context, pid int64, dayStart time.Time) int64
 	GetJadeAward(ctx context.Context, uid, pid int64) (*repo.JadeAward, error)
 	RawAchievements(ctx context.Context, uid int64) ([]repo.Achievement, error)

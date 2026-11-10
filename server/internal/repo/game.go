@@ -211,6 +211,7 @@ type RevengeRow struct {
 	Difficulty int       `json:"difficulty"`
 	BestScore  int       `json:"best_score"`
 	LastAt     time.Time `json:"last_at"`
+	Hidden     bool      `json:"hidden"` // 题目隐藏标记；观察者侧剔除由 handler 按权限现判
 }
 
 // Wrongbook 错题集：有非取消未 AC 提交且从未 AC 的题（jadeAwards 无记录 = 未 AC 过），
@@ -237,7 +238,7 @@ func (r *Repo) Wrongbook(ctx context.Context, uid int64, limit int, minAge time.
 		bson.D{{Key: "$limit", Value: limit}},
 		bson.D{{Key: "$lookup", Value: bson.M{
 			"from": "problems", "localField": "_id", "foreignField": "_id", "as": "p",
-			"pipeline": bson.A{bson.M{"$project": bson.M{"title": 1, "difficulty": 1}}},
+			"pipeline": bson.A{bson.M{"$project": bson.M{"title": 1, "difficulty": 1, "hidden": 1}}},
 		}}},
 		bson.D{{Key: "$unwind", Value: bson.M{"path": "$p", "preserveNullAndEmptyArrays": true}}},
 	)
@@ -255,6 +256,7 @@ func (r *Repo) Wrongbook(ctx context.Context, uid int64, limit int, minAge time.
 			P      struct {
 				Title      string `bson:"title"`
 				Difficulty int    `bson:"difficulty"`
+				Hidden     bool   `bson:"hidden"`
 			} `bson:"p"`
 		}
 		if err := cur.Decode(&row); err != nil {
@@ -265,7 +267,7 @@ func (r *Repo) Wrongbook(ctx context.Context, uid int64, limit int, minAge time.
 			continue
 		}
 		rows = append(rows, RevengeRow{PID: row.PID, Title: row.P.Title,
-			Difficulty: row.P.Difficulty, BestScore: row.Best, LastAt: row.LastAt})
+			Difficulty: row.P.Difficulty, BestScore: row.Best, LastAt: row.LastAt, Hidden: row.P.Hidden})
 	}
 	return rows, cur.Err()
 }
@@ -490,19 +492,26 @@ type StarNode struct {
 }
 
 // StarMap 知识星图：个人各知识点去重 AC 数（AC 提交 join 题目标签）。
-func (r *Repo) StarMap(ctx context.Context, uid int64) ([]StarNode, error) {
+// includeHidden=false 时隐藏题不进知识点计数（公开口径按观察者权限，与全站隐藏题
+// 剔除范式一致——tag 计数本身也属隐藏题存在性信号）。
+func (r *Repo) StarMap(ctx context.Context, uid int64, includeHidden bool) ([]StarNode, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"uid": uid, "status": StatusAccepted, "published": true}}},
 		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
 		{{Key: "$lookup", Value: bson.M{
 			"from": "problems", "localField": "_id.pid", "foreignField": "_id", "as": "p",
-			"pipeline": bson.A{bson.M{"$project": bson.M{"tags": 1}}},
+			"pipeline": bson.A{bson.M{"$project": bson.M{"tags": 1, "hidden": 1}}},
 		}}},
 		{{Key: "$unwind", Value: bson.M{"path": "$p", "preserveNullAndEmptyArrays": true}}},
 		{{Key: "$unwind", Value: bson.M{"path": "$p.tags", "preserveNullAndEmptyArrays": true}}},
-		{{Key: "$group", Value: bson.M{"_id": "$p.tags", "solved": bson.M{"$sum": 1}}}},
-		{{Key: "$match", Value: bson.M{"_id": bson.M{"$ne": nil}}}},
 	}
+	if !includeHidden {
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.M{"p.hidden": bson.M{"$ne": true}}}})
+	}
+	pipeline = append(pipeline,
+		bson.D{{Key: "$group", Value: bson.M{"_id": "$p.tags", "solved": bson.M{"$sum": 1}}}},
+		bson.D{{Key: "$match", Value: bson.M{"_id": bson.M{"$ne": nil}}}},
+	)
 	cur, err := r.submissions.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err

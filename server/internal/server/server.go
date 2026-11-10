@@ -177,9 +177,6 @@ func Run(ctx context.Context, deps *Deps) {
 		// 游戏感批（v0.41）：每日钩子 / 成就星图 / 降临 / 双榜（只读 + 本人数据）
 		api.GET("/daily", AuthOptional(h), h.GetDaily)
 		api.GET("/me/revenge", AuthRequired(h), h.MyRevenge)
-		api.GET("/me/wrongbook", AuthRequired(h), h.MyWrongbook)
-		api.GET("/me/achievements", AuthRequired(h), h.MyAchievements)
-		api.GET("/me/starmap", AuthRequired(h), h.MyStarMap)
 		api.GET("/heralds", AuthOptional(h), h.GetHeralds)
 		api.GET("/game-rank", AuthOptional(h), h.GameRank)
 		api.GET("/problems/:id/boards", AuthRequired(h), h.ProblemBoards)
@@ -196,6 +193,11 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/users/lookup", AuthRequired(h), h.LookupUsers)
 		// 用户公开主页（v0.17）：登录可见，本人与他人统一视图（gin 静态段 /lookup 优先匹配，无冲突）
 		api.GET("/users/:id/profile", AuthRequired(h), h.UserProfile)
+		// 公开主页游戏三卡（v0.85 随主页公开，原 /api/me/* 三接口退役）：成就墙 / 知识星图 /
+		// 错题本——隐藏题按观察者权限剔除，口径同 first_ac
+		api.GET("/users/:id/achievements", AuthRequired(h), h.UserAchievements)
+		api.GET("/users/:id/starmap", AuthRequired(h), h.UserStarMap)
+		api.GET("/users/:id/wrongbook", AuthRequired(h), h.UserWrongbook)
 		api.GET("/submissions/:id", AuthOptional(h), h.GetSubmission)
 		api.POST("/submissions/:id/rejudge", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.RejudgeSubmission)
 		// 取消评测（v0.7.1）：本人 ∨ submission.view.all（handler 内校验）
