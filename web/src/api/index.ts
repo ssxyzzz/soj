@@ -289,6 +289,8 @@ export const siteApi = {
 export const problemApi = {
   // 玉解锁题解（v0.33-②）：价 = 难度 × 系数；解锁永久，返回新余额供顶栏刷新
   unlockSolutions: (id: number) => post<{ unlocked: boolean; balance: number }>(`/problems/${id}/solution-unlock`),
+  // 题目收藏（v0.86）：幂等 toggle，返回操作后的收藏态
+  toggleFavorite: (id: number) => post<{ favorited: boolean }>(`/problems/${id}/favorite`),
   list: (
     page: number,
     pageSize: number,

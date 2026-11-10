@@ -96,6 +96,7 @@ type RepoAPI interface {
 	DeleteRound(ctx context.Context, kind string, id int64) error
 	DeleteSolution(ctx context.Context, sid int64) error
 	FailVerifyCode(ctx context.Context, id int64, already int) (int, error)
+	FavoritePIDs(ctx context.Context, uid int64, pids []int64) (map[int64]bool, error)
 	GetAssignment(ctx context.Context, id int64) (*repo.Assignment, error)
 	GetClass(ctx context.Context, id int64) (*repo.Class, error)
 	GetClassByInviteCode(ctx context.Context, code string) (*repo.Class, error)
@@ -270,6 +271,7 @@ type RepoAPI interface {
 	TestDataDownloadAllowed(ctx context.Context, uid, pid int64, limit int) (bool, error)
 	TestDataDownloadedInWeek(ctx context.Context, uid int64, exclude []int64) (int64, error)
 	ToggleDiscussLike(ctx context.Context, targetType string, targetID, uid int64) (liked bool, count int64, err error)
+	ToggleProblemFavorite(ctx context.Context, uid, pid int64) (bool, error)
 	TransferClass(ctx context.Context, classID, fromUID, toUID int64) error
 	UnbindAllTagsField(ctx context.Context, field string, tagIDs []int64) (int64, error)
 	UnbindEmail(ctx context.Context, uid int64) error

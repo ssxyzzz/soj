@@ -174,6 +174,8 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/problems/:id/challenge/status", AuthRequired(h), h.ChallengeStatus)
 		api.POST("/problems/:id/challenge/quit", AuthRequired(h), h.QuitChallenge)
 		api.POST("/problems/:id/run", AuthRequired(h), h.SelfTestRun)
+		// 题目收藏（v0.86）：幂等 toggle，登录态；列表接口附带当前用户收藏标记
+		api.POST("/problems/:id/favorite", AuthRequired(h), h.ToggleProblemFavorite)
 		// 游戏感批（v0.41）：每日钩子 / 成就星图 / 降临 / 双榜（只读 + 本人数据）
 		api.GET("/daily", AuthOptional(h), h.GetDaily)
 		api.GET("/me/revenge", AuthRequired(h), h.MyRevenge)

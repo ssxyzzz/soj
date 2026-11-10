@@ -44,6 +44,7 @@ export interface ProblemListItem {
   accepted_count?: number // 其中 AC 的提交数
   status?: string // 我的最高分提交状态（登录才返回，全称如 Accepted/Wrong Answer）
   my_score?: number // 该提交的得分
+  favorite?: boolean // 我是否已收藏（v0.86，登录才返回，仅命中时下发）
   tags?: number[] // 标签树节点 ID，名字由前端标签树映射
   type?: string // 题型（v0.9）：空 = 传统题；objective / function / interactive 显示徽章
   kind?: string // 客观题小类（single/multiple/judge/blank），仅 objective 时返回

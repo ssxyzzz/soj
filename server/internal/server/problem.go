@@ -190,7 +190,40 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 			}
 		}
 	}
+	// 收藏星标（v0.86）：登录用户按当前页批查自己收藏的题；失败不阻塞列表（回退无星）
+	if logged {
+		if favs, err := h.repo.FavoritePIDs(ctx, uid, pids); err == nil {
+			for _, it := range items {
+				if favs[it["id"].(int64)] {
+					it["favorite"] = true
+				}
+			}
+		}
+	}
 	ok(c, gin.H{"list": items, "total": total})
+}
+
+// ToggleProblemFavorite 收藏/取消收藏题目（v0.86）：幂等 toggle，返回操作后的收藏态。
+// 题号必须真实存在（防脚本攒幽灵收藏文档）；星标只在题库列表行出现，入口天然有界。
+func (h *Handlers) ToggleProblemFavorite(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	uid, okUID := requireUID(c)
+	if !okUID {
+		return
+	}
+	ctx := c.Request.Context()
+	if _, err := h.repo.GetProblem(ctx, id); respondRepoErr(c, err, "题目不存在", "读取题目失败") {
+		return
+	}
+	fav, err := h.repo.ToggleProblemFavorite(ctx, uid, id)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "收藏操作失败")
+		return
+	}
+	ok(c, gin.H{"favorited": fav})
 }
 
 // GetProblem 题目详情（含按视角的锁题/隐藏判定与样例按需读取）。

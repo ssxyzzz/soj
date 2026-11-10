@@ -45,6 +45,9 @@ type fakeRepo struct {
 	lastStarIncludeHidden bool
 	wbRows                []repo.RevengeRow
 
+	// 题目收藏（v0.86）契约挂钩：uid → pid → 已收藏
+	favorites map[int64]map[int64]bool
+
 	metaTreeNodes []repo.TagNode // 题库整理（v0.43）meta 任务：来源树种子（GetMetaTagTree/MatchMetaTags 用）
 	tagTreeNodes  []repo.TagNode // 手动整理（v0.49）：知识树种子（ValidateTagRefs 用）
 	lists         map[int64]*repo.ProblemList // 题单 AI 一键整理（v0.71）：题单种子（GetProblemList 用）

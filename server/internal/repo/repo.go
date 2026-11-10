@@ -56,6 +56,8 @@ type Repo struct {
 	dailyProblems  *mongo.Collection // 每日一题（v0.41，_id = 日期串）
 	classroomRaces *mongo.Collection // 课堂 PK（v0.42，班级同题手速赛）
 
+	problemFavorites *mongo.Collection // 题目收藏（v0.86，{uid,pid} 唯一）
+
 	// 系统设置进程缓存（v0.37）：热路径单文档点查 5s 缓存，UpdateSystemSettings
 	// 写穿失效。缓存存归一化后的值，外发 clone（调用方拿到独立副本，防误改缓存）。
 	setMu    sync.RWMutex
@@ -153,6 +155,8 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		achievements:  db.Collection("achievements"),
 		dailyProblems: db.Collection("dailyProblems"),
 		classroomRaces: db.Collection("classroomRaces"),
+
+		problemFavorites: db.Collection("problemFavorites"),
 		acRates:       map[int64]acRateEntry{},
 		raceBoardCache: map[int64]raceBoardEntry{},
 	}, nil
@@ -334,6 +338,10 @@ func (r *Repo) Bootstrap(ctx context.Context, store testdata.Provider) error {
 	}
 	// 题解每题每人一篇（2026-10-26）：清历史重复 + 唯一索引兜底并发
 	if _, err := r.EnsureSolutionUnique(ctx); err != nil {
+		return err
+	}
+	// 题目收藏（v0.86）：{uid,pid} 唯一防重
+	if err := r.EnsureProblemFavoriteIndexes(ctx); err != nil {
 		return err
 	}
 

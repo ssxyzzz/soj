@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { ArrowDown, CircleClose, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
+import { Star } from 'lucide-vue-next'
 
 import { authApi, problemApi, rankApi } from '@/api'
 import { downloadFile } from '@/api/download'
@@ -137,6 +138,22 @@ function search() {
   page.value = 1
   qsync()
   load()
+}
+
+// 收藏星标（v0.86）：toggle 后按返回态回写行（不乐观更新，失败拦截器统一 toast 不翻星）；
+// 全局在途锁防连点双翻转
+const favBusy = ref(false)
+async function onToggleFavorite(row: ProblemListItem) {
+  if (favBusy.value) return
+  favBusy.value = true
+  try {
+    const res = await problemApi.toggleFavorite(row.id)
+    row.favorite = res.favorited
+  } catch {
+    /* 失败已 toast，星标保持原态 */
+  } finally {
+    favBusy.value = false
+  }
 }
 
 function resetSearch() {
@@ -394,8 +411,18 @@ onMounted(() => {
               <span v-else class="dim">—</span>
             </template>
           </el-table-column>
-          <el-table-column label="题号" width="76">
+          <el-table-column label="题号" width="96">
             <template #default="{ row }">
+              <!-- 收藏星标（v0.86）：仅登录视角渲染（游客列内纯题号）；点击拦截冒泡防触发整行跳转 -->
+              <button
+                v-if="userStore.token"
+                class="fav-btn"
+                :class="{ on: row.favorite }"
+                :title="row.favorite ? '取消收藏' : '收藏'"
+                @click.stop="onToggleFavorite(row as ProblemListItem)"
+              >
+                <Star :size="14" :stroke-width="1.8" />
+              </button>
               <span class="mono dim">P{{ row.id }}</span>
             </template>
           </el-table-column>
@@ -584,6 +611,39 @@ onMounted(() => {
    行勾选与表头全选一并放大 */
 :deep(.el-table-column--selection .el-checkbox) {
   transform: scale(1.35);
+}
+
+/* 收藏星标（v0.86）：未收藏墨灰轮廓，悬停琥珀微亮，已收藏琥珀实心
+   （--soj-warning 语义档即 TLE 同源琥珀，半透明派生走 color-mix 纪律） */
+.fav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--soj-ink-3);
+  cursor: pointer;
+  vertical-align: middle;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+.fav-btn:hover {
+  color: var(--soj-warning);
+  background: color-mix(in srgb, var(--soj-warning) 12%, transparent);
+}
+
+.fav-btn.on {
+  color: var(--soj-warning);
+}
+
+.fav-btn.on svg {
+  fill: currentColor;
 }
 
 /* toolbar 形态收编全局 .toolbar（flex/wrap/gap/mb），本地只留增量 */
