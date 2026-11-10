@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"soj/internal/repo"
+	"soj/internal/sandbox"
 )
 
 func TestWaker(t *testing.T) {
@@ -143,5 +144,70 @@ func TestWAFileIOHint(t *testing.T) {
 		if !c.wantHas && got != "" {
 			t.Errorf("%s: 不应追加提示，得到 %q", c.name, got)
 		}
+	}
+}
+
+// TestCaseVerdictSignalHint RE 明细可读性：Signalled（被信号终止）按信号编号翻成成因
+// 提示（如 11 = SIGSEGV 段错误，含爆栈改非递归的指引）；自行非零退出与被信号终止
+// 文案可区分；stderr 仅在非空时拼接（不再出现裸编号与尾逗号）。
+func TestCaseVerdictSignalHint(t *testing.T) {
+	cmp := outputComparer{}
+	cases := []struct {
+		name      string
+		res       sandbox.Result
+		wantParts []string // 明细必须依次包含的片段
+		wantGone  string   // 明细不得出现的旧文案片段
+	}{
+		{
+			name:      "信号11翻段错误含爆栈指引",
+			res:       sandbox.Result{Status: "Signalled", ExitStatus: 11},
+			wantParts: []string{"运行时错误：段错误", "SIGSEGV", "递归过深爆栈"},
+			wantGone:  "退出状态",
+		},
+		{
+			name:      "信号8翻算术错误",
+			res:       sandbox.Result{Status: "Signalled", ExitStatus: 8},
+			wantParts: []string{"SIGFPE", "除以零"},
+			wantGone:  "退出状态",
+		},
+		{
+			name:      "未收录信号回退编号",
+			res:       sandbox.Result{Status: "Signalled", ExitStatus: 99},
+			wantParts: []string{"异常信号 99"},
+			wantGone:  "退出状态",
+		},
+		{
+			name:      "非零退出码区分于信号",
+			res:       sandbox.Result{Status: "Nonzero Exit Status", ExitStatus: 1},
+			wantParts: []string{"程序以非零退出码 1 结束"},
+			wantGone:  "信号",
+		},
+		{
+			name:      "旧拼写 Non Zero 兼容",
+			res:       sandbox.Result{Status: "Non Zero Exit Status", ExitStatus: -1},
+			wantParts: []string{"程序以非零退出码 -1 结束"},
+			wantGone:  "",
+		},
+		{
+			name:      "stderr非空才拼接且无尾逗号",
+			res:       sandbox.Result{Status: "Signalled", ExitStatus: 11, Files: map[string]string{"stderr": "panic: runtime error"}},
+			wantParts: []string{"段错误", "；stderr: ", "panic: runtime error"},
+			wantGone:  ", \n",
+		},
+	}
+	for _, c := range cases {
+		_, _, got := caseVerdict(&c.res, "", "", cmp)
+		for _, part := range c.wantParts {
+			if !strings.Contains(got, part) {
+				t.Errorf("%s: 明细 %q 缺少片段 %q", c.name, got, part)
+			}
+		}
+		if c.wantGone != "" && strings.Contains(got, c.wantGone) {
+			t.Errorf("%s: 明细 %q 不应出现 %q", c.name, got, c.wantGone)
+		}
+	}
+	// StatusRE 契约：以上全部按 RE 收口
+	if _, st, _ := caseVerdict(&sandbox.Result{Status: "Signalled", ExitStatus: 11}, "", "", cmp); st != repo.StatusRE {
+		t.Errorf("Signalled 应收口为 %s，得到 %s", repo.StatusRE, st)
 	}
 }

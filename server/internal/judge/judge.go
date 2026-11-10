@@ -444,6 +444,20 @@ func tolerantEqual(a, b string, tol float64) bool {
 	return true
 }
 
+// signalHints 把沙箱 Signalled 状态的信号编号翻成选手能读懂的成因提示。
+// 只覆盖选手代码实际会触发的常见信号面，未收录信号回退「异常信号 N」。
+// （信号编号即 go-judge Signalled 状态下的 ExitStatus 约定值）
+var signalHints = map[int]string{
+	4:  "非法指令（SIGILL）",
+	6:  "程序主动中止（SIGABRT，常见于断言失败、double free 或内存申请失败）",
+	7:  "总线错误（SIGBUS，常见于数组越界或未对齐访问）",
+	8:  "算术错误（SIGFPE，常见于除以零或模零）",
+	11: "段错误（SIGSEGV，常见于数组越界、空指针解引用或递归过深爆栈；深度大的树/图题建议改用非递归写法）",
+	13: "管道破裂（SIGPIPE，读取端已关闭仍在写入）",
+	24: "超出 CPU 限额（SIGXCPU）",
+	31: "非法系统调用（SIGSYS）",
+}
+
 // caseVerdict 把沙箱单点结果归一为 (点位状态缩写, 终止状态, 原因)。
 // 终止状态非空表示该点导致整份提交按此状态失败（单点模式用）。
 func caseVerdict(res *sandbox.Result, progOut, ans string, cmp outputComparer) (caseStatus, finalStatus, reason string) {
@@ -458,8 +472,22 @@ func caseVerdict(res *sandbox.Result, progOut, ans string, cmp outputComparer) (
 	case "Memory Limit Exceeded":
 		return "MLE", repo.StatusMLE, "超出内存限制"
 	case "Nonzero Exit Status", "Non Zero Exit Status", "Signalled": // 两种拼写均兼容（实测为 Nonzero）
-		return "RE", repo.StatusRE,
-			fmt.Sprintf("退出状态 %d, %s", res.ExitStatus, truncate(res.Stderr(), 512))
+		var msg string
+		if res.Status == "Signalled" {
+			// 被信号终止：ExitStatus 即信号编号，翻成成因提示
+			name, ok := signalHints[res.ExitStatus]
+			if !ok {
+				name = fmt.Sprintf("异常信号 %d", res.ExitStatus)
+			}
+			msg = "运行时错误：" + name
+		} else {
+			// 自行退出：ExitStatus 为非零退出码（如 return -1、exit(1)）
+			msg = fmt.Sprintf("程序以非零退出码 %d 结束", res.ExitStatus)
+		}
+		if s := strings.TrimSpace(res.Stderr()); s != "" {
+			msg += "；stderr: " + truncate(s, 512)
+		}
+		return "RE", repo.StatusRE, msg
 	case "Output Limit Exceeded":
 		return "OLE", repo.StatusRE, "输出超过限制"
 	default:
