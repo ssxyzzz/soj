@@ -416,12 +416,15 @@ func Run(ctx context.Context, deps *Deps) {
 				// 题库整理（v0.43）：AI 打标 + 规则归一化，两段式（任务只产建议、
 				// apply 确认后写库）；批量改库是部署级操作，root 专属（同标签树先例）。
 				// v0.49 双模式：manual* = 手动直改（分页题目表 + 最终值写库 + 水位）
+				// v0.92 历史：apply 两路批次留痕 tidyHistory，面板可回看
 				adminG.POST("/tidy/run", RequireRoot(), h.TidyRun)
 				adminG.GET("/tidy/status", RequireRoot(), h.TidyStatus)
 				adminG.POST("/tidy/cancel", RequireRoot(), h.TidyCancel)
 				adminG.POST("/tidy/apply", RequireRoot(), h.TidyApply)
 				adminG.GET("/tidy/problems", RequireRoot(), h.TidyManualProblems)
 				adminG.POST("/tidy/manual", RequireRoot(), h.TidyManualApply)
+				adminG.GET("/tidy/history", RequireRoot(), h.TidyHistoryList)
+				adminG.GET("/tidy/history/:id", RequireRoot(), h.TidyHistoryDetail)
 
 				// 标签树（v0.5.5）：仅 root 可改（硬编码不下放，同角色管理先例）；
 				// 管理面板读走 /admin/tagtree（附每节点引用数），公开读仍走 /tags/tree

@@ -58,6 +58,9 @@ type fakeRepo struct {
 
 	metaTreeNodes []repo.TagNode // 题库整理（v0.43）meta 任务：来源树种子（GetMetaTagTree/MatchMetaTags 用）
 	tagTreeNodes  []repo.TagNode // 手动整理（v0.49）：知识树种子（ValidateTagRefs 用）
+	// 整理历史（v0.92）：apply 留痕内存版（InsertTidyHistory/ListTidyHistory/GetTidyHistory）
+	tidyHistory map[int64]*repo.TidyHistory
+	tidyHistSeq int64
 	lists         map[int64]*repo.ProblemList // 题单 AI 一键整理（v0.71）：题单种子（GetProblemList 用）
 	aiCfg         *ai.Config                  // AI 供应商配置种子（GetAIConfig 用；无启用档 = 未配置）
 
@@ -321,6 +324,7 @@ func baseFake() *fakeRepo {
 		aiCfg:      &ai.Config{},
 		bestScores: map[int64]int{},
 		jadeBal:    map[int64]int64{},
+		tidyHistory: map[int64]*repo.TidyHistory{},
 	}
 }
 

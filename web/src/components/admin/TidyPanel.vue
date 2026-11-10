@@ -1,14 +1,15 @@
 <script setup lang="ts">
-// 题库整理（v0.43 两段式；v0.49 拆双模式）：AI 整理 = AI/规则只产建议，root 预览勾选
-// 确认后才批量写库；手动整理 = 分页题目表（每页 100 题）直接手改，见 ManualTidyPanel。
+// 题库整理（v0.43 两段式；v0.49 拆双模式；v0.92 二期）：AI 整理 = AI/规则只产建议，
+// root 预览勾选确认后才批量写库；手动整理 = 分页题目表（每页 100 题）直接手改，
+// 见 ManualTidyPanel；整理历史 = apply 两路批次留痕回看（逐题 old→new 可审计）。
 // 三类任务共用单任务骨架（run → 2s 轮询 → 差异表 → apply），照 BackupPanel
-// 轮询范式（失败计数超限复位按钮，v0.37）。冲突题置顶 + 默认不勾 + 可改判是本面板灵魂：
-// AI 档与通过率档并列展示由 root 拍板（plan 2026-10-31 三拍板）。
+// 轮询范式（失败计数超限复位按钮，v0.37）。
+// v0.92 难度五源判读：题面+知识点+题解+AC代码+网上答案（GLM web_search）综合，
+// 通过率链路退役——参考列/冲突置顶/只看冲突/兜底全数移除，AI 失败行无建议默认不勾。
 // v0.68 知识点勾选细分：知识点表退役整行勾选，新增/移除两维独立勾选采纳（默认两维全勾 =
 // 拆分前「有建议即整行勾」语义）——只勾新增时现有标签原样保留，不勾移除就不移除。
-// v0.49 双模式 + 建议表服务端分页（验收期调整）：页面只持有当前页 ≤100 条建议——
-// 全量快照（2000 题级）整包进 2s 轮询是卡顿根源；勾选为当前页独立语义，翻页即清，
-// 不做跨页保留。suggestion_total/conflict_total 为全量口径（翻页器与冲突计数）。
+// v0.49 建议表服务端分页：页面只持有当前页 ≤100 条建议——全量快照（2000 题级）
+// 整包进 2s 轮询是卡顿根源；勾选为当前页独立语义，翻页即清，不做跨页保留。
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -16,17 +17,21 @@ import { adminApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
 import LazySelectCell from '@/components/LazySelectCell.vue'
 import ManualTidyPanel from './ManualTidyPanel.vue'
-import type { TidyApplyItem, TidyKind, TidySuggestion, TidyStatus } from '@/types'
+import type { TidyApplyItem, TidyHistoryBatch, TidyHistoryDetail, TidyKind, TidySuggestion, TidyStatus } from '@/types'
 
-// 模式卡（v0.49）：AI整理（建议流）/ 手动整理（直改流）
+// 模式卡（v0.49 双模式 + v0.92 历史第三卡）：AI整理（建议流）/ 手动整理（直改流）/ 整理历史（回看）
 const MODE_META = {
   ai: {
     label: 'AI整理',
-    desc: 'AI 读题面评估难度、从知识树候选集选知识点、标题规则重挂来源标签——只产建议不写库，预览勾选确认后才应用。',
+    desc: '难度 = 题面+知识点+题解+AC代码+网上答案五源综合判读；知识点 = 知识树候选集选名；来源 = 标题规则重挂。只产建议不写库，预览勾选确认后才应用。',
   },
   manual: {
     label: '手动整理',
     desc: '分页题目表（每页 100 题）直接手改难度 / 知识点 / 来源标签，保存即写库并计入已整理水位，不经 AI。',
+  },
+  history: {
+    label: '整理历史',
+    desc: 'AI 确认应用与手动整理保存的每一批次都留痕：谁、何时、逐题从什么改成什么，可追溯可审计。',
   },
 } as const
 
@@ -38,7 +43,7 @@ const diffOptions = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, label: `D
 const KIND_META: Record<TidyKind, { label: string; desc: string }> = {
   difficulty: {
     label: '难度',
-    desc: 'AI 读题面对照难度锚点表给主建议；通过率档位并列参考。两者档差 ≥2 判冲突置顶默认不勾，由你改判。AI 失败的题按通过率兜底。',
+    desc: 'AI 综合题面、现挂知识点、站内题解、历史 AC 代码与网上公开资料（联网搜索）对照锚点表给建议；不看通过率。AI 失败的题不出建议，默认不勾可改判。',
   },
   knowledge: {
     label: '知识点',
@@ -58,7 +63,6 @@ const starting = ref(false)
 const status = ref<TidyStatus | null>(null)
 const applying = ref(false)
 const appliedPids = ref(new Set<number>())
-const onlyConflict = ref(false) // 难度表「只看冲突」筛选
 
 // 勾选三件套：selected = 待应用行集（难度/来源 = 表格整行勾；知识点 = 两维并集，
 // 应用按钮与计数口径），selAdd/selRm = 知识点新增/移除两维采纳集（v0.68 拆分，pid → true）；
@@ -74,9 +78,6 @@ const done = computed(() => ['done', 'cancelled', 'failed'].includes(status.valu
 // 当前页切片（服务端分页后 status.suggestions 只含本页 ≤100 条）
 const suggestions = computed<TidySuggestion[]>(() => status.value?.suggestions ?? [])
 const suggestionTotal = computed(() => status.value?.suggestion_total ?? suggestions.value.length)
-const conflictCount = computed(
-  () => status.value?.conflict_total ?? suggestions.value.filter((s) => s.conflict).length,
-)
 const jobKind = computed<TidyKind | null>(() => status.value?.kind ?? null)
 
 // 任务题号范围（快照带出）：单边留空显示开口；全空 = 全库不显示
@@ -99,13 +100,14 @@ const pageLabel = computed(() => {
   return ` · 当前第 ${lo}–${hi} 条`
 })
 
-// 整行勾选默认值（plan 拍板）：难度=未设且非冲突才勾；来源=有建议且与现值不同才勾。
+// 整行勾选默认值（plan 拍板；v0.92 难度口径）：难度=未设且 AI 有建议才勾（AI 失败行
+// 无建议默认不勾，root 可勾后改判）；来源=有建议且与现值不同才勾。
 // 知识点不走整行勾选（v0.68 拆新增/移除两维，默认值见 syncSelection knowledge 分支）
 function defaultChecked(s: TidySuggestion): boolean {
   if (appliedPids.value.has(s.pid)) return false
   switch (s.kind) {
     case 'difficulty':
-      return !s.has_difficulty && !s.conflict
+      return !s.has_difficulty && !s.ai_error && (s.suggest_difficulty ?? 0) >= 1
     case 'meta':
       return !s.no_clue && !!s.suggest_meta_ids && !sameSet(s.cur_meta_ids, s.suggest_meta_ids)
     default:
@@ -158,12 +160,12 @@ function clearSelection() {
   })
 }
 
-// 按当前 page/onlyConflict 拉取状态快照（服务端切片）。runningMerge=true 时（2s 轮询拍）
+// 按当前 page 拉取状态快照（服务端切片）。runningMerge=true 时（2s 轮询拍）
 // 只就地更新进度字段不整对象替换——轮询期建议表未挂载（v-if done），整替换只会让全部
 // computed 白跑一遍；保持引用稳定，进度条独享重渲染（v0.63 批次2）。
 async function fetchStatus(runningMerge = false): Promise<boolean> {
   try {
-    const r = await adminApi.tidyStatus(page.value, PAGE_SIZE, onlyConflict.value)
+    const r = await adminApi.tidyStatus(page.value, PAGE_SIZE)
     if (runningMerge && status.value && status.value.state === 'running' && r.state === 'running') {
       status.value.total = r.total
       status.value.done = r.done
@@ -293,9 +295,9 @@ function startPoll() {
   poll.restart()
 }
 
-// 翻页 / 「只看冲突」切换：终态下按新条件拉取对应切片（轮询进行中由轮询自然带新页），
+// 翻页：终态下按新条件拉取对应切片（轮询进行中由轮询自然带新页），
 // 勾选清空重置（当前页独立语义）
-watch([page, onlyConflict], async () => {
+watch(page, async () => {
   if (running.value) return
   const ok = await fetchStatus()
   if (ok && done.value) clearSelection()
@@ -311,7 +313,6 @@ async function runTidy() {
   starting.value = true
   appliedPids.value = new Set()
   page.value = 1
-  onlyConflict.value = false
   try {
     await adminApi.tidyRun(kind.value, redo.value, f, t)
     status.value = { state: 'running', kind: kind.value, total: 0, done: 0, suggestions: [] }
@@ -397,8 +398,69 @@ async function discardResults() {
   selRm.value = new Set()
   appliedPids.value = new Set()
   finalDiff.value = new Map()
-  onlyConflict.value = false
 }
+
+// ---- 整理历史（v0.92）：批次列表 + 单批明细 ----
+
+const HIST_PAGE_SIZE = 20
+const histPage = ref(1)
+const histList = ref<TidyHistoryBatch[]>([])
+const histTotal = ref(0)
+const histLoading = ref(false)
+const histDetail = ref<TidyHistoryDetail | null>(null)
+const detailLoading = ref(false)
+const detailShow = ref(false)
+
+const KIND_LABEL: Record<TidyKind, string> = { difficulty: '难度', knowledge: '知识点', meta: '来源标签' }
+
+async function loadHistory() {
+  histLoading.value = true
+  try {
+    const r = await adminApi.tidyHistory(histPage.value, HIST_PAGE_SIZE)
+    histList.value = r.list
+    histTotal.value = r.total
+  } catch {
+    // 拦截器已提示
+  } finally {
+    histLoading.value = false
+  }
+}
+
+async function openHistoryDetail(id: number) {
+  detailShow.value = true
+  detailLoading.value = true
+  histDetail.value = null
+  try {
+    histDetail.value = await adminApi.tidyHistoryDetail(id)
+  } catch {
+    // 拦截器已提示
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+// 历史明细「变更」单元格：按批内 kinds 渲染 old→new（难度 D?、知识点/来源名字快照）
+function histChange(row: { old_difficulty?: number; new_difficulty?: number; old_tag_names?: string[]; new_tag_names?: string[]; old_meta_names?: string[]; new_meta_names?: string[] }, kinds: TidyKind[]): string {
+  const parts: string[] = []
+  if (kinds.includes('difficulty')) {
+    parts.push(`难度 ${row.old_difficulty ? `D${row.old_difficulty}` : '未设置'} → ${row.new_difficulty ? `D${row.new_difficulty}` : '未设置'}`)
+  }
+  if (kinds.includes('knowledge')) {
+    parts.push(`知识点 ${(row.old_tag_names ?? []).join('、') || '无'} → ${(row.new_tag_names ?? []).join('、') || '清空'}`)
+  }
+  if (kinds.includes('meta')) {
+    parts.push(`来源 ${(row.old_meta_names ?? []).join('、') || '无'} → ${(row.new_meta_names ?? []).join('、') || '清空'}`)
+  }
+  return parts.join('；')
+}
+
+// 切到历史模式即拉列表（apply 后再进来自动看到新批次）
+watch(mode, (m) => {
+  if (m === 'history') {
+    histPage.value = 1
+    void loadHistory()
+  }
+})
 
 onMounted(async () => {
   // 进页恢复任务态（刷新后仍在跑/刚完成的任务照常可续；建议切片按当前页拉取）
@@ -419,8 +481,8 @@ onMounted(async () => {
       </div>
     </template>
 
-    <!-- 发起区：模式卡（AI整理 / 手动整理）+ AI 三类任务卡。任务进行中或已有结果待
-         处置时收起（结果属于「当次任务当次处置」，弃置结果后回到这里） -->
+    <!-- 发起区：模式卡（AI整理 / 手动整理 / 整理历史）+ AI 三类任务卡。任务进行中或已有
+         结果待处置时收起（结果属于「当次任务当次处置」，弃置结果后回到这里） -->
     <template v-if="!running && (!status || status.state === 'idle')">
       <div class="mode-cards">
         <div
@@ -437,7 +499,74 @@ onMounted(async () => {
           <div class="kc-desc">{{ m.desc }}</div>
         </div>
       </div>
-      <template v-if="mode === 'ai'">
+      <!-- 整理历史（v0.92）：批次列表 + 点开逐题明细 -->
+      <template v-if="mode === 'history'">
+        <el-table :data="histList" size="small" v-loading="histLoading">
+          <el-table-column prop="id" label="批次" width="70" />
+          <el-table-column label="时间" width="170">
+            <template #default="{ row }">{{ new Date(row.at).toLocaleString() }}</template>
+          </el-table-column>
+          <el-table-column prop="by_name" label="操作者" width="100" />
+          <el-table-column label="模式" width="96">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.mode === 'ai' ? 'primary' : 'warning'">{{ row.mode === 'ai' ? 'AI确认' : '手动' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="类型" min-width="120">
+            <template #default="{ row }">{{ row.kinds.map((k: TidyKind) => KIND_LABEL[k]).join(' + ') }}</template>
+          </el-table-column>
+          <el-table-column label="范围" width="130">
+            <template #default="{ row }">
+              <span v-if="row.from || row.to" class="mono">{{ row.from || '起' }}~{{ row.to || '止' }}</span>
+              <span v-else class="muted">全库</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="应用 / 失败" width="110">
+            <template #default="{ row }">
+              <span class="mono">{{ row.applied }}</span>
+              <span v-if="row.failed" class="fail-n"> / {{ row.failed }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="80">
+            <template #default="{ row }">
+              <el-button size="small" link type="primary" @click="openHistoryDetail(row.id)">明细</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+        <div v-if="histTotal > HIST_PAGE_SIZE" class="pager-row">
+          <el-pagination
+            background
+            layout="prev, pager, next, total"
+            :total="histTotal"
+            :page-size="HIST_PAGE_SIZE"
+            :current-page="histPage"
+            @current-change="(p: number) => { histPage = p; void loadHistory() }"
+          />
+        </div>
+        <el-empty v-if="!histLoading && !histTotal" description="还没有整理记录——AI 确认应用或手动整理保存后自动留痕" :image-size="72" />
+
+        <!-- 单批明细：逐题 old→new（名字快照，树改版不影响回看） -->
+        <el-dialog v-model="detailShow" :title="histDetail ? `批次 #${histDetail.id} · ${histDetail.by_name} · ${new Date(histDetail.at).toLocaleString()}` : '批次明细'" width="760px">
+          <el-table v-if="histDetail" v-loading="detailLoading" :data="histDetail.items" size="small" max-height="60vh">
+            <el-table-column prop="pid" label="题号" width="76" />
+            <el-table-column label="标题" min-width="160" show-overflow-tooltip>
+              <template #default="{ row }">
+                <router-link :to="`/problems/${row.pid}`" target="_blank" class="tlink">{{ row.title }}</router-link>
+              </template>
+            </el-table-column>
+            <el-table-column label="变更" min-width="240" show-overflow-tooltip>
+              <template #default="{ row }">{{ histChange(row, histDetail!.kinds) }}</template>
+            </el-table-column>
+            <el-table-column label="结果" width="150" show-overflow-tooltip>
+              <template #default="{ row }">
+                <el-tag v-if="row.ok" size="small" type="success">成功</el-tag>
+                <el-tag v-else size="small" type="danger">失败：{{ row.err }}</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-dialog>
+      </template>
+      <template v-else-if="mode === 'ai'">
         <div class="kind-cards">
           <div
             v-for="(m, k) in KIND_META"
@@ -506,9 +635,6 @@ onMounted(async () => {
     <!-- 结果差异表 -->
     <template v-if="done && suggestions.length">
       <div class="result-bar">
-        <template v-if="jobKind === 'difficulty'">
-          <el-checkbox v-model="onlyConflict">只看冲突（{{ conflictCount }}，默认不勾待改判）</el-checkbox>
-        </template>
         <span class="muted">
           已勾选 <b>{{ selectedCount }}</b> / {{ suggestionTotal }} 题{{ pageLabel }}
           <template v-if="jobKind === 'knowledge' && (selAdd.size || selRm.size)">（新增 {{ selAdd.size }} · 移除 {{ selRm.size }}）</template>
@@ -524,7 +650,7 @@ onMounted(async () => {
         </el-button>
       </div>
 
-      <!-- 难度：现值 / AI 建议（可改判）/ 通过率参考 / 冲突 -->
+      <!-- 难度（v0.92 五源判读）：现值 / AI 建议（可改判，AI 失败行无建议）/ 备注 -->
       <el-table
         v-if="jobKind === 'difficulty'"
         ref="tableRef"
@@ -547,32 +673,22 @@ onMounted(async () => {
         </el-table-column>
         <el-table-column label="建议（可改判）" width="150">
           <template #default="{ row }">
-            <!-- v0.63 惰性单元格编辑（LazySelectCell）：点格才挂 select，同屏 ≤1 个 -->
+            <!-- AI 失败行无建议：置灰提示，勾选后仍可改判（v0.63 惰性单元格编辑） -->
             <LazySelectCell
+              v-if="!row.ai_error"
               :model-value="finalDiff.get(row.pid) ?? row.suggest_difficulty ?? 3"
               :options="diffOptions"
               :readonly="appliedPids.has(row.pid)"
               empty="D3"
               @update:model-value="(v: number | number[]) => finalDiff.set((row as TidySuggestion).pid, v as number)"
             />
+            <span v-else class="muted">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="通过率参考" width="150">
-          <template #default="{ row }">
-            <span class="mono">D{{ row.rate_difficulty }}</span>
-            <span class="muted" style="margin-left: var(--soj-sp-6)">
-              {{ row.attempted ? `${Math.round((row.pass_rate ?? 0) * 100)}% · ${row.attempted}人` : '无人做过' }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column label="冲突" width="76">
-          <template #default="{ row }">
-            <el-tag v-if="row.conflict" type="danger" size="small">冲突</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="ai_error" label="备注" min-width="180" show-overflow-tooltip>
+        <el-table-column label="备注" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="row.ai_error" class="warn-text">{{ row.ai_error }}</span>
+            <span v-else-if="row.note" class="muted">{{ row.note }}</span>
           </template>
         </el-table-column>
       </el-table>
@@ -706,10 +822,10 @@ onMounted(async () => {
   gap: var(--soj-sp-12);
 }
 
-/* 模式卡（v0.49）：AI整理 / 手动整理 两列，嵌在任务卡上方 */
+/* 模式卡（v0.49 双模式；v0.92 三卡）：AI整理 / 手动整理 / 整理历史，嵌在任务卡上方 */
 .mode-cards {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--soj-sp-12);
   margin-bottom: var(--soj-sp-12);
 }
@@ -806,6 +922,12 @@ onMounted(async () => {
 
 .warn-text {
   color: var(--el-color-warning);
+}
+
+/* 历史列表失败计数（应用 / 失败 的失败段） */
+.fail-n {
+  color: var(--el-color-danger);
+  font-family: var(--font-mono);
 }
 
 .mono {

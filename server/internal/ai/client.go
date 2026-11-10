@@ -79,6 +79,17 @@ func NewClient(p *Provider) *Client {
 
 // Chat 同步对话补全。system 为提示词模板（服务端统一维护），user 为组装好的素材消息。
 func (c *Client) Chat(ctx context.Context, system, user string) (*Response, error) {
+	return c.chat(ctx, system, user, false)
+}
+
+// ChatSearch 带联网搜索的对话补全（v0.92 题库整理难度五源「网上答案」拍板路线）：
+// 仅 bigmodel.cn 系端点随请求附 GLM web_search 工具（模型自行决定搜什么），
+// 其余 OpenAI 兼容服务不支持该参数——静默降级为普通对话（四源判读照常），不报错。
+func (c *Client) ChatSearch(ctx context.Context, system, user string) (*Response, error) {
+	return c.chat(ctx, system, user, true)
+}
+
+func (c *Client) chat(ctx context.Context, system, user string, webSearch bool) (*Response, error) {
 	// 进程内并发闸（AI 外呼同时最多 gateMax 路，防打爆上游与预算）
 	gateMu.Lock()
 	if gateN >= gateMax {
@@ -108,6 +119,13 @@ func (c *Client) Chat(ctx context.Context, system, user string) (*Response, erro
 	//（防未知字段被拒收；自建反代 bigmodel 的部署如需关闭请代理层补写）。
 	if strings.Contains(c.p.BaseURL, "bigmodel.cn") {
 		body["thinking"] = map[string]string{"type": "disabled"}
+		// web_search 工具同样仅 GLM 官方端点支持（v0.92）；搜索结果由模型消化，
+		// 不回传 search_result 原文省 token
+		if webSearch {
+			body["tools"] = []map[string]any{
+				{"type": "web_search", "web_search": map[string]any{"enable": true}},
+			}
+		}
 	}
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {

@@ -873,11 +873,12 @@ export interface BackupStatus {
 // 服务端 403 是最终裁决）
 export const BACKUP_DOWNLOAD_LIMIT_BYTES = 32 * 1024 * 1024
 
-// ---------- 题库整理（v0.43；v0.49 拆 AI整理/手动整理双模式） ----------
+// ---------- 题库整理（v0.43；v0.49 双模式；v0.92 难度五源 + 整理历史） ----------
 
 export type TidyKind = 'difficulty' | 'knowledge' | 'meta'
 
-// 逐题建议（kind 专属字段按需出现；与后端 server/tidy.go TidySuggestion 对齐）
+// 逐题建议（kind 专属字段按需出现；与后端 server/tidy.go TidySuggestion 对齐）。
+// v0.92 难度五源判读：通过率参考档/冲突/attempted 退役；ai_error 非空 = AI 失败无建议
 export interface TidySuggestion {
   pid: number
   title: string
@@ -885,11 +886,7 @@ export interface TidySuggestion {
   // difficulty
   has_difficulty?: boolean
   cur_difficulty?: number
-  suggest_difficulty?: number
-  rate_difficulty?: number
-  pass_rate?: number
-  attempted?: number
-  conflict?: boolean
+  suggest_difficulty?: number // 0/缺席 = 无建议（AI 失败行，不出兜底）
   ai_error?: string
   // knowledge
   cur_tag_ids?: number[]
@@ -917,12 +914,43 @@ export interface TidyStatus {
   from?: number // 题号范围下界（含；0/缺席 = 不限）
   to?: number // 题号范围上界（含；0/缺席 = 不限）
   suggestions?: TidySuggestion[] // 当前页切片（服务端分页，v0.49 验收期调整）
-  suggestion_total?: number // 过滤后全量条数（翻页器口径；only_conflict 时 = 冲突数）
-  conflict_total?: number // 难度冲突全量计数（「只看冲突」勾选框文案）
+  suggestion_total?: number // 全量条数（翻页器口径）
   error?: string
   by?: string
   started_at?: string
   ended_at?: string | null
+}
+
+// 整理历史批次（v0.92，apply 两路留痕；与后端 repo/tidyhistory.go 对齐）
+export interface TidyHistoryBatch {
+  id: number
+  at: string
+  by_uid: number
+  by_name: string
+  mode: 'ai' | 'manual'
+  kinds: TidyKind[]
+  from: number
+  to: number
+  applied: number
+  failed: number
+  message?: string
+}
+
+export interface TidyHistoryItem {
+  pid: number
+  title: string
+  ok: boolean
+  err?: string
+  old_difficulty?: number // 缺席 = 未设置
+  new_difficulty?: number
+  old_tag_names?: string[]
+  new_tag_names?: string[]
+  old_meta_names?: string[]
+  new_meta_names?: string[]
+}
+
+export interface TidyHistoryDetail extends TidyHistoryBatch {
+  items: TidyHistoryItem[]
 }
 
 export interface TidyApplyItem {

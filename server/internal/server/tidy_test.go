@@ -1,7 +1,8 @@
 package server
 
-// 题库一键整理（v0.43）单测：纯函数（JSON 解析/通过率分档/唯一名映射）+ apply 校验链
-// + meta 规则任务全流程（fake 全程无 Mongo，照 handler_httptest 模式）。
+// 题库一键整理（v0.43；v0.92 五源判读 + 整理历史）单测：纯函数（JSON 解析/唯一名映射）
+// + apply 校验链（含历史留痕）+ meta 规则任务全流程 + 历史两端点契约
+//（fake 全程无 Mongo，照 handler_httptest 模式）。
 
 import (
 	"context"
@@ -24,35 +25,11 @@ func TestExtractJSONAndParsers(t *testing.T) {
 		t.Fatal("越界难度应报错")
 	}
 	if _, err := parseTidyDifficulty(`{"difficulty": 0}`); err == nil {
-		t.Fatal("0（未设置）不是合法建议，应报错走兜底")
+		t.Fatal("0（未设置）不是合法建议，应报错")
 	}
 	names, err := parseTidyNameList("```json\n{\"tags\":[\"动态规划\",\"单调队列\"]}\n```")
 	if err != nil || len(names) != 2 || names[0] != "动态规划" {
 		t.Fatalf("parseTidyNameList = %v, %v", names, err)
-	}
-}
-
-func TestRateTier(t *testing.T) {
-	cases := []struct {
-		rate      float64
-		attempted int64
-		want      int
-	}{
-		{0, 0, 3},      // 无人做过 → D3
-		{0.95, 20, 1},  // ≥0.9
-		{0.85, 20, 2},  // ≥0.8
-		{0.6, 20, 3},   // ≥0.5
-		{0.35, 20, 4},  // ≥0.3
-		{0.25, 20, 5},  // ≥0.2
-		{0.12, 20, 6},  // ≥0.1
-		{0.06, 20, 7},  // ≥0.05
-		{0.03, 20, 8},  // ≥0.02
-		{0.01, 20, 9},  // 其余
-	}
-	for _, c := range cases {
-		if got := rateTier(c.rate, c.attempted); got != c.want {
-			t.Errorf("rateTier(%v, %d) = %d，期望 %d", c.rate, c.attempted, got, c.want)
-		}
 	}
 }
 
@@ -88,8 +65,72 @@ func (f *fakeRepo) TidyListProblems(context.Context) ([]*repo.Problem, error) {
 	return out, nil
 }
 
-func (f *fakeRepo) TidyPassRates(context.Context) (map[int64]float64, map[int64]int64, error) {
-	return map[int64]float64{}, map[int64]int64{}, nil
+// TidyProblemMetas / TidyProblemSolutions / TidyACCodes 五源素材 fake（内存版）：
+// 难度任务走 AI 外呼，单测不触发真实调用；题解/AC 素材 fake 返回空（源缺席判读路径）。
+func (f *fakeRepo) TidyProblemMetas(_ context.Context, pids []int64) (map[int64]*repo.Problem, error) {
+	out := make(map[int64]*repo.Problem, len(pids))
+	for _, pid := range pids {
+		if p, ok := f.problems[pid]; ok {
+			out[pid] = p
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) TidyProblemSolutions(context.Context, int64, int64) ([]*repo.Solution, error) {
+	return nil, nil
+}
+
+func (f *fakeRepo) TidyACCodes(context.Context, int64) ([]repo.TidyACCode, error) {
+	return nil, nil
+}
+
+// ---- 整理历史 fake（v0.92）：内存版批次留痕与翻页 ----
+
+func (f *fakeRepo) InsertTidyHistory(_ context.Context, h *repo.TidyHistory) error {
+	f.tidyHistSeq++
+	h.ID = f.tidyHistSeq
+	cp := *h
+	f.tidyHistory[h.ID] = &cp
+	return nil
+}
+
+func (f *fakeRepo) ListTidyHistory(_ context.Context, page, pageSize int) ([]*repo.TidyHistory, int64, error) {
+	total := int64(len(f.tidyHistory))
+	ids := make([]int64, 0, total)
+	for id := range f.tidyHistory {
+		ids = append(ids, id)
+	}
+	for i := 0; i < len(ids); i++ {
+		for j := i + 1; j < len(ids); j++ {
+			if ids[j] > ids[i] {
+				ids[i], ids[j] = ids[j], ids[i]
+			}
+		}
+	}
+	lo := (page - 1) * pageSize
+	if lo < 0 || lo >= len(ids) {
+		return []*repo.TidyHistory{}, total, nil
+	}
+	hi := lo + pageSize
+	if hi > len(ids) {
+		hi = len(ids)
+	}
+	out := make([]*repo.TidyHistory, 0, hi-lo)
+	for _, id := range ids[lo:hi] {
+		h := *f.tidyHistory[id]
+		h.Items = nil // 列表不带明细（同真库 projection）
+		out = append(out, &h)
+	}
+	return out, total, nil
+}
+
+func (f *fakeRepo) GetTidyHistory(_ context.Context, id int64) (*repo.TidyHistory, error) {
+	if h, ok := f.tidyHistory[id]; ok {
+		cp := *h
+		return &cp, nil
+	}
+	return nil, nil
 }
 
 func (f *fakeRepo) GetMetaTagTree(ctx context.Context) ([]repo.TagNode, error) {
@@ -462,7 +503,7 @@ func TestTidyManualApply(t *testing.T) {
 }
 
 // TestTidyStatusPaged 建议快照服务端分页（v0.49 验收期调整）：页面只持有当前页切片，
-// suggestion_total/conflict_total 保持全量口径；only_conflict 全量过滤后再切页。
+// suggestion_total 保持全量口径（v0.92 通过率冲突链路退役，只看冲突过滤随之移除）。
 func TestTidyStatusPaged(t *testing.T) {
 	f := baseFake()
 	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
@@ -481,8 +522,9 @@ func TestTidyStatusPaged(t *testing.T) {
 		t.Fatal("run 失败")
 	}
 	deadline := time.Now().Add(3 * time.Second)
+	var body map[string]any
 	for time.Now().Before(deadline) {
-		_, body := doJSON(r, "GET", "/api/admin/tidy/status?page=1&page_size=100", tok, "")
+		_, body = doJSON(r, "GET", "/api/admin/tidy/status?page=1&page_size=100", tok, "")
 		if body["data"].(map[string]any)["state"] != "running" {
 			break
 		}
@@ -490,13 +532,10 @@ func TestTidyStatusPaged(t *testing.T) {
 	}
 
 	// 第 1 页：100 条切片 + 全量总数
-	_, body := doJSON(r, "GET", "/api/admin/tidy/status?page=1&page_size=100", tok, "")
+	_, body = doJSON(r, "GET", "/api/admin/tidy/status?page=1&page_size=100", tok, "")
 	data := body["data"].(map[string]any)
 	if n, _ := data["suggestion_total"].(float64); n != 250 {
 		t.Fatalf("suggestion_total = %v，期望 250", data["suggestion_total"])
-	}
-	if n, _ := data["conflict_total"].(float64); n != 0 {
-		t.Fatalf("conflict_total = %v，期望 0（meta 无冲突）", data["conflict_total"])
 	}
 	sugs := asAnySlice(data["suggestions"])
 	if len(sugs) != 100 {
@@ -516,14 +555,94 @@ func TestTidyStatusPaged(t *testing.T) {
 	if sugs = asAnySlice(body["data"].(map[string]any)["suggestions"]); len(sugs) != 0 {
 		t.Fatalf("越界页应空，得 %d 条", len(sugs))
 	}
-	// only_conflict=true：meta 无冲突 → 空切片；suggestion_total 为过滤后口径（翻页器一致）
-	_, body = doJSON(r, "GET", "/api/admin/tidy/status?page=1&page_size=100&only_conflict=true", tok, "")
-	data = body["data"].(map[string]any)
-	if sugs = asAnySlice(data["suggestions"]); len(sugs) != 0 {
-		t.Fatalf("only_conflict 应空，得 %d 条", len(sugs))
+}
+
+// TestTidyHistoryFlow 整理历史（v0.92）：AI apply 与手动 apply 两路批次留痕，
+// 列表分页倒序 + 单批明细逐题 old→new + 越界 id 404 + 学生 403。
+func TestTidyHistoryFlow(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
+	f.tagTreeNodes = []repo.TagNode{{ID: 11, Name: "动态规划"}}
+	f.metaTreeNodes = []repo.TagNode{{ID: 500, Name: "洛谷"}}
+	f.problems[3501] = &repo.Problem{ID: 3501, Title: "题A", Difficulty: 0, Tags: []int64{}, MetaTags: []int64{}}
+	f.problems[3502] = &repo.Problem{ID: 3502, Title: "题B", Difficulty: 5, Tags: []int64{11}}
+	h := newTestHandlers(f)
+	r := testEngine(h)
+	r.POST("/api/admin/tidy/apply", AuthRequired(h), RequireRoot(), h.TidyApply)
+	r.POST("/api/admin/tidy/manual", AuthRequired(h), RequireRoot(), h.TidyManualApply)
+	r.GET("/api/admin/tidy/history", AuthRequired(h), RequireRoot(), h.TidyHistoryList)
+	r.GET("/api/admin/tidy/history/:id", AuthRequired(h), RequireRoot(), h.TidyHistoryDetail)
+	tok := f.addUser(h, 1, "root", repo.RoleRoot, 0)
+
+	// AI apply：3501 成功（D0→D6）、3502 越界失败（old 保持 D5，new=11 尝试值）
+	if code, body := doJSON(r, "POST", "/api/admin/tidy/apply", tok,
+		`{"kind":"difficulty","items":[{"pid":3501,"difficulty":6},{"pid":3502,"difficulty":11}]}`); code != 200 {
+		t.Fatalf("ai apply = %d %v", code, body)
 	}
-	if n, _ := data["suggestion_total"].(float64); n != 0 {
-		t.Fatalf("only_conflict 下 suggestion_total 应为过滤后口径 0，得 %v", data["suggestion_total"])
+	// 手动 apply：3501 双字段（难度+知识点）→ kinds=[difficulty,knowledge]
+	if code, body := doJSON(r, "POST", "/api/admin/tidy/manual", tok,
+		`{"items":[{"pid":3501,"difficulty":7,"tags":[11]}]}`); code != 200 {
+		t.Fatalf("manual apply = %d %v", code, body)
+	}
+
+	// 列表：倒序两条（手动批在前），列表不带明细
+	_, body := doJSON(r, "GET", "/api/admin/tidy/history", tok, "")
+	data := body["data"].(map[string]any)
+	if n, _ := data["total"].(float64); n != 2 {
+		t.Fatalf("total = %v，期望 2", data["total"])
+	}
+	list := data["list"].([]any)
+	first := list[0].(map[string]any)
+	if first["mode"] != "manual" || len(asAnySlice(first["kinds"])) != 2 {
+		t.Fatalf("首批 = %v，期望 manual 双 kinds", first)
+	}
+	if asAnySlice(first["items"]) != nil {
+		t.Fatal("列表不得带 items 明细（null/缺席均可）")
+	}
+	if first["by_name"] != "root" {
+		t.Fatalf("by_name = %v，期望 root", first["by_name"])
+	}
+
+	// AI 批明细（id=1）：3501 old 0 → new 6 成功；3502 old 5 → new 11 失败带原因
+	_, body = doJSON(r, "GET", "/api/admin/tidy/history/1", tok, "")
+	detail := body["data"].(map[string]any)
+	items := detail["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("明细 = %d 条，期望 2", len(items))
+	}
+	it := items[0].(map[string]any)
+	// old_difficulty=0（未设置）随 omitempty 缺席——同 Problem.Difficulty 口径
+	if it["ok"] != true || it["old_difficulty"] != nil || it["new_difficulty"] != float64(6) || it["title"] != "题A" {
+		t.Fatalf("3501 明细 = %v，期望 ok old=未设置(缺席) new=6", it)
+	}
+	it2 := items[1].(map[string]any)
+	if it2["ok"] != false || it2["old_difficulty"] != float64(5) || it2["new_difficulty"] != float64(11) || it2["err"] == "" {
+		t.Fatalf("3502 明细 = %v，期望失败项 old=5 new=11 带原因", it2)
+	}
+
+	// 手动批明细（id=2）：知识点名字快照 old 空 → new「动态规划」
+	_, body = doJSON(r, "GET", "/api/admin/tidy/history/2", tok, "")
+	items = body["data"].(map[string]any)["items"].([]any)
+	it3 := items[0].(map[string]any)
+	names := asAnySlice(it3["new_tag_names"])
+	if len(names) != 1 || names[0] != "动态规划" {
+		t.Fatalf("手动批知识点快照 = %v，期望 [动态规划]", names)
+	}
+	if it3["old_difficulty"] != float64(6) || it3["new_difficulty"] != float64(7) {
+		t.Fatalf("手动批难度 = %v→%v，期望 6→7（以上一轮 AI apply 后为旧值）", it3["old_difficulty"], it3["new_difficulty"])
+	}
+
+	// 越界 id 404 / 非法 id 400 / 学生 403
+	if code, _ := doJSON(r, "GET", "/api/admin/tidy/history/99", tok, ""); code != 404 {
+		t.Fatalf("越界 id = %d，期望 404", code)
+	}
+	if code, _ := doJSON(r, "GET", "/api/admin/tidy/history/abc", tok, ""); code != 400 {
+		t.Fatalf("非法 id = %d，期望 400", code)
+	}
+	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
+	stu := f.addUser(h, 100, "stu", repo.RoleDefault, 0)
+	if code, _ := doJSON(r, "GET", "/api/admin/tidy/history", stu, ""); code != 403 {
+		t.Fatalf("学生打历史列表 = %d，期望 403", code)
 	}
 }
 

@@ -31,6 +31,8 @@ import type {
   BackupStatus,
   BatchImportStatus,
   TidyApplyItem,
+  TidyHistoryBatch,
+  TidyHistoryDetail,
   TidyKind,
   TidyManualProblem,
   TidyStatus,
@@ -719,8 +721,8 @@ export const adminApi = {
         '/admin/tidy/run', { kind, redo, from, to }, { timeout: 300_000 })
       .then((r) => r.data.data),
   // 建议快照服务端分页（v0.49 验收期调整）：页面只持有当前页，2s 轮询不再整包搬运
-  tidyStatus: (page = 1, pageSize = 100, onlyConflict = false) =>
-    get<TidyStatus>('/admin/tidy/status', { page, page_size: pageSize, ...(onlyConflict ? { only_conflict: 'true' } : {}) }),
+  tidyStatus: (page = 1, pageSize = 100) =>
+    get<TidyStatus>('/admin/tidy/status', { page, page_size: pageSize }),
   tidyCancel: () => post<{ cancel_requested: boolean }>('/admin/tidy/cancel'),
   tidyApply: (kind: TidyKind, items: TidyApplyItem[]) =>
     client
@@ -738,6 +740,10 @@ export const adminApi = {
     client
       .post<ApiResponse<{ applied: number; failed: number; message: string }>>('/admin/tidy/manual', { items }, { timeout: 120_000 })
       .then((r) => r.data.data),
+  // 整理历史（v0.92）：apply 两路批次留痕，列表分页 + 单批逐题明细
+  tidyHistory: (page = 1, pageSize = 20) =>
+    get<{ list: TidyHistoryBatch[]; total: number }>('/admin/tidy/history', { page, page_size: pageSize }),
+  tidyHistoryDetail: (id: number) => get<TidyHistoryDetail>(`/admin/tidy/history/${id}`),
 }
 
 // ---------- 比赛（v0.4） ----------

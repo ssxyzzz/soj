@@ -457,7 +457,7 @@ func (h *Handlers) runListOrganize(ctx context.Context, job *listOrganizeJob, ui
 			defer func() { <-sem }()
 			batch := batches[bi]
 			user := listOrganizeUser(listCtx, leafText, batch, knNames, metaNames)
-			resp, err := h.tidyAIChat(ctx, uid, "list_organize", 0, sys, user)
+			resp, err := h.tidyAIChat(ctx, uid, "list_organize", 0, sys, user, false)
 			if err == nil {
 				var m map[int64]string
 				m, err = parseListOrganizeAssign(resp.Content, batch, job.Keys)

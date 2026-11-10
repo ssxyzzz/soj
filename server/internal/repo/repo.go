@@ -57,6 +57,7 @@ type Repo struct {
 	classroomRaces *mongo.Collection // 课堂 PK（v0.42，班级同题手速赛）
 
 	problemFavorites *mongo.Collection // 题目收藏（v0.86，{uid,pid} 唯一）
+	tidyHistory      *mongo.Collection // 整理历史批次（v0.92，apply 留痕全量留存）
 
 	// 系统设置进程缓存（v0.37）：热路径单文档点查 5s 缓存，UpdateSystemSettings
 	// 写穿失效。缓存存归一化后的值，外发 clone（调用方拿到独立副本，防误改缓存）。
@@ -157,6 +158,7 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 		classroomRaces: db.Collection("classroomRaces"),
 
 		problemFavorites: db.Collection("problemFavorites"),
+		tidyHistory:      db.Collection("tidyHistory"),
 		acRates:       map[int64]acRateEntry{},
 		raceBoardCache: map[int64]raceBoardEntry{},
 	}, nil
