@@ -83,9 +83,10 @@ const bigNo = computed(() => String(props.problem.id))
       <template v-if="!isObjective">
         <div class="cell">时间限制 <b class="mono">{{ fmtSec(problem.time_limit_ms) }}</b></div>
         <div class="cell">内存限制 <b class="mono">{{ fmtMem(problem.memory_limit_kb) }}</b></div>
-        <div class="cell">
+        <!-- 赛时隐藏成绩（v0.87）服务端不下发 submit_count：整格隐藏（同难度格口径），非 0/0 假象 -->
+        <div v-if="problem.submit_count != null" class="cell">
           <b class="mono">{{ problem.accepted_count ?? 0 }}</b> 通过 ／
-          <b class="mono">{{ problem.submit_count ?? 0 }}</b> 提交
+          <b class="mono">{{ problem.submit_count }}</b> 提交
         </div>
       </template>
       <div v-else class="cell">客观题 · <b>{{ problem.questions?.length ?? 0 }}</b> 小题</div>

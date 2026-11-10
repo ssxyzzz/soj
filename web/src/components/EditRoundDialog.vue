@@ -138,7 +138,7 @@ async function save() {
             intro: intro.value,
             scoreboard: !scoreboardOff.value,
             hide_during: hideDuring.value,
-            ...(props.kind === 'contest' ? { hide_meta: hideMeta.value } : {}),
+            hide_meta: hideMeta.value, // v0.87 起比赛/考试同开关（原考试 UI 不提供恒关）
             file_io: fileIO.value,
             ...(canJade ? { jade_pool: jadePool.value, jade_part_pool: jadePartPool.value } : {}),
           }
@@ -206,11 +206,11 @@ watch(
             tip="开启后隐藏期内（赛时到成绩发布前）参赛者看不到状态、标签与通过率；关闭则赛中即可实时查看"
           />
         </el-form-item>
-        <el-form-item v-if="kind === 'contest'">
+        <el-form-item>
           <SwitchRow
             v-model="hideMeta"
             label="赛时隐藏难度与知识点"
-            tip="比赛期间对参赛者隐藏题目难度与知识点（服务端不下发，悬停不可见），题目表与做题页显示横杠；发布后恢复显示，组织者与管理员不受影响"
+            tip="赛期内对参赛者隐藏题目难度与知识点（服务端不下发，悬停不可见），题目表与做题页显示横杠；发布后恢复显示，组织者与管理员不受影响"
           />
         </el-form-item>
         <!-- 玉奖池（v0.33-①）：双池默认 0 不发；仅教师/admin/root 可见可改 -->

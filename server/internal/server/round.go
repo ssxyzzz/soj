@@ -50,7 +50,7 @@ type roundCreateReq struct {
 	FileIO     bool      `json:"file_io"`
 	Scoreboard *bool     `json:"scoreboard"`  // 缺省 false：关闭成绩表（2026-11 UI 反转为「关闭成绩表」开关，默认开）
 	HideDuring *bool     `json:"hide_during"` // 缺省 true：赛期内对参赛者隐藏结果
-	HideMeta   *bool     `json:"hide_meta"`   // 缺省：比赛 true / 考试 false——发布前对参赛者隐藏难度与知识点
+	HideMeta   *bool     `json:"hide_meta"`   // 缺省 true（v0.87 比赛考试同默认）：发布前对参赛者隐藏难度与知识点
 	// 玉奖池（v0.33-①）：双池可配（0/缺省 = 不发）；设置权限仅教师/admin/root。
 	JadePool            *int64 `json:"jade_pool"`
 	JadeParticipatePool *int64 `json:"jade_part_pool"`
@@ -169,8 +169,9 @@ func (h *Handlers) createRound(c *gin.Context, s roundScope, classID int64) {
 		FileIO:     req.FileIO,
 		Scoreboard: req.Scoreboard != nil && *req.Scoreboard, // 缺省关（2026-11 反转，原缺省开）
 		HideDuring: req.HideDuring == nil || *req.HideDuring,
-		// 赛时隐藏难度/知识点是比赛场景开关：比赛默认开；考试 UI 不提供，保持关
-		HideMeta: s.Kind == repo.KindContest && (req.HideMeta == nil || *req.HideMeta),
+		// 赛时隐藏难度/知识点：v0.87 起比赛/考试同开关同默认（缺省开）——原「考试 UI
+		// 不提供恒关」口径废弃，与「赛时隐藏成绩」行为对齐
+		HideMeta: req.HideMeta == nil || *req.HideMeta,
 	}
 	// 玉奖池（v0.33-①）：仅教师/admin/root 可设（2026-10-30 拍板，堵自建班自印自发）
 	if req.JadePool != nil || req.JadeParticipatePool != nil {
@@ -535,6 +536,21 @@ func (h *Handlers) roundUpdate(c *gin.Context, s roundScope) {
 				hu = end.AddDate(0, 0, days)
 			}
 			patch.HiddenUntil = &hu
+		}
+		// 改时间重启已发布场次（v0.87）：published 残留 true 会短路赛时隐藏判定，整场
+		// 回炉——场次与全部提交（旧轮已公开的+新一轮的）翻回未公开，新隐藏期结束后由
+		// 发布循环重新发布补发。先回炉再改时间：中途失败宁可短暂多隐藏，不可短暂泄漏。
+		if ct.Published {
+			newHiddenEnd := end
+			if patch.HiddenUntil != nil {
+				newHiddenEnd = *patch.HiddenUntil
+			}
+			if time.Now().Before(newHiddenEnd) {
+				if err := h.repo.UnpublishRound(ctx, s.Kind, ct.ID); err != nil {
+					fail(c, http.StatusInternalServerError, "回炉场次失败")
+					return
+				}
+			}
 		}
 	}
 	if req.ProblemIDs != nil {

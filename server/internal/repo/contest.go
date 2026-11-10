@@ -92,6 +92,23 @@ func (r *Repo) roundsCol(kind string) *mongo.Collection {
 	return r.db.Collection("contests")
 }
 
+// UnpublishRound 整场回炉（v0.87）：场次 published → false，并把该场全部提交一并
+// 翻回未公开。用于组织者改起止时间「重启」已发布场次——published 残留 true 会短路
+// 赛时隐藏判定（学生直见状态/难度/通过率），且新一轮提交永远等不到发布补发。
+// 条件更新防并发（仅 published=true 时生效）；提交回炉幂等（true→false 重复执行无害）。
+// 玉结算不回退：已发的首 AC 玉由 jadeAwards {uid,pid} 唯一索引兜底，重发布不重发。
+func (r *Repo) UnpublishRound(ctx context.Context, kind string, id int64) error {
+	if _, err := r.roundsCol(kind).UpdateOne(ctx,
+		bson.M{"_id": id, "published": true},
+		bson.M{"$set": bson.M{"published": false}}); err != nil {
+		return err
+	}
+	_, err := r.submissions.UpdateMany(ctx,
+		bson.M{roundsIDField(kind): id, "published": true},
+		bson.M{"$set": bson.M{"published": false}})
+	return err
+}
+
 // roundsSeq 比赛与考试独立取号（contests/exams 各自的 _id 序列）。
 func roundsSeq(kind string) string {
 	if kind == KindExam {

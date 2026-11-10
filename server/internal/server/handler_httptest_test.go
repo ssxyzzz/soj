@@ -48,6 +48,14 @@ type fakeRepo struct {
 	// 题目收藏（v0.86）契约挂钩：uid → pid → 已收藏
 	favorites map[int64]map[int64]bool
 
+	// 赛时隐藏修复（v0.87）契约挂钩：未发布比赛种子（loadAllLocks 锁题）、可控统计、
+	// 提交档、回炉/改字段捕获
+	unpubContests  []*repo.Contest
+	stats          map[int64]repo.ProblemStat
+	submissions    map[int64]*repo.Submission
+	unpublishCalls []int64
+	updatedRound   map[int64]repo.RoundPatch
+
 	metaTreeNodes []repo.TagNode // 题库整理（v0.43）meta 任务：来源树种子（GetMetaTagTree/MatchMetaTags 用）
 	tagTreeNodes  []repo.TagNode // 手动整理（v0.49）：知识树种子（ValidateTagRefs 用）
 	lists         map[int64]*repo.ProblemList // 题单 AI 一键整理（v0.71）：题单种子（GetProblemList 用）
@@ -140,11 +148,14 @@ func (f *fakeRepo) ListProblemsPage(_ context.Context, flt repo.ProblemListFilte
 }
 
 func (f *fakeRepo) ListProblemStats(context.Context, []int64) (map[int64]repo.ProblemStat, error) {
+	if f.stats != nil {
+		return f.stats, nil
+	}
 	return map[int64]repo.ProblemStat{}, nil
 }
 
 func (f *fakeRepo) ListUnpublishedContests(context.Context) ([]*repo.Contest, error) {
-	return nil, nil
+	return f.unpubContests, nil
 }
 
 func (f *fakeRepo) ListUnpublishedExams(context.Context) ([]*repo.Contest, error) {

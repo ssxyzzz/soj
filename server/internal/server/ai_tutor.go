@@ -350,11 +350,13 @@ func (h *Handlers) AiDebug(c *gin.Context) {
 		fail(c, http.StatusForbidden, "只能分析自己的提交")
 		return
 	}
-	if sub.Status == repo.StatusAccepted {
-		fail(c, http.StatusBadRequest, "这份提交已通过，无需找 bug")
+	// 赛时封锁先行（v0.87）：AC 检查曾在本 gate 之前，赛时对 AC 提交返回
+	// 「已通过，无需找 bug」等于向参赛者泄漏判题结果——先过锁题封锁再谈 AC
+	if _, okG := h.aiTutorGate(c, sub.ProblemID); !okG {
 		return
 	}
-	if _, okG := h.aiTutorGate(c, sub.ProblemID); !okG {
+	if sub.Status == repo.StatusAccepted {
+		fail(c, http.StatusBadRequest, "这份提交已通过，无需找 bug")
 		return
 	}
 	// 素材要题面正文：瘦读不含 statement，补全量读

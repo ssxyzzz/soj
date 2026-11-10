@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -164,7 +165,8 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	// 通过率统计：只聚合当前页题目的公开态提交；失败不阻塞列表（前端显示 -）
+	// 通过率统计：只聚合当前页题目的公开态提交；失败不阻塞列表（前端显示 -）。
+	// 赛时/隐藏期的锁题行不下发（v0.87）：与赛事详情列表口径对齐；组织者与特权不受限。
 	pids := make([]int64, 0, len(items))
 	for _, it := range items {
 		pids = append(pids, it["id"].(int64))
@@ -174,7 +176,13 @@ func (h *Handlers) ListProblems(c *gin.Context) {
 		stats = map[int64]repo.ProblemStat{}
 	}
 	for _, it := range items {
-		st := stats[it["id"].(int64)]
+		pid := it["id"].(int64)
+		if vk := viewMap[pid]; vk != nil && !vk.Round.Published &&
+			!(vk.Round.Status(time.Now()) == "running" && !vk.Round.HideDuring) &&
+			!privileged && !(logged && uid == vk.Round.CreatedBy) {
+			continue
+		}
+		st := stats[pid]
 		it["submit_count"] = st.Total
 		it["accepted_count"] = st.Accepted
 	}
@@ -360,13 +368,20 @@ func (h *Handlers) GetProblem(c *gin.Context) {
 		}
 		resp["function"] = fn
 	}
-	// 统计（题目信息卡）：公开态提交聚合；失败降级 0，不阻塞详情
-	if stats, err := h.repo.ListProblemStats(ctx, []int64{id}); err == nil {
-		resp["submit_count"] = stats[id].Total
-		resp["accepted_count"] = stats[id].Accepted
-	} else {
-		resp["submit_count"] = int64(0)
-		resp["accepted_count"] = int64(0)
+	// 统计（题目信息卡）：公开态提交聚合；失败降级 0，不阻塞详情。
+	// 赛时/隐藏期不下发字段（v0.87）：与赛事详情列表口径对齐——该场 result_hidden 时
+	// 通过率列是横杠，做题页题头整格隐藏；组织者与特权视角不受限（同 hideMeta 块）。
+	roundResultHidden := vk != nil && !vk.Round.Published &&
+		!(vk.Round.Status(time.Now()) == "running" && !vk.Round.HideDuring) &&
+		!(logged && uid == vk.Round.CreatedBy) && !privileged && !h.problemEditable(c, p)
+	if !roundResultHidden {
+		if stats, err := h.repo.ListProblemStats(ctx, []int64{id}); err == nil {
+			resp["submit_count"] = stats[id].Total
+			resp["accepted_count"] = stats[id].Accepted
+		} else {
+			resp["submit_count"] = int64(0)
+			resp["accepted_count"] = int64(0)
+		}
 	}
 	// 赛时隐藏难度/知识点（hideMeta，2026-10-27）：题目被未发布的比赛/考试收录且该场
 	// 开启此开关时，非特权视角不下发难度与知识点标签——做题页/题库详情/悬停/开发者
