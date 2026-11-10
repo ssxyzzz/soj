@@ -52,21 +52,21 @@ const emit = defineEmits<{ (e: 'color', slot: MarkSlot): void; (e: 'erase'): voi
   user-select: none; /* 拖选扫过工具条本身不产生选区 */
 }
 
-/* 圆点：画板 swatch 同款视觉（白描边 + hairline ring），色由 --mk-dot 下发。
-   命中区 = 整块 28×28 方形按钮（视觉圆 18px 由 background-clip: content-box +
-   ::before 描边原样还原）——圆点周围一圈空白都算点到该色（v0.90.2 用户拍板）。
-   两个坑实测：①按钮本体不设圆角——border-radius 区域外浏览器不做命中，方块
-   四角会失灵；②类名前缀 mk-dot 避撞 main.css 全局 .dot（状态圆点 6px/50%），
-   全局 display:inline-block 与 50% 圆角曾漏进来让角落命中失效 */
+/* 圆点：画板 swatch 同款视觉（色圆 18px + 白描边 2px + hairline ring），整体画在
+   ::before 上；按钮本体 = 28×28 透明方块命中区——点圆点周围一圈空白都算点到该色
+   （v0.90.2 用户拍板）。三个坑实测记档：①命中块不设圆角——border-radius 区域外
+   浏览器不做命中，圆角会让方块四角失灵；②类名 mk-dot 避撞 main.css 全局 .dot
+   （状态圆点 6px/50%）；③色圆不能画在按钮自身再靠 background-clip: content-box
+   缩圆——content-box 裁出来的是方形，方角会从 ::before 圆环外露出来（v0.90.2
+   生产实锤「方块套圆」，v0.90.3 改色圆整体入 ::before） */
 .mk-dot {
   width: 28px;
   height: 28px;
   flex: none;
   display: block;
-  padding: 5px;
+  padding: 0;
   border: none;
-  background: var(--mk-dot);
-  background-clip: content-box;
+  background: transparent;
   cursor: pointer;
   position: relative;
   transition: transform 0.15s;
@@ -77,6 +77,7 @@ const emit = defineEmits<{ (e: 'color', slot: MarkSlot): void; (e: 'erase'): voi
   position: absolute;
   inset: 5px;
   border-radius: var(--soj-radius-pill);
+  background: var(--mk-dot);
   border: 2px solid var(--soj-white);
   box-shadow: 0 0 0 1px var(--soj-line-2);
 }
