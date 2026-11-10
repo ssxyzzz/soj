@@ -33,7 +33,7 @@ const memberRoleOptions = [
   { id: 2, label: '普通成员' },
 ]
 const loading = ref(true)
-const section = ref<'assignments' | 'exams' | 'members'>('assignments')
+const section = ref<'assignments' | 'exams' | 'pk' | 'members'>('assignments')
 
 // 作业拖拽排序（仅班级管理员）：六点手柄武装 → 卡片可拖 → 悬停即时换位 →
 // 落下/收尾一次性保存全序（服务端逐个写 sort = 下标，列表 sort 升序 + 新者在前兜底）
@@ -193,7 +193,7 @@ const raceState = ref<{ race?: ClassRaceView; last?: ClassRaceView }>({})
 const race = computed(() => raceState.value.race)
 const lastRace = computed(() => raceState.value.last)
 const raceView = computed(() => race.value ?? lastRace.value)
-const raceCardVisible = computed(() => !!raceView.value || !!cl.value?.manageable)
+// raceCardVisible 退役（v0.91 tab 化）：PK 卡落独立 tab 恒渲染，空态由卡内 hint 承载
 
 const showRace = ref(false)
 const creatingRace = ref(false)
@@ -560,9 +560,88 @@ onMounted(load)
           <div class="soj-seg">
             <button type="button" :class="{ on: section === 'assignments' }" @click="section = 'assignments'">作业</button>
             <button type="button" :class="{ on: section === 'exams' }" @click="section = 'exams'">考试</button>
+            <button type="button" :class="{ on: section === 'pk' }" @click="section = 'pk'">课堂 PK</button>
             <button v-if="cl.members" type="button" :class="{ on: section === 'members' }" @click="section = 'members'">学生</button>
           </div>
         </div>
+
+        <!-- 课堂 PK tab（v0.42 → v0.91 tab 化：原横幅卡常驻作业列表上方，拍板挪进
+             tab 行「考试/学生」之间；学生无 PK 也见空态卡，入口不再隐形） -->
+        <template v-if="section === 'pk'">
+          <div class="card pk-card" :class="{ celebrating: raceCelebrate }">
+            <div class="pk-top">
+              <span class="pk-badge">⚔️ 课堂 PK</span>
+              <span
+                class="pk-state"
+                :class="race ? (raceCdMs > 0 ? 'soon' : 'live') : lastRace?.status === 'settled' ? 'done' : 'off'"
+              >
+                {{ race ? (raceCdMs > 0 ? '即将开始' : '进行中') : lastRace?.status === 'settled' ? '已结算' : '已取消' }}
+              </span>
+              <span v-if="race && raceCdMs > 0" class="pk-clock mono">开赛 {{ fmtClock(raceCdMs) }}</span>
+              <span v-else-if="race" class="pk-clock mono">{{ fmtClock(raceRemainMs) }}</span>
+              <span class="pk-grow"></span>
+              <el-button v-if="cl?.manageable && !race" size="small" type="primary" plain @click="openRaceDialog">
+                发起 PK
+              </el-button>
+              <el-button
+                v-if="cl?.manageable && race"
+                size="small"
+                type="danger"
+                plain
+                :loading="cancellingRace"
+                @click="cancelRace"
+              >
+                取消
+              </el-button>
+            </div>
+
+            <template v-if="raceView">
+              <div class="pk-body">
+                <RouterLink class="pk-title" :to="`/problems/${raceView.pid}`">{{ raceView.ptitle }}</RouterLink>
+                <span class="pk-meta">
+                  {{ raceView.host_name }} 发起 ·
+                  {{ Math.max(1, Math.round((raceView.deadline_at - raceView.started_at) / 60000)) }} 分钟
+                  {{ raceView.bonus ? '· 前 3 名掉落加成' : '· 纯娱乐局' }}
+                </span>
+              </div>
+              <div v-if="raceView.board.length" class="pk-board">
+                <div
+                  v-for="row in raceRows"
+                  :key="row.uid"
+                  class="pk-row"
+                  :class="{ me: row.uid === userStore.uid }"
+                >
+                  <span class="pk-medal">{{ ['🥇', '🥈', '🥉'][row.rank - 1] ?? `#${row.rank}` }}</span>
+                  <span class="pk-name">{{ row.username }}</span>
+                  <span class="pk-ms mono">{{ fmtSec(row.duration_ms) }}</span>
+                </div>
+                <div v-if="myOutsideRow" class="pk-row me">
+                  <span class="pk-medal">#{{ myOutsideRow.rank }}</span>
+                  <span class="pk-name">我</span>
+                  <span class="pk-ms mono">{{ fmtSec(myOutsideRow.duration_ms) }}</span>
+                </div>
+              </div>
+              <div v-else class="pk-hint">
+                {{ race && raceCdMs > 0 ? '倒计时结束后开赛，AC 即上榜' : '还没有人 AC——第一个交的就是榜首' }}
+              </div>
+
+              <div class="pk-actions">
+                <template v-if="race">
+                  <el-button v-if="userStore.canChallenge" type="primary" :disabled="raceCdMs > 0" @click="joinRace">
+                    {{ raceCdMs > 0 ? '即将开始…' : raceView.my_rank > 0 ? `继续挑战（当前 #${raceView.my_rank}）` : '参赛' }}
+                  </el-button>
+                  <el-tooltip v-else content="Lv.3 解锁挑战模式后可参赛（教职工豁免）" placement="top">
+                    <el-button disabled>Lv.3 解锁后可参赛</el-button>
+                  </el-tooltip>
+                </template>
+                <span v-else-if="raceView.status === 'settled'" class="pk-winner">
+                  {{ raceView.winner_name ? `🏆 冠军：${raceView.winner_name}` : '本场无人 AC' }}
+                </span>
+              </div>
+            </template>
+            <div v-else class="pk-hint">没有进行中的课堂 PK——老师发起后全班同题限时开战</div>
+          </div>
+        </template>
 
         <template v-if="section === 'assignments'">
           <el-alert
@@ -572,81 +651,6 @@ onMounted(load)
             :closable="false"
           />
           <template v-else>
-            <!-- 课堂 PK（v0.42）：全班同题手速挑战——教师发起、学生从挑战链路参赛 -->
-            <div v-if="raceCardVisible" class="card pk-card" :class="{ celebrating: raceCelebrate }">
-              <div class="pk-top">
-                <span class="pk-badge">⚔️ 课堂 PK</span>
-                <span
-                  class="pk-state"
-                  :class="race ? (raceCdMs > 0 ? 'soon' : 'live') : lastRace?.status === 'settled' ? 'done' : 'off'"
-                >
-                  {{ race ? (raceCdMs > 0 ? '即将开始' : '进行中') : lastRace?.status === 'settled' ? '已结算' : '已取消' }}
-                </span>
-                <span v-if="race && raceCdMs > 0" class="pk-clock mono">开赛 {{ fmtClock(raceCdMs) }}</span>
-                <span v-else-if="race" class="pk-clock mono">{{ fmtClock(raceRemainMs) }}</span>
-                <span class="pk-grow"></span>
-                <el-button v-if="cl?.manageable && !race" size="small" type="primary" plain @click="openRaceDialog">
-                  发起 PK
-                </el-button>
-                <el-button
-                  v-if="cl?.manageable && race"
-                  size="small"
-                  type="danger"
-                  plain
-                  :loading="cancellingRace"
-                  @click="cancelRace"
-                >
-                  取消
-                </el-button>
-              </div>
-
-              <template v-if="raceView">
-                <div class="pk-body">
-                  <RouterLink class="pk-title" :to="`/problems/${raceView.pid}`">{{ raceView.ptitle }}</RouterLink>
-                  <span class="pk-meta">
-                    {{ raceView.host_name }} 发起 ·
-                    {{ Math.max(1, Math.round((raceView.deadline_at - raceView.started_at) / 60000)) }} 分钟
-                    {{ raceView.bonus ? '· 前 3 名掉落加成' : '· 纯娱乐局' }}
-                  </span>
-                </div>
-                <div v-if="raceView.board.length" class="pk-board">
-                  <div
-                    v-for="row in raceRows"
-                    :key="row.uid"
-                    class="pk-row"
-                    :class="{ me: row.uid === userStore.uid }"
-                  >
-                    <span class="pk-medal">{{ ['🥇', '🥈', '🥉'][row.rank - 1] ?? `#${row.rank}` }}</span>
-                    <span class="pk-name">{{ row.username }}</span>
-                    <span class="pk-ms mono">{{ fmtSec(row.duration_ms) }}</span>
-                  </div>
-                  <div v-if="myOutsideRow" class="pk-row me">
-                    <span class="pk-medal">#{{ myOutsideRow.rank }}</span>
-                    <span class="pk-name">我</span>
-                    <span class="pk-ms mono">{{ fmtSec(myOutsideRow.duration_ms) }}</span>
-                  </div>
-                </div>
-                <div v-else class="pk-hint">
-                  {{ race && raceCdMs > 0 ? '倒计时结束后开赛，AC 即上榜' : '还没有人 AC——第一个交的就是榜首' }}
-                </div>
-
-                <div class="pk-actions">
-                  <template v-if="race">
-                    <el-button v-if="userStore.canChallenge" type="primary" :disabled="raceCdMs > 0" @click="joinRace">
-                      {{ raceCdMs > 0 ? '即将开始…' : raceView.my_rank > 0 ? `继续挑战（当前 #${raceView.my_rank}）` : '参赛' }}
-                    </el-button>
-                    <el-tooltip v-else content="Lv.3 解锁挑战模式后可参赛（教职工豁免）" placement="top">
-                      <el-button disabled>Lv.3 解锁后可参赛</el-button>
-                    </el-tooltip>
-                  </template>
-                  <span v-else-if="raceView.status === 'settled'" class="pk-winner">
-                    {{ raceView.winner_name ? `🏆 冠军：${raceView.winner_name}` : '本场无人 AC' }}
-                  </span>
-                </div>
-              </template>
-              <div v-else class="pk-hint">没有进行中的课堂 PK——老师发起后全班同题限时开战</div>
-            </div>
-
             <!-- 作业长条卡直接落在页面上（2026-10-26 拍板：去外层大卡）；
                  左侧日期色块（年月日），管理员可从六点手柄拖动排序（最新默认在最上） -->
             <div v-if="assignments.length" class="strip-list">
@@ -725,10 +729,17 @@ onMounted(load)
           <el-alert v-else title="加入班级后才能查看考试" type="info" :closable="false" />
         </template>
 
-        <el-card v-else>
+        <el-card v-else-if="section === 'members'">
           <el-table stripe :data="cl.members">
               <el-table-column prop="uid" label="ID" width="100" />
-              <el-table-column prop="username" label="用户名" min-width="160" />
+              <el-table-column prop="username" label="用户名" min-width="140" />
+              <el-table-column label="昵称" min-width="120">
+                <template #default="{ row }">
+                  <!-- 昵称可空（注册未填）：横杠不兜底用户名——用户名列就在旁边 -->
+                  <span v-if="row.nickname">{{ row.nickname }}</span>
+                  <span v-else class="dim">—</span>
+                </template>
+              </el-table-column>
               <el-table-column label="身份" width="200">
                 <template #default="{ row }">
                   <el-tag v-if="row.is_owner" size="small" type="warning">建班人</el-tag>

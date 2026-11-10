@@ -533,6 +533,7 @@ export interface ProgressRow {
 export interface ClassMember {
   uid: number
   username: string
+  nickname?: string // 昵称（v0.91 成员表昵称列，读时回填可空）
   role: string
   joined_at: string
   is_owner: boolean

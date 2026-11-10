@@ -228,6 +228,20 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		resp["invite_code"] = cl.InviteCode
 		members, err := h.repo.ListMembers(ctx, id)
 		if err == nil {
+			// 昵称回填（v0.91 成员表昵称列）：users 批量一次（GetUsersByIDs 索引点查），
+			// 读时回填不落快照——昵称可改，快照会陈旧（口径同 v0.75 提交记录昵称列）
+			nicks := map[int64]string{}
+			if users, err := h.repo.GetUsersByIDs(ctx, func() []int64 {
+				ids := make([]int64, 0, len(members))
+				for _, m := range members {
+					ids = append(ids, m.UID)
+				}
+				return ids
+			}()); err == nil {
+				for uid, u := range users {
+					nicks[uid] = u.Nickname
+				}
+			}
 			list := make([]gin.H, 0, len(members))
 			for _, m := range members {
 				memberRole := m.Role
@@ -236,7 +250,7 @@ func (h *Handlers) GetClass(c *gin.Context) {
 				}
 				list = append(list, gin.H{
 					"uid": m.UID, "username": m.Uname, "role": memberRole, "joined_at": m.JoinedAt,
-					"is_owner": m.UID == cl.OwnerID,
+					"is_owner": m.UID == cl.OwnerID, "nickname": nicks[m.UID],
 				})
 			}
 			resp["members"] = list
