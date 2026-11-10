@@ -11,7 +11,7 @@
 #                     未变更文件零占用；需 compose 里 backup_snaps 卷）
 #   --offsite         备份成功后把密文副本 rsync 到异地（SOJ_OFFSITE 环境变量 = ssh 别名；
 #                     保留最近 30 份 db + 1 份 media/all）
-#   --install-cron    安装两条 crontab（每日 db+快照 04:17 / 每周日 media 04:20），幂等
+#   --install-cron    安装两条 crontab（每日 db+快照 01:17 / 每周一 media 04:17），幂等
 #   输出目录默认 ./backups（密文另在服务器 /data/backups 自动留存一份）
 set -euo pipefail
 
@@ -51,8 +51,8 @@ if [ "$INSTALL_CRON" = "1" ]; then
   OFF_FLAG=""
   [ "$OFFSITE" = "1" ] && OFF_FLAG=" --offsite"
   MARK="SOJ-BACKUP-CRON"
-  LINE1="17 4 * * * cd \$HOME/soj && ./scripts/backup.sh --tier db --with-snapshots$OFF_FLAG >> backups/cron.log 2>&1 #$MARK-db"
-  LINE2="20 4 * * 0 cd \$HOME/soj && ./scripts/backup.sh --tier media$OFF_FLAG >> backups/cron.log 2>&1 #$MARK-media"
+  LINE1="17 1 * * * cd \$HOME/soj && ./scripts/backup.sh --tier db --with-snapshots$OFF_FLAG >> backups/cron.log 2>&1 #$MARK-db"
+  LINE2="17 4 * * 1 cd \$HOME/soj && ./scripts/backup.sh --tier media$OFF_FLAG >> backups/cron.log 2>&1 #$MARK-media"
   (crontab -l 2>/dev/null | grep -v "$MARK"; echo "$LINE1"; echo "$LINE2") | crontab - \
     || die "crontab 安装失败（服务器上执行）"
   echo "已安装备份 crontab："
