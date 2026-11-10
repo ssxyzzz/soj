@@ -663,9 +663,10 @@ export interface ListCard {
   manageable: boolean
 }
 
-// 详情条目：pid + 摘要 + 我的最高分状态
+// 详情条目：题目摘要 + 我的最高分状态（v0.87 命名层统一：pid→id、score→my_score，
+// 与题库/比赛/作业列表条目同一概念同一字段名）
 export interface ListProblemEntry {
-  pid: number
+  id: number
   title: string
   difficulty: number
   hidden?: boolean
@@ -673,7 +674,7 @@ export interface ListProblemEntry {
   locked?: boolean
   lock_kind?: string
   status?: string
-  score?: number
+  my_score?: number
   tags?: number[]
 }
 

@@ -54,11 +54,11 @@ function fromDetail(d: ListDetail): ListEntryDraft[] {
   return d.chapters.map((c) => ({
     title: c.title,
     desc: c.desc ?? '',
-    problems: c.problems.map((e) => ({ id: e.pid, title: e.title, hidden: e.hidden })),
+    problems: c.problems.map((e) => ({ id: e.id, title: e.title, hidden: e.hidden })),
     children: c.sections.map((s) => ({
       title: s.title,
       desc: s.desc ?? '',
-      problems: s.problems.map((e) => ({ id: e.pid, title: e.title, hidden: e.hidden })),
+      problems: s.problems.map((e) => ({ id: e.id, title: e.title, hidden: e.hidden })),
       children: [],
     })),
   }))

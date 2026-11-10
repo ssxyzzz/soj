@@ -26,9 +26,11 @@ func (h *Handlers) listManageable(c *gin.Context, l *repo.ProblemList) bool {
 	return logged && (role == repo.RoleRoot || uid == l.CreatedBy)
 }
 
-// listEntryJSON 详情条目：pid + 摘要 + 观察者状态（status/score 来自 UserBestStatuses）。
+// listEntryJSON 详情条目：题目摘要 + 观察者状态（status/my_score 来自 UserBestStatuses）。
+// v0.87 命名层统一：pid→id、score→my_score，与题库/比赛/作业列表接口同一概念同一字段名
+//（存储层 pid 惯例不动，仅 API JSON 面换血）。
 type listEntryJSON struct {
-	PID        int64   `json:"pid"`
+	ID         int64   `json:"id"`
 	Title      string  `json:"title"`
 	Difficulty int     `json:"difficulty"`
 	Hidden     bool    `json:"hidden,omitempty"`
@@ -36,7 +38,7 @@ type listEntryJSON struct {
 	Locked     bool    `json:"locked,omitempty"`
 	LockKind   string  `json:"lock_kind,omitempty"`
 	Status     *string `json:"status,omitempty"`
-	Score      *int    `json:"score,omitempty"`
+	MyScore    *int    `json:"my_score,omitempty"`
 	Tags       []int64 `json:"tags,omitempty"`
 }
 
@@ -89,7 +91,7 @@ func (h *Handlers) buildListScope(c *gin.Context, l *repo.ProblemList) ([]listCh
 		if (p.Hidden || p.Duplicate) && !seeAllHidden {
 			return listEntryJSON{}, false // 隐藏题/重复题：无权限视角整条剔除（分母同步缩减）
 		}
-		e := listEntryJSON{PID: p.ID, Title: p.Title, Difficulty: p.Difficulty, Hidden: p.Hidden, Duplicate: p.Duplicate, Tags: p.Tags}
+		e := listEntryJSON{ID: p.ID, Title: p.Title, Difficulty: p.Difficulty, Hidden: p.Hidden, Duplicate: p.Duplicate, Tags: p.Tags}
 		if lk := lockMap[p.ID]; lk != nil {
 			e.Locked = true
 			e.LockKind = lk.Kind
@@ -97,7 +99,7 @@ func (h *Handlers) buildListScope(c *gin.Context, l *repo.ProblemList) ([]listCh
 		if logged {
 			if st, ok := statuses[p.ID]; ok {
 				s, sc := st.Status, st.Score
-				e.Status, e.Score = &s, &sc
+				e.Status, e.MyScore = &s, &sc
 			}
 		}
 		if !seen[p.ID] {
@@ -277,12 +279,12 @@ func (h *Handlers) GetListDetail(c *gin.Context) {
 	solved, difficulties := 0, make([]int, 10)
 	seen := map[int64]bool{}
 	countEntry := func(e listEntryJSON) {
-		if seen[e.PID] {
+		if seen[e.ID] {
 			return // 同题重复挂载：进度与难度分布均只计一次
 		}
-		seen[e.PID] = true
+		seen[e.ID] = true
 		difficulties[e.Difficulty-1]++
-		if st, ok := statuses[e.PID]; ok && st.Status == repo.StatusAccepted {
+		if st, ok := statuses[e.ID]; ok && st.Status == repo.StatusAccepted {
 			solved++
 		}
 	}

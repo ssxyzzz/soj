@@ -103,8 +103,8 @@ const solvedByDiff = computed(() => {
     for (const sec of ch.sections) for (const e of sec.problems) countEntry(e)
   }
   function countEntry(e: ListProblemEntry) {
-    if (seen.has(e.pid)) return
-    seen.add(e.pid)
+    if (seen.has(e.id)) return
+    seen.add(e.id)
     if (e.status === 'Accepted' && e.difficulty >= 1 && e.difficulty <= 10) out[e.difficulty - 1]++
   }
   return out
@@ -294,12 +294,12 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                 <el-table v-if="ch.problems.length" :data="ch.problems" class="ptable">
                   <el-table-column label="状态" width="140">
                     <template #default="{ row }">
-                      <SubStatus v-if="row.status" :status="row.status" :score="row.score" />
+                      <SubStatus v-if="row.status" :status="row.status" :score="row.my_score" />
                       <span v-else class="dim">未做</span>
                     </template>
                   </el-table-column>
                   <el-table-column label="题号" width="96">
-                    <template #default="{ row }"><span class="mono dim">P{{ row.pid }}</span></template>
+                    <template #default="{ row }"><span class="mono dim">P{{ row.id }}</span></template>
                   </el-table-column>
                   <el-table-column label="题目" min-width="320">
                     <template #default="{ row }">
@@ -310,7 +310,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                         </el-tag>
                       </template>
                       <template v-else>
-                        <router-link class="ptitle" :to="`/problems/${row.pid}`"><b>{{ row.title }}</b></router-link>
+                        <router-link class="ptitle" :to="`/problems/${row.id}`"><b>{{ row.title }}</b></router-link>
                         <el-tag v-if="row.hidden" size="small" type="danger" effect="plain" class="ml8">隐藏</el-tag>
                         <el-tag v-if="row.duplicate" size="small" type="info" effect="plain" class="ml8">重复</el-tag>
                       </template>
@@ -357,12 +357,12 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                     <el-table v-if="sec.problems.length" :data="sec.problems" class="ptable">
                       <el-table-column label="状态" width="140">
                         <template #default="{ row }">
-                          <SubStatus v-if="row.status" :status="row.status" :score="row.score" />
+                          <SubStatus v-if="row.status" :status="row.status" :score="row.my_score" />
                           <span v-else class="dim">未做</span>
                         </template>
                       </el-table-column>
                       <el-table-column label="题号" width="96">
-                        <template #default="{ row }"><span class="mono dim">P{{ row.pid }}</span></template>
+                        <template #default="{ row }"><span class="mono dim">P{{ row.id }}</span></template>
                       </el-table-column>
                       <el-table-column label="题目" min-width="320">
                         <template #default="{ row }">
@@ -373,7 +373,7 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                             </el-tag>
                           </template>
                           <template v-else>
-                            <router-link class="ptitle" :to="`/problems/${row.pid}`"><b>{{ row.title }}</b></router-link>
+                            <router-link class="ptitle" :to="`/problems/${row.id}`"><b>{{ row.title }}</b></router-link>
                             <el-tag v-if="row.hidden" size="small" type="danger" effect="plain" class="ml8">隐藏</el-tag>
                             <el-tag v-if="row.duplicate" size="small" type="info" effect="plain" class="ml8">重复</el-tag>
                           </template>
