@@ -1,28 +1,29 @@
 <script setup lang="ts">
-// 题目详情（v3-full 重制）：面包屑 + 画布题面（ProblemStatement）+ 宽副列 356 五卡
-// （题目维护 → 提交本题（内嵌语言选择 + 深色代码框直接提交）→ 题目信息 → 我的提交
-// mini 行卡 → 评测须知）；客观题作答区在主列，弹窗链路（题解/我的提交/所有代码/在线编程）保留。
+// 题目详情（v3-full 重制；v0.90 统一批③卡组收敛）：面包屑（作业分支走 ProblemHeadCard
+// 统一头）+ 画布题面（ProblemStatement）+ 宽副列卡组（题目维护/提交本题/我的提交 mini
+// 行卡/答案解析/互助/评测须知——维护卡与 mini 卡为共享组件）；客观题作答区在主列，
+// 弹窗链路（题解/我的提交/所有代码/在线编程/粘贴提交 SubmitDialog）保留。
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, problemApi, submissionApi } from '@/api'
-import { judgeQueueApi } from '@/api/judgeQueue'
 import { usePolling } from '@/composables/usePolling'
 import { useStatementFocus } from '@/composables/useStatementFocus'
-import CodeEditor from '@/components/CodeEditor.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
-import PageCrumbs from '@/components/PageCrumbs.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
+import SubmitDialog from '@/components/SubmitDialog.vue'
 import AiTutorPanel from '@/components/AiTutorPanel.vue'
 import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
 import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
-import SubStatus from '@/components/SubStatus.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
-import AnswerAnalysisCard from '@/components/problem/AnswerAnalysisCard.vue'
+import ProblemHeadCard from '@/components/problem/cards/ProblemHeadCard.vue'
+import ProblemMaintainCard from '@/components/problem/cards/ProblemMaintainCard.vue'
+import ProblemVideoDialog from '@/components/problem/cards/ProblemVideoDialog.vue'
+import MySubmissionsMiniCard from '@/components/problem/cards/MySubmissionsMiniCard.vue'
 import { defineAsyncComponent } from 'vue'
 // 讨论/题解弹窗按需加载（加载优化批）：不点开不下载对应 chunk（题解链含 MdEditor），
 // 题面首开闭包瘦身；首次打开多一次懒加载往返
@@ -32,8 +33,7 @@ import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { useGameFeastStore } from '@/stores/gameFeast'
 import { pickTaunt } from '@/utils/gameText'
-import { autocompleteOn, defaultLang, languageOptions } from '@/utils/code'
-import { fmtRel, fmtShort, isQueueStatus, statusStyle } from '@/utils/format'
+import { isQueueStatus, statusStyle } from '@/utils/format'
 import type { AssignmentDetail, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/types'
 
 const route = useRoute()
@@ -142,28 +142,7 @@ watch(
   },
 )
 
-// 批量重测（v0.7.1）：本题全部已出结果的提交低优先级重排队，不挤占学生新提交
-const rejudgeAllRunning = ref(false)
-async function rejudgeAll() {
-  const p = problem.value
-  if (!p || rejudgeAllRunning.value) return
-  try {
-    await ElMessageBox.confirm(
-      `将把本题所有已出结果的提交重新评测（低优先级，不影响学生新提交的评测顺序），确定？`,
-      '批量重测',
-      { type: 'warning', confirmButtonText: '批量重测', cancelButtonText: '取消' },
-    )
-  } catch {
-    return
-  }
-  rejudgeAllRunning.value = true
-  try {
-    const r = await judgeQueueApi.rejudgeProblem(p.id)
-    ElMessage.success(r.count > 0 ? `已加入重测队列：${r.count} 条` : '本题没有可重测的提交')
-  } finally {
-    rejudgeAllRunning.value = false
-  }
-}
+// 批量重测已收编 ProblemMaintainCard（v0.90 统一批③，与赛事做题页共享一份实现）
 const submitDisabledReason = computed(() => {
   // 客观题无测试数据概念（题干即全部），不受 has_cases 约束
   if (problem.value?.type !== 'objective' && problem.value?.has_cases === false) {
@@ -247,41 +226,9 @@ function openChallenge() {
   router.push(`/problems/${problem.value!.id}/challenge`)
 }
 
-// ---- 副列「提交本题」内嵌编辑器（v3 rail codebox）：语言 + 深色代码框 + 直接提交 ----
-const railLang = ref(defaultLang())
-const railCode = ref('')
-const acOn = computed(() => autocompleteOn())
-
-watch(problem, (p) => {
-  if (!p) return
-  const lock = isFunction.value ? 'cpp' : isInteractive.value ? 'cpp' : undefined
-  if (lock) railLang.value = lock
-  // 仅函数题预填题面学生模板；个人代码模板只用于在线编程（2026-10-27），提交弹窗保持全空白
-  railCode.value = funcTemplate.value
-})
-
-function changeRailLang(l: string) {
-  railLang.value = l
-}
-
-const railLangOptions = computed(() => {
-  if (isFunction.value) return languageOptions.filter((o) => o.value === 'cpp')
-  if (isInteractive.value) return languageOptions.filter((o) => ['cpp', 'c'].includes(o.value))
-  return languageOptions
-})
-
-function railSubmit() {
-  if (submitDisabled.value) {
-    ElMessage.warning(submitDisabledReason.value || '请先登录')
-    if (!userStore.token) router.push({ path: '/login', query: { redirect: route.fullPath } })
-    return
-  }
-  if (!railCode.value.trim()) {
-    ElMessage.warning('代码不能为空')
-    return
-  }
-  handleSubmit(railLang.value, railCode.value)
-}
+// ---- 副列「提交本题」弹窗通道（v0.90 统一批③：手写粘贴弹窗退役，统一 SubmitDialog，
+// 与赛事做题页同一实现；语言锁/函数题模板/字号字体偏好由组件内处理） ----
+const showRailSubmit = ref(false)
 
 function openWorkbenchEntry() {
   if (!userStore.token) {
@@ -292,18 +239,12 @@ function openWorkbenchEntry() {
   showWorkbench.value = true
 }
 
-// 粘贴提交弹窗（2026-10-25 修复⑥）：副列去内嵌编辑器后的入口。
-// 打开弹窗每次都是干净起点（v0.83.2 用户拍板「点击提交应该清空，不保留上一次的代码」）：
-// 无条件重置——普通题全空、函数题题面学生模板（2026-10-27 设计保留）；个人代码模板只用于在线编程
-const showRailSubmit = ref(false)
-
 function openRailSubmit() {
   if (!userStore.token) {
     ElMessage.warning('请先登录')
     router.push({ path: '/login', query: { redirect: route.fullPath } })
     return
   }
-  railCode.value = funcTemplate.value
   showRailSubmit.value = true
 }
 
@@ -453,28 +394,15 @@ onUnmounted(stopPolling)
   <div v-loading="loading">
     <template v-if="problem">
       <PageShell :hide-aside="stmtFocus">
-        <!-- v0.77 作业做题统一头（独立行）：面包屑（班级/作业可点）+ 切题序号，与比赛/
-             考试做题页同形态；拉不到作业上下文（直链且非班级成员 403）不渲染，降级普通题页 -->
-        <el-card
+        <!-- v0.77 作业做题统一头 → v0.90 收编 ProblemHeadCard（与比赛/考试做题页同一实现）；
+             拉不到作业上下文（直链且非班级成员 403）不渲染，降级普通题页 -->
+        <ProblemHeadCard
           v-if="assignmentCtx && assignmentCtx.id && !stmtFocus"
-          class="assign-head"
-          :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }"
-        >
-          <PageCrumbs :items="assignCrumbItems" />
-          <div class="sw-row">
-            <span class="sw-lab">切题</span>
-            <button
-              v-for="(p, i) in assignmentCtx.problems"
-              :key="p.id"
-              type="button"
-              class="sw-btn"
-              :class="{ on: p.id === Number(route.params.id) }"
-              @click="goAssignProblem(p.id)"
-            >
-              {{ i + 1 }}
-            </button>
-          </div>
-        </el-card>
+          :crumbs="assignCrumbItems"
+          :problem-ids="assignmentCtx.problems.map((p) => p.id)"
+          :current-pid="Number(route.params.id)"
+          @select="goAssignProblem"
+        />
         <div v-else-if="!stmtFocus" class="crumbs">
           <router-link to="/problems">题库</router-link>
           ／ <span class="mono">P{{ problem.id }}</span>
@@ -518,12 +446,7 @@ onUnmounted(stopPolling)
         />
 
         <template #aside>
-        <RailCard v-if="problem.can_edit_statement" ov="管理" title="题目维护" class="aside-card">
-          <div class="entry-actions">
-            <el-button type="primary" @click="router.push(`/problems/${problem.id}/edit`)">编辑题目</el-button>
-            <el-button :loading="rejudgeAllRunning" @click="rejudgeAll">批量重测本题</el-button>
-          </div>
-        </RailCard>
+        <ProblemMaintainCard v-if="problem.can_edit_statement" :problem-id="problem.id" />
 
         <!-- v3「提交本题」（2026-10-25 修复⑥）：副列不再内嵌编辑器，点「提交」进弹窗粘贴提交；
              客观题换成操作入口卡。按钮竖排全宽五连（2026-10-27 拍板：对齐比赛做题页本题操作卡，
@@ -550,19 +473,7 @@ onUnmounted(stopPolling)
           </div>
         </RailCard>
 
-        <RailCard v-if="userStore.token" ov="记录" title="我的提交" class="aside-card">
-          <template v-if="recentMine.length">
-            <div v-for="s in recentMine" :key="s.id" class="soj-mini-li" @click="showMine = true">
-              <SubStatus :status="s.status" :score="s.score" />
-              <span class="grow mono">#{{ s.id }}</span>
-              <!-- 相对时间列（2026-10-25 用户反馈）：N 秒/分钟/小时前；含中文不挂 mono（修复⑫） -->
-              <span class="t">{{ fmtRel(s.created_at) }}</span>
-              <span class="t mono">{{ s.time_ms ? `${s.time_ms}ms` : fmtShort(s.created_at).split(' ')[1] }}</span>
-            </div>
-            <p class="hint link" @click="showMine = true">查看全部 →</p>
-          </template>
-          <p v-else class="hint">还没有提交过本题。</p>
-        </RailCard>
+        <MySubmissionsMiniCard v-if="userStore.token" :rows="recentMine" @open="showMine = true" />
 
         <!-- 答案解析（v0.23 验收调整）：视频讲解默认可看（不设 AC 门槛），文字题解满分∨老师门槛；
              玉解锁（v0.33-②）：未达门槛的学生可花玉解锁文字题解（难度 × 系数定价，解锁永久）。
@@ -619,7 +530,7 @@ onUnmounted(stopPolling)
       :title="`#${problem.id} ${problem.title}`"
       :problem="problem"
       :submitting="submitting"
-      :initial-code="isFunction ? funcTemplate : railCode || undefined"
+      :initial-code="isFunction ? funcTemplate : undefined"
       :lang-only="isFunction ? 'cpp' : isInteractive ? ['cpp', 'c'] : undefined"
       @submit="handleSubmit"
     />
@@ -635,90 +546,30 @@ onUnmounted(stopPolling)
       :title="`P${problem.id} ${problem.title} · 讨论`"
     />
 
-    <!-- 视频讲解弹窗（答案解析卡入口） -->
-    <el-dialog v-model="showVideo" title="视频讲解" width="880px" top="6vh" destroy-on-close>
-      <AnswerAnalysisCard v-if="problem.solution_video_url" :url="problem.solution_video_url" />
-    </el-dialog>
+    <!-- 视频讲解弹窗（答案解析卡入口；v0.90 收编 ProblemVideoDialog 与赛事页共用） -->
+    <ProblemVideoDialog v-model="showVideo" :url="problem.solution_video_url" />
 
     <MySubmissionsDialog ref="mineDialogRef" v-model="showMine" :problem-id="problem.id" />
 
     <AllCodesDialog v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
 
-    <!-- 粘贴提交弹窗（2026-10-25 修复⑥）：副列不再内嵌编辑器，点「提交代码」进弹窗粘贴提交；
-         2026-10-26 字号/字体跟随用户偏好（与在线编程同一份 prefs 实时联动），弹窗加大 -->
-    <el-dialog v-model="showRailSubmit" title="提交代码" width="960px" top="6vh" :close-on-click-modal="false">
-      <div class="dlg-lang">
-        <span class="dlg-label">语言</span>
-        <el-select :model-value="railLang" style="width: 220px" @change="changeRailLang">
-          <el-option v-for="o in railLangOptions" :key="o.value" :value="o.value" :label="o.label" />
-        </el-select>
-      </div>
-      <CodeEditor
-        v-model="railCode"
-        class="dlg-editor"
-        :language="railLang"
-        :autocomplete="acOn"
-        :font-size="userStore.prefs.codeFontSize || 14"
-        :font-family="userStore.prefs.codeFont || 'Consolas'"
-        height="520px"
-        placeholder="在此编写或粘贴你的代码"
-      />
-      <div v-if="submitDisabledReason" class="hint">{{ submitDisabledReason }}</div>
-      <template #footer>
-        <el-button @click="showRailSubmit = false">取消</el-button>
-        <el-button type="primary" :disabled="submitDisabled" :loading="submitting" @click="railSubmit">
-          提交评测
-        </el-button>
-      </template>
-    </el-dialog>
+    <!-- 粘贴提交弹窗（v0.90 统一批③换血 SubmitDialog）：与赛事做题页同一实现——语言锁/
+         函数题模板预填/字号字体偏好由组件处理；空代码校验与提交动作组件内 emit -->
+    <SubmitDialog
+      v-model="showRailSubmit"
+      :title="`#${problem.id} ${problem.title}`"
+      :disabled="submitDisabled"
+      :disabled-reason="submitDisabledReason"
+      :submitting="submitting"
+      :initial-code="isFunction ? funcTemplate : undefined"
+      :lang-only="isFunction ? 'cpp' : isInteractive ? ['cpp', 'c'] : undefined"
+      @submit="handleSubmit"
+    />
 </template>
   </div>
 </template>
 
 <style scoped>
-/* v0.77 作业做题统一头（与比赛/考试做题页同形态；sw-btn 样式照搬 RoundProblemView） */
-.assign-head :deep(.soj-crumbs) {
-  margin-bottom: var(--soj-sp-10);
-}
-
-.sw-row {
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-6);
-  flex-wrap: wrap;
-}
-
-.sw-lab {
-  font-size: var(--soj-fs-12);
-  color: var(--soj-ink-3);
-  margin-right: var(--soj-sp-2);
-}
-
-.sw-btn {
-  width: 34px;
-  height: 32px;
-  border-radius: 10px;
-  border: 1px solid var(--soj-line-2);
-  background: var(--el-fill-color-blank);
-  font: inherit;
-  font-weight: var(--soj-fw-bold);
-  font-size: var(--soj-fs-13);
-  color: var(--soj-ink-2);
-  cursor: pointer;
-  transition: all 0.12s;
-}
-
-.sw-btn:hover {
-  border-color: var(--soj-blue-line);
-  color: var(--soj-blue);
-}
-
-.sw-btn.on {
-  background: var(--soj-blue);
-  border-color: var(--soj-blue);
-  color: var(--soj-white);
-}
-
 /* v3 .crumbs */
 .crumbs {
   font-size: var(--soj-fs-13);
@@ -733,22 +584,6 @@ onUnmounted(stopPolling)
 
 .crumbs a:hover {
   color: var(--soj-blue);
-}
-
-/* 粘贴提交弹窗 */
-.dlg-lang {
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-10);
-}
-
-.dlg-label {
-  font-size: var(--soj-fs-13);
-  color: var(--soj-ink-3);
-}
-
-.dlg-editor {
-  margin-top: var(--soj-sp-12);
 }
 
 .hint {
@@ -788,10 +623,6 @@ onUnmounted(stopPolling)
 .center {
   text-align: center;
   margin-top: var(--soj-sp-8);
-}
-
-.soj-mini-li {
-  cursor: pointer;
 }
 
 /* AI 助教并入答案解析卡（v0.33-④ 验收调整）：面板与解析入口之间留间距 */

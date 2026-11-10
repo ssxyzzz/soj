@@ -320,7 +320,8 @@ onMounted(() => {
           :rows="round.problems"
           numbering="T"
           :show-status="!!userStore.token"
-          @title-click="problemRoute"
+          clickable
+          @row-click="problemRoute"
         />
         <el-alert
           v-else

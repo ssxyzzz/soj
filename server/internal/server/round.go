@@ -898,8 +898,12 @@ func (h *Handlers) roundMySubmissions(c *gin.Context, s roundScope) {
 	for _, s := range subs {
 		if revealed {
 			// v0.64 拆形：已揭榜列表瘦身（无 code/detail）——揭榜等待期前端 1.5s
-			// 轮询，旧形状每拍全量代码 MB 级 JSON.parse；看代码/明细改走详情接口按需取
-			items = append(items, submissionJSON(s, false))
+			// 轮询，旧形状每拍全量代码 MB 级 JSON.parse；看代码/明细改走详情接口按需取。
+			// pid 为赛内条目契约字段（前端按题过滤；submissionJSON 通用名是 problem_id，
+			// 此处补 pid 对齐隐藏期分支——两分支字段名曾分叉致已揭榜场过滤恒空，v0.90 修复）
+			h := submissionJSON(s, false)
+			h["pid"] = s.ProblemID
+			items = append(items, h)
 			continue
 		}
 		// 隐藏期内不出分（状态/得分不返回），但代码是本人写的，随提交带回去供回看

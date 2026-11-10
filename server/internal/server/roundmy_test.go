@@ -67,6 +67,11 @@ func TestRoundMySubmissionsSplitShape(t *testing.T) {
 	if row["status"] != "AC" {
 		t.Errorf("揭榜行应带状态: %v", row["status"])
 	}
+	// pid 是赛内条目契约字段（前端做题页按题过滤）：两分支必须同带（曾分叉致已揭榜场
+	// 过滤恒空——做题页「我的提交」卡永远空，v0.90 修复钉死）
+	if row["pid"] != float64(5) {
+		t.Errorf("揭榜行应带 pid（按题过滤依赖）: %v", row["pid"])
+	}
 
 	// 隐藏期：行带 code（考时回看唯一通道），不带状态/得分
 	r, tok, _, _ = mk(false)
@@ -81,5 +86,8 @@ func TestRoundMySubmissionsSplitShape(t *testing.T) {
 	}
 	if _, has := row["status"]; has {
 		t.Error("隐藏期行不得带状态（赛期内不出分）")
+	}
+	if row["pid"] != float64(5) {
+		t.Errorf("隐藏期行应带 pid: %v", row["pid"])
 	}
 }

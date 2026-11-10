@@ -4,26 +4,26 @@
 // （比赛回赛事页、考试回班级列表）——全部由 kind 派生。
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 
-import { contestApi, examApi, problemApi, submissionApi, type RoundKind } from '@/api'
-import { judgeQueueApi } from '@/api/judgeQueue'
+import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import { usePolling } from '@/composables/usePolling'
 import { useStatementFocus } from '@/composables/useStatementFocus'
-import CodePane from '@/components/CodePane.vue'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
-import PageCrumbs from '@/components/PageCrumbs.vue'
-import SubStatus from '@/components/SubStatus.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
-import AnswerAnalysisCard from '@/components/problem/AnswerAnalysisCard.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
+import ProblemHeadCard from '@/components/problem/cards/ProblemHeadCard.vue'
+import ProblemMaintainCard from '@/components/problem/cards/ProblemMaintainCard.vue'
+import ProblemVideoDialog from '@/components/problem/cards/ProblemVideoDialog.vue'
+import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
+import MySubmissionsMiniCard from '@/components/problem/cards/MySubmissionsMiniCard.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
 import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
 import SubmitDialog from '@/components/SubmitDialog.vue'
-import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus } from '@/utils/format'
+import { fmtDate, isQueueStatus } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
 import type {
   ContestDetail, ContestMySubmission, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission,
@@ -56,8 +56,6 @@ const round = ref<ContestDetail | null>(null)
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
 const mine = ref<ContestMySubmission[]>([])
-// 点开的提交：隐藏期 = 列表行（自带 code）；已揭榜 = 详情接口 Submission（列表瘦身）
-const mineDetail = ref<ContestMySubmission | Submission | null>(null)
 const revealed = ref(false)
 
 const showSubmit = ref(false)
@@ -65,14 +63,15 @@ const showWorkbench = ref(false)
 const showOthers = ref(false)
 const showMine = ref(false)
 const submitting = ref(false)
-// 我的提交弹窗（对齐题库的弹窗形态）：列表点行 → 代码详情；隐藏期内不出分
-const mineView = ref<'list' | 'code'>('list')
 // 所有代码入口：题库全量可见人群（admin/root）在赛事做题页也可查看，普通参与者维持无此入口
 const canViewOthers = computed(() => userStore.can('problem.view.all'))
 
 const roundId = computed(() => Number(route.params.id))
 const pid = computed(() => Number(route.params.pid))
 const running = computed(() => round.value?.status === 'running')
+// 榜单入口（用户拍板）：比赛/考试结束后全员可见本题全部提交（原「所有代码」仅 admin
+// 恒显且赛时也开——赛时不下开防作弊，admin 赛时看代码走管理面）
+const ended = computed(() => round.value?.status === 'ended')
 const statusText = computed(() => {
   switch (round.value?.status) {
     case 'running': return '进行中'
@@ -159,43 +158,8 @@ const funcTemplate = computed(() => problem.value?.function?.template_code || ''
 const isInteractive = computed(() => problem.value?.type === 'interactive')
 const noCases = computed(() => !isObjective.value && problem.value?.has_cases === false)
 
-async function openMineDetail(s: ContestMySubmission) {
-  if (!s.id) return
-  // v0.64 拆形：已揭榜的列表行瘦身不带 code，点开按需拉详情；隐藏期行自带
-  // code（考时回看唯一通道），直接展示
-  if (revealed.value && !s.code) {
-    try {
-      mineDetail.value = await submissionApi.get(s.id)
-    } catch {
-      return // 拦截器已提示
-    }
-  } else {
-    mineDetail.value = s
-  }
-  mineView.value = 'code'
-}
-
-// 批量重测本题（题库详情页同款，管理卡）：本题全部已出结果的提交低优先级重排队
-const rejudgeRunning = ref(false)
-async function rejudgeAll() {
-  if (!problem.value || rejudgeRunning.value) return
-  try {
-    await ElMessageBox.confirm(
-      '将把本题所有已出结果的提交重新评测（低优先级，不影响学生新提交的评测顺序），确定？',
-      '批量重测',
-      { type: 'warning', confirmButtonText: '批量重测', cancelButtonText: '取消' },
-    )
-  } catch {
-    return
-  }
-  rejudgeRunning.value = true
-  try {
-    const r = await judgeQueueApi.rejudgeProblem(problem.value.id)
-    ElMessage.success(r.count > 0 ? `已加入重测队列：${r.count} 条` : '本题没有可重测的提交')
-  } finally {
-    rejudgeRunning.value = false
-  }
-}
+// 批量重测已收编 ProblemMaintainCard（v0.90 统一批③）；我的提交弹窗（含点行看代码的
+// 拆形逻辑）收敛进 MySubmissionsDialog 赛时模式
 
 // 题解弹窗（揭榜后的答案解析卡内入口，卡片已按 revealed + can_view_solutions 显隐）
 const showSolutions = ref(false)
@@ -279,36 +243,19 @@ watch(
 
 <template>
   <div v-loading="loading">
-    <!-- v0.79 题面专注模式：stmtFocus 时独立头与右栏让位，题面铺满。
-         v0.80 用户拍板：统一头卡收进主列（不再 standalone 横跨全宽），副列留给功能卡 -->
-    <PageShell v-if="round && problem" :hide-aside="stmtFocus">
-      <el-card v-if="!stmtFocus" class="standalone-card round-head" :body-style="{ padding: 'var(--soj-sp-14) var(--soj-sp-20)' }">
-          <!-- v0.77 统一头 + v0.81 用户拍板重排：面包屑行右端 = 时间段+状态（先时间后
-               状态，不单起一行）；第二行 = OI 赛制提示 + 切题序号 -->
-          <div class="rh-top">
-            <PageCrumbs :items="crumbItems" />
-            <div class="rh-meta">
-              <span class="rtime">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
-              <span class="sub-status" :class="running ? 'blue' : 'gray'"><span class="dot" :class="running ? 'blue' : 'gray'"></span>{{ statusText }}</span>
-            </div>
-          </div>
-          <div class="rh-sub">
-            <span v-if="!revealed" class="rtime">OI 赛制：赛时只记录提交次数，不出分</span>
-            <span class="sw-btns">
-              <span class="sw-lab">切题</span>
-              <button
-                v-for="(p, i) in round.problems"
-                :key="p.id"
-                type="button"
-                class="sw-btn"
-                :class="{ on: p.id === pid }"
-                @click="goProblem(p.id)"
-              >
-                {{ i + 1 }}
-              </button>
-            </span>
-          </div>
-      </el-card>
+      <!-- v0.79 题面专注模式：stmtFocus 时独立头与右栏让位，题面铺满。
+           v0.80 用户拍板：统一头卡收进主列（不再 standalone 横跨全宽），副列留给功能卡；
+           v0.90 收编 ProblemHeadCard（与题库/作业做题页同一实现），meta=时间段+状态、sub=OI 赛制提示 -->
+      <PageShell v-if="round && problem" :hide-aside="stmtFocus">
+      <ProblemHeadCard v-if="!stmtFocus" :crumbs="crumbItems" :problem-ids="(round.problems ?? []).map((p) => p.id)" :current-pid="pid" @select="goProblem">
+        <template #meta>
+          <span class="rtime">{{ fmtDate(round.start) }} ~ {{ fmtDate(round.end) }}</span>
+          <span class="sub-status" :class="running ? 'blue' : 'gray'"><span class="dot" :class="running ? 'blue' : 'gray'"></span>{{ statusText }}</span>
+        </template>
+        <template v-if="!revealed" #sub>
+          <span class="rtime">OI 赛制：赛时只记录提交次数，不出分</span>
+        </template>
+      </ProblemHeadCard>
 
       <ProblemStatement :problem="problem" :file-io="round.file_io" />
 
@@ -328,14 +275,12 @@ watch(
       />
 
       <template #aside>
-        <!-- 管理卡（题库详情页同款）：编辑直达，免去回题库找原题 -->
-        <RailCard v-if="problem.can_edit_statement" ov="管理" title="题目维护" class="aside-card">
-          <div class="entry-actions">
-            <el-button type="primary" style="width: 100%" @click="router.push(`/problems/${pid}/edit`)">编辑题目</el-button>
-            <el-button style="width: 100%" :loading="rejudgeRunning" @click="rejudgeAll">批量重测本题</el-button>
-          </div>
-        </RailCard>
+        <!-- 管理卡（v0.90 收编 ProblemMaintainCard，与题库/作业做题页同一实现）：编辑直达 -->
+        <ProblemMaintainCard v-if="problem.can_edit_statement" :problem-id="pid" />
 
+        <!-- 本题操作（用户拍板改造）：「我的提交」「所有代码」按钮退役——我的提交独立成
+             mini 卡（题库同款卡片语言，点行开弹窗），榜单改比赛结束后全员可见（原所有代码
+             仅 admin 恒显，赛时不下开防作弊） -->
         <RailCard ov="提交" class="aside-card">
           <template #head>
             <div class="rail-ov">提交</div>
@@ -343,7 +288,7 @@ watch(
               <TipLabel
                 label="本题操作"
                 :tip="!revealed
-                  ? 'OI 赛制：赛时只记录提交次数不出分；「我的提交」仅显示已记录，可点开查看自己的代码'
+                  ? 'OI 赛制：赛时只记录提交次数不出分；「我的提交」卡仅显示已记录，可点开查看自己的代码'
                   : undefined"
               />
             </div>
@@ -370,11 +315,24 @@ watch(
                 </el-button>
               </el-tooltip>
             </template>
-            <el-button style="width: 100%" @click="showMine = true">我的提交</el-button>
-            <el-button v-if="canViewOthers" style="width: 100%" @click="showOthers = true">所有代码</el-button>
+            <el-tooltip
+              v-if="ended"
+              content="比赛结束后可查看本题的全部提交榜单"
+              placement="top"
+            >
+              <el-button style="width: 100%" @click="showOthers = true">榜单</el-button>
+            </el-tooltip>
             <div v-if="!running" class="hint center">{{ name }}未在进行中</div>
           </div>
         </RailCard>
+
+        <!-- 我的提交 mini 卡（题库同款）：近 3 条，未揭榜状态位「已记录」，点行开完整弹窗 -->
+        <MySubmissionsMiniCard
+          v-if="userStore.token"
+          :rows="(mine as unknown as Submission[])"
+          :masked="!revealed"
+          @open="showMine = true"
+        />
 
         <!-- 答案解析（v0.23）：视频讲解默认可看，文字题解满分∨老师门槛，两钮同款白底黑字；
              比赛/考试隐藏期（未揭榜）整卡不显示 -->
@@ -421,129 +379,23 @@ watch(
 
       <SolutionsDialog v-model="showSolutions" :problem-id="pid" />
 
-      <!-- 视频讲解弹窗（答案解析卡入口） -->
-      <el-dialog v-model="showVideo" title="视频讲解" width="880px" top="6vh" destroy-on-close>
-        <AnswerAnalysisCard v-if="problem.solution_video_url" :url="problem.solution_video_url" />
-      </el-dialog>
+      <!-- 视频讲解弹窗（v0.90 收编 ProblemVideoDialog 与题库页共用） -->
+      <ProblemVideoDialog v-model="showVideo" :url="problem.solution_video_url" />
+
       <AllCodesDialog v-if="problem" v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
 
-      <!-- 我的提交（题库弹窗同形态）：隐藏期内不出分（状态列显示「已记录」），
-           点击行查看自己的代码；不提供判题明细入口 -->
-      <el-dialog v-model="showMine" title="我的提交" width="1020" top="4vh" @closed="mineView = 'list'">
-        <template v-if="mineView === 'list'">
-          <el-table stripe :data="mine" highlight-current-row @row-click="openMineDetail">
-            <el-table-column label="状态" width="140">
-              <template #default="{ row }">
-                <SubStatus v-if="revealed && row.status" :status="row.status" :score="row.score" />
-                <span v-else class="dim">已记录</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="language" label="语言" width="100" />
-            <el-table-column label="总耗时" width="100">
-              <template #default="{ row }">
-                {{ revealed ? fmtSec(row.time_ms ?? 0) : '—' }}
-              </template>
-            </el-table-column>
-            <el-table-column label="总内存" width="110">
-              <template #default="{ row }">
-                {{ revealed && row.memory_kb ? fmtMem(row.memory_kb) : '—' }}
-              </template>
-            </el-table-column>
-            <el-table-column label="提交时间">
-              <template #default="{ row }">{{ fmtRel(row.created_at) }}</template>
-            </el-table-column>
-          </el-table>
-          <el-empty v-if="!mine.length" description="还没有提交" :image-size="48" />
-        </template>
-        <template v-else-if="mineDetail">
-          <el-button class="mb8" @click="mineView = 'list'">← 返回列表</el-button>
-          <el-descriptions :column="3" border class="detail-desc">
-            <el-descriptions-item label="语言">{{ mineDetail.language }}</el-descriptions-item>
-            <el-descriptions-item label="提交时间">{{ fmtDate(mineDetail.created_at) }}</el-descriptions-item>
-          </el-descriptions>
-          <div class="detail-sub">代码</div>
-          <CodePane :code="mineDetail.code" :language="mineDetail.language" />
-        </template>
-      </el-dialog>
+      <!-- 我的提交（v0.90 收敛进 MySubmissionsDialog 赛时模式）：外部注入场内提交列表，
+           隐藏期不出分（状态列「已记录」/耗时内存横杠/详情裁测试点与 AI），点行看自己代码 -->
+      <MySubmissionsDialog v-model="showMine" :problem-id="pid" :rows="mine" :revealed="revealed" />
     </template>
   </div>
 </template>
 
 <style scoped>
-/* v0.80 统一头收进主列：下距对齐原 standalone 行距（16px），与题面衔接 */
-.round-head {
-  margin-bottom: var(--soj-sp-16);
-}
-
-/* v0.81 用户拍板重排：首行 = 面包屑（左）+ 时间段+状态（右，先时间后状态不单起一行） */
-.rh-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--soj-sp-12);
-  flex-wrap: wrap;
-}
-
-.rh-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-12);
-  flex-wrap: wrap;
-}
-
-/* v0.81 第二行：OI 赛制提示 + 切题序号 */
-.rh-sub {
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-12);
-  flex-wrap: wrap;
-  margin-top: var(--soj-sp-10);
-}
-
-/* v3 .rtime：--soj-fs-12 弱化说明 */
+/* v3 .rtime：--soj-fs-12 弱化说明（头卡 meta/sub 插槽内容，样式随定义方作用域） */
 .rtime {
   font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
-}
-
-/* v3 .sw-btns：34x32 圆角 10 切题方块钮 */
-.sw-btns {
-  display: inline-flex;
-  gap: var(--soj-sp-6);
-  margin-left: var(--soj-sp-12);
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.sw-lab {
-  font-size: var(--soj-fs-12);
-  color: var(--soj-ink-3);
-  margin-right: var(--soj-sp-2);
-}
-
-.sw-btn {
-  width: 34px;
-  height: 32px;
-  border-radius: 10px;
-  border: 1px solid var(--soj-line-2);
-  background: var(--el-fill-color-blank);
-  font: inherit;
-  font-weight: var(--soj-fw-bold);
-  font-size: var(--soj-fs-13);
-  color: var(--soj-ink-2);
-  cursor: pointer;
-  transition: all 0.12s;
-}
-
-.sw-btn:hover {
-  border-color: var(--soj-blue-line);
-  color: var(--soj-blue);
-}
-
-.sw-btn.on {
-  background: var(--soj-blue);
-  border-color: var(--soj-blue);
-  color: var(--soj-white);
 }
 
 .hint {
@@ -551,17 +403,6 @@ watch(
   color: var(--soj-ink-3);
   line-height: 1.7;
   margin: var(--soj-sp-10) 0 0;
-}
-
-.sa-switch {
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-8);
-  margin-top: var(--soj-sp-8);
-}
-
-.switch-btn {
-  font-weight: var(--soj-fw-emphasis);
 }
 
 .center {

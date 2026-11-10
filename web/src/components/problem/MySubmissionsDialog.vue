@@ -6,21 +6,30 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { aiTutorApi, problemApi } from '@/api'
+import { aiTutorApi, problemApi, submissionApi } from '@/api'
 import CodePane from '@/components/CodePane.vue'
 import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDesc } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
-import type { Submission } from '@/types'
+import type { ContestMySubmission, Submission } from '@/types'
 
 const props = defineProps<{
   modelValue: boolean
   problemId: number
+  /** 赛时模式（v0.90 统一批③收敛）：外部注入场内提交列表（含未公开提交）——
+   *  不内部拉取不分页，数据由页面随场内 loadMine 更新；缺省 = 题库模式自查 */
+  rows?: ContestMySubmission[]
+  /** 赛时是否已揭榜（赛时模式）：false = OI 赛制遮罩（状态列「已记录」、耗时/内存
+   *  横杠、详情裁剪测试点明细与 AI 找 bug），true = 正常展示 */
+  revealed?: boolean
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 
 const userStore = useUserStore()
+
+// 是否处于可出分视角：题库模式恒 true；赛时模式看揭榜
+const isRevealed = computed(() => !props.rows || props.revealed !== false)
 
 const PAGE_SIZE = 10
 const mySubs = ref<Submission[]>([])
@@ -36,13 +45,15 @@ const sortedDetail = computed(() => {
   return rows
 })
 
-// 最后一页不足 PAGE_SIZE 时补空白行，让表格保持整页高度
+// 最后一页不足 PAGE_SIZE 时补空白行，让表格保持整页高度（题库分页模式；赛时全量不补位）
 const displayRows = computed(() => {
+  if (props.rows) return displaySource.value
   const fill = Math.max(0, PAGE_SIZE - mySubs.value.length)
   return [...mySubs.value, ...Array.from({ length: fill }, () => ({}) as Submission)]
 })
 
 async function loadMine(p = 1) {
+  if (props.rows) return // 赛时模式数据外部注入，不自查
   try {
     const r = await problemApi.mySubmissions(props.problemId, p, PAGE_SIZE)
     mySubs.value = r.list
@@ -52,6 +63,11 @@ async function loadMine(p = 1) {
     mySubs.value = []
   }
 }
+
+// 展示行：赛时模式 = 外部注入的场内提交（响应式跟随页面 loadMine）；题库模式 = 分页自查。
+// ContestMySubmission 与 Submission 是同表两投影（problem_id vs pid 命名差），表格/详情
+// 只消费共有子集（id/language/time_ms/memory_kb/created_at/status/score/code），断言统一
+const displaySource = computed<Submission[]>(() => (props.rows ? (props.rows as unknown as Submission[]) : mySubs.value))
 
 watch(
   () => props.modelValue,
@@ -64,9 +80,19 @@ watch(
   },
 )
 
-function openMineDetail(s: Submission) {
+async function openMineDetail(s: Submission) {
   if (!s.id) return // 补位的空白行不可点
-  mineDetail.value = s
+  // 赛时模式拆形（v0.64 口径）：已揭榜的列表行瘦身不带 code，点开按需拉详情；
+  // 隐藏期行自带 code（考时回看唯一通道）直接展示
+  if (props.rows && props.revealed && !s.code) {
+    try {
+      mineDetail.value = await submissionApi.get(s.id)
+    } catch {
+      return // 拦截器已提示
+    }
+  } else {
+    mineDetail.value = s
+  }
   mineView.value = 'detail'
   loadAiPrice()
   // 找 bug 结果常驻（2026-10-30 反馈）：按提交缓存；没拉过就向后端取历史分析
@@ -196,7 +222,9 @@ defineExpose({ refresh: loadMine })
         <el-table-column label="状态" width="140">
           <template #default="{ row }">
             <template v-if="row.id">
-              <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
+              <!-- 赛时未揭榜（OI 赛制）：不出分，状态列只报「已记录」 -->
+              <span v-if="!isRevealed" class="dim">已记录</span>
+              <el-tooltip v-else-if="statusDesc(row.status)" placement="top" effect="light">
                 <template #content>
                   <div class="status-tip">
                     <div>{{ statusDesc(row.status)!.meaning }}</div>
@@ -212,12 +240,12 @@ defineExpose({ refresh: loadMine })
         <el-table-column prop="language" label="语言" width="100" />
         <el-table-column label="总耗时" width="100">
           <template #default="{ row }">
-            <template v-if="row.id">{{ fmtSec(row.time_ms) }}</template>
+            <template v-if="row.id">{{ isRevealed ? fmtSec(row.time_ms) : '—' }}</template>
           </template>
         </el-table-column>
         <el-table-column label="总内存" width="110">
           <template #default="{ row }">
-            <template v-if="row.id">{{ fmtMem(row.memory_kb) }}</template>
+            <template v-if="row.id">{{ isRevealed && row.memory_kb ? fmtMem(row.memory_kb) : '—' }}</template>
           </template>
         </el-table-column>
         <el-table-column label="提交时间">
@@ -226,8 +254,8 @@ defineExpose({ refresh: loadMine })
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!mySubs.length" description="还没有提交过" :image-size="48" />
-      <div v-if="myTotal > 0" class="side-pager">
+      <el-empty v-if="!displaySource.length" description="还没有提交过" :image-size="48" />
+      <div v-if="!rows && myTotal > 0" class="side-pager">
         <el-pagination
           background
           layout="prev, pager, next"
@@ -239,11 +267,12 @@ defineExpose({ refresh: loadMine })
       </div>
     </template>
     <template v-else-if="mineDetail">
-      <!-- 详情头行：返回列表居左，AI 找 bug 居右（2026-10-30 反馈：从状态格挪出） -->
+      <!-- 详情头行：返回列表居左，AI 找 bug 居右（2026-10-30 反馈：从状态格挪出）；
+           AI 找 bug 赛时未揭榜不出现（服务端本就封锁，UI 同步收敛） -->
       <div class="detail-top">
         <el-button @click="mineView = 'list'">← 返回列表</el-button>
         <el-button
-          v-if="aiReady && canAiDebug"
+          v-if="isRevealed && aiReady && canAiDebug"
           link
           type="warning"
           size="small"
@@ -255,7 +284,8 @@ defineExpose({ refresh: loadMine })
       </div>
       <el-descriptions :column="3" border class="detail-desc">
         <el-descriptions-item label="状态">
-          <el-tooltip v-if="statusDesc(mineDetail.status)" placement="top" effect="light">
+          <span v-if="!isRevealed" class="dim">已记录</span>
+          <el-tooltip v-else-if="statusDesc(mineDetail.status)" placement="top" effect="light">
             <template #content>
               <div class="status-tip">
                 <div>{{ statusDesc(mineDetail.status)!.meaning }}</div>
@@ -267,18 +297,19 @@ defineExpose({ refresh: loadMine })
           <SubStatus v-else :status="mineDetail.status" :score="mineDetail.score" />
         </el-descriptions-item>
         <el-descriptions-item label="语言">{{ mineDetail.language }}</el-descriptions-item>
-        <el-descriptions-item label="总耗时">{{ fmtSec(mineDetail.time_ms) }}</el-descriptions-item>
-        <el-descriptions-item label="总内存">{{ fmtMem(mineDetail.memory_kb) }}</el-descriptions-item>
+        <el-descriptions-item label="总耗时">{{ isRevealed ? fmtSec(mineDetail.time_ms) : '—' }}</el-descriptions-item>
+        <el-descriptions-item label="总内存">{{ isRevealed && mineDetail.memory_kb ? fmtMem(mineDetail.memory_kb) : '—' }}</el-descriptions-item>
         <el-descriptions-item label="提交时间">{{ fmtDate(mineDetail.created_at) }}</el-descriptions-item>
       </el-descriptions>
-      <!-- 有测试点明细时错误原因已在明细列展示（表尾 err 行），仅无明细时独立成块（如编译错误） -->
-      <template v-if="mineDetail.error_info && !sortedDetail.length">
+      <!-- 有测试点明细时错误原因已在明细列展示（表尾 err 行），仅无明细时独立成块（如编译错误）；
+           测试点明细/错误信息赛时未揭榜不出（数据本就不带 detail，防御性同遮） -->
+      <template v-if="isRevealed && mineDetail.error_info && !sortedDetail.length">
         <div class="detail-sub">错误信息</div>
         <pre class="mono sub-code">{{ mineDetail.error_info }}</pre>
       </template>
       <div class="detail-sub">代码</div>
       <CodePane :code="mineDetail.code" :language="mineDetail.language" />
-      <template v-if="mineDetail.detail?.length">
+      <template v-if="isRevealed && mineDetail.detail?.length">
         <div class="detail-sub">测试点明细</div>
         <el-table stripe :data="sortedDetail" border>
           <el-table-column prop="index" label="测试点" width="90" />
@@ -300,7 +331,7 @@ defineExpose({ refresh: loadMine })
           </el-table-column>
         </el-table>
       </template>
-      <template v-else-if="mineDetail.error_info">
+      <template v-else-if="isRevealed && mineDetail.error_info">
         <div class="detail-sub">错误信息</div>
         <pre class="mono sub-code">{{ mineDetail.error_info }}</pre>
       </template>
