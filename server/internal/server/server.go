@@ -196,10 +196,11 @@ func Run(ctx context.Context, deps *Deps) {
 		// 用户公开主页（v0.17）：登录可见，本人与他人统一视图（gin 静态段 /lookup 优先匹配，无冲突）
 		api.GET("/users/:id/profile", AuthRequired(h), h.UserProfile)
 		// 公开主页游戏三卡（v0.85 随主页公开，原 /api/me/* 三接口退役）：成就墙 / 知识星图 /
-		// 错题本——隐藏题按观察者权限剔除，口径同 first_ac
+		// 错题本——隐藏题按观察者权限剔除，口径同 first_ac；收藏卡随 v0.89 收藏铺开公开
 		api.GET("/users/:id/achievements", AuthRequired(h), h.UserAchievements)
 		api.GET("/users/:id/starmap", AuthRequired(h), h.UserStarMap)
 		api.GET("/users/:id/wrongbook", AuthRequired(h), h.UserWrongbook)
+		api.GET("/users/:id/favorites", AuthRequired(h), h.UserFavorites)
 		api.GET("/submissions/:id", AuthOptional(h), h.GetSubmission)
 		api.POST("/submissions/:id/rejudge", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.RejudgeSubmission)
 		// 取消评测（v0.7.1）：本人 ∨ submission.view.all（handler 内校验）

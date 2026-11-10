@@ -14,10 +14,8 @@ import EditRoundDialog from '@/components/EditRoundDialog.vue'
 import PageCrumbs from '@/components/PageCrumbs.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import ProblemTable from '@/components/problem/ProblemTable.vue'
 import RailCard from '@/components/RailCard.vue'
-import FitTags from '@/components/problem/FitTags.vue'
-import SubStatus from '@/components/SubStatus.vue'
-import TierBadge from '@/components/TierBadge.vue'
 import { buildRoundBoard } from '@/components/score/adapters'
 import ScoreBoardDialog from '@/components/score/ScoreBoardDialog.vue'
 import ScoreSummaryCard from '@/components/score/ScoreSummaryCard.vue'
@@ -189,13 +187,6 @@ const boardVisible = computed(() => {
   return c.published || (c.status === 'running' && !c.hide_during)
 })
 
-// 通过率 = AC 提交 / 总提交（与题库同口径）
-function acceptRate(row: { submit_count?: number; accepted_count?: number }): string {
-  if (!row.submit_count) return '—'
-  const pct = ((row.accepted_count ?? 0) / row.submit_count) * 100
-  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
-}
-
 async function load() {
   try {
     round.value = await api.value.detail(Number(route.params.id))
@@ -319,54 +310,18 @@ onMounted(() => {
         </div>
       </el-card>
 
-      <!-- 题目表：T1 / 状态 / 题目 / 难度 / 知识点 / 通过率（难度与知识点按场次 hide_meta
-           开关服务端下发：隐藏时字段缺席渲染横杠，2026-10-27） -->
+      <!-- 题目表（v0.89 统一 ProblemTable）：T 序号 / 状态 / 题目 / 难度 / 知识点 / 通过率，
+           难度与知识点按场次 hide_meta 开关服务端下发（隐藏时字段缺席渲染横杠）；
+           result_hidden 行级赛时遮罩（已提交/横杠）；标题点击进做题页 -->
       <el-card class="block">
         <template #header><span>题目（{{ problemTotal }}）</span></template>
-        <el-table v-if="round.problems?.length" stripe :data="round.problems">
-          <el-table-column label="题号" width="80">
-            <template #default="{ $index }">T{{ $index + 1 }}</template>
-          </el-table-column>
-          <el-table-column v-if="userStore.token" label="状态" width="150">
-            <template #default="{ row }">
-            <template v-if="row.result_hidden">
-              <el-tag v-if="row.submitted" size="small" type="info">已提交</el-tag>
-              <span v-else class="dim">—</span>
-            </template>
-            <SubStatus v-else-if="row.status" :status="row.status" :score="row.my_score" />
-            <span v-else class="dim">未做</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="题目" min-width="260">
-            <template #default="{ row }">
-              <span class="tlink" @click="problemRoute(row)">{{ row.title }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="难度" width="104">
-            <template #default="{ row }">
-              <TierBadge v-if="row.difficulty != null" :tier="row.difficulty" kind="difficulty" />
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="知识点" min-width="170">
-            <template #default="{ row }">
-              <FitTags v-if="row.tags?.length" :ids="row.tags" />
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="通过率" width="110">
-            <template #default="{ row }">
-              <el-tooltip
-                v-if="!row.result_hidden && row.submit_count"
-                :content="`AC ${row.accepted_count ?? 0} / 提交 ${row.submit_count}`"
-                placement="top"
-              >
-                <span>{{ acceptRate(row) }}</span>
-              </el-tooltip>
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-        </el-table>
+        <ProblemTable
+          v-if="round.problems?.length"
+          :rows="round.problems"
+          numbering="T"
+          :show-status="!!userStore.token"
+          @title-click="problemRoute"
+        />
         <el-alert
           v-else
           :title="round.status === 'scheduled' ? `${name}开始前题目隐藏，开始后可见` : '仅本班成员可见题目'"

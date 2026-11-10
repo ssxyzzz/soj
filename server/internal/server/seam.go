@@ -97,6 +97,7 @@ type RepoAPI interface {
 	DeleteSolution(ctx context.Context, sid int64) error
 	FailVerifyCode(ctx context.Context, id int64, already int) (int, error)
 	FavoritePIDs(ctx context.Context, uid int64, pids []int64) (map[int64]bool, error)
+	FavoriteRows(ctx context.Context, uid int64, limit int) ([]repo.FavoriteRow, error)
 	GetAssignment(ctx context.Context, id int64) (*repo.Assignment, error)
 	GetClass(ctx context.Context, id int64) (*repo.Class, error)
 	GetClassByInviteCode(ctx context.Context, code string) (*repo.Class, error)

@@ -13,12 +13,11 @@ import { onBeforeRouteLeave } from 'vue-router'
 
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import ProblemTable from '@/components/problem/ProblemTable.vue'
 import RailCard from '@/components/RailCard.vue'
-import SubStatus from '@/components/SubStatus.vue'
 import DiffChart from '@/components/DiffChart.vue'
-import TierBadge from '@/components/TierBadge.vue'
 import UserNameLevel from '@/components/UserNameLevel.vue'
-import { listApi } from '@/api'
+import { listApi, problemApi } from '@/api'
 import { useListQuery } from '@/composables/useListQuery'
 import { useUserStore } from '@/stores/user'
 import type { ListChapter, ListDetail, ListProblemEntry, ListRankResult } from '@/types'
@@ -109,6 +108,30 @@ const solvedByDiff = computed(() => {
   }
   return out
 })
+
+// 收藏星（v0.89 铺开）：toggle 后按返回态回写——同题可重复挂载于多章/节，全树同步该题星态；
+// 不乐观更新，失败拦截器统一 toast 星标保持原态；在途锁防连点双翻转
+const favBusy = ref(false)
+async function onToggleFavorite(row: { id: number }) {
+  if (favBusy.value) return
+  favBusy.value = true
+  try {
+    const res = await problemApi.toggleFavorite(row.id)
+    for (const ch of detail.value?.chapters ?? []) {
+      for (const e of ch.problems) if (e.id === row.id) e.favorite = res.favorited
+      for (const sec of ch.sections) for (const e of sec.problems) if (e.id === row.id) e.favorite = res.favorited
+    }
+  } catch {
+    /* 失败已 toast，星标保持原态 */
+  } finally {
+    favBusy.value = false
+  }
+}
+
+// 整行点击跳题（对齐题库/作业交互）：锁题冻结行组件内已挡（不可点）
+function onRowToProblem(row: { id: number }) {
+  router.push(`/problems/${row.id}`)
+}
 
 function chapterCount(ch: ListChapter): { solved: number; total: number } {
   let solved = 0
@@ -290,44 +313,19 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
               <!-- v-if 懒挂载（v0.62 挂载冻结根治批）：折叠章不建组件树（原 v-show 全量
                    挂载，大题单 300~600 题 = 同量 FitTags/表格一次建完） -->
               <div v-if="expanded[`ch:${ch.no}`]" class="cbody">
-                <!-- 章直挂题 -->
-                <el-table v-if="ch.problems.length" :data="ch.problems" class="ptable">
-                  <el-table-column label="状态" width="140">
-                    <template #default="{ row }">
-                      <SubStatus v-if="row.status" :status="row.status" :score="row.my_score" />
-                      <span v-else class="dim">未做</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="题号" width="96">
-                    <template #default="{ row }"><span class="mono dim">P{{ row.id }}</span></template>
-                  </el-table-column>
-                  <el-table-column label="题目" min-width="320">
-                    <template #default="{ row }">
-                      <template v-if="row.locked">
-                        <span class="ptitle locked"><b>{{ row.title }}</b></span>
-                        <el-tag size="small" type="success" class="ml8">
-                          {{ row.lock_kind === 'exam' ? '考试中' : '比赛中' }}
-                        </el-tag>
-                      </template>
-                      <template v-else>
-                        <router-link class="ptitle" :to="`/problems/${row.id}`"><b>{{ row.title }}</b></router-link>
-                        <el-tag v-if="row.hidden" size="small" type="danger" effect="plain" class="ml8">隐藏</el-tag>
-                        <el-tag v-if="row.duplicate" size="small" type="info" effect="plain" class="ml8">重复</el-tag>
-                      </template>
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="难度" width="130">
-                    <template #default="{ row }">
-                      <TierBadge :tier="row.difficulty" kind="difficulty" size="sm" />
-                    </template>
-                  </el-table-column>
-                  <el-table-column label="知识点" min-width="200">
-                    <template #default="{ row }">
-                      <FitTags v-if="row.tags?.length" :ids="row.tags" />
-                      <span v-else class="dim">—</span>
-                    </template>
-                  </el-table-column>
-                </el-table>
+                <!-- 章直挂题（v0.89 统一 ProblemTable + 收藏铺开：对齐题库六列含通过率与收藏星，
+                     整行可点跳题；锁题行冻结） -->
+                <ProblemTable
+                  v-if="ch.problems.length"
+                  :rows="ch.problems"
+                  class="ptable"
+                  favorite
+                  clickable
+                  locked-frozen
+                  :title-to="(row) => `/problems/${row.id}`"
+                  @row-click="onRowToProblem"
+                  @toggle-favorite="onToggleFavorite"
+                />
 
                 <!-- 小节：独立折叠条 + 各自表格（表头在小节内） -->
                 <div v-for="sec in ch.sections" :key="sec.no" class="sec-block">
@@ -354,43 +352,17 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
                   </button>
                   <!-- v-if 懒挂载（v0.62）：同章节折叠体口径，折叠小节不建表格 -->
                   <div v-if="expanded[`sec:${ch.no}:${sec.no}`]" class="sec-table">
-                    <el-table v-if="sec.problems.length" :data="sec.problems" class="ptable">
-                      <el-table-column label="状态" width="140">
-                        <template #default="{ row }">
-                          <SubStatus v-if="row.status" :status="row.status" :score="row.my_score" />
-                          <span v-else class="dim">未做</span>
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="题号" width="96">
-                        <template #default="{ row }"><span class="mono dim">P{{ row.id }}</span></template>
-                      </el-table-column>
-                      <el-table-column label="题目" min-width="320">
-                        <template #default="{ row }">
-                          <template v-if="row.locked">
-                            <span class="ptitle locked"><b>{{ row.title }}</b></span>
-                            <el-tag size="small" type="success" class="ml8">
-                              {{ row.lock_kind === 'exam' ? '考试中' : '比赛中' }}
-                            </el-tag>
-                          </template>
-                          <template v-else>
-                            <router-link class="ptitle" :to="`/problems/${row.id}`"><b>{{ row.title }}</b></router-link>
-                            <el-tag v-if="row.hidden" size="small" type="danger" effect="plain" class="ml8">隐藏</el-tag>
-                            <el-tag v-if="row.duplicate" size="small" type="info" effect="plain" class="ml8">重复</el-tag>
-                          </template>
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="难度" width="130">
-                        <template #default="{ row }">
-                          <TierBadge :tier="row.difficulty" kind="difficulty" size="sm" />
-                        </template>
-                      </el-table-column>
-                      <el-table-column label="知识点" min-width="200">
-                        <template #default="{ row }">
-                          <FitTags v-if="row.tags?.length" :ids="row.tags" />
-                          <span v-else class="dim">—</span>
-                        </template>
-                      </el-table-column>
-                    </el-table>
+                    <ProblemTable
+                      v-if="sec.problems.length"
+                      :rows="sec.problems"
+                      class="ptable"
+                      favorite
+                      clickable
+                      locked-frozen
+                      :title-to="(row) => `/problems/${row.id}`"
+                      @row-click="onRowToProblem"
+                      @toggle-favorite="onToggleFavorite"
+                    />
                     <p v-else class="hint sempty">本节暂无题目</p>
                   </div>
                 </div>
@@ -731,21 +703,6 @@ const pctOf = (n: number) => (detail.value?.total ? Math.round((n / detail.value
 
 .cbody {
   padding: 0;
-}
-
-/* 表格内题目链接与内联标签 */
-.ptitle {
-  color: var(--soj-navy);
-  text-decoration: none;
-}
-
-a.ptitle:hover {
-  color: var(--soj-blue);
-}
-
-.ptitle.locked {
-  color: var(--soj-ink-3);
-  cursor: not-allowed;
 }
 
 /* 可点展开三角形（章节/小节通用）：大号明显指示；收起灰、展开蓝（方向+颜色双信号） */

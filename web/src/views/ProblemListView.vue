@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { ArrowDown, CircleClose, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
-import { Star } from 'lucide-vue-next'
 
 import { authApi, problemApi, rankApi } from '@/api'
 import { downloadFile } from '@/api/download'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
-import FitTags from '@/components/problem/FitTags.vue'
-import SubStatus from '@/components/SubStatus.vue'
+import ProblemTable, { type ProblemTableRow } from '@/components/problem/ProblemTable.vue'
 import TagFilter from '@/components/problem/TagFilter.vue'
 import TierBadge from '@/components/TierBadge.vue'
 import { useLevelsStore } from '@/stores/levels'
@@ -20,19 +18,6 @@ import type { ProblemListItem } from '@/types'
 
 const router = useRouter()
 
-// 客观题小类徽章（v0.9）：带「题」字，与详情页题型标签口径一致
-function kindBadge(kind?: string) {
-  const map: Record<string, string> = { single: '单选题', multiple: '多选题', judge: '判断题', blank: '填空题' }
-  return map[kind ?? ''] ?? '客观题'
-}
-
-// 题型徽章文案：客观题按小类细分；函数/交互题给固定名；传统题不显示
-function typeBadge(row: { type?: string; kind?: string }): string {
-  if (row.type === 'objective') return kindBadge(row.kind)
-  if (row.type === 'function') return '函数题'
-  if (row.type === 'interactive') return '交互题'
-  return ''
-}
 const userStore = useUserStore()
 const tagStore = useTagTreeStore()
 const levels = useLevelsStore()
@@ -85,7 +70,7 @@ const exporting = ref(false)
 // 选择模式：点「打包导出」进入（左侧勾选框出现），导出完成或点「完成选择」退出
 const picking = ref(false)
 // reserve-selection：el-table 跨页保留勾选，selection-change 回调给全量已选行
-function onSelChange(rows: ProblemListItem[]) {
+function onSelChange(rows: ProblemTableRow[]) {
   selected.value = new Set(rows.map((r) => r.id))
 }
 // 导出（v0.64 直链化）：签发短签直链即返回，下载进度交浏览器原生下载器
@@ -143,7 +128,7 @@ function search() {
 // 收藏星标（v0.86）：toggle 后按返回态回写行（不乐观更新，失败拦截器统一 toast 不翻星）；
 // 全局在途锁防连点双翻转
 const favBusy = ref(false)
-async function onToggleFavorite(row: ProblemListItem) {
+async function onToggleFavorite(row: ProblemTableRow) {
   if (favBusy.value) return
   favBusy.value = true
   try {
@@ -246,13 +231,6 @@ function rowHref(row: { id?: number; locked?: boolean; lock_kind?: string; conte
 
 function problemRoute(row: Parameters<typeof rowHref>[0]) {
   router.push(rowHref(row))
-}
-
-// 通过率 = AC 提交 / 总提交（百分比，整数省小数）
-function acceptRate(row: { submit_count?: number; accepted_count?: number }): string {
-  if (!row.submit_count) return '—'
-  const pct = ((row.accepted_count ?? 0) / row.submit_count) * 100
-  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
 }
 
 function onPageChange(p: number) {
@@ -394,89 +372,22 @@ onMounted(() => {
       </div>
 
       <el-card class="tbl-card">
-        <el-table
-          stripe
+        <!-- 题目表（v0.89 统一 ProblemTable 超集蓝本回归自身）：打包导出勾选 + 收藏星 +
+             知识点/标签双树切换列头 + 整行点击（锁题行引导进赛事）+ 底部完整翻页留在页面 -->
+        <ProblemTable
           v-loading="loading"
-          :data="list"
-          row-key="id"
-          style="cursor: pointer"
-          @row-click="(row: ProblemListItem) => problemRoute(row)"
+          :rows="list"
+          :selection="canExport && picking"
+          favorite
+          tag-switch
+          :tag-tree="tagCol"
+          clickable
+          :title-to="rowHref"
+          @row-click="problemRoute"
           @selection-change="onSelChange"
-        >
-          <el-table-column v-if="canExport && picking" type="selection" width="48" reserve-selection :selectable="() => true" />
-          <el-table-column label="状态" width="130">
-            <template #default="{ row }">
-              <SubStatus v-if="userStore.token && row.status" :status="row.status" :score="row.my_score" />
-              <span v-else-if="userStore.token" class="dim">未做</span>
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="题号" width="96">
-            <template #default="{ row }">
-              <!-- 收藏星标（v0.86）：仅登录视角渲染（游客列内纯题号）；点击拦截冒泡防触发整行跳转 -->
-              <button
-                v-if="userStore.token"
-                class="fav-btn"
-                :class="{ on: row.favorite }"
-                :title="row.favorite ? '取消收藏' : '收藏'"
-                @click.stop="onToggleFavorite(row as ProblemListItem)"
-              >
-                <Star :size="14" :stroke-width="1.8" />
-              </button>
-              <span class="mono dim">P{{ row.id }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="题目" min-width="320">
-            <template #default="{ row }">
-              <RouterLink :to="rowHref(row)" class="tlink" @click.stop>{{ row.title }}</RouterLink>
-              <el-tag v-if="typeBadge(row)" size="small" class="ml8 ptype-tag">
-                {{ typeBadge(row) }}
-              </el-tag>
-              <el-tag v-if="row.hidden" size="small" type="danger" class="ml8">隐藏题</el-tag>
-              <el-tag v-if="row.duplicate" size="small" type="info" class="ml8">重复题</el-tag>
-              <!-- 客观题没有测试数据是正常形态，不提示「无数据」 -->
-              <el-tag v-if="row.has_cases === false && row.type !== 'objective'" size="small" type="warning" class="ml8">无数据</el-tag>
-              <el-tag v-if="row.locked" size="small" type="success" class="ml8">
-                {{ row.lock_kind === 'exam' ? '考试中' : '比赛中' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="难度" width="104">
-            <template #default="{ row }">
-              <!-- 赛时隐藏难度（hideMeta）时服务端不下发，渲染横杠而非按 D3 兜底 -->
-              <TierBadge v-if="row.difficulty != null" :tier="row.difficulty" kind="difficulty" />
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column min-width="180">
-            <template #header>
-              <!-- 知识点/标签切换列头（2026-10-25）：蓝色可点击，当前维度高亮，点击整表换向 -->
-              <button class="tag-col-toggle" title="点击切换知识点 / 标签" @click="toggleTagCol">
-                <span :class="{ cur: tagCol === 'knowledge' }">知识点</span><span class="slash">/</span><span :class="{ cur: tagCol === 'meta' }">标签</span>
-              </button>
-            </template>
-            <template #default="{ row }">
-              <FitTags
-                v-if="(tagCol === 'knowledge' ? row.tags : row.meta_tags)?.length"
-                :ids="tagCol === 'knowledge' ? row.tags : row.meta_tags"
-                :tree="tagCol"
-              />
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="通过率" width="88">
-            <template #default="{ row }">
-              <!-- 原生 title（v0.62 挂载冻结根治批）：50 行 × el-tooltip 实例是题库刷新
-                   卡的同构成分，一行文案用原生提示零成本承载 -->
-              <span
-                v-if="row.submit_count"
-                class="mono"
-                :title="`AC ${row.accepted_count ?? 0} / 提交 ${row.submit_count}`"
-              >{{ acceptRate(row) }}</span>
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-        </el-table>
+          @toggle-favorite="onToggleFavorite"
+          @toggle-tag-tree="toggleTagCol"
+        />
         <!-- 主列底部翻页（v3 pager）：居中、控件齐全——首页/末页按钮自拼
              （EP pagination 的 layout 不支持 first/last，写上会被静默忽略） -->
         <div class="table-pager">
@@ -613,39 +524,6 @@ onMounted(() => {
   transform: scale(1.35);
 }
 
-/* 收藏星标（v0.86）：未收藏墨灰轮廓，悬停琥珀微亮，已收藏琥珀实心
-   （--soj-warning 语义档即 TLE 同源琥珀，半透明派生走 color-mix 纪律） */
-.fav-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-right: 2px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--soj-ink-3);
-  cursor: pointer;
-  vertical-align: middle;
-  transition:
-    color 0.15s,
-    background-color 0.15s;
-}
-
-.fav-btn:hover {
-  color: var(--soj-warning);
-  background: color-mix(in srgb, var(--soj-warning) 12%, transparent);
-}
-
-.fav-btn.on {
-  color: var(--soj-warning);
-}
-
-.fav-btn.on svg {
-  fill: currentColor;
-}
-
 /* toolbar 形态收编全局 .toolbar（flex/wrap/gap/mb），本地只留增量 */
 
 .search-pill {
@@ -678,45 +556,6 @@ onMounted(() => {
   padding: var(--soj-sp-12) var(--soj-sp-14);
   background: var(--el-fill-color-light);
   border-radius: 14px;
-}
-
-/* 题表「知识点/标签」切换列头：蓝色可点击，当前维度不透明 + 下划线，另一维度淡化 */
-.tag-col-toggle {
-  display: inline-flex;
-  align-items: center;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  font-weight: var(--soj-fw-bold);
-  color: var(--soj-blue);
-  cursor: pointer;
-  user-select: none;
-}
-
-.tag-col-toggle .slash {
-  padding: 0 var(--soj-sp-2);
-  opacity: 0.45;
-}
-
-.tag-col-toggle span:not(.slash) {
-  opacity: 0.5;
-  transition: opacity 0.15s;
-}
-
-.tag-col-toggle span.cur {
-  opacity: 1;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-thickness: 1.5px;
-}
-
-.tag-col-toggle:hover span:not(.slash) {
-  opacity: 0.85;
-}
-
-.tag-col-toggle:hover span.cur {
-  opacity: 1;
 }
 
 .diff-panel {

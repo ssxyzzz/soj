@@ -63,3 +63,50 @@ func (r *Repo) FavoritePIDs(ctx context.Context, uid int64, pids []int64) (map[i
 	}
 	return out, cursor.Err()
 }
+
+// FavoriteRow 个人主页收藏卡行：题目摘要 + 收藏时间（hidden 供观察者权限剔除）。
+type FavoriteRow struct {
+	PID        int64     `bson:"pid" json:"id"`
+	Title      string    `bson:"title" json:"title"`
+	Difficulty int       `bson:"difficulty" json:"difficulty"`
+	Hidden     bool      `bson:"hidden" json:"-"`
+	At         time.Time `bson:"at" json:"at"`
+}
+
+// FavoriteRows 用户收藏列表（v0.89 铺开批）：按收藏时间倒序，limit 有界；
+// 两段查——先收藏关系后题目摘要（已删除的题整条剔除），题目顺序=收藏时间序。
+func (r *Repo) FavoriteRows(ctx context.Context, uid int64, limit int) ([]FavoriteRow, error) {
+	if uid <= 0 || limit <= 0 {
+		return []FavoriteRow{}, nil
+	}
+	cursor, err := r.problemFavorites.Find(ctx, bson.M{"uid": uid},
+		options.Find().SetProjection(bson.M{"pid": 1, "at": 1}).
+			SetSort(bson.D{{Key: "at", Value: -1}}).SetLimit(int64(limit)))
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	type favDoc struct {
+		PID int64     `bson:"pid"`
+		At  time.Time `bson:"at"`
+	}
+	var favs []favDoc
+	if err := cursor.All(ctx, &favs); err != nil {
+		return nil, err
+	}
+	pids := make([]int64, 0, len(favs))
+	for _, f := range favs {
+		pids = append(pids, f.PID)
+	}
+	sums, err := r.ProblemSummariesByIDs(ctx, pids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FavoriteRow, 0, len(favs))
+	for _, f := range favs {
+		if p := sums[f.PID]; p != nil {
+			out = append(out, FavoriteRow{PID: p.ID, Title: p.Title, Difficulty: p.Difficulty, Hidden: p.Hidden, At: f.At})
+		}
+	}
+	return out, nil
+}

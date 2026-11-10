@@ -102,6 +102,7 @@ declare module 'vue' {
     ProblemInfoCard: typeof import('./components/problem/ProblemInfoCard.vue')['default']
     ProblemPicker: typeof import('./components/ProblemPicker.vue')['default']
     ProblemStatement: typeof import('./components/problem/ProblemStatement.vue')['default']
+    ProblemTable: typeof import('./components/problem/ProblemTable.vue')['default']
     RailCard: typeof import('./components/RailCard.vue')['default']
     RolesPanel: typeof import('./components/admin/RolesPanel.vue')['default']
     RoundDetailView: typeof import('./components/RoundDetailView.vue')['default']

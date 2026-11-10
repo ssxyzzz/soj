@@ -105,6 +105,31 @@ func (h *Handlers) UserWrongbook(c *gin.Context) {
 	ok(c, gin.H{"list": rows[start:end], "total_estimate": len(rows)})
 }
 
+// UserFavorites GET /api/users/:id/favorites —— 收藏卡（v0.89 收藏铺开批）：
+// 按收藏时间倒序前 20 条，本人/他人同口径（v0.85 公开主页拍板「默认全部可见」）；
+// 隐藏题按观察者权限剔除（无「题库全量可见」不见）。
+func (h *Handlers) UserFavorites(c *gin.Context) {
+	uid, okUID := h.targetUID(c)
+	if !okUID {
+		return
+	}
+	rows, err := h.repo.FavoriteRows(c.Request.Context(), uid, 20)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取收藏失败")
+		return
+	}
+	if !hasPerm(c, repo.PermProblemViewAll) {
+		kept := rows[:0]
+		for _, r := range rows {
+			if !r.Hidden {
+				kept = append(kept, r)
+			}
+		}
+		rows = kept
+	}
+	ok(c, gin.H{"list": rows})
+}
+
 // targetUID 公开主页族接口（game 三卡 v0.85 公开化）共用：解析路由 :id 并校验
 // 用户存在（不存在回 404；parseID 自带非法 ID 400）。
 func (h *Handlers) targetUID(c *gin.Context) (int64, bool) {

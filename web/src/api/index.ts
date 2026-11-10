@@ -202,6 +202,9 @@ export const gameApi = {
     get<{ list: { tag_id: number; name: string; solved: number; lit: boolean }[]; lit: number }>(
       `/users/${uid}/starmap`,
     ),
+  // 收藏卡（v0.89 收藏铺开）：按收藏时间倒序前 20 条，本人/他人同口径
+  favorites: (uid: number) =>
+    get<{ list: { id: number; title: string; difficulty: number; at: string }[] }>(`/users/${uid}/favorites`),
   heralds: () =>
     get<{ list: { uid: number; level: number; nickname: string; at: string }[] }>('/heralds'),
   gameRank: (type: 'combo' | 'streak', by: 'best' | 'cur' = 'best') =>

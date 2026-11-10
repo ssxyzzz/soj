@@ -29,17 +29,22 @@ func (h *Handlers) listManageable(c *gin.Context, l *repo.ProblemList) bool {
 // listEntryJSON 详情条目：题目摘要 + 观察者状态（status/my_score 来自 UserBestStatuses）。
 // v0.87 命名层统一：pid→id、score→my_score，与题库/比赛/作业列表接口同一概念同一字段名
 //（存储层 pid 惯例不动，仅 API JSON 面换血）。
+// v0.89 收藏铺开：favorite（观察者收藏态）+ submit_count/accepted_count（公开态通过率，
+// 赛时/隐藏期锁题行不下发，口径同题库 v0.87）。
 type listEntryJSON struct {
-	ID         int64   `json:"id"`
-	Title      string  `json:"title"`
-	Difficulty int     `json:"difficulty"`
-	Hidden     bool    `json:"hidden,omitempty"`
-	Duplicate  bool    `json:"duplicate,omitempty"` // v0.47：重复题标记（特权视角展示用）
-	Locked     bool    `json:"locked,omitempty"`
-	LockKind   string  `json:"lock_kind,omitempty"`
-	Status     *string `json:"status,omitempty"`
-	MyScore    *int    `json:"my_score,omitempty"`
-	Tags       []int64 `json:"tags,omitempty"`
+	ID             int64   `json:"id"`
+	Title          string  `json:"title"`
+	Difficulty     int     `json:"difficulty"`
+	Hidden         bool    `json:"hidden,omitempty"`
+	Duplicate      bool    `json:"duplicate,omitempty"` // v0.47：重复题标记（特权视角展示用）
+	Locked         bool    `json:"locked,omitempty"`
+	LockKind       string  `json:"lock_kind,omitempty"`
+	Status         *string `json:"status,omitempty"`
+	MyScore        *int    `json:"my_score,omitempty"`
+	Favorite       bool    `json:"favorite,omitempty"`
+	SubmitCount    int64   `json:"submit_count,omitempty"`
+	AcceptedCount  int64   `json:"accepted_count,omitempty"`
+	Tags           []int64 `json:"tags,omitempty"`
 }
 
 // listSectionJSON 详情小节节点（章节树第二层）。
@@ -59,7 +64,8 @@ type listChapterJSON struct {
 	Sections []listSectionJSON `json:"sections"`
 }
 
-// buildListScope 装配题单章节树（观察者视角）：题目摘要批量查、状态批量查、锁批量查。
+// buildListScope 装配题单章节树（观察者视角）：题目摘要批量查、状态批量查、锁批量查、
+// 收藏批查 + 公开态通过率批查（v0.89 收藏铺开：题单表对齐题库六列）。
 // 返回章节树 + 去重可见 pid 集（已剔已删题与无权限隐藏题）。
 func (h *Handlers) buildListScope(c *gin.Context, l *repo.ProblemList) ([]listChapterJSON, []int64, error) {
 	uid, _, role, logged := currentUser(c)
@@ -79,6 +85,18 @@ func (h *Handlers) buildListScope(c *gin.Context, l *repo.ProblemList) ([]listCh
 	if err != nil {
 		return nil, nil, err
 	}
+	// 通过率（公开态聚合）与收藏星批查：均按整单 pid 一次 $in（索引支撑，量级 = 题单可见题数）
+	stats := map[int64]repo.ProblemStat{}
+	if st, err := h.repo.ListProblemStats(c.Request.Context(), all); err == nil {
+		stats = st
+	}
+	favs := map[int64]bool{}
+	if logged {
+		if f, err := h.repo.FavoritePIDs(c.Request.Context(), uid, all); err == nil {
+			favs = f
+		}
+	}
+	now := time.Now()
 
 	chapters := make([]listChapterJSON, 0, len(l.Chapters))
 	seen := map[int64]bool{}
@@ -92,9 +110,21 @@ func (h *Handlers) buildListScope(c *gin.Context, l *repo.ProblemList) ([]listCh
 			return listEntryJSON{}, false // 隐藏题/重复题：无权限视角整条剔除（分母同步缩减）
 		}
 		e := listEntryJSON{ID: p.ID, Title: p.Title, Difficulty: p.Difficulty, Hidden: p.Hidden, Duplicate: p.Duplicate, Tags: p.Tags}
+		hideStats := false
 		if lk := lockMap[p.ID]; lk != nil {
 			e.Locked = true
 			e.LockKind = lk.Kind
+			// 赛时/隐藏期锁题行不下发通过率（v0.87 口径对齐题库）；组织者与特权不受限。
+			// 收藏是观察者个人行为，不受遮罩影响照常下发。
+			hideStats = !lk.Round.Published &&
+				!(lk.Round.Status(now) == "running" && !lk.Round.HideDuring) && !seeAllHidden
+		}
+		if st := stats[p.ID]; st.Total > 0 && !hideStats {
+			e.SubmitCount = st.Total
+			e.AcceptedCount = st.Accepted
+		}
+		if favs[p.ID] {
+			e.Favorite = true
 		}
 		if logged {
 			if st, ok := statuses[p.ID]; ok {

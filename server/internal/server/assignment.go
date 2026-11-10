@@ -334,6 +334,16 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 			it["accepted_count"] = st.Accepted
 		}
 	}
+	// 收藏星（v0.89 收藏铺开）：观察者个人行为，赛时遮罩不影响照常下发
+	if logged {
+		if favs, err := h.repo.FavoritePIDs(ctx, uid, allPids); err == nil {
+			for _, it := range problems {
+				if favs[it["id"].(int64)] {
+					it["favorite"] = true
+				}
+			}
+		}
+	}
 	resp := gin.H{
 		"id": a.ID, "class_id": a.ClassID, "class_name": className, "title": a.Title, "intro": a.Intro, "intro_html": a.IntroHtml,
 		"problems": problems, "manageable": manage,

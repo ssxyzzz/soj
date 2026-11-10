@@ -42,14 +42,66 @@ func (f *fakeRepo) FavoritePIDs(_ context.Context, uid int64, pids []int64) (map
 	return out, nil
 }
 
-// favoriteEngine 收藏测试专用路由（与生产注册同形：列表 AuthOptional + 收藏 AuthRequired）。
+func (f *fakeRepo) FavoriteRows(_ context.Context, uid int64, limit int) ([]repo.FavoriteRow, error) {
+	out := []repo.FavoriteRow{}
+	set := f.favorites[uid]
+	for pid := range set {
+		if len(out) >= limit {
+			break
+		}
+		hidden := false
+		if p, ok := f.problems[pid]; ok {
+			hidden = p.Hidden
+		}
+		out = append(out, repo.FavoriteRow{PID: pid, Title: f.problems[pid].Title, Difficulty: f.problems[pid].Difficulty, Hidden: hidden})
+	}
+	return out, nil
+}
+
+// favoriteEngine 收藏测试专用路由（与生产注册同形：列表 AuthOptional + 收藏 AuthRequired + 主页收藏卡）。
 func favoriteEngine(h *Handlers) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	api := r.Group("/api")
 	api.GET("/problems", AuthOptional(h), h.ListProblems)
 	api.POST("/problems/:id/favorite", AuthRequired(h), h.ToggleProblemFavorite)
+	api.GET("/users/:id/favorites", AuthRequired(h), h.UserFavorites)
 	return r
+}
+
+// TestUserFavorites 收藏卡（v0.89 铺开）：登录可见他人收藏、隐藏题对无特权视角剔除。
+func TestUserFavorites(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
+	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
+	f.problems[7] = &repo.Problem{ID: 7, Title: "公开题", Difficulty: 2}
+	f.problems[8] = &repo.Problem{ID: 8, Title: "隐藏题", Difficulty: 3, Hidden: true}
+	f.problems[9] = &repo.Problem{ID: 9, Title: "普通题", Difficulty: 1}
+	f.favorites = map[int64]map[int64]bool{100: {7: true, 8: true, 9: true}}
+	f.users[100] = &repo.User{ID: 100, Username: "favOwner", Role: repo.RoleDefault, PwdVer: 0}
+	h := newTestHandlers(f)
+	r := favoriteEngine(h)
+	viewer := f.addUser(h, 200, "viewer", repo.RoleDefault, 0)
+	root := f.addUser(h, 1, "root", repo.RoleRoot, 0)
+
+	if code, _ := doJSON(r, "GET", "/api/users/100/favorites", "", ""); code != http.StatusUnauthorized {
+		t.Fatalf("游客收藏卡 = %d，期望 401", code)
+	}
+	if code, _ := doJSON(r, "GET", "/api/users/999/favorites", viewer, ""); code != http.StatusNotFound {
+		t.Fatalf("不存在用户 = %d，期望 404", code)
+	}
+	// 学生视角：隐藏题 8 剔除，余 7/9
+	_, body := doJSON(r, "GET", "/api/users/100/favorites", viewer, "")
+	list := body["data"].(map[string]any)["list"].([]any)
+	if len(list) != 2 {
+		t.Fatalf("学生视角收藏 = %d 条，期望 2（隐藏题剔除）", len(list))
+	}
+	// root 视角：全量 3 条
+	_, body = doJSON(r, "GET", "/api/users/100/favorites", root, "")
+	list = body["data"].(map[string]any)["list"].([]any)
+	if len(list) != 3 {
+		t.Fatalf("root 视角收藏 = %d 条，期望 3", len(list))
+	}
 }
 
 func TestToggleProblemFavorite(t *testing.T) {

@@ -39,10 +39,12 @@ async function load() {
   }
 }
 // 游戏感批（v0.41）：成就墙 / 知识星图 / 错题本三卡随主页数据加载（v0.85 拍板随
-// 公开主页默认可见，不再限本人）；接口按 route id 拉取，隐藏题剔除由服务端按观察者权限收口
+// 公开主页默认可见，不再限本人）；v0.89 收藏铺开加入收藏卡（星图之下、错题本之上）；
+// 接口按 route id 拉取，隐藏题剔除由服务端按观察者权限收口
 const achs = ref<{ code: string; name: string; desc: string; tier: string; icon: string; unlocked_at?: string }[]>([])
 const achUnlocked = ref(0)
 const stars = ref<{ tag_id: number; name: string; solved: number; lit: boolean }[]>([])
+const favorites = ref<{ id: number; title: string; difficulty: number; at: string }[]>([])
 const wrongbook = ref<{ pid: number; title: string; difficulty: number; best_score: number }[]>([])
 
 async function loadGame() {
@@ -52,16 +54,19 @@ async function loadGame() {
   achs.value = []
   achUnlocked.value = 0
   stars.value = []
+  favorites.value = []
   wrongbook.value = []
   try {
-    const [a, sm, wb] = await Promise.all([
+    const [a, sm, fv, wb] = await Promise.all([
       gameApi.achievements(uid),
       gameApi.starmap(uid),
+      gameApi.favorites(uid),
       gameApi.wrongbook(uid, 1),
     ])
     achs.value = a.list
     achUnlocked.value = a.unlocked
     stars.value = sm.list
+    favorites.value = fv.list
     wrongbook.value = wb.list
   } catch {
     /* 静默：游戏区块不阻塞主页 */
@@ -348,6 +353,22 @@ function openDetail(id: number) {
               <span class="star-name">{{ s.name || '未命名知识点' }}</span>
               <span class="star-n mono">{{ s.solved }} 题</span>
             </div>
+          </div>
+        </div>
+
+        <!-- 收藏夹（v0.89 收藏铺开）：本人/他人同口径，按收藏时间倒序前 20 条 -->
+        <div v-if="favorites.length" class="card fav-card">
+          <div class="done-head">
+            <h3><TipLabel label="收藏夹" tip="题库/题单/作业里星标的题，按收藏时间倒序" /></h3>
+            <span class="dim">{{ favorites.length }} 题</span>
+          </div>
+          <div class="wb-list">
+            <router-link v-for="f in favorites" :key="f.id" class="wb-row" :to="`/problems/${f.id}`">
+              <TierBadge :tier="f.difficulty || 3" kind="difficulty" size="sm" />
+              <span class="wb-title">{{ f.title }}</span>
+              <span class="mono pid">P{{ f.id }}</span>
+              <span class="wb-go">去做 →</span>
+            </router-link>
           </div>
         </div>
 
@@ -791,12 +812,14 @@ function openDetail(id: number) {
 .done-card,
 .ach-card,
 .star-card,
+.fav-card,
 .wb-card {
   margin-bottom: var(--soj-sp-16);
 }
 
 .ach-card,
 .star-card,
+.fav-card,
 .wb-card {
   padding: var(--soj-sp-20) var(--soj-sp-24);
 }

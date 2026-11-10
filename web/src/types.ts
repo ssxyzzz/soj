@@ -485,12 +485,13 @@ export interface ClassRaceView {
 export interface AssignmentProblem {
   id: number
   title: string
-  difficulty?: number // 难度档（2026-10-27 作业题目表新增难度列；缺省前端按 D3 兜底）
+  difficulty?: number // 难度档（2026-10-27 作业题目表新增难度列；缺省渲染横杠）
   contest_id?: number
   exam_id?: number
   submitted?: boolean
   status?: string
   my_score?: number
+  favorite?: boolean
   tags?: number[]
   submit_count?: number
   accepted_count?: number
@@ -664,7 +665,7 @@ export interface ListCard {
 }
 
 // 详情条目：题目摘要 + 我的最高分状态（v0.87 命名层统一：pid→id、score→my_score，
-// 与题库/比赛/作业列表条目同一概念同一字段名）
+// 与题库/比赛/作业列表条目同一概念同一字段名；v0.89 收藏铺开补 favorite/通过率）
 export interface ListProblemEntry {
   id: number
   title: string
@@ -675,6 +676,9 @@ export interface ListProblemEntry {
   lock_kind?: string
   status?: string
   my_score?: number
+  favorite?: boolean
+  submit_count?: number
+  accepted_count?: number
   tags?: number[]
 }
 

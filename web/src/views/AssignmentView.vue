@@ -5,18 +5,16 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { assignmentApi } from '@/api'
+import { assignmentApi, problemApi } from '@/api'
 import { downloadFile } from '@/api/download'
 import MdEditor from '@/components/MdEditor.vue'
 import PageCrumbs from '@/components/PageCrumbs.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
 import CopyFromListButton from '@/components/CopyFromListButton.vue'
-import TierBadge from '@/components/TierBadge.vue'
 import MdView from '@/components/MdView.vue'
 import PageShell from '@/components/PageShell.vue'
+import ProblemTable from '@/components/problem/ProblemTable.vue'
 import RailCard from '@/components/RailCard.vue'
-import FitTags from '@/components/problem/FitTags.vue'
-import SubStatus from '@/components/SubStatus.vue'
 import { buildAssignmentBoard } from '@/components/score/adapters'
 import ScoreBoardDialog from '@/components/score/ScoreBoardDialog.vue'
 import ScoreSummaryCard from '@/components/score/ScoreSummaryCard.vue'
@@ -149,6 +147,23 @@ function inspectCell(payload: { uid: number; name: string; pid: number; title: s
   openUserSubs(payload.uid, payload.name, payload.pid, payload.title)
 }
 
+// 收藏星（v0.89 铺开）：toggle 后按返回态回写行；不乐观更新，失败拦截器统一 toast；
+// 在途锁防连点双翻转（与题库/题单同款范式）
+const favBusy = ref(false)
+async function onToggleFavorite(row: { id: number }) {
+  if (favBusy.value) return
+  favBusy.value = true
+  try {
+    const res = await problemApi.toggleFavorite(row.id)
+    const target = assignment.value?.problems.find((p) => p.id === row.id)
+    if (target) target.favorite = res.favorited
+  } catch {
+    /* 失败已 toast，星标保持原态 */
+  } finally {
+    favBusy.value = false
+  }
+}
+
 function problemRoute(row: { id: number; contest_id?: number; exam_id?: number }) {
   if (row.exam_id) {
     router.push(`/exams/${row.exam_id}/problems/${row.id}`)
@@ -158,13 +173,6 @@ function problemRoute(row: { id: number; contest_id?: number; exam_id?: number }
     // v0.77 作业做题专属路由：面包屑 + 切题（与比赛/考试做题页形态统一）
     router.push(`/assignments/${route.params.id}/problems/${row.id}`)
   }
-}
-
-// 通过率 = AC 提交 / 总提交（与题库同口径）
-function acceptRate(row: { submit_count?: number; accepted_count?: number }): string {
-  if (!row.submit_count) return '—'
-  const pct = ((row.accepted_count ?? 0) / row.submit_count) * 100
-  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`
 }
 
 // ---- 编辑作业 / 删作业 ----
@@ -261,54 +269,21 @@ onMounted(() => {
         </div>
       </el-card>
 
-      <!-- 题目表：T1 / 状态 / 题目 / 标签 / 通过率 -->
+      <!-- 题目表（v0.89 统一 ProblemTable + 收藏铺开）：T 序号 / 状态 / 题目 / 难度 / 标签 /
+           通过率，整行可点跳题 + 收藏星；result_hidden 行级赛时遮罩（已提交/横杠），
+           难度空值横杠（原 || 3 兜底退役） -->
       <el-card class="block">
         <template #header><span>作业题目（{{ problemTotal }}）</span></template>
-        <el-table v-if="problemTotal" stripe :data="assignment.problems" style="cursor: pointer" @row-click="(row: AssignmentProblem) => problemRoute(row)">
-          <el-table-column label="题号" width="80">
-            <template #default="{ $index }">T{{ $index + 1 }}</template>
-          </el-table-column>
-          <el-table-column v-if="userStore.token" label="状态" width="150">
-            <template #default="{ row }">
-              <template v-if="row.result_hidden">
-                <el-tag v-if="row.submitted" size="small" type="info">已提交</el-tag>
-                <span v-else class="dim">—</span>
-              </template>
-              <SubStatus v-else-if="row.status" :status="row.status" :score="row.my_score" />
-              <span v-else class="dim">未做</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="题目" min-width="260">
-            <template #default="{ row }">
-              <!-- 整行可点跳题（2026-11-01 对齐题库交互）：标题只留链接样式，点击落行事件 -->
-              <span class="tlink">{{ row.title }}</span>
-            </template>
-          </el-table-column>
-          <!-- 难度（2026-10-27）：TierBadge 与题库难度列同款（锁题隐藏期随行隐藏信息口径，不给难度也无妨——服务端已下发） -->
-          <el-table-column label="难度" width="110">
-            <template #default="{ row }">
-              <TierBadge :tier="(row as AssignmentProblem).difficulty || 3" kind="difficulty" />
-            </template>
-          </el-table-column>
-          <el-table-column label="标签" min-width="170">
-            <template #default="{ row }">
-              <FitTags v-if="!row.result_hidden && row.tags?.length" :ids="row.tags" />
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="通过率" width="110">
-            <template #default="{ row }">
-              <el-tooltip
-                v-if="!row.result_hidden && row.submit_count"
-                :content="`AC ${row.accepted_count ?? 0} / 提交 ${row.submit_count}`"
-                placement="top"
-              >
-                <span>{{ acceptRate(row) }}</span>
-              </el-tooltip>
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-        </el-table>
+        <ProblemTable
+          v-if="problemTotal"
+          :rows="assignment.problems"
+          numbering="T"
+          :show-status="!!userStore.token"
+          favorite
+          clickable
+          @row-click="(row) => problemRoute(row as AssignmentProblem)"
+          @toggle-favorite="onToggleFavorite"
+        />
         <el-empty v-else description="作业里还没有题目" :image-size="60" />
       </el-card>
 
