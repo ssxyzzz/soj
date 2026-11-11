@@ -20,32 +20,38 @@ import (
 )
 
 func TestExtractJSONAndParsers(t *testing.T) {
-	// 围栏 + 闲话包裹的难度输出
-	d, err := parseTidyDifficulty("好的，以下是评估结果：\n```json\n{\"difficulty\": 7}\n```")
-	if err != nil || d != 7 {
-		t.Fatalf("parseTidyDifficulty 围栏 = %d, %v，期望 7 nil", d, err)
+	// extractJSON：剥围栏与前后闲话，取首 { 到尾 }
+	if got := extractJSON("好的，结果如下：\n```json\n{\"difficulty\": 7}\n```\n以上。"); got != `{"difficulty": 7}` {
+		t.Fatalf("extractJSON 围栏 = %q", got)
 	}
-	if _, err := parseTidyDifficulty(`{"difficulty": 11}`); err == nil {
-		t.Fatal("越界难度应报错")
+	d, names, err := parseTidyCombo("好的，以下是结果：\n```json\n{\"difficulty\": 7, \"tags\": [\"动态规划\"]}\n```")
+	if err != nil || d != 7 || len(names) != 1 || names[0] != "动态规划" {
+		t.Fatalf("parseTidyCombo 围栏 = %d %v %v，期望 7 [动态规划] nil", d, names, err)
 	}
-	if _, err := parseTidyDifficulty(`{"difficulty": 0}`); err == nil {
-		t.Fatal("0（未设置）不是合法建议，应报错")
-	}
-	names, err := parseTidyNameList("```json\n{\"tags\":[\"动态规划\",\"单调队列\"]}\n```")
-	if err != nil || len(names) != 2 || names[0] != "动态规划" {
-		t.Fatalf("parseTidyNameList = %v, %v", names, err)
+	// 难度越界不属解析错误（结构合法），由调用方按维拒绝
+	if d, _, err := parseTidyCombo(`{"difficulty": 11, "tags": []}`); err != nil || d != 11 {
+		t.Fatalf("越界难度应原样返回由调用方拒绝: %d %v", d, err)
 	}
 }
 
-// TestTidyKnowledgeUserPrompt 知识点五源素材组装契约（v0.93 对齐难度口径）：五源段落
+// TestTidyComboUserPrompt 综合五源素材组装契约（v0.94）：层级树候选锚点 + 五源段落
 // 齐活进 prompt；缺席源不伪造空段（客观题无标程/无 AC/无题解照样判读）。
-func TestTidyKnowledgeUserPrompt(t *testing.T) {
+func TestTidyComboUserPrompt(t *testing.T) {
 	p := &repo.Problem{ID: 7, Title: "[CSP-J 2019 复赛] 公交换乘", Statement: "题面正文", TimeLimitMS: 1000, MemoryLimitKB: 262144}
 	sols := []*repo.Solution{{Content: "题解正文"}}
 	acs := []repo.TidyACCode{{ID: 1, Lang: "C++", TimeMS: 12, Code: "int main(){}"}}
-	user := tidyKnowledgeUser("【基础算法】贪心", []string{"模拟"}, p, sols, acs, "// 标程实现")
+	candidates := tidyKnowledgeCandidates([]repo.TagNode{
+		{ID: 1, Name: "基础算法", Children: []repo.TagNode{
+			{ID: 11, Name: "动态规划", Children: []repo.TagNode{
+				{ID: 111, Name: "背包DP", Children: []repo.TagNode{{ID: 1111, Name: "01背包"}, {ID: 1112, Name: "完全背包"}}},
+			}},
+			{ID: 12, Name: "贪心"},
+		}},
+	})
+	user := tidyComboUser(candidates, p, []string{"模拟"}, sols, acs, "// 标程实现")
 	for _, want := range []string{
-		"候选知识点", "【基础算法】贪心", "现挂知识点：模拟",
+		"候选知识点", "【基础算法】", "- 背包DP：01背包、完全背包", "- 贪心",
+		"现挂知识点：模拟",
 		"【题面】", "题面正文",
 		"【数据标程】", "// 标程实现",
 		"【站内题解 1】", "题解正文",
@@ -56,14 +62,73 @@ func TestTidyKnowledgeUserPrompt(t *testing.T) {
 		}
 	}
 	// 缺席源（标程/题解/AC 全空）：段落整体缺席，不伪造
-	absent := tidyKnowledgeUser("锚点", nil, p, nil, nil, "")
+	absent := tidyComboUser("锚点", p, nil, nil, nil, "")
 	for _, gone := range []string{"【数据标程】", "【站内题解", "【历史通过代码", "【数据标程】\n\n"} {
 		if strings.Contains(absent, gone) {
 			t.Fatalf("缺席源不应出现段落 %q：\n%s", gone, absent)
 		}
 	}
-	if !strings.Contains(absent, "该题现挂知识点：无") {
-		t.Fatalf("无现挂知识点应显式标注：\n%s", absent)
+	if strings.Contains(absent, "现挂知识点") {
+		t.Fatalf("无现挂知识点应整行缺席：\n%s", absent)
+	}
+}
+
+// TestTidyComboSystem 层级纪律 system 契约（v0.94）：纪律四则 + 难度锚点表 + 两维
+// JSON 格式 + 难度判读要点。
+func TestTidyComboSystem(t *testing.T) {
+	notes := [10]string{}
+	notes[4] = "算法基础：二分/前缀和/差分"
+	notes[9] = "NOI&IOI：综合构造"
+	combo := tidyComboSystem(notes)
+	for _, want := range []string{
+		"一次完成难度评估与知识点标注", "知识点标注层级纪律", "逐字一致", "低级可行则只标低级",
+		"低级杂音不挂", "一题多解同档才都标", "不要依据通过率", "难度锚点表", `"difficulty"`, `"tags"`,
+	} {
+		if !strings.Contains(combo, want) {
+			t.Fatalf("综合 system 缺 %q：\n%s", want, combo)
+		}
+	}
+}
+
+// TestParseTidyCombo 综合输出解析契约：合法 {difficulty, tags}、围栏闲话包裹、结构坏输出。
+func TestParseTidyCombo(t *testing.T) {
+	d, names, err := parseTidyCombo("结果如下：\n```json\n{\"difficulty\": 6, \"tags\": [\"树状数组\"]}\n```")
+	if err != nil || d != 6 || len(names) != 1 || names[0] != "树状数组" {
+		t.Fatalf("parseTidyCombo = %d %v %v", d, names, err)
+	}
+	if _, _, err := parseTidyCombo("这不是 JSON"); err == nil {
+		t.Fatal("非 JSON 应报错")
+	}
+}
+
+// TestTagParentClosure 机械补链契约（v0.94 层级纪律）：叶子补齐父链到一级分类、
+// 原集已含的不重复计、输出按 ID 升序稳定、根节点不入映射。
+func TestTagParentClosure(t *testing.T) {
+	tree := []repo.TagNode{
+		{ID: 1, Name: "动态规划", Children: []repo.TagNode{
+			{ID: 11, Name: "背包DP", Children: []repo.TagNode{
+				{ID: 111, Name: "01背包"}, {ID: 112, Name: "完全背包"},
+			}},
+		}},
+		{ID: 2, Name: "基础语法"},
+	}
+	parentOf := tagParentOf(tree)
+	if _, ok := parentOf[2]; ok {
+		t.Fatal("根节点不应有父")
+	}
+	// 叶子补全链：01背包 → 背包DP → 动态规划
+	suggested := map[int64]bool{111: true}
+	auto := tagParentClosure(parentOf, suggested)
+	if len(auto) != 2 || auto[0] != 1 || auto[1] != 11 {
+		t.Fatalf("叶子应补 1,11 两级: %v", auto)
+	}
+	if !suggested[1] || !suggested[11] || !suggested[111] {
+		t.Fatal("闭包集应含全链")
+	}
+	// 已含上级不重复计：双叶子并入（背包DP/动态规划已在集内）应零补链
+	suggested2 := map[int64]bool{1: true, 11: true, 111: true, 112: true}
+	if auto2 := tagParentClosure(parentOf, suggested2); len(auto2) != 0 {
+		t.Fatalf("已含全链不应再补: %v", auto2)
 	}
 }
 
@@ -304,7 +369,7 @@ func TestTidyApplyValidation(t *testing.T) {
 
 	// 难度越界 → 该项计失败不写库
 	code, body := doJSON(r, "POST", "/api/admin/tidy/apply", tok,
-		`{"kind":"difficulty","items":[{"pid":3001,"difficulty":11}]}`)
+		`{"kind":"combo","items":[{"pid":3001,"difficulty":11}]}`)
 	if code != 200 || int(body["data"].(map[string]any)["failed"].(float64)) != 1 {
 		t.Fatalf("越界难度 apply = %d %v，期望 failed=1", code, body)
 	}
@@ -312,9 +377,9 @@ func TestTidyApplyValidation(t *testing.T) {
 		t.Fatalf("失败项不得写库，实际 difficulty=%d", f.problems[3001].Difficulty)
 	}
 
-	// 合法改判 → 写库 + 水位打点（下次默认跳过）
+	// 合法改判 → 写库 + 水位打点（下次默认跳过）；3002 只带难度 = 只打 difficulty 水位
 	code, body = doJSON(r, "POST", "/api/admin/tidy/apply", tok,
-		`{"kind":"difficulty","items":[{"pid":3001,"difficulty":6},{"pid":3002,"difficulty":4}]}`)
+		`{"kind":"combo","items":[{"pid":3001,"difficulty":6},{"pid":3002,"difficulty":4}]}`)
 	if code != 200 || int(body["data"].(map[string]any)["applied"].(float64)) != 2 {
 		t.Fatalf("合法 apply = %d %v，期望 applied=2", code, body)
 	}
@@ -323,6 +388,9 @@ func TestTidyApplyValidation(t *testing.T) {
 	}
 	if _, ok := f.problems[3001].TidiedAt["difficulty"]; !ok {
 		t.Fatal("apply 后未打整理水位")
+	}
+	if _, ok := f.problems[3002].TidiedAt["knowledge"]; ok {
+		t.Fatal("未带 tags 终值不应打 knowledge 水位")
 	}
 }
 
@@ -612,6 +680,12 @@ func TestTidyStatusPaged(t *testing.T) {
 	if pid := int64(sugs[0].(map[string]any)["pid"].(float64)); pid != 4201 {
 		t.Fatalf("首页首条 = %d，期望 4201（题号升序）", pid)
 	}
+	// 页容放宽（v0.94.1）：page_size=1000 一次拉全量（上限局部放宽，其余端点仍 100）
+	_, body = doJSON(r, "GET", "/api/admin/tidy/status?page=1&page_size=1000", tok, "")
+	sugs = asAnySlice(body["data"].(map[string]any)["suggestions"])
+	if len(sugs) != 250 {
+		t.Fatalf("page_size=1000 应一次拉全 250 条，得 %d", len(sugs))
+	}
 	// 第 3 页：剩 50 条
 	_, body = doJSON(r, "GET", "/api/admin/tidy/status?page=3&page_size=100", tok, "")
 	sugs = asAnySlice(body["data"].(map[string]any)["suggestions"])
@@ -642,9 +716,9 @@ func TestTidyHistoryFlow(t *testing.T) {
 	r.GET("/api/admin/tidy/history/:id", AuthRequired(h), RequireRoot(), h.TidyHistoryDetail)
 	tok := f.addUser(h, 1, "root", repo.RoleRoot, 0)
 
-	// AI apply：3501 成功（D0→D6）、3502 越界失败（old 保持 D5，new=11 尝试值）
+	// AI apply（combo）：3501 成功（D0→D6）、3502 越界失败（old 保持 D5，new=11 尝试值）
 	if code, body := doJSON(r, "POST", "/api/admin/tidy/apply", tok,
-		`{"kind":"difficulty","items":[{"pid":3501,"difficulty":6},{"pid":3502,"difficulty":11}]}`); code != 200 {
+		`{"kind":"combo","items":[{"pid":3501,"difficulty":6},{"pid":3502,"difficulty":11}]}`); code != 200 {
 		t.Fatalf("ai apply = %d %v", code, body)
 	}
 	// 手动 apply：3501 双字段（难度+知识点）→ kinds=[difficulty,knowledge]

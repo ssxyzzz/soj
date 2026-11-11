@@ -873,9 +873,9 @@ export interface BackupStatus {
 // 服务端 403 是最终裁决）
 export const BACKUP_DOWNLOAD_LIMIT_BYTES = 32 * 1024 * 1024
 
-// ---------- 题库整理（v0.43；v0.49 双模式；v0.92 难度五源 + 整理历史） ----------
+// ---------- 题库整理（v0.43；v0.49 双模式；v0.92 难度五源 + 整理历史；v0.94 综合 + 层级纪律） ----------
 
-export type TidyKind = 'difficulty' | 'knowledge' | 'meta'
+export type TidyKind = 'combo' | 'difficulty' | 'knowledge' | 'meta'
 
 // 逐题建议（kind 专属字段按需出现；与后端 server/tidy.go TidySuggestion 对齐）。
 // v0.92 难度五源判读：通过率参考档/冲突/attempted 退役；ai_error 非空 = AI 失败无建议
@@ -883,16 +883,17 @@ export interface TidySuggestion {
   pid: number
   title: string
   kind: TidyKind
-  // difficulty
+  // difficulty / combo
   has_difficulty?: boolean
   cur_difficulty?: number
-  suggest_difficulty?: number // 0/缺席 = 无建议（AI 失败行，不出兜底）
+  suggest_difficulty?: number // 0/缺席 = 无建议（AI 失败行或越界未采纳，不出兜底）
   ai_error?: string
-  // knowledge
+  // knowledge / combo
   cur_tag_ids?: number[]
   cur_tag_names?: string[]
   add_tag_ids?: number[]
   add_tag_names?: string[]
+  add_auto_ids?: number[] // 父链机械补链的联动集（后台机制；建议默认全勾采纳，前端不再单显示标识）
   remove_tag_ids?: number[]
   remove_tag_names?: string[]
   dropped?: string[]

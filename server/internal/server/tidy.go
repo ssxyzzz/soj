@@ -4,15 +4,17 @@ package server
 // 两段式铁律（2026-10-31 拍板）：整理任务只产**建议**，root 在预览表勾选确认后经
 // TidyApply 走 UpdateProblemMeta 校验链批量写库——不自动写库、不自动建树节点、
 // 不动题面、无定时自动整理（纯 root 手动触发）。
-// 三项共用单任务骨架（照备份/导入 job 模式：running/done/cancelled/failed + 轮询 + 取消）：
-//   difficulty = AI 五源综合判读（v0.92 换血：题面+知识点+文字题解+历史AC代码+网上答案，
-//                通过率全面退出难度口径——参考列/冲突标记/启发式兜底全数退役，
-//                AI 失败即标失败不出建议；网上答案走 GLM web_search 工具，非 bigmodel
-//                端点自动降级四源）
-//   knowledge  = AI 五源综合判读（v0.93 对齐难度口径：题面+站内题解+数据标程+
-//                历史AC代码+网上答案，对照知识树候选锚点选名；幻觉/歧义/树外名丢弃，
-//                不自动建节点）
+// 两项共用单任务骨架（照备份/导入 job 模式：running/done/cancelled/failed + 轮询 + 取消）：
+//   combo      = 综合 = 难度+知识点一次判读（v0.94，单维难度/知识点 AI 整理同批退役——
+//                五源素材共享一次外呼出 {difficulty, tags}，外呼减半；难度锚点表+知识树
+//                层级锚点同 prompt；JSON 整体解析失败两维皆无建议，难度越界仅难度侧不
+//                采纳；apply 后 difficulty+knowledge 按维双打点水位，手动整理互认）
 //   meta       = 纯规则零 AI（ParseSourceHint + MatchMetaTags 对齐重挂 + 树外孤儿剔除）
+// v0.94 知识点标注层级纪律（combo）：机械补链（叶子→父链到一级分类自动进新增建议，
+// AddAutoIDs 标记联动集）+ prompt 政策（低级可行只标低级压标程高级标签 / 高级主导时
+// 基础语法杂音不挂 / 一题多解同档才都标）+ 难度锚点表 D1–D10 作档位校准。
+// v0.94.1 用户拍板：单维难度/知识点 AI 整理退役（综合卡全覆盖）；状态端点 page_size
+// 上限局部放宽到 1000（预览建议轻量无 statementHtml，其余列表端点维持全局 100 上限）。
 // v0.49 手动模式（root 拍板）：不经 AI 无建议环节——分页题目表（每页 ≤100 题）行内
 // 手改难度/知识点/来源标签，TidyManualApply 收最终值批量写库并按字段对应 kind 打
 // tidiedAt 水位（保存过 = 已整理，AI 整理默认跳过，redo 可重跑）。
@@ -44,8 +46,8 @@ import (
 	"soj/internal/testdata"
 )
 
-// tidyKinds 支持的整理类型。
-var tidyKinds = map[string]bool{"difficulty": true, "knowledge": true, "meta": true}
+// tidyKinds 支持的整理类型（v0.94.1：单维 difficulty/knowledge AI 整理退役，综合全覆盖）。
+var tidyKinds = map[string]bool{"meta": true, "combo": true}
 
 // tidyWorkers AI 类任务的并发度（对齐 AI 客户端闸 4 路留余量给在线功能）。
 const tidyWorkers = 3
@@ -62,11 +64,13 @@ type TidySuggestion struct {
 	SuggestDifficulty int    `json:"suggest_difficulty"`  // 建议（0 = 无建议：AI 失败行）
 	AIError           string `json:"ai_error,omitempty"`  // 非空 = AI 失败原因（无建议，不出兜底）
 
-	// knowledge：现有/新增/移除三段差集 + 丢弃名单
+	// knowledge/combo：现有/新增/移除三段差集 + 丢弃名单；AddAutoIDs = 机械补链
+	//（v0.94 层级纪律：叶子→父链到一级分类自动补的上级，前端默认勾选带「联动」标可取消）
 	CurTagIDs      []int64  `json:"cur_tag_ids,omitempty"`
 	CurTagNames    []string `json:"cur_tag_names,omitempty"`
 	AddTagIDs      []int64  `json:"add_tag_ids,omitempty"`
 	AddTagNames    []string `json:"add_tag_names,omitempty"`
+	AddAutoIDs     []int64  `json:"add_auto_ids,omitempty"`
 	RemoveTagIDs   []int64  `json:"remove_tag_ids,omitempty"`
 	RemoveTagNames []string `json:"remove_tag_names,omitempty"`
 	Dropped        []string `json:"dropped,omitempty"` // 幻觉/歧义/树外名（供 root 核对 AI 行为）
@@ -160,7 +164,7 @@ func (h *Handlers) TidyRun(c *gin.Context) {
 		To   *int64 `json:"to"`   // 题号上界（含）；nil = 不限
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || !tidyKinds[req.Kind] {
-		fail(c, http.StatusBadRequest, "kind 需为 difficulty / knowledge / meta")
+		fail(c, http.StatusBadRequest, "kind 需为 combo / meta")
 		return
 	}
 	if (req.From != nil && *req.From < 1) || (req.To != nil && *req.To < 1) ||
@@ -205,10 +209,8 @@ func (h *Handlers) TidyRun(c *gin.Context) {
 		}()
 		var err error
 		switch req.Kind {
-		case "difficulty":
-			err = h.runTidyDifficulty(ctx, job, uid, req.Redo)
-		case "knowledge":
-			err = h.runTidyKnowledge(ctx, job, uid, req.Redo)
+		case "combo":
+			err = h.runTidyCombo(ctx, job, uid, req.Redo)
 		case "meta":
 			err = h.runTidyMeta(ctx, job, req.Redo)
 		}
@@ -228,8 +230,17 @@ func (h *Handlers) TidyRun(c *gin.Context) {
 // TidyStatus GET /api/admin/tidy/status：任务进度与建议结果（无任务 = idle）。
 // 建议按页下发（v0.49 验收期调整，page/page_size 走 queryPage 上限 100）：
 // suggestion_total 为全量口径（翻页器用），页面只持有当前页切片。
+// tidyStatusMaxPageSize 整理状态端点的页容上限（v0.94.1 局部放宽到 1000）：建议切片
+// 为轻量结构（无题面/代码），root 预览要一眼多行；全局 queryPage 100 上限不动（其余
+// 列表端点口径不变）。
+const tidyStatusMaxPageSize = 1000
+
 func (h *Handlers) TidyStatus(c *gin.Context) {
-	page, pageSize := queryPage(c)
+	page := atoiDefault(c.Query("page"), 1)
+	pageSize := atoiDefault(c.Query("page_size"), 100)
+	if pageSize > tidyStatusMaxPageSize {
+		pageSize = tidyStatusMaxPageSize
+	}
 	h.tidyMu.Lock()
 	job := h.tidyTask
 	h.tidyMu.Unlock()
@@ -280,7 +291,7 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 			}
 		}
 	}
-	if req.Kind == "knowledge" {
+	if req.Kind == "combo" {
 		for _, it := range req.Items {
 			if it.Tags != nil {
 				if err := h.repo.ValidateTagRefs(c.Request.Context(), *it.Tags); err != nil {
@@ -295,6 +306,7 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 	uid, name, _, _ := currentUser(c)
 	okN, failN := 0, 0
 	var appliedPIDs []int64
+	var diffApplied, tagApplied []int64 // combo 双水位按维收集（见循环内）
 	var firstErr string
 	// 落历史（v0.92）：写库前的旧值快照 + 树名映射，逐题 old→new 留痕
 	pids := make([]int64, 0, len(req.Items))
@@ -320,9 +332,8 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 		if old := oldMeta[it.PID]; old != nil {
 			item.Title = old.Title
 			switch req.Kind {
-			case "difficulty":
+			case "combo":
 				item.OldDifficulty = old.Difficulty
-			case "knowledge":
 				item.OldTagNames = tidyIDNames(old.Tags, names)
 			case "meta":
 				item.OldMetaNames = tidyIDNames(old.MetaTags, names)
@@ -330,23 +341,22 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 		}
 		var itemErr string
 		switch req.Kind {
-		case "difficulty":
-			if it.Difficulty == nil {
-				itemErr = "缺少难度字段"
-			} else {
-				item.NewDifficulty = *it.Difficulty // 失败项也留尝试值（审计口径）
+		case "combo":
+			// 两维任一有终值即合法应用项；缺哪个维度 = 该维度本次不动
+			if it.Difficulty != nil {
+				item.NewDifficulty = *it.Difficulty
 				if !repo.ValidDifficulty(*it.Difficulty) {
 					itemErr = "难度值非法"
 				} else {
 					patch.Difficulty = it.Difficulty
 				}
 			}
-		case "knowledge":
-			if it.Tags == nil {
-				itemErr = "缺少知识点字段"
-			} else {
+			if itemErr == "" && it.Tags != nil {
 				patch.Tags = it.Tags
 				item.NewTagNames = tidyIDNames(*it.Tags, names)
+			}
+			if itemErr == "" && it.Difficulty == nil && it.Tags == nil {
+				itemErr = "缺少难度/知识点字段"
 			}
 		case "meta":
 			if it.MetaTags == nil {
@@ -371,6 +381,16 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 			okN++
 			item.OK = true
 			appliedPIDs = append(appliedPIDs, it.PID)
+			// combo 双水位按维精确打点：难度只记真带了难度终值的项、知识点只记真带
+			// 了 tags 终值的项——某维没勾 = 该维本次未整理，不打点（下次单维 redo 会再来）
+			if req.Kind == "combo" {
+				if it.Difficulty != nil {
+					diffApplied = append(diffApplied, it.PID)
+				}
+				if it.Tags != nil {
+					tagApplied = append(tagApplied, it.PID)
+				}
+			}
 		}
 		hist.Items = append(hist.Items, item)
 	}
@@ -380,7 +400,15 @@ func (h *Handlers) TidyApply(c *gin.Context) {
 		msg += fmt.Sprintf("，失败 %d（%s）", failN, firstErr)
 	}
 	// 应用成功 = 已整理水位（下次默认跳过，redo 可重跑）；失败不致命，水位落后仅重复建议
-	if err := h.repo.MarkTidied(ctx, req.Kind, appliedPIDs); err != nil {
+	if req.Kind == "combo" {
+		// combo = difficulty+knowledge 双打点（单维整理互认水位，不重复烧钱）
+		if err := h.repo.MarkTidied(ctx, "difficulty", diffApplied); err != nil {
+			msg += "（水位记录失败，下次可能重复建议这些题）"
+		}
+		if err := h.repo.MarkTidied(ctx, "knowledge", tagApplied); err != nil {
+			msg += "（水位记录失败，下次可能重复建议这些题）"
+		}
+	} else if err := h.repo.MarkTidied(ctx, req.Kind, appliedPIDs); err != nil {
 		msg += "（水位记录失败，下次可能重复建议这些题）"
 	}
 	hist.Message = msg
@@ -582,7 +610,7 @@ func (h *Handlers) TidyHistoryDetail(c *gin.Context) {
 // tidyKindNames 按 kind 取对应树 ID→名映射（历史明细名字快照用）。
 func (h *Handlers) tidyKindNames(ctx context.Context, kind string) map[int64]string {
 	switch kind {
-	case "knowledge":
+	case "combo":
 		return h.tidyTagNames(ctx, false)
 	case "meta":
 		return h.tidyTagNames(ctx, true)
@@ -619,24 +647,69 @@ func tidyIDNames(ids []int64, nameOf map[int64]string) []string {
 	return out
 }
 
-// ---- 三类任务体 ----
+// ---- 任务体 ----
 
-// runTidyDifficulty 难度整理（v0.92 五源判读）：题面+知识点+文字题解+历史AC代码进
-// prompt，网上答案由 GLM web_search 工具随行（非 bigmodel 端点自动降级四源）；通过率
-// 链路退役——不再交叉验证/冲突/兜底，AI 失败即标失败不出建议（root 预览可弃或手改）。
-// 已设难度的题照常出建议但标记 has_difficulty（预览默认不勾）。
-func (h *Handlers) runTidyDifficulty(ctx context.Context, job *tidyJob, uid int64, redo bool) error {
+// applyTagSuggestion AI 名单 → 树内差集（combo）：逐字一致映射、歧义/
+// 树外进丢弃列、差集出新增/移除，再按 v0.94 层级纪律做父链机械补链（自动补入的上级
+// 进 AddAutoIDs 联动集；已在现挂里的联动祖先不出行但仍计入建议集防误移除）。
+func applyTagSuggestion(s *TidySuggestion, names []string, uniq map[string]int64, ambiguous map[string]bool, parentOf map[int64]int64, nameOf map[int64]string) {
+	cur := map[int64]bool{}
+	for _, id := range s.CurTagIDs {
+		cur[id] = true
+	}
+	suggested := map[int64]bool{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		id, ok := uniq[name]
+		if !ok {
+			if ambiguous[name] {
+				s.Dropped = append(s.Dropped, name+"（同名歧义）")
+			} else {
+				s.Dropped = append(s.Dropped, name+"（树外名）")
+			}
+			continue
+		}
+		suggested[id] = true
+		if !cur[id] {
+			s.AddTagIDs = append(s.AddTagIDs, id)
+			s.AddTagNames = append(s.AddTagNames, name)
+		}
+	}
+	for _, id := range tagParentClosure(parentOf, suggested) {
+		if !cur[id] {
+			s.AddTagIDs = append(s.AddTagIDs, id)
+			s.AddTagNames = append(s.AddTagNames, nameOf[id])
+			s.AddAutoIDs = append(s.AddAutoIDs, id)
+		}
+	}
+	for _, id := range s.CurTagIDs {
+		if !suggested[id] {
+			s.RemoveTagIDs = append(s.RemoveTagIDs, id)
+			s.RemoveTagNames = append(s.RemoveTagNames, nameOf[id])
+		}
+	}
+}
+
+// runTidyCombo 综合整理（v0.94）：难度+知识点一次判读——五源素材共享一次外呼出
+// {difficulty, tags}（搜索一次），难度锚点表+知识树层级锚点同 prompt；水位排除口径 =
+// difficulty 与 knowledge 都整理过才跳过（任一维度未整理即进任务，已设难度照常出建议
+// 靠 has_difficulty 默认不勾）；JSON 整体解析失败两维皆无建议，难度越界仅难度侧不采纳；
+// apply 后 difficulty+knowledge 双打点水位（见 TidyApply），单维 redo 互认。
+func (h *Handlers) runTidyCombo(ctx context.Context, job *tidyJob, uid int64, redo bool) error {
 	probs, err := h.repo.TidyListProblems(ctx)
 	if err != nil {
 		return err
 	}
 	probs = filterRange(probs, job.From, job.To)
-	// 水位排除（redo=false）：已整理过（tidiedAt.difficulty）与已显式设难度的题
-	// 都不进本轮——后者照常出建议只烧 token（apply 后才有水位），直接不跑
 	if !redo {
 		kept := probs[:0]
 		for _, p := range probs {
-			if _, done := p.TidiedAt["difficulty"]; done || (p.Difficulty >= 1 && p.Difficulty <= 10) {
+			_, d := p.TidiedAt["difficulty"]
+			_, k := p.TidiedAt["knowledge"]
+			if d && k {
 				job.mu.Lock()
 				job.Excluded++
 				job.mu.Unlock()
@@ -646,112 +719,22 @@ func (h *Handlers) runTidyDifficulty(ctx context.Context, job *tidyJob, uid int6
 		}
 		probs = kept
 	}
-	// 知识点名映射（五源之一：现挂知识点进 prompt）
-	tree, err := h.repo.GetTagTree(ctx)
-	if err != nil {
-		return err
-	}
-	nameOf := tagNameIDToName(tree)
-	lcfg, _ := h.repo.GetLevelConfig(ctx)
-	notes := lcfg.DifficultyNotes
-
-	job.mu.Lock()
-	job.Total = len(probs)
-	job.mu.Unlock()
-
-	sys := tidyDifficultySystem(notes)
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, tidyWorkers)
-	for _, p := range probs {
-		if ctx.Err() != nil {
-			break
-		}
-		wg.Add(1)
-		go func(p *repo.Problem) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			s := h.tidySuggestDifficulty(ctx, uid, sys, p, nameOf)
-			// 取消后队列里的 worker 会拿到零值建议——不入结果（Done 只计真实建议）
-			if ctx.Err() == nil {
-				job.addSuggestion(s)
-			}
-		}(p)
-	}
-	wg.Wait()
-	return ctx.Err()
-}
-
-// tidySuggestDifficulty 单题难度建议（worker 内执行；AI 失败标失败不出建议不报错）。
-func (h *Handlers) tidySuggestDifficulty(ctx context.Context, uid int64, sys string, p *repo.Problem, nameOf map[int64]string) TidySuggestion {
-	s := TidySuggestion{
-		PID: p.ID, Title: p.Title, Kind: "difficulty",
-		HasDifficulty: p.Difficulty >= 1 && p.Difficulty <= 10,
-		CurDifficulty: p.Difficulty,
-	}
-	// 五源素材采集（有则用无则缺席；单源查询失败按缺席降级不废整题判读）
-	var tagNames []string
-	for _, id := range p.Tags {
-		if n := nameOf[id]; n != "" {
-			tagNames = append(tagNames, n)
-		}
-	}
-	sols, solErr := h.repo.TidyProblemSolutions(ctx, p.ID, tidySolutionLimit)
-	acs, acErr := h.repo.TidyACCodes(ctx, p.ID)
-
-	user := tidyDifficultyUser(p, tagNames, sols, acs)
-	resp, err := h.tidyAIChat(ctx, uid, "tidy_difficulty", p.ID, sys, user, true)
-	if err != nil {
-		if ctx.Err() != nil {
-			return s // 任务取消中，结果无所谓
-		}
-		s.AIError = "AI 调用失败：" + truncateTail(err.Error(), 120)
-		return s
-	}
-	d, perr := parseTidyDifficulty(resp.Content)
-	if perr != nil {
-		s.AIError = "AI 输出无法解析：" + truncateTail(perr.Error(), 120)
-		return s
-	}
-	s.SuggestDifficulty = d
-	// 素材采集告警进 note（不占 ai_error——该字段专表「AI 失败无建议」，
-	// 预览默认勾选按它判；源缺席不拦判读，root 备注列可见）
-	if solErr != nil {
-		s.Note = "题解源读取失败，已按缺席判读：" + truncateTail(solErr.Error(), 80)
-	} else if acErr != nil {
-		s.Note = "AC 代码源读取失败，已按缺席判读：" + truncateTail(acErr.Error(), 80)
-	}
-	return s
-}
-
-// runTidyKnowledge 知识点整理（v0.93 五源判读，对齐难度口径）：题面+站内题解+数据标程+
-// 历史 AC 代码进 prompt，网上资料由 GLM web_search 工具随行（非 bigmodel 端点自动降级
-// 四源）；知识树候选名（按一级分类分组）作锚点表，AI 返回名字列表 → 唯一名映射回 ID
-//（同名歧义/幻觉/树外丢弃不挂）；差集 = 新增/移除。
-func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64, redo bool) error {
-	probs, err := h.repo.TidyListProblems(ctx)
-	if err != nil {
-		return err
-	}
-	probs = filterRange(probs, job.From, job.To)
-	if !redo {
-		probs = excludeTidied(probs, "knowledge", job)
-	}
 	tree, err := h.repo.GetTagTree(ctx)
 	if err != nil {
 		return err
 	}
 	uniq, ambiguous := uniqueTagLookup(tree)
 	nameOf := tagNameIDToName(tree)
+	parentOf := tagParentOf(tree)
 	candidates := tidyKnowledgeCandidates(tree)
-	stdStore := testdata.NewLocalFS(h.cfg.DataDir) // 数据标程读数据卷（v0.93 五源之一）
+	lcfg, _ := h.repo.GetLevelConfig(ctx)
+	stdStore := testdata.NewLocalFS(h.cfg.DataDir)
 
 	job.mu.Lock()
 	job.Total = len(probs)
 	job.mu.Unlock()
 
-	sys := tidyKnowledgeSystem()
+	sys := tidyComboSystem(lcfg.DifficultyNotes)
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, tidyWorkers)
 	for _, p := range probs {
@@ -763,16 +746,16 @@ func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			s := TidySuggestion{PID: p.ID, Title: p.Title, Kind: "knowledge"}
+			s := TidySuggestion{
+				PID: p.ID, Title: p.Title, Kind: "combo",
+				HasDifficulty: p.Difficulty >= 1 && p.Difficulty <= 10,
+				CurDifficulty: p.Difficulty,
+			}
 			for _, id := range p.Tags {
 				s.CurTagIDs = append(s.CurTagIDs, id)
 				if n := nameOf[id]; n != "" {
 					s.CurTagNames = append(s.CurTagNames, n)
 				}
-			}
-			cur := map[int64]bool{}
-			for _, id := range p.Tags {
-				cur[id] = true
 			}
 
 			// 五源素材采集（有则用无则缺席；单源查询失败按缺席降级不废整题判读）
@@ -780,58 +763,40 @@ func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64
 			acs, acErr := h.repo.TidyACCodes(ctx, p.ID)
 			std, stdErr := readTidyStd(stdStore, p.ID)
 
-			user := tidyKnowledgeUser(candidates, s.CurTagNames, p, sols, acs, std)
-			resp, err := h.tidyAIChat(ctx, uid, "tidy_knowledge", p.ID, sys, user, true)
+			user := tidyComboUser(candidates, p, s.CurTagNames, sols, acs, std)
+			resp, err := h.tidyAIChat(ctx, uid, "tidy_combo", p.ID, sys, user, true)
 			if err != nil {
 				if ctx.Err() == nil {
-					s.Note = "AI 调用失败：" + truncateTail(err.Error(), 120)
+					s.AIError = "AI 调用失败：" + truncateTail(err.Error(), 120)
 					job.addSuggestion(s)
 				}
 				return
 			}
-			names, perr := parseTidyNameList(resp.Content)
+			d, names, perr := parseTidyCombo(resp.Content)
 			if perr != nil {
-				s.Note = "AI 输出无法解析：" + truncateTail(perr.Error(), 120)
+				// JSON 整体解析失败 = 两维皆无建议（一次判读的固有粒度）
+				s.AIError = "AI 输出无法解析：" + truncateTail(perr.Error(), 120)
 				if ctx.Err() == nil {
 					job.addSuggestion(s)
 				}
 				return
 			}
+			var notes []string
+			if !repo.ValidDifficulty(d) {
+				notes = append(notes, fmt.Sprintf("难度建议 %d 越界，未采纳（知识点侧照常）", d))
+			} else {
+				s.SuggestDifficulty = d
+			}
+			applyTagSuggestion(&s, names, uniq, ambiguous, parentOf, nameOf)
 			// 素材采集告警进 note（源缺席不拦判读，root 备注列可见）
 			if solErr != nil {
-				s.Note = "题解源读取失败，已按缺席判读：" + truncateTail(solErr.Error(), 80)
+				notes = append(notes, "题解源读取失败，已按缺席判读："+truncateTail(solErr.Error(), 80))
 			} else if acErr != nil {
-				s.Note = "AC 代码源读取失败，已按缺席判读：" + truncateTail(acErr.Error(), 80)
+				notes = append(notes, "AC 代码源读取失败，已按缺席判读："+truncateTail(acErr.Error(), 80))
 			} else if stdErr != nil {
-				s.Note = "数据标程读取失败，已按缺席判读：" + truncateTail(stdErr.Error(), 80)
+				notes = append(notes, "数据标程读取失败，已按缺席判读："+truncateTail(stdErr.Error(), 80))
 			}
-			suggested := map[int64]bool{}
-			for _, name := range names {
-				name = strings.TrimSpace(name)
-				if name == "" {
-					continue
-				}
-				id, ok := uniq[name]
-				if !ok {
-					if ambiguous[name] {
-						s.Dropped = append(s.Dropped, name+"（同名歧义）")
-					} else {
-						s.Dropped = append(s.Dropped, name+"（树外名）")
-					}
-					continue
-				}
-				suggested[id] = true
-				if !cur[id] {
-					s.AddTagIDs = append(s.AddTagIDs, id)
-					s.AddTagNames = append(s.AddTagNames, name)
-				}
-			}
-			for _, id := range p.Tags {
-				if !suggested[id] {
-					s.RemoveTagIDs = append(s.RemoveTagIDs, id)
-					s.RemoveTagNames = append(s.RemoveTagNames, nameOf[id])
-				}
-			}
+			s.Note = strings.Join(notes, "；")
 			if ctx.Err() == nil {
 				job.addSuggestion(s)
 			}
@@ -989,32 +954,9 @@ func extractJSON(s string) string {
 	return s
 }
 
-func parseTidyDifficulty(content string) (int, error) {
-	var out struct {
-		Difficulty int `json:"difficulty"`
-	}
-	if err := json.Unmarshal([]byte(extractJSON(content)), &out); err != nil {
-		return 0, fmt.Errorf("%w: %s", err, truncateTail(content, 80))
-	}
-	if !repo.ValidDifficulty(out.Difficulty) {
-		return 0, fmt.Errorf("难度 %d 越界（1–10）", out.Difficulty)
-	}
-	return out.Difficulty, nil
-}
-
-func parseTidyNameList(content string) ([]string, error) {
-	var out struct {
-		Tags []string `json:"tags"`
-	}
-	if err := json.Unmarshal([]byte(extractJSON(content)), &out); err != nil {
-		return nil, fmt.Errorf("%w: %s", err, truncateTail(content, 80))
-	}
-	return out.Tags, nil
-}
-
 // ---- prompt 组装 ----
 
-// 五源素材预算（v0.92 难度，v0.93 知识点同口径）：题面 6000 + 题解 ≤2 篇×3000 +
+// 五源素材预算（v0.92 定口径，combo 同源）：题面 6000 + 题解 ≤2 篇×3000 +
 // AC 代码 ≤6 份×6000 + 数据标程 6000，单题 prompt 有界（≈54K 字符），后台批量任务可承受。
 const (
 	tidyStatementMaxRunes = 6000
@@ -1027,26 +969,10 @@ const (
 	tidyStdMaxBytes = 128 << 10
 )
 
-// tidyDifficultySystem 难度评估 system（锚点表 = root 后台当前 DifficultyNotes，与
-// 站内难度说明卡同一把尺子）。v0.92 五源口径：明确告知可用素材与「不看通过率」。
-func tidyDifficultySystem(notes [10]string) string {
-	var b strings.Builder
-	b.WriteString("你是信息学竞赛题目的难度评估专家。综合以下素材判断题目难度，对照难度锚点表输出 1–10 的难度档位：\n")
-	b.WriteString("题面、现挂知识点、站内文字题解、历史通过代码；如具备联网搜索能力，可搜索该题的公开资料（原题出处、网上题解的难度评价）作参考。\n")
-	b.WriteString("判读要点：算法思维深度与实现复杂度是主要依据（时间复杂度档位、代码量、数据结构的实现成本）；若提供多份通过代码，最短实现最能代表算法本质复杂度。\n")
-	b.WriteString("注意：不要依据通过率或做题人数评估难度（本站样本小且为教学场景，噪声大）。\n\n难度锚点表：\n")
-	for i, n := range notes {
-		if strings.TrimSpace(n) == "" {
-			continue
-		}
-		fmt.Fprintf(&b, "D%d：%s\n", i+1, n)
-	}
-	b.WriteString("\n要求：只输出 JSON，格式为 {\"difficulty\": <1-10 的整数>}，不要输出任何其他内容。")
-	return b.String()
-}
-
-// tidyDifficultyUser 五源素材组装（有则用无则缺席，不伪造空源段落）。
-func tidyDifficultyUser(p *repo.Problem, tagNames []string, sols []*repo.Solution, acs []repo.TidyACCode) string {
+// tidySourceBlock 五源素材块（v0.94 抽取共用，combo user prompt 素材源）——
+// 题号/标题/类型/时限/现挂知识点 + 【题面】【数据标程】【站内题解 n】【历史通过代码 n】；
+// 有则用无则缺席，不伪造空源段落。
+func tidySourceBlock(p *repo.Problem, tagNames []string, sols []*repo.Solution, acs []repo.TidyACCode, stdCode string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "题号：%d\n标题：%s\n", p.ID, p.Title)
 	switch p.Type {
@@ -1062,76 +988,6 @@ func tidyDifficultyUser(p *repo.Problem, tagNames []string, sols []*repo.Solutio
 		fmt.Fprintf(&b, "现挂知识点：%s\n", strings.Join(tagNames, "、"))
 	}
 	fmt.Fprintf(&b, "\n【题面】\n%s\n", truncateTail(p.Statement, tidyStatementMaxRunes))
-	for i, s := range sols {
-		fmt.Fprintf(&b, "\n【站内题解 %d】\n%s\n", i+1, truncateTail(s.Content, tidySolutionMaxRunes))
-	}
-	for i, a := range acs {
-		fmt.Fprintf(&b, "\n【历史通过代码 %d】（%s，耗时 %dms）\n%s\n",
-			i+1, a.Lang, a.TimeMS, truncateTail(a.Code, tidyACCodeMaxRunes))
-	}
-	b.WriteString("\n请综合上述素材（可联网搜索补充公开资料），输出难度 JSON。")
-	return b.String()
-}
-
-// tidyKnowledgeCandidates 知识树候选集按一级分类分组（供 prompt 与前端展示同源）。
-func tidyKnowledgeCandidates(tree []repo.TagNode) string {
-	var b strings.Builder
-	for _, top := range tree {
-		names := collectSubtreeNames(top)
-		if len(names) == 0 {
-			continue
-		}
-		fmt.Fprintf(&b, "【%s】%s\n", top.Name, strings.Join(names, "、"))
-	}
-	return b.String()
-}
-
-func collectSubtreeNames(n repo.TagNode) []string {
-	out := []string{}
-	var walk func(t repo.TagNode)
-	walk = func(t repo.TagNode) {
-		out = append(out, t.Name)
-		for _, c := range t.Children {
-			walk(c)
-		}
-	}
-	for _, c := range n.Children {
-		walk(c)
-	}
-	return out
-}
-
-func tidyKnowledgeSystem() string {
-	return `你是信息学竞赛题目的知识点标注专家。综合题面、数据标程、站内题解、历史通过代码判断题目考查的核心算法与技术，对照候选知识点列表（锚点表）选出该题考查的核心知识点；如具备联网搜索能力，可搜索该题的公开资料（原题出处、网上题解的知识点标注）作参考。
-规则：
-1. 只能使用候选列表中出现过的名字，逐字一致；列表外、自造、同义改写的名字一律不要。
-2. 宁缺毋滥：没有把握的知识点不要选，通常 1–4 个。
-3. 数据标程是最可靠的判据——它就是该题的标准解法；若提供多份通过代码，最短实现最能代表算法本质。
-4. 只输出 JSON，格式为 {"tags": ["知识点1", "知识点2"]}，不要输出任何其他内容。`
-}
-
-// tidyKnowledgeUser 知识点五源素材组装（v0.93 对齐难度口径：候选锚点表 + 现挂知识点 +
-// 题面 + 数据标程 + 站内题解 + 历史 AC 代码；有则用无则缺席，不伪造空源段落）。
-func tidyKnowledgeUser(candidates string, curNames []string, p *repo.Problem, sols []*repo.Solution, acs []repo.TidyACCode, stdCode string) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "题号：%d\n标题：%s\n", p.ID, p.Title)
-	switch p.Type {
-	case "objective":
-		b.WriteString("类型：客观题（选择/判断/填空）\n")
-	case "function":
-		b.WriteString("类型：函数实现题\n")
-	case "interactive":
-		b.WriteString("类型：交互题\n")
-	}
-	b.WriteString("候选知识点（按分类分组，判读锚点表）：\n")
-	b.WriteString(candidates)
-	if len(curNames) > 0 {
-		fmt.Fprintf(&b, "\n该题现挂知识点：%s（若其中某些与题目无关，结果中不要包含它们——将按差集作为移除建议）\n",
-			strings.Join(curNames, "、"))
-	} else {
-		b.WriteString("\n该题现挂知识点：无\n")
-	}
-	fmt.Fprintf(&b, "\n【题面】\n%s\n", truncateTail(p.Statement, tidyStatementMaxRunes))
 	if stdCode != "" {
 		fmt.Fprintf(&b, "\n【数据标程】\n%s\n", truncateTail(stdCode, tidyStdCodeMaxRunes))
 	}
@@ -1142,8 +998,145 @@ func tidyKnowledgeUser(candidates string, curNames []string, p *repo.Problem, so
 		fmt.Fprintf(&b, "\n【历史通过代码 %d】（%s，耗时 %dms）\n%s\n",
 			i+1, a.Lang, a.TimeMS, truncateTail(a.Code, tidyACCodeMaxRunes))
 	}
-	b.WriteString("\n请综合上述素材（可联网搜索补充公开资料），从候选知识点中选出该题考查的核心知识点，输出知识点 JSON。")
 	return b.String()
+}
+
+// tidyKnowledgeCandidates 知识树候选锚点按层级缩进渲染（v0.94：平铺名单改层级树——
+// AI 看得见上下级才判得了标注层级纪律；纯叶子组并名一行省字符）。
+func tidyKnowledgeCandidates(tree []repo.TagNode) string {
+	var b strings.Builder
+	for _, top := range tree {
+		if len(top.Children) == 0 {
+			continue
+		}
+		b.WriteString("【" + top.Name + "】\n")
+		writeTagLevels(&b, top.Children, "  ")
+	}
+	return b.String()
+}
+
+func writeTagLevels(b *strings.Builder, nodes []repo.TagNode, indent string) {
+	for _, n := range nodes {
+		switch {
+		case len(n.Children) == 0:
+			b.WriteString(indent + "- " + n.Name + "\n")
+		case allTagLeaf(n.Children):
+			names := make([]string, 0, len(n.Children))
+			for _, c := range n.Children {
+				names = append(names, c.Name)
+			}
+			b.WriteString(indent + "- " + n.Name + "：" + strings.Join(names, "、") + "\n")
+		default:
+			b.WriteString(indent + "- " + n.Name + "\n")
+			writeTagLevels(b, n.Children, indent+"  ")
+		}
+	}
+}
+
+func allTagLeaf(nodes []repo.TagNode) bool {
+	for _, n := range nodes {
+		if len(n.Children) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// tidyTagDiscipline 知识点标注层级纪律（v0.94，combo system；档位校准 = 下方难度锚点表）：
+//   1. 逐字一致 + 只出最具体层级（上级由机械补链保证，AI 不必重复给上级）
+//   2. 低级可行则只标低级（压标程/AC 的高级解法标签——标注刻画题目本质考点与最低门槛）
+//   3. 高级主导时基础语法杂音不挂（小数处理这类），除非正是本题考点
+//   4. 一题多解同档才都标，跨档只标最低档那套
+//   5. 现挂知识点无关的不包含（差集出移除建议）
+func tidyTagDiscipline() string {
+	return `知识点标注层级纪律：
+1. 只能使用候选列表中出现过的名字，逐字一致；列表外、自造、同义改写的名字一律不要。给出最具体层级的知识点即可，其全部上级由系统自动补齐。
+2. 低级可行则只标低级：若存在更基础知识点构成的正确解法，只标那套——标程/通过代码用了更高级算法不代表要标，知识标注刻画的是题目本质考点与最低门槛。
+3. 高级主导时低级杂音不挂：题目核心是算法知识时，基础语法类标签（小数处理、简单输出这类）不要标，除非它正是本题考点。
+4. 一题多解同档才都标：对照下方难度锚点表判断知识点档位——多个解法档位相同才都标，跨档只标最低档的那套。
+5. 现挂知识点中与题目无关的不要包含（将按差集作为移除建议）。`
+}
+
+// writeDifficultyAnchors 难度锚点表渲染（combo system；空档跳过）。
+func writeDifficultyAnchors(b *strings.Builder, notes [10]string) {
+	b.WriteString("\n难度锚点表（知识点档位校准参考）：\n")
+	for i, n := range notes {
+		if strings.TrimSpace(n) == "" {
+			continue
+		}
+		fmt.Fprintf(b, "D%d：%s\n", i+1, n)
+	}
+}
+
+// tidyComboSystem 综合整理（难度+知识点一次判读）system（v0.94；notes = 难度锚点表文案）。
+func tidyComboSystem(notes [10]string) string {
+	var b strings.Builder
+	b.WriteString("你是信息学竞赛题目的整理专家，一次完成难度评估与知识点标注。综合题面、现挂知识点、数据标程、站内题解、历史通过代码判断题目难度档位与考查的核心知识点，知识点从候选列表（按层级缩进）中选名；如具备联网搜索能力，可搜索该题的公开资料（原题出处、网上题解）作参考。\n")
+	b.WriteString("难度判读要点：算法思维深度与实现复杂度是主要依据（时间复杂度档位、代码量、数据结构的实现成本）；若提供多份通过代码，最短实现最能代表算法本质复杂度；不要依据通过率或做题人数评估难度（本站样本小且为教学场景，噪声大）。\n")
+	b.WriteString(tidyTagDiscipline())
+	b.WriteString("\n6. 宁缺毋滥：没有把握的知识点不要选，通常 1–4 个；数据标程是最可靠的判据——它就是该题的标准解法。\n")
+	writeDifficultyAnchors(&b, notes)
+	b.WriteString("\n要求：只输出 JSON，格式为 {\"difficulty\": <1-10 的整数>, \"tags\": [\"知识点1\", \"知识点2\"]}，不要输出任何其他内容。")
+	return b.String()
+}
+
+// tidyComboUser 综合整理素材组装（层级树候选锚点 + 五源块）。
+func tidyComboUser(candidates string, p *repo.Problem, tagNames []string, sols []*repo.Solution, acs []repo.TidyACCode, stdCode string) string {
+	var b strings.Builder
+	b.WriteString("候选知识点（按层级缩进；选中下层时其全部上级由系统自动补齐）：\n")
+	b.WriteString(candidates)
+	b.WriteString("\n")
+	b.WriteString(tidySourceBlock(p, tagNames, sols, acs, stdCode))
+	b.WriteString("\n请综合上述素材（可联网搜索补充公开资料），判定难度档位并选出核心知识点，输出综合 JSON。")
+	return b.String()
+}
+
+// parseTidyCombo 综合输出解析：{difficulty, tags} 结构体一次解析；难度取值合法性由
+// 调用方校验（越界只废难度侧不废知识点侧）。
+func parseTidyCombo(content string) (int, []string, error) {
+	var out struct {
+		Difficulty int      `json:"difficulty"`
+		Tags       []string `json:"tags"`
+	}
+	if err := json.Unmarshal([]byte(extractJSON(content)), &out); err != nil {
+		return 0, nil, fmt.Errorf("%w: %s", err, truncateTail(content, 80))
+	}
+	return out.Difficulty, out.Tags, nil
+}
+
+// tagParentOf 知识树子→父映射（机械补链用；根节点无父不入表）。
+func tagParentOf(tree []repo.TagNode) map[int64]int64 {
+	m := map[int64]int64{}
+	var walk func(list []repo.TagNode, parent int64)
+	walk = func(list []repo.TagNode, parent int64) {
+		for _, n := range list {
+			if parent > 0 {
+				m[n.ID] = parent
+			}
+			walk(n.Children, n.ID)
+		}
+	}
+	walk(tree, 0)
+	return m
+}
+
+// tagParentClosure v0.94 层级纪律机械补链：对建议集做父链闭包——每个命中节点沿
+// parentOf 补齐全部上级到一级分类；返回自动补入的上级 ID（原集已含的不重复计，
+// 按节点 ID 升序稳定输出）。从每个原集节点直接走到根，新增节点的祖先必然在链上被覆盖。
+func tagParentClosure(parentOf map[int64]int64, suggested map[int64]bool) []int64 {
+	var auto []int64
+	for id := range suggested {
+		p, ok := parentOf[id]
+		for ok {
+			if !suggested[p] {
+				suggested[p] = true
+				auto = append(auto, p)
+			}
+			p, ok = parentOf[p]
+		}
+	}
+	sort.Slice(auto, func(a, b int) bool { return auto[a] < auto[b] })
+	return auto
 }
 
 // readTidyStd 数据标程素材（v0.93 五源之一）：读数据卷 data/std.cpp（数据包附属标程，

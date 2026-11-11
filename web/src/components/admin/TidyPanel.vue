@@ -26,7 +26,7 @@ import type { TidyApplyItem, TidyHistoryBatch, TidyHistoryDetail, TidyKind, Tidy
 const MODE_META = {
   ai: {
     label: 'AI整理',
-    desc: '难度 = 题面+知识点+题解+AC代码+网上答案五源综合判读；知识点 = 题面+题解+数据标程+AC代码+网上答案对照知识树锚点选名；来源 = 标题规则重挂。只产建议不写库，预览勾选确认后才应用。',
+    desc: '综合 = 难度+知识点一次判读（五源共享一次外呼，全库整理外呼减半）；来源 = 标题规则重挂。只产建议不写库，预览勾选确认后才应用。',
   },
   manual: {
     label: '手动整理',
@@ -39,26 +39,26 @@ const MODE_META = {
 } as const
 
 const mode = ref<keyof typeof MODE_META>('ai')
-const PAGE_SIZE = 100
+// 预览表每页条数可调（v0.94.1 用户拍板：50/100/200/500/1000，服务端切片上限已放宽）
+const pageSize = ref(100)
+const pageSizeOptions = [50, 100, 200, 500, 1000]
 // 难度改判十档选项（LazySelectCell 单选 D1..D10）
 const diffOptions = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, label: `D${i + 1}` }))
 
-const KIND_META: Record<TidyKind, { label: string; desc: string }> = {
-  difficulty: {
-    label: '难度',
-    desc: 'AI 综合题面、现挂知识点、站内题解、历史 AC 代码与网上公开资料（联网搜索）对照锚点表给建议；不看通过率。AI 失败的题不出建议，默认不勾可改判。',
-  },
-  knowledge: {
-    label: '知识点',
-    desc: 'AI 综合题面、数据标程、站内题解、历史 AC 代码与网上公开资料（联网搜索）对照知识树锚点表给建议，逐字一致；幻觉/歧义/树外名一律丢弃不自动建节点，现有标签认为无关的会出移除建议。新增/移除两列逐个知识点勾选采纳，可只采纳其中一部分。',
+// 可发起的整理维度（v0.94.1：单维难度/知识点 AI 整理退役，综合全覆盖）；
+// TidyKind 仍保留四值供历史批次 kinds 兼容渲染
+const KIND_META = {
+  combo: {
+    label: '综合',
+    desc: '难度+知识点一次判读（五源共享一次外呼，搜索一次，全库整理外呼减半）：难度对照锚点表、知识点对照知识树层级锚点+难度锚点档位校准（逐字一致、父级自动补链、低级可行只标低级、一题多解同档才都标）。输出整体解析失败则两维都不出建议。',
   },
   meta: {
     label: '来源标签',
     desc: '纯规则零 AI：重跑标题方括号解析（年份/地区/来源名）对齐来源树重挂，树外孤儿 ID 清除；标题无线索的题只列出不动。',
   },
-}
+} as const
 
-const kind = ref<TidyKind>('difficulty')
+const kind = ref<keyof typeof KIND_META>('combo')
 const redo = ref(false) // 重新整理已整理过的题（默认只整理未整理的，断点续整）
 const rangeFrom = ref<number | undefined>() // 题号范围下界（含；空 = 全库）
 const rangeTo = ref<number | undefined>() // 题号范围上界（含；空 = 全库）
@@ -67,12 +67,15 @@ const status = ref<TidyStatus | null>(null)
 const applying = ref(false)
 const appliedPids = ref(new Set<number>())
 
-// 勾选三件套：selected = 待应用行集（难度/来源 = 表格整行勾；知识点 = 两维有勾的题并集，
-// 应用按钮与计数口径），selAdd/selRm = 知识点新增/移除两维逐标签采纳集（v0.92.1 细化，
-// 复合键 `${pid}:${tagId}`，同题可只勾部分标签）；finalDiff = 难度改判（pid → 最终值）
+// 勾选四件套：selected = 待应用行集（难度/来源 = 表格整行勾；知识点 = 两维有勾的题并集；
+// 综合 = 难度行勾 ∪ 两维有勾题并集，应用按钮与计数口径），selAdd/selRm = 知识点新增/移除
+// 两维逐标签采纳集（v0.92.1 细化，复合键 `${pid}:${tagId}`，同题可只勾部分标签）；
+// selDiff = 综合模式难度维行勾（v0.94，自持集合不走 el-table selection——避免与逐标签
+// 勾的并集语义打架）；finalDiff = 难度改判（pid → 最终值）
 const selected = ref(new Set<number>())
 const selAdd = ref(new Set<string>())
 const selRm = ref(new Set<string>())
+const selDiff = ref(new Set<number>())
 const finalDiff = ref(new Map<number, number>())
 
 // 知识点复合键 → 题号集（selected 维护用；应用/计数按题口径不变）
@@ -80,6 +83,11 @@ function pidsOfKeys(keys: Iterable<string>): Set<number> {
   const pids = new Set<number>()
   for (const k of keys) pids.add(Number(k.slice(0, k.indexOf(':'))))
   return pids
+}
+
+// 综合模式 selected 不变式：难度行勾 ∪ 两维有勾题并集（v0.94）
+function syncComboSelected() {
+  selected.value = new Set([...pidsOfKeys([...selAdd.value, ...selRm.value]), ...selDiff.value])
 }
 const tableRef = ref()
 
@@ -105,25 +113,20 @@ const tableRows = computed<TidySuggestion[]>(() => suggestions.value)
 const page = ref(1)
 const pageLabel = computed(() => {
   const n = suggestionTotal.value
-  if (n <= PAGE_SIZE) return ''
-  const lo = (page.value - 1) * PAGE_SIZE + 1
-  const hi = Math.min(page.value * PAGE_SIZE, n)
+  if (n <= pageSize.value) return ''
+  const lo = (page.value - 1) * pageSize.value + 1
+  const hi = Math.min(page.value * pageSize.value, n)
   return ` · 当前第 ${lo}–${hi} 条`
 })
 
-// 整行勾选默认值（plan 拍板；v0.92 难度口径）：难度=未设且 AI 有建议才勾（AI 失败行
-// 无建议默认不勾，root 可勾后改判）；来源=有建议且与现值不同才勾。
-// 知识点不走整行勾选（v0.68 拆新增/移除两维，默认值见 syncSelection knowledge 分支）
+// 整行勾选默认值（来源标签口径）：有建议且与现值不同才勾。
+// 综合不走整行勾选（难度维 selDiff + 知识点逐标签两维，默认值见 syncSelection combo 分支）
 function defaultChecked(s: TidySuggestion): boolean {
   if (appliedPids.value.has(s.pid)) return false
-  switch (s.kind) {
-    case 'difficulty':
-      return !s.has_difficulty && !s.ai_error && (s.suggest_difficulty ?? 0) >= 1
-    case 'meta':
-      return !s.no_clue && !!s.suggest_meta_ids && !sameSet(s.cur_meta_ids, s.suggest_meta_ids)
-    default:
-      return false
+  if (s.kind === 'meta') {
+    return !s.no_clue && !!s.suggest_meta_ids && !sameSet(s.cur_meta_ids, s.suggest_meta_ids)
   }
+  return false
 }
 
 function sameSet(a?: number[], b?: number[]): boolean {
@@ -133,26 +136,31 @@ function sameSet(a?: number[], b?: number[]): boolean {
 }
 
 function syncSelection(rows: TidySuggestion[]) {
-  if (jobKind.value === 'knowledge') {
-    // 拆分默认值：新增/移除两维逐标签默认全勾（v0.92.1 细化，= v0.68「每题两维全勾」
-    // 的等价默认语义），root 逐标签退勾；无内置 selection 列，无需 toggleRowSelection 回放
+  if (jobKind.value === 'combo') {
+    // 拆分默认值：新增/移除两维逐标签默认全勾（含父级自动补链行，均可取消）；
+    // 难度维：未设难度且有建议才勾（同原单维难度默认口径），改判初值 = 建议值；
+    // 无内置 selection 列，无需 toggleRowSelection 回放
     const add = new Set<string>()
     const rm = new Set<string>()
+    const diff = new Set<number>()
     for (const s of rows) {
       if (appliedPids.value.has(s.pid)) continue
       for (const id of s.add_tag_ids ?? []) add.add(`${s.pid}:${id}`)
       for (const id of s.remove_tag_ids ?? []) rm.add(`${s.pid}:${id}`)
+      if (!s.has_difficulty && !s.ai_error && (s.suggest_difficulty ?? 0) >= 1) {
+        diff.add(s.pid)
+      }
     }
     selAdd.value = add
     selRm.value = rm
-    selected.value = pidsOfKeys([...add, ...rm])
+    selDiff.value = diff
+    finalDiff.value = new Map(
+      rows.filter((s) => s.kind === 'combo' && !s.ai_error).map((s) => [s.pid, s.suggest_difficulty ?? 3]),
+    )
+    selected.value = new Set([...pidsOfKeys([...add, ...rm]), ...diff])
     return
   }
   selected.value = new Set(rows.filter(defaultChecked).map((s) => s.pid))
-  // 难度改判初始值 = 建议值
-  finalDiff.value = new Map(
-    rows.filter((s) => s.kind === 'difficulty').map((s) => [s.pid, s.suggest_difficulty ?? 3]),
-  )
   // toggle 会逐个触发 selection-change → onSelectionChange 用表格部分实况覆盖 selected，
   // 故循环前快照目标集、toggle 只吃快照常量（活读会让第 2 个起全部失真——实测实锤）
   const want = new Set(selected.value)
@@ -167,6 +175,7 @@ function clearSelection() {
   selected.value = new Set()
   selAdd.value = new Set()
   selRm.value = new Set()
+  selDiff.value = new Set()
   void nextTick(() => {
     for (const row of tableRows.value) {
       tableRef.value?.toggleRowSelection(row, false)
@@ -179,7 +188,7 @@ function clearSelection() {
 // computed 白跑一遍；保持引用稳定，进度条独享重渲染（v0.63 批次2）。
 async function fetchStatus(runningMerge = false): Promise<boolean> {
   try {
-    const r = await adminApi.tidyStatus(page.value, PAGE_SIZE)
+    const r = await adminApi.tidyStatus(page.value, pageSize.value)
     if (runningMerge && status.value && status.value.state === 'running' && r.state === 'running') {
       status.value.total = r.total
       status.value.done = r.done
@@ -207,26 +216,36 @@ function selectAllVisible() {
   })
 }
 
-// 知识点全选拆两枚（v0.92.1）：全选新增 / 全选移除各自独立，逐标签补勾可见行；
-// 跳过已应用行：其勾选框已禁用，程序化再勾与禁用态自相矛盾
-function selectAllKnowledge(part: 'add' | 'rm') {
-  const next = new Set(part === 'add' ? selAdd.value : selRm.value)
-  for (const row of tableRows.value) {
-    if (appliedPids.value.has(row.pid)) continue
-    for (const id of (part === 'add' ? row.add_tag_ids : row.remove_tag_ids) ?? []) {
-      next.add(`${row.pid}:${id}`)
+// 综合全选拆三枚（v0.94.1 用户拍板）：全选难度 / 全选新增 / 全选移除各自独立，
+// 可见行逐项补勾；跳过已应用行（其勾选框已禁用，程序化再勾与禁用态自相矛盾）
+function selectAllCombo(part: 'diff' | 'add' | 'rm') {
+  if (part === 'diff') {
+    const diff = new Set(selDiff.value)
+    for (const row of tableRows.value) {
+      if (appliedPids.value.has(row.pid)) continue
+      diff.add(row.pid)
     }
+    selDiff.value = diff
+  } else {
+    const next = new Set(part === 'add' ? selAdd.value : selRm.value)
+    for (const row of tableRows.value) {
+      if (appliedPids.value.has(row.pid)) continue
+      for (const id of (part === 'add' ? row.add_tag_ids : row.remove_tag_ids) ?? []) {
+        next.add(`${row.pid}:${id}`)
+      }
+    }
+    if (part === 'add') selAdd.value = next
+    else selRm.value = next
   }
-  if (part === 'add') selAdd.value = next
-  else selRm.value = next
-  selected.value = pidsOfKeys([...selAdd.value, ...selRm.value])
+  syncComboSelected()
 }
 
 function invertVisible() {
-  if (jobKind.value === 'knowledge') {
-    // 可见行逐标签取反（v0.92.1 细化；无建议的行不凭空造勾；跳过已应用行，同全选）
+  if (jobKind.value === 'combo') {
+    // 可见行三维取反（逐标签取反 + 难度维整行取反；无建议的行不凭空造勾；跳过已应用行）
     const add = new Set(selAdd.value)
     const rm = new Set(selRm.value)
+    const diff = new Set(selDiff.value)
     for (const row of tableRows.value) {
       if (appliedPids.value.has(row.pid)) continue
       for (const id of row.add_tag_ids ?? []) {
@@ -239,10 +258,13 @@ function invertVisible() {
         if (rm.has(k)) rm.delete(k)
         else rm.add(k)
       }
+      if (diff.has(row.pid)) diff.delete(row.pid)
+      else diff.add(row.pid)
     }
     selAdd.value = add
     selRm.value = rm
-    selected.value = pidsOfKeys([...add, ...rm])
+    selDiff.value = diff
+    syncComboSelected()
     return
   }
   // 同 syncSelection 的快照纪律：先算目标集整体赋值，再按 target 常量回放
@@ -256,8 +278,8 @@ function invertVisible() {
   })
 }
 
-// 知识点单标签勾选切换（v0.92.1 细化 v0.68 单维切换）：同题各标签互相独立；
-// selected 恒 = 两维有勾的题号并集（不变式，应用/计数口径）
+// 综合单标签勾选切换（v0.92.1 粒度）：同题各标签互相独立；
+// selected 恒 = 难度行勾 ∪ 两维有勾题号并集（不变式，应用/计数口径）
 function toggleKnowledge(pid: number, part: 'add' | 'rm', tagId: number, on: boolean) {
   const k = `${pid}:${tagId}`
   const next = new Set(part === 'add' ? selAdd.value : selRm.value)
@@ -265,7 +287,16 @@ function toggleKnowledge(pid: number, part: 'add' | 'rm', tagId: number, on: boo
   else next.delete(k)
   if (part === 'add') selAdd.value = next
   else selRm.value = next
-  selected.value = pidsOfKeys([...selAdd.value, ...selRm.value])
+  syncComboSelected()
+}
+
+// 综合难度维整行勾切：勾了才随应用写难度（finalDiff 改判值），不勾 = 难度不动
+function toggleComboDiff(pid: number, on: boolean) {
+  const next = new Set(selDiff.value)
+  if (on) next.add(pid)
+  else next.delete(pid)
+  selDiff.value = next
+  syncComboSelected()
 }
 
 const selectedCount = computed(() => selected.value.size)
@@ -313,10 +344,16 @@ function startPoll() {
   poll.restart()
 }
 
-// 翻页：终态下按新条件拉取对应切片（轮询进行中由轮询自然带新页），
-// 勾选清空重置（当前页独立语义）
+// 翻页/换每页条数：终态下按新条件拉取对应切片（轮询进行中由轮询自然带新页），
+// 勾选清空重置（当前页独立语义）；换条数回第一页
 watch(page, async () => {
   if (running.value) return
+  const ok = await fetchStatus()
+  if (ok && done.value) clearSelection()
+})
+watch(pageSize, async () => {
+  if (running.value) return
+  page.value = 1
   const ok = await fetchStatus()
   if (ok && done.value) clearSelection()
 })
@@ -356,12 +393,13 @@ async function applySelected() {
   for (const s of suggestions.value) {
     if (!selected.value.has(s.pid)) continue
     switch (s.kind) {
-      case 'difficulty':
-        items.push({ pid: s.pid, difficulty: finalDiff.value.get(s.pid) ?? s.suggest_difficulty ?? 3 })
-        break
-      case 'knowledge': {
-        // 最终集按逐标签勾选拼（v0.92.1 细化 v0.68）：cur + 勾中的 add − 勾中的 rm，
-        // 同题可只采纳部分标签；两维全无勾 = 该行不应用（selected 并集不变式下不出现，守卫兜底）
+      case 'combo': {
+        // 两维独立勾选：难度行勾才写难度（finalDiff 改判值），标签按逐标签勾选拼终值；
+        // 两维全无勾 = 该行不应用（selected 并集不变式下不出现，守卫兜底）
+        const item: TidyApplyItem = { pid: s.pid }
+        if (selDiff.value.has(s.pid)) {
+          item.difficulty = finalDiff.value.get(s.pid) ?? s.suggest_difficulty ?? 3
+        }
         const add = new Set<number>()
         for (const id of s.add_tag_ids ?? []) {
           if (selAdd.value.has(`${s.pid}:${id}`)) add.add(id)
@@ -370,11 +408,14 @@ async function applySelected() {
         for (const id of s.remove_tag_ids ?? []) {
           if (selRm.value.has(`${s.pid}:${id}`)) rm.add(id)
         }
-        if (!add.size && !rm.size) break
-        const set = new Set<number>(s.cur_tag_ids ?? [])
-        for (const id of add) set.add(id)
-        for (const id of rm) set.delete(id)
-        items.push({ pid: s.pid, tags: [...set] })
+        if (add.size || rm.size) {
+          const set = new Set<number>(s.cur_tag_ids ?? [])
+          for (const id of add) set.add(id)
+          for (const id of rm) set.delete(id)
+          item.tags = [...set]
+        }
+        if (item.difficulty === undefined && !item.tags) break
+        items.push(item)
         break
       }
       case 'meta':
@@ -420,6 +461,7 @@ async function discardResults() {
   selected.value = new Set()
   selAdd.value = new Set()
   selRm.value = new Set()
+  selDiff.value = new Set()
   appliedPids.value = new Set()
   finalDiff.value = new Map()
 }
@@ -435,7 +477,7 @@ const histDetail = ref<TidyHistoryDetail | null>(null)
 const detailLoading = ref(false)
 const detailShow = ref(false)
 
-const KIND_LABEL: Record<TidyKind, string> = { difficulty: '难度', knowledge: '知识点', meta: '来源标签' }
+const KIND_LABEL: Record<TidyKind, string> = { combo: '综合', difficulty: '难度', knowledge: '知识点', meta: '来源标签' }
 
 async function loadHistory() {
   histLoading.value = true
@@ -463,9 +505,19 @@ async function openHistoryDetail(id: number) {
   }
 }
 
-// 历史明细「变更」单元格：按批内 kinds 渲染 old→new（难度 D?、知识点/来源名字快照）
+// 历史明细「变更」单元格：按批内 kinds 渲染 old→new（难度 D?、知识点/来源名字快照）；
+// combo 批按 item 真带了哪个维的终值渲染对应段（只勾一维时另一维不渲染，旧值无变更义）
 function histChange(row: { old_difficulty?: number; new_difficulty?: number; old_tag_names?: string[]; new_tag_names?: string[]; old_meta_names?: string[]; new_meta_names?: string[] }, kinds: TidyKind[]): string {
   const parts: string[] = []
+  if (kinds.includes('combo')) {
+    if (row.new_difficulty !== undefined) {
+      parts.push(`难度 ${row.old_difficulty ? `D${row.old_difficulty}` : '未设置'} → ${row.new_difficulty ? `D${row.new_difficulty}` : '未设置'}`)
+    }
+    if (row.new_tag_names !== undefined) {
+      parts.push(`知识点 ${(row.old_tag_names ?? []).join('、') || '无'} → ${(row.new_tag_names ?? []).join('、') || '清空'}`)
+    }
+    return parts.join('；')
+  }
   if (kinds.includes('difficulty')) {
     parts.push(`难度 ${row.old_difficulty ? `D${row.old_difficulty}` : '未设置'} → ${row.new_difficulty ? `D${row.new_difficulty}` : '未设置'}`)
   }
@@ -661,16 +713,17 @@ onMounted(async () => {
       <div class="result-bar">
         <span class="muted">
           已勾选 <b>{{ selectedCount }}</b>/{{ suggestionTotal }} 题{{ pageLabel }}
-          <template v-if="jobKind === 'knowledge' && (selAdd.size || selRm.size)"> · 新增 {{ selAdd.size }} · 移除 {{ selRm.size }}</template>
+          <template v-if="jobKind === 'combo' && (selAdd.size || selRm.size)"> · 新增 {{ selAdd.size }} · 移除 {{ selRm.size }}</template>
           <template v-if="status?.excluded"> · 已排除 {{ status.excluded }}</template>
           <template v-if="appliedPids.size"> · 已应用 {{ appliedPids.size }}</template>
           <template v-if="rangeLabel"> · {{ rangeLabel }}</template>
         </span>
         <span class="spacer" />
-        <!-- 知识点全选拆两枚（v0.92.1）：逐标签粒度下「全选可见」失去单义，按维拆分 -->
-        <template v-if="jobKind === 'knowledge'">
-          <el-button size="small" @click="selectAllKnowledge('add')">全选新增</el-button>
-          <el-button size="small" @click="selectAllKnowledge('rm')">全选移除</el-button>
+        <!-- 综合全选拆三枚（v0.94.1）：难度/新增/移除三维各自独立，逐项补勾可见行 -->
+        <template v-if="jobKind === 'combo'">
+          <el-button size="small" @click="selectAllCombo('diff')">全选难度</el-button>
+          <el-button size="small" @click="selectAllCombo('add')">全选新增</el-button>
+          <el-button size="small" @click="selectAllCombo('rm')">全选移除</el-button>
         </template>
         <el-button v-else size="small" @click="selectAllVisible">全选可见</el-button>
         <el-button size="small" @click="invertVisible">反选</el-button>
@@ -679,104 +732,100 @@ onMounted(async () => {
         </el-button>
       </div>
 
-      <!-- 难度（v0.92 五源判读）：现值 / AI 建议（可改判，AI 失败行无建议）/ 备注 -->
+      <!-- 综合（v0.94）：一行两维——难度行勾（未设难度默认勾）+「现难度 → 建议难度（可
+           改判 LazySelectCell）」合列 + 知识点「现 / ＋新增勾选 / －移除勾选」三行合列
+          （v0.94.1 合列去横向滚动；联动为后台机制，前端不再显示「联动」字样）；
+           无 el-table selection 列（难度维自持 selDiff 集合，与逐标签勾的并集语义不打架） -->
       <el-table
-        v-if="jobKind === 'difficulty'"
+        v-if="jobKind === 'combo'"
         ref="tableRef"
         :data="tableRows"
         size="small"
-        @selection-change="onSelectionChange"
       >
-        <el-table-column type="selection" width="42" />
-        <el-table-column prop="pid" label="题号" width="76" />
-        <el-table-column label="标题" min-width="220" show-overflow-tooltip>
+        <el-table-column width="42" label="">
+          <template #header>
+            <el-tooltip content="勾选 = 应用时写难度（建议值或改判值）" placement="top">
+              <span class="muted">难度</span>
+            </el-tooltip>
+          </template>
+          <template #default="{ row }">
+            <el-checkbox
+              :model-value="selDiff.has((row as TidySuggestion).pid)"
+              :disabled="appliedPids.has(row.pid) || !!row.ai_error"
+              @update:model-value="(v: boolean | string | number) => toggleComboDiff((row as TidySuggestion).pid, v === true)"
+            />
+          </template>
+        </el-table-column>
+        <el-table-column prop="pid" label="题号" width="70" />
+        <el-table-column label="标题" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">
             <router-link :to="`/problems/${row.pid}`" target="_blank" class="tlink">{{ row.title }}</router-link>
           </template>
         </el-table-column>
-        <el-table-column label="现难度" width="86">
+        <el-table-column label="难度（现 → 建议）" min-width="168">
           <template #default="{ row }">
-            <span v-if="row.has_difficulty" class="mono">D{{ row.cur_difficulty }}</span>
-            <el-tag v-else size="small" type="info">未设置</el-tag>
+            <span class="diff-cell">
+              <span v-if="row.has_difficulty" class="mono">D{{ row.cur_difficulty }}</span>
+              <el-tag v-else size="small" type="info">未设置</el-tag>
+              <span class="muted">→</span>
+              <!-- AI 失败行无建议：置灰提示，勾选后仍可改判（v0.63 惰性单元格编辑） -->
+              <LazySelectCell
+                v-if="!row.ai_error"
+                :model-value="finalDiff.get(row.pid) ?? row.suggest_difficulty ?? 3"
+                :options="diffOptions"
+                :readonly="appliedPids.has(row.pid)"
+                empty="D3"
+                @update:model-value="(v: number | number[]) => finalDiff.set((row as TidySuggestion).pid, v as number)"
+              />
+              <span v-else class="muted">—</span>
+            </span>
           </template>
         </el-table-column>
-        <el-table-column label="建议（可改判）" width="150">
+        <el-table-column label="知识点（现 / ＋新增 / －移除）" min-width="320">
           <template #default="{ row }">
-            <!-- AI 失败行无建议：置灰提示，勾选后仍可改判（v0.63 惰性单元格编辑） -->
-            <LazySelectCell
-              v-if="!row.ai_error"
-              :model-value="finalDiff.get(row.pid) ?? row.suggest_difficulty ?? 3"
-              :options="diffOptions"
-              :readonly="appliedPids.has(row.pid)"
-              empty="D3"
-              @update:model-value="(v: number | number[]) => finalDiff.set((row as TidySuggestion).pid, v as number)"
-            />
-            <span v-else class="muted">—</span>
+            <div class="kp-cell">
+              <div class="kp-line">
+                <span class="kp-label">现</span>
+                <span class="kp-plain">{{ (row.cur_tag_names ?? []).join('、') || '—' }}</span>
+              </div>
+              <div v-if="row.add_tag_names?.length" class="kp-line">
+                <span class="kp-label kp-add">＋</span>
+                <span class="part-cell">
+                  <span v-for="(n, i) in row.add_tag_names" :key="n" class="tag-pick">
+                    <el-checkbox
+                      class="part-check"
+                      :model-value="selAdd.has(`${(row as TidySuggestion).pid}:${row.add_tag_ids?.[i]}`)"
+                      :disabled="appliedPids.has(row.pid)"
+                      @update:model-value="(v: boolean | string | number) => toggleKnowledge((row as TidySuggestion).pid, 'add', row.add_tag_ids?.[i] as number, v === true)"
+                    />
+                    <el-tag size="small" type="success">{{ n }}</el-tag>
+                  </span>
+                </span>
+              </div>
+              <div v-if="row.remove_tag_names?.length" class="kp-line">
+                <span class="kp-label kp-rm">－</span>
+                <span class="part-cell">
+                  <span v-for="(n, i) in row.remove_tag_names" :key="n" class="tag-pick">
+                    <el-checkbox
+                      class="part-check"
+                      :model-value="selRm.has(`${(row as TidySuggestion).pid}:${row.remove_tag_ids?.[i]}`)"
+                      :disabled="appliedPids.has(row.pid)"
+                      @update:model-value="(v: boolean | string | number) => toggleKnowledge((row as TidySuggestion).pid, 'rm', row.remove_tag_ids?.[i] as number, v === true)"
+                    />
+                    <el-tag size="small" type="danger">{{ n }}</el-tag>
+                  </span>
+                </span>
+              </div>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="备注" min-width="200" show-overflow-tooltip>
+        <el-table-column label="丢弃 / 备注" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <span v-if="row.ai_error" class="warn-text">{{ row.ai_error }}</span>
+            <span v-else-if="row.dropped?.length">丢弃：{{ row.dropped.join('；') }}</span>
             <span v-else-if="row.note" class="muted">{{ row.note }}</span>
           </template>
         </el-table-column>
-      </el-table>
-
-      <!-- 知识点：现有 / 新增（逐标签勾选）/ 移除（逐标签勾选）/ 丢弃。v0.68 退役整行
-           选择列拆两维；v0.92.1 细化到每个知识点一个勾选框——同题可只采纳部分标签，
-           不勾移除就不移除、只勾新增时现有标签原样保留；全选拆「全选新增/全选移除」，
-           反选 = 可见行逐标签取反 -->
-      <el-table
-        v-else-if="jobKind === 'knowledge'"
-        ref="tableRef"
-        :data="tableRows"
-        size="small"
-      >
-        <el-table-column prop="pid" label="题号" width="76" />
-        <el-table-column label="标题" min-width="170" show-overflow-tooltip>
-          <template #default="{ row }">
-            <router-link :to="`/problems/${row.pid}`" target="_blank" class="tlink">{{ row.title }}</router-link>
-          </template>
-        </el-table-column>
-        <el-table-column label="现有" min-width="140" show-overflow-tooltip>
-          <template #default="{ row }">{{ (row.cur_tag_names ?? []).join('、') || '—' }}</template>
-        </el-table-column>
-        <el-table-column label="新增（勾选采纳）" min-width="150">
-          <template #default="{ row }">
-            <div v-if="row.add_tag_names?.length" class="part-cell">
-              <span v-for="(n, i) in row.add_tag_names" :key="n" class="tag-pick">
-                <el-checkbox
-                  class="part-check"
-                  :model-value="selAdd.has(`${(row as TidySuggestion).pid}:${row.add_tag_ids?.[i]}`)"
-                  :disabled="appliedPids.has(row.pid)"
-                  @update:model-value="(v: boolean | string | number) => toggleKnowledge((row as TidySuggestion).pid, 'add', row.add_tag_ids?.[i] as number, v === true)"
-                />
-                <el-tag size="small" type="success">{{ n }}</el-tag>
-              </span>
-            </div>
-            <span v-else class="muted">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="移除（勾选采纳）" min-width="150">
-          <template #default="{ row }">
-            <div v-if="row.remove_tag_names?.length" class="part-cell">
-              <span v-for="(n, i) in row.remove_tag_names" :key="n" class="tag-pick">
-                <el-checkbox
-                  class="part-check"
-                  :model-value="selRm.has(`${(row as TidySuggestion).pid}:${row.remove_tag_ids?.[i]}`)"
-                  :disabled="appliedPids.has(row.pid)"
-                  @update:model-value="(v: boolean | string | number) => toggleKnowledge((row as TidySuggestion).pid, 'rm', row.remove_tag_ids?.[i] as number, v === true)"
-                />
-                <el-tag size="small" type="danger">{{ n }}</el-tag>
-              </span>
-            </div>
-            <span v-else class="muted">—</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="丢弃（AI 越界名）" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ (row.dropped ?? []).join('；') || '—' }}</template>
-        </el-table-column>
-        <el-table-column prop="note" label="备注" min-width="140" show-overflow-tooltip />
       </el-table>
 
       <!-- 来源标签：现值 / 建议 / 状态 -->
@@ -812,15 +861,17 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
 
-      <!-- 100/页分页器（v0.49，服务端分页）：只拉当前页切片，翻页勾选清空（当前页独立语义） -->
-      <div v-if="suggestionTotal > PAGE_SIZE" class="pager-row">
+      <!-- 分页器（v0.49 服务端分页；v0.94.1 每页条数可调）：只拉当前页切片，翻页/换条数勾选清空（当前页独立语义） -->
+      <div v-if="suggestionTotal > pageSizeOptions[0]" class="pager-row">
         <el-pagination
           background
-          layout="prev, pager, next, total"
+          layout="sizes, prev, pager, next, total"
           :total="suggestionTotal"
-          :page-size="PAGE_SIZE"
+          :page-sizes="pageSizeOptions"
+          :page-size="pageSize"
           :current-page="page"
           @current-change="(p: number) => (page = p)"
+          @size-change="(s: number) => (pageSize = s)"
         />
       </div>
     </template>
@@ -835,7 +886,7 @@ onMounted(async () => {
       class="state-alert"
     >
       <span class="muted">
-        {{ jobKind === 'difficulty' ? '这些题难度已设置或已应用过整理' : '这些题已应用过整理' }}，默认不再进任务。
+        {{ jobKind === 'combo' ? '这些题难度与知识点都已应用过整理' : '这些题已应用过整理' }}，默认不再进任务。
         如需全量重跑：点右上角「发起新整理」→ 勾选「重新整理已整理过的题」→ 重新开始。
       </span>
     </el-alert>
@@ -852,8 +903,47 @@ onMounted(async () => {
 
 .kind-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--soj-sp-12);
+}
+
+/* 综合表合列（v0.94.1 去横向滚动）：难度「现→建议」同行排布；知识点「现/＋/－」三行堆叠 */
+.diff-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--soj-sp-8);
+}
+
+.kp-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--soj-sp-4);
+  min-width: 0;
+}
+
+.kp-line {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--soj-sp-4);
+}
+
+.kp-label {
+  flex: none;
+  width: 16px;
+  font-weight: var(--soj-fw-bold);
+  text-align: center;
+}
+
+.kp-add {
+  color: var(--el-color-success);
+}
+
+.kp-rm {
+  color: var(--el-color-danger);
+}
+
+.kp-plain {
+  min-width: 0;
 }
 
 /* 模式卡（v0.49 双模式；v0.92 三卡）：AI整理 / 手动整理 / 整理历史，嵌在任务卡上方 */
