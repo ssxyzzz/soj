@@ -496,7 +496,7 @@ func (r *Repo) EnsureDefaultMetaTagTree(ctx context.Context) (bool, error) {
 }
 
 // MatchMetaTags 把导入解析出的来源线索（SourceHint）映射到来源标签树节点 ID：
-// Region/Source 按节点名精确匹配（任一层级），Year 按年份枝子节点名匹配；
+// Region/Year 按节点名精确匹配（任一层级），Source 走词元级匹配（v0.92.2）；
 // 全部命中失败的线索不返回（2026-10-25 定稿：匹配不上直接丢弃）。
 func (r *Repo) MatchMetaTags(ctx context.Context, hint SourceHint) []int64 {
 	nodes, err := r.GetTagTreeDoc(ctx, TreeDocMeta)
@@ -516,11 +516,13 @@ func (r *Repo) MatchMetaTags(ctx context.Context, hint SourceHint) []int64 {
 	walk(nodes)
 
 	ids := make([]int64, 0, 3)
+	seen := map[int64]bool{}
 	add := func(name string) {
 		if name == "" {
 			return
 		}
-		if id, ok := byName[name]; ok {
+		if id, ok := byName[name]; ok && !seen[id] {
+			seen[id] = true
 			ids = append(ids, id)
 		}
 	}
@@ -528,11 +530,81 @@ func (r *Repo) MatchMetaTags(ctx context.Context, hint SourceHint) []int64 {
 		add(strconv.Itoa(hint.Year))
 	}
 	add(strings.TrimSpace(hint.Region))
-	add(strings.TrimSpace(hint.Source))
+	for _, name := range matchSourceNames(byName, strings.TrimSpace(hint.Source)) {
+		add(name)
+	}
 	if len(ids) == 0 {
 		return nil
 	}
 	return ids
+}
+
+// matchSourceNames 来源串词元级树名匹配（v0.92.2）：返回来源串内按词边界命中的全部
+// 树名（按出现位置顺序，同位置只取最长命中）。真实题名括号里来源常带尾巴（「CSP-J
+// 复赛」「USACO 1.1.1」「USACO02FEB」「2023CSPJ-T1」），整串精确匹配对不上树上光名
+// 即整条丢弃——改为树名在串内按词边界出现即命中：
+//   - 同一位置取最长命中（NOIP 不得被 NOI 词中吞走）；
+//   - 拉丁树名两侧不得紧贴 ASCII 字母（防短名吞长名词中），汉字结尾的树名后可接
+//     题号字母（「洛谷P1001」命中洛谷）；数字邻接放行（USACO02FEB / 2023CSPJ-T1）；
+//   - 匹配前归一无横杠拼写（CSPJ→CSP-J、CSPS→CSP-S），大小写不敏感。
+func matchSourceNames(byName map[string]int64, source string) []string {
+	if source == "" {
+		return nil
+	}
+	s := strings.ReplaceAll(source, "CSPJ", "CSP-J")
+	s = strings.ReplaceAll(s, "CSPS", "CSP-S")
+	runes := []rune(strings.ToLower(s))
+	type cand struct {
+		low     []rune
+		orig    string
+		endsHan bool
+	}
+	cands := make([]cand, 0, len(byName))
+	for name := range byName {
+		low := []rune(strings.ToLower(name))
+		if len(low) == 0 {
+			continue
+		}
+		cands = append(cands, cand{low: low, orig: name, endsHan: low[len(low)-1] >= 0x80})
+	}
+	sort.Slice(cands, func(a, b int) bool { return len(cands[a].low) > len(cands[b].low) })
+	var hit []string
+	for i := 0; i < len(runes); {
+		taken := 0
+		for _, c := range cands {
+			end := i + len(c.low)
+			if end > len(runes) || string(runes[i:end]) != string(c.low) {
+				continue
+			}
+			if !sourceBoundaryOK(runes, i, end, c.endsHan) {
+				continue
+			}
+			hit = append(hit, c.orig)
+			taken = len(c.low)
+			break
+		}
+		if taken == 0 {
+			taken = 1
+		}
+		i += taken
+	}
+	return hit
+}
+
+// sourceBoundaryOK 树名命中词边界判定：前邻不得是 ASCII 字母；后邻是 ASCII 字母时
+// 仅汉字结尾树名放行；数字邻接放行（题号 / USACO02FEB / 2023CSP-J-T1 前后接数字）。
+func sourceBoundaryOK(runes []rune, i, end int, endsHan bool) bool {
+	if i > 0 && isASCIILetterRune(runes[i-1]) {
+		return false
+	}
+	if end < len(runes) && isASCIILetterRune(runes[end]) && !endsHan {
+		return false
+	}
+	return true
+}
+
+func isASCIILetterRune(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
 }
 
 // CollectTagIDsByName 收集名字包含 nameContain（不分大小写）的节点 ID（v0.26.1

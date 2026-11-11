@@ -183,3 +183,64 @@ func TestEnsureDefaultMetaTagTree(t *testing.T) {
 		t.Fatalf("未预置年份不应命中: %v", ids)
 	}
 }
+
+// TestMatchMetaTagsSourceTokens 来源名词元级匹配（v0.92.2）：真实库题名括号形态——
+// 整串光名、带尾巴（CSP-J 复赛 / USACO 1.1.1）、无横杠拼写（2023CSPJ-T1）、紧写
+//（USACO02FEB）、双来源只挂树上有的（IOI / USACO1.1）、汉字树名接题号（洛谷P1001）、
+// 最长命中不吞短名（NOIP 不挂 NOI）、匹配不上仍丢弃。
+func TestMatchMetaTagsSourceTokens(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+	if _, err := r.EnsureDefaultMetaTagTree(ctx); err != nil {
+		t.Fatalf("注入种子: %v", err)
+	}
+	tree, err := r.GetTagTreeDoc(ctx, TreeDocMeta)
+	if err != nil || len(tree) == 0 {
+		t.Fatalf("种子树为空: err=%v", err)
+	}
+	nameOf := map[int64]string{}
+	var walk func(list []TagNode)
+	walk = func(list []TagNode) {
+		for _, n := range list {
+			nameOf[n.ID] = n.Name
+			walk(n.Children)
+		}
+	}
+	walk(tree)
+
+	cases := []struct {
+		src  string
+		want []string
+	}{
+		{"CSP-J", []string{"CSP-J"}},
+		{"CSP-J 复赛", []string{"CSP-J"}},
+		{"USACO 1.1.1", []string{"USACO"}},
+		{"USACO02FEB", []string{"USACO"}},
+		{"2023CSPJ-T1", []string{"CSP-J"}},
+		{"洛谷P1001", []string{"洛谷"}},
+		{"NOIP 普及组", []string{"NOIP"}},
+		{"IOI / USACO1.1", []string{"USACO"}},
+		{"神秘来源Q", nil},
+	}
+	for _, tc := range cases {
+		ids := r.MatchMetaTags(ctx, SourceHint{Source: tc.src})
+		got := make([]string, 0, len(ids))
+		for _, id := range ids {
+			got = append(got, nameOf[id])
+		}
+		if len(got) != len(tc.want) {
+			t.Fatalf("matchSourceNames(%q) = %v, want %v", tc.src, got, tc.want)
+		}
+		for i, w := range tc.want {
+			if got[i] != w {
+				t.Fatalf("matchSourceNames(%q) = %v, want %v", tc.src, got, tc.want)
+			}
+		}
+	}
+	// 全链路：方括号解析 → 词元级匹配（年份+带尾巴来源双中）
+	hint := ParseSourceHint("[CSP-J 2019 复赛] 公交换乘（transfer）")
+	ids := r.MatchMetaTags(ctx, hint)
+	if len(ids) != 2 || nameOf[ids[0]] != "2019" || nameOf[ids[1]] != "CSP-J" {
+		t.Fatalf("[CSP-J 2019 复赛] 全链路应命中 2019+CSP-J: %v %v", ids, hint)
+	}
+}
