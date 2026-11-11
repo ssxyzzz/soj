@@ -262,6 +262,22 @@ func (h *Handlers) TidyCancel(c *gin.Context) {
 	ok(c, gin.H{"cancel_requested": true})
 }
 
+// TidyDiscard POST /api/admin/tidy/discard：弃置终态任务（v0.95.1）——清掉进程内任务槽。
+// 此前弃置是纯前端态（面板 status 置空），tidyTask 终态快照恒在、进页恢复一拉即把已弃置
+// 的结果复活，与「结果属当次任务当次处置」矛盾。running 态不清理（先走 cancel 优雅取消）；
+// 无任务幂等成功。
+func (h *Handlers) TidyDiscard(c *gin.Context) {
+	h.tidyMu.Lock()
+	if h.tidyTask != nil && h.tidyTask.State == "running" {
+		h.tidyMu.Unlock()
+		fail(c, http.StatusConflict, "任务仍在执行——请先取消整理")
+		return
+	}
+	h.tidyTask = nil
+	h.tidyMu.Unlock()
+	ok(c, gin.H{"discarded": true})
+}
+
 // TidyApply POST /api/admin/tidy/apply：把勾选的建议批量写库（root 确认后的第二段）。
 // body {kind, items:[{pid, difficulty?, tags?, meta_tags?}]}——字段均为「最终值」
 //（root 可改判，不区分建议值与手改值）；逐题走 UpdateProblemMeta + 前置校验链，
@@ -734,7 +750,7 @@ func (h *Handlers) runTidyCombo(ctx context.Context, job *tidyJob, uid int64, re
 	job.Total = len(probs)
 	job.mu.Unlock()
 
-	sys := tidyComboSystem(lcfg.DifficultyNotes)
+	sys := tidyComboSystem(effectiveDifficultyNotes(lcfg))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, tidyWorkers)
 	for _, p := range probs {
@@ -1057,6 +1073,20 @@ func tidyTagDiscipline() string {
 5. 现挂知识点中与题目无关的不要包含（将按差集作为移除建议）。`
 }
 
+// effectiveDifficultyNotes AI 整理锚点表文案（v0.95 双轨拆分）：逐档 AI 整理说明优先，
+// 空档回退学生说明——存量库的详细锚点还在学生说明里，回退保证配置迁移期锚点不断档。
+func effectiveDifficultyNotes(cfg *repo.LevelConfig) [10]string {
+	var out [10]string
+	for i := range out {
+		if s := strings.TrimSpace(cfg.DifficultyAINotes[i]); s != "" {
+			out[i] = cfg.DifficultyAINotes[i]
+		} else {
+			out[i] = cfg.DifficultyNotes[i]
+		}
+	}
+	return out
+}
+
 // writeDifficultyAnchors 难度锚点表渲染（combo system；空档跳过）。
 func writeDifficultyAnchors(b *strings.Builder, notes [10]string) {
 	b.WriteString("\n难度锚点表（知识点档位校准参考）：\n")
@@ -1068,7 +1098,8 @@ func writeDifficultyAnchors(b *strings.Builder, notes [10]string) {
 	}
 }
 
-// tidyComboSystem 综合整理（难度+知识点一次判读）system（v0.94；notes = 难度锚点表文案）。
+// tidyComboSystem 综合整理（难度+知识点一次判读）system（v0.94；notes = 难度锚点表文案，
+// v0.95 起传 effectiveDifficultyNotes 的产物——AI 说明优先、空档回退学生说明）。
 func tidyComboSystem(notes [10]string) string {
 	var b strings.Builder
 	b.WriteString("你是信息学竞赛题目的整理专家，一次完成难度评估与知识点标注。综合题面、现挂知识点、数据标程、站内题解、历史通过代码判断题目难度档位与考查的核心知识点，知识点从候选列表（按层级缩进）中选名；如具备联网搜索能力，可搜索该题的公开资料（原题出处、网上题解）作参考。\n")

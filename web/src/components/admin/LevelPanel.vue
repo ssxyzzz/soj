@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// 等级面板（v0.11，root）：用户等级（名称/阈值/衰减）与难度等级（名称/逐档说明）双页签，
+// 等级面板（v0.11，root）：用户等级（名称/阈值/衰减）与难度等级（名称/双轨说明）双页签，
 // 切换同题目管理的知识树/标签树 el-tabs 形制（2026-10-26 拆分）。
 // 两个页签共用一份配置、任一侧保存都整体提交——后端 /admin/levelconfig 本就整体覆盖。
+// 难度说明双轨（v0.95）：学生说明（题库说明卡/建题提示展示）+ AI 整理说明（详细知识点与
+// 难度锚点 ≤2000 字，仅作 AI 整理判读素材、学生端不可见；空档回退学生说明）。
 // 十阶档数与色轴固定不开放改。特效开关字段（effects_*）在配置里保留但 UI 已隐藏——
 // v0.21 改版（2026-10-25）等级徽章回归实色炫彩版，特效链恒开、开关不再消费。
 import { onMounted, reactive, ref } from 'vue'
@@ -19,6 +21,7 @@ const form = reactive({
   names: [...DEFAULT_LEVEL_NAMES],
   difficulty_names: [...DEFAULT_LEVEL_NAMES],
   difficulty_notes: Array.from({ length: 10 }, () => ''),
+  difficulty_ai_notes: Array.from({ length: 10 }, () => ''),
   thresholds: [200, 600, 1200, 2000, 3000, 4200, 5600, 7200, 9000] as number[],
   decay1: 0.5,
   decay2: 0.2,
@@ -34,6 +37,7 @@ onMounted(async () => {
     form.names = [...config.names]
     form.difficulty_names = [...(config.difficulty_names?.length === 10 ? config.difficulty_names : config.names)]
     form.difficulty_notes = [...(config.difficulty_notes?.length === 10 ? config.difficulty_notes : Array.from({ length: 10 }, () => ''))]
+    form.difficulty_ai_notes = [...(config.difficulty_ai_notes?.length === 10 ? config.difficulty_ai_notes : Array.from({ length: 10 }, () => ''))]
     form.thresholds = [...config.thresholds]
     form.decay1 = config.decay1
     form.decay2 = config.decay2
@@ -62,6 +66,7 @@ async function save() {
       names: form.names.map((n) => n.trim()),
       difficulty_names: form.difficulty_names.map((n) => n.trim()),
       difficulty_notes: form.difficulty_notes,
+      difficulty_ai_notes: form.difficulty_ai_notes,
       thresholds: form.thresholds,
       decay1: form.decay1,
       decay2: form.decay2,
@@ -150,7 +155,7 @@ function diffChipClass(i: number): Record<string, boolean> {
       </div>
     </div>
 
-    <div class="section-title"><TipLabel label="难度说明" tip="每档各一条，逐行展示在题库「难度说明」说明卡；留空 = 该档不显示" /></div>
+    <div class="section-title"><TipLabel label="难度说明（学生）" tip="面向学生的展示文案（每档 ≤100 字）：题库「难度说明」说明卡与建题/编辑页难度提示展示；留空 = 该档不显示" /></div>
     <div class="notes-list">
       <div v-for="i in 10" :key="i" class="note-cell">
         <span class="tier-chip" :class="diffChipClass(i - 1)">{{ form.difficulty_names[i - 1] }}</span>
@@ -158,6 +163,22 @@ function diffChipClass(i: number): Record<string, boolean> {
           v-model="form.difficulty_notes[i - 1]"
           maxlength="100"
           :placeholder="`第 ${i} 档说明（留空不显示）`"
+        />
+      </div>
+    </div>
+
+    <!-- AI 整理说明（v0.95 双轨拆分）：详细知识点与难度锚点，仅作 AI 整理判读素材，学生端不可见 -->
+    <div class="section-title"><TipLabel label="AI 整理说明" tip="面向 AI 的详细知识点与难度锚点（每档 ≤2000 字）：仅作 AI 整理综合判读的锚点表素材，学生端不可见；留空 = 该档回退上方学生说明" /></div>
+    <div class="notes-list">
+      <div v-for="i in 10" :key="i" class="note-cell note-cell--top">
+        <span class="tier-chip" :class="diffChipClass(i - 1)">{{ form.difficulty_names[i - 1] }}</span>
+        <el-input
+          v-model="form.difficulty_ai_notes[i - 1]"
+          type="textarea"
+          :rows="2"
+          :autosize="{ minRows: 2, maxRows: 8 }"
+          maxlength="2000"
+          :placeholder="`第 ${i} 档 AI 说明（留空回退学生说明）`"
         />
       </div>
     </div>
@@ -219,7 +240,7 @@ function diffChipClass(i: number): Record<string, boolean> {
   gap: var(--soj-sp-10);
 }
 
-/* 逐档难度说明：色块 chip + 单行输入，一行一档 */
+/* 逐档难度说明：色块 chip + 单行输入，一行一档；AI 说明段 textarea 行 chip 贴首行 */
 .notes-list {
   display: flex;
   flex-direction: column;
@@ -230,5 +251,9 @@ function diffChipClass(i: number): Record<string, boolean> {
   display: flex;
   align-items: center;
   gap: var(--soj-sp-8);
+}
+
+.note-cell--top {
+  align-items: flex-start;
 }
 </style>

@@ -7,6 +7,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,6 +88,31 @@ func TestTidyComboSystem(t *testing.T) {
 		if !strings.Contains(combo, want) {
 			t.Fatalf("综合 system 缺 %q：\n%s", want, combo)
 		}
+	}
+}
+
+// TestEffectiveDifficultyNotes AI 整理锚点表文案三态（v0.95 双轨拆分）：AI 说明优先 /
+// 空档（含纯空白）回退学生说明 / 全空 AI 数组（存量库缺字段）整表回退。
+func TestEffectiveDifficultyNotes(t *testing.T) {
+	cfg := &repo.LevelConfig{}
+	cfg.DifficultyNotes[4] = "学生说明 D5"
+	cfg.DifficultyAINotes[4] = "AI 详细锚点 D5"
+	if eff := effectiveDifficultyNotes(cfg); eff[4] != "AI 详细锚点 D5" {
+		t.Fatalf("AI 说明应优先：got %q", eff[4])
+	}
+	cfg.DifficultyAINotes[4] = "   "
+	if eff := effectiveDifficultyNotes(cfg); eff[4] != "学生说明 D5" {
+		t.Fatalf("空档应回退学生说明：got %q", eff[4])
+	}
+	cfg.DifficultyNotes[0] = "学生说明 D1"
+	if eff := effectiveDifficultyNotes(cfg); eff[0] != "学生说明 D1" || eff[4] != "学生说明 D5" {
+		t.Fatalf("全空 AI 数组整表回退学生说明：%+v", eff)
+	}
+	// 锚点表渲染：回退后的文案按 D1–D10 逐行出现，空档跳过
+	var b strings.Builder
+	writeDifficultyAnchors(&b, effectiveDifficultyNotes(cfg))
+	if !strings.Contains(b.String(), "D1：学生说明 D1") || !strings.Contains(b.String(), "D5：学生说明 D5") {
+		t.Fatalf("锚点表缺回旧行：\n%s", b.String())
 	}
 }
 
@@ -456,6 +482,52 @@ func TestTidyRunMetaFlow(t *testing.T) {
 	}
 	if n, _ := snap["excluded"].(float64); n != 1 {
 		t.Fatalf("excluded = %v，期望 1", snap["excluded"])
+	}
+}
+
+// TestTidyDiscard 弃置终态任务（v0.95.1）：done → discard → status 回 idle（进页恢复
+// 不再复活已弃置结果）；无任务幂等 200；running 态拒弃置 409（先 cancel）。
+func TestTidyDiscard(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
+	f.metaTreeNodes = []repo.TagNode{{ID: 500, Name: "洛谷"}}
+	f.problems[3301] = &repo.Problem{ID: 3301, Title: "[洛谷] 待弃置的题"}
+	h := newTestHandlers(f)
+	r := testEngine(h)
+	r.POST("/api/admin/tidy/run", AuthRequired(h), RequireRoot(), h.TidyRun)
+	r.GET("/api/admin/tidy/status", AuthRequired(h), RequireRoot(), h.TidyStatus)
+	r.POST("/api/admin/tidy/discard", AuthRequired(h), RequireRoot(), h.TidyDiscard)
+	tok := f.addUser(h, 1, "root", repo.RoleRoot, 0)
+
+	if code, body := doJSON(r, "POST", "/api/admin/tidy/run", tok, `{"kind":"meta"}`); code != 200 {
+		t.Fatalf("tidy/run = %d %v", code, body)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_, body := doJSON(r, "GET", "/api/admin/tidy/status", tok, "")
+		if body["data"].(map[string]any)["state"] != "running" {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// 终态弃置 → 任务槽清空，status 回 idle
+	if code, body := doJSON(r, "POST", "/api/admin/tidy/discard", tok, ""); code != 200 {
+		t.Fatalf("tidy/discard = %d %v", code, body)
+	}
+	_, body := doJSON(r, "GET", "/api/admin/tidy/status", tok, "")
+	if body["data"].(map[string]any)["state"] != "idle" {
+		t.Fatalf("弃置后 status = %v，期望 idle", body["data"].(map[string]any)["state"])
+	}
+	// 无任务再弃置：幂等 200
+	if code, _ := doJSON(r, "POST", "/api/admin/tidy/discard", tok, ""); code != 200 {
+		t.Fatalf("空槽重复弃置 = %d，期望 200", code)
+	}
+	// running 态拒弃置（弃置前必须先走 cancel）
+	h.tidyMu.Lock()
+	h.tidyTask = &tidyJob{State: "running", Kind: "meta"}
+	h.tidyMu.Unlock()
+	if code, _ := doJSON(r, "POST", "/api/admin/tidy/discard", tok, ""); code != http.StatusConflict {
+		t.Fatalf("running 弃置 = %d，期望 409", code)
 	}
 }
 

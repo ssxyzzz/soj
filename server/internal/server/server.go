@@ -420,6 +420,7 @@ func Run(ctx context.Context, deps *Deps) {
 				adminG.POST("/tidy/run", RequireRoot(), h.TidyRun)
 				adminG.GET("/tidy/status", RequireRoot(), h.TidyStatus)
 				adminG.POST("/tidy/cancel", RequireRoot(), h.TidyCancel)
+				adminG.POST("/tidy/discard", RequireRoot(), h.TidyDiscard)
 				adminG.POST("/tidy/apply", RequireRoot(), h.TidyApply)
 				adminG.GET("/tidy/problems", RequireRoot(), h.TidyManualProblems)
 				adminG.POST("/tidy/manual", RequireRoot(), h.TidyManualApply)

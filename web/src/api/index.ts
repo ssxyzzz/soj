@@ -624,6 +624,7 @@ export const adminApi = {
     names: string[]
     difficulty_names: string[]
     difficulty_notes: string[]
+    difficulty_ai_notes: string[]
     thresholds: number[]
     decay1: number
     decay2: number
@@ -724,6 +725,8 @@ export const adminApi = {
   tidyStatus: (page = 1, pageSize = 100) =>
     get<TidyStatus>('/admin/tidy/status', { page, page_size: pageSize }),
   tidyCancel: () => post<{ cancel_requested: boolean }>('/admin/tidy/cancel'),
+  // 弃置终态任务（v0.95.1）：清服务器任务槽，进页恢复不再复活已弃置结果
+  tidyDiscard: () => post<{ discarded: boolean }>('/admin/tidy/discard'),
   tidyApply: (kind: TidyKind, items: TidyApplyItem[]) =>
     client
       .post<ApiResponse<{ applied: number; failed: number; message: string }>>('/admin/tidy/apply', { kind, items }, { timeout: 120_000 })

@@ -403,7 +403,8 @@ export interface LevelConfigInfo {
 export interface AdminLevelConfig {
   names: string[]
   difficulty_names: string[]
-  difficulty_notes: string[]
+  difficulty_notes: string[] // 学生说明（题库说明卡 + 建题提示展示；≤100 字）
+  difficulty_ai_notes: string[] // AI 整理说明（详细知识点与难度锚点，≤2000 字；学生端不可见，空档回退学生说明）
   thresholds: number[]
   decay1: number
   decay2: number

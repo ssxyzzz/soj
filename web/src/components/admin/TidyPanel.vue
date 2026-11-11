@@ -443,7 +443,9 @@ async function applySelected() {
 }
 
 // 回到发起卡（2026-10-31 验收期修复：终态结果此前霸屏、发起入口被吞——
-// 结果属于「当次任务当次处置」，root 主动弃置后才回发起区；未应用的条数给确认）
+// 结果属于「当次任务当次处置」，root 主动弃置后才回发起区；未应用的条数给确认）。
+// v0.95.1 弃置同步清服务器任务槽（tidyDiscard）：否则进页恢复一拉终态快照，
+// 已弃置的结果刷新即复活。
 async function discardResults() {
   const pending = selected.value.size
   if (pending > 0) {
@@ -456,6 +458,11 @@ async function discardResults() {
     } catch {
       return
     }
+  }
+  try {
+    await adminApi.tidyDiscard()
+  } catch {
+    // 拦截器已提示（running 态 409 等）；前端照常回发起卡
   }
   status.value = null
   selected.value = new Set()

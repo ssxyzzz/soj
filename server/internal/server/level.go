@@ -16,6 +16,7 @@ import (
 )
 
 // levelView 公开配置视图：徽章组件（名字/色轴/特效）与进度条（阈值）渲染所需。
+// difficulty_notes 只带学生说明；AI 整理说明不公开（学生端不可见），root 面板走 AdminGetLevelConfig。
 func levelView(cfg *repo.LevelConfig) gin.H {
 	return gin.H{
 		"names":            cfg.Names,
@@ -56,15 +57,16 @@ func (h *Handlers) AdminGetLevelConfig(c *gin.Context) {
 // AdminUpdateLevelConfig 等级面板保存（root）：名称/阈值/衰减系数/特效开关整体覆盖。
 func (h *Handlers) AdminUpdateLevelConfig(c *gin.Context) {
 	var req struct {
-		Names           [10]string `json:"names"`
-		DifficultyNames [10]string `json:"difficulty_names"`
-		DifficultyNotes [10]string `json:"difficulty_notes"`
-		Thresholds      [9]int64   `json:"thresholds"`
-		Decay1          *float64   `json:"decay1"`
-		Decay2          *float64   `json:"decay2"`
-		Decay3          *float64   `json:"decay3"`
-		EffectsEnabled  *bool      `json:"effects_enabled"`
-		EffectsTiers    *[10]bool  `json:"effects_tiers"`
+		Names             [10]string `json:"names"`
+		DifficultyNames   [10]string `json:"difficulty_names"`
+		DifficultyNotes   [10]string `json:"difficulty_notes"`
+		DifficultyAINotes [10]string `json:"difficulty_ai_notes"`
+		Thresholds        [9]int64   `json:"thresholds"`
+		Decay1            *float64   `json:"decay1"`
+		Decay2            *float64   `json:"decay2"`
+		Decay3            *float64   `json:"decay3"`
+		EffectsEnabled    *bool      `json:"effects_enabled"`
+		EffectsTiers      *[10]bool  `json:"effects_tiers"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数错误")
@@ -79,7 +81,10 @@ func (h *Handlers) AdminUpdateLevelConfig(c *gin.Context) {
 	cfg.Names = req.Names
 	cfg.DifficultyNames = req.DifficultyNames
 	for i := range req.DifficultyNotes {
-		cfg.DifficultyNotes[i] = trimTo(req.DifficultyNotes[i], 100) // 每档说明 ≤100 字，空档留空不展示
+		cfg.DifficultyNotes[i] = trimTo(req.DifficultyNotes[i], 100) // 每档学生说明 ≤100 字，空档留空不展示
+	}
+	for i := range req.DifficultyAINotes {
+		cfg.DifficultyAINotes[i] = trimTo(req.DifficultyAINotes[i], 2000) // 每档 AI 整理说明 ≤2000 字，空档回退学生说明
 	}
 	cfg.Thresholds = req.Thresholds
 	if req.Decay1 != nil {

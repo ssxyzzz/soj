@@ -63,16 +63,22 @@ type LevelConfig struct {
 	// 题目难度名（D1–10 档的展示文字，2026-10-22 起 Difficulty 徽章/筛选/建题选择器均显示名字，
 	// 不再用「D1~D10」描述）；默认与等级名相同，root 后台独立可改。
 	DifficultyNames [10]string `bson:"difficultyNames" json:"difficulty_names"`
-	// 难度说明（2026-10-26）：每档难度各一条自由文案，题库「难度说明」说明卡逐档展示，
-	// 建题/编辑页难度页签提示同源；空档 = 不显示该行。默认为定稿文案，root 后台「难度等级」页签编辑。
+	// 难度说明（2026-10-26）：每档难度各一条自由文案（≤100 字），题库「难度说明」说明卡
+	// 逐档展示，建题/编辑页难度页签提示同源；空档 = 不显示该行。默认为定稿文案，
+	// root 后台「难度等级」页签编辑。v0.95 起语义收窄为「学生说明」。
 	DifficultyNotes [10]string `bson:"difficultyNotes" json:"difficulty_notes"`
+	// AI 整理说明（v0.95 双轨拆分）：每档 ≤2000 字的详细知识点与难度锚点，仅作 AI 整理
+	// 综合判读的锚点表素材（tidy），不进公开 /levels 视图——学生端不可见。
+	// 逐档空则回退学生说明（存量库的详细锚点还在学生说明里，回退保证迁移期锚点不断档）。
+	DifficultyAINotes [10]string `bson:"difficultyAiNotes" json:"difficulty_ai_notes"`
 	// 特效开关：等级徽章的动画/光效（难度徽章恒静态，不受此控制）。
 	// 全局关 = 部署方不想要炫酷效果；逐级关可只保留低档纯色。
 	EffectsEnabled bool     `bson:"effectsEnabled" json:"effects_enabled"`
 	EffectsTiers   [10]bool `bson:"effectsTiers" json:"effects_tiers"`
 }
 
-// DefaultLevelConfig 默认等级配置（深拷贝默认数组；难度名默认与等级名相同，难度说明默认为定稿文案）。
+// DefaultLevelConfig 默认等级配置（深拷贝默认数组；难度名默认与等级名相同，难度说明默认为
+// 定稿文案；AI 整理说明默认全空——逐档回退学生说明，不另备一份默认文案）。
 func DefaultLevelConfig() *LevelConfig {
 	cfg := &LevelConfig{
 		Names:           DefaultLevelNames,
