@@ -7,12 +7,16 @@ package server
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	"soj/internal/repo"
+	"soj/internal/testdata"
 )
 
 func TestExtractJSONAndParsers(t *testing.T) {
@@ -30,6 +34,70 @@ func TestExtractJSONAndParsers(t *testing.T) {
 	names, err := parseTidyNameList("```json\n{\"tags\":[\"动态规划\",\"单调队列\"]}\n```")
 	if err != nil || len(names) != 2 || names[0] != "动态规划" {
 		t.Fatalf("parseTidyNameList = %v, %v", names, err)
+	}
+}
+
+// TestTidyKnowledgeUserPrompt 知识点五源素材组装契约（v0.93 对齐难度口径）：五源段落
+// 齐活进 prompt；缺席源不伪造空段（客观题无标程/无 AC/无题解照样判读）。
+func TestTidyKnowledgeUserPrompt(t *testing.T) {
+	p := &repo.Problem{ID: 7, Title: "[CSP-J 2019 复赛] 公交换乘", Statement: "题面正文", TimeLimitMS: 1000, MemoryLimitKB: 262144}
+	sols := []*repo.Solution{{Content: "题解正文"}}
+	acs := []repo.TidyACCode{{ID: 1, Lang: "C++", TimeMS: 12, Code: "int main(){}"}}
+	user := tidyKnowledgeUser("【基础算法】贪心", []string{"模拟"}, p, sols, acs, "// 标程实现")
+	for _, want := range []string{
+		"候选知识点", "【基础算法】贪心", "现挂知识点：模拟",
+		"【题面】", "题面正文",
+		"【数据标程】", "// 标程实现",
+		"【站内题解 1】", "题解正文",
+		"【历史通过代码 1】", "int main(){}",
+	} {
+		if !strings.Contains(user, want) {
+			t.Fatalf("五源 prompt 缺段落 %q：\n%s", want, user)
+		}
+	}
+	// 缺席源（标程/题解/AC 全空）：段落整体缺席，不伪造
+	absent := tidyKnowledgeUser("锚点", nil, p, nil, nil, "")
+	for _, gone := range []string{"【数据标程】", "【站内题解", "【历史通过代码", "【数据标程】\n\n"} {
+		if strings.Contains(absent, gone) {
+			t.Fatalf("缺席源不应出现段落 %q：\n%s", gone, absent)
+		}
+	}
+	if !strings.Contains(absent, "该题现挂知识点：无") {
+		t.Fatalf("无现挂知识点应显式标注：\n%s", absent)
+	}
+}
+
+// TestReadTidyStd 数据标程读取器（v0.93）：有标程读全文、无数据卷/无标程缺席降级
+// 不报错、超限文件截断到硬上限。
+func TestReadTidyStd(t *testing.T) {
+	root := t.TempDir()
+	store := testdata.NewLocalFS(root)
+	// 无数据卷：缺席
+	if code, err := readTidyStd(store, 1); code != "" || err != nil {
+		t.Fatalf("无数据卷应空串 nil: %q %v", code, err)
+	}
+	// 有标程：读全文
+	dir := filepath.Join(root, "2", "data")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "std.cpp"), []byte("// std"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := readTidyStd(store, 2); err != nil || code != "// std" {
+		t.Fatalf("读标程 = %q %v", code, err)
+	}
+	// 超限截断：硬上限 128KB
+	big := make([]byte, tidyStdMaxBytes+4096)
+	for i := range big {
+		big[i] = 'a'
+	}
+	if err := os.WriteFile(filepath.Join(dir, "std.cpp"), big, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, err := readTidyStd(store, 2)
+	if err != nil || len(code) != tidyStdMaxBytes {
+		t.Fatalf("超限应截到 %d 字节: %d %v", tidyStdMaxBytes, len(code), err)
 	}
 }
 

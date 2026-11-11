@@ -9,7 +9,9 @@ package server
 //                通过率全面退出难度口径——参考列/冲突标记/启发式兜底全数退役，
 //                AI 失败即标失败不出建议；网上答案走 GLM web_search 工具，非 bigmodel
 //                端点自动降级四源）
-//   knowledge  = AI 从知识树候选集选名（幻觉/歧义/树外名丢弃，不自动建节点）
+//   knowledge  = AI 五源综合判读（v0.93 对齐难度口径：题面+站内题解+数据标程+
+//                历史AC代码+网上答案，对照知识树候选锚点选名；幻觉/歧义/树外名丢弃，
+//                不自动建节点）
 //   meta       = 纯规则零 AI（ParseSourceHint + MatchMetaTags 对齐重挂 + 树外孤儿剔除）
 // v0.49 手动模式（root 拍板）：不经 AI 无建议环节——分页题目表（每页 ≤100 题）行内
 // 手改难度/知识点/来源标签，TidyManualApply 收最终值批量写库并按字段对应 kind 打
@@ -22,10 +24,13 @@ package server
 // 该上限保护的是学生侧 AI 功能配额，root 批量整理是后台任务）。
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,6 +41,7 @@ import (
 
 	"soj/internal/ai"
 	"soj/internal/repo"
+	"soj/internal/testdata"
 )
 
 // tidyKinds 支持的整理类型。
@@ -719,8 +725,10 @@ func (h *Handlers) tidySuggestDifficulty(ctx context.Context, uid int64, sys str
 	return s
 }
 
-// runTidyKnowledge 知识点整理：知识树候选名（按一级分类分组）进 prompt，AI 返回名字
-// 列表 → 唯一名映射回 ID（同名歧义/幻觉/树外丢弃不挂）；差集 = 新增/移除。
+// runTidyKnowledge 知识点整理（v0.93 五源判读，对齐难度口径）：题面+站内题解+数据标程+
+// 历史 AC 代码进 prompt，网上资料由 GLM web_search 工具随行（非 bigmodel 端点自动降级
+// 四源）；知识树候选名（按一级分类分组）作锚点表，AI 返回名字列表 → 唯一名映射回 ID
+//（同名歧义/幻觉/树外丢弃不挂）；差集 = 新增/移除。
 func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64, redo bool) error {
 	probs, err := h.repo.TidyListProblems(ctx)
 	if err != nil {
@@ -737,6 +745,7 @@ func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64
 	uniq, ambiguous := uniqueTagLookup(tree)
 	nameOf := tagNameIDToName(tree)
 	candidates := tidyKnowledgeCandidates(tree)
+	stdStore := testdata.NewLocalFS(h.cfg.DataDir) // 数据标程读数据卷（v0.93 五源之一）
 
 	job.mu.Lock()
 	job.Total = len(probs)
@@ -766,8 +775,13 @@ func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64
 				cur[id] = true
 			}
 
-			user := tidyKnowledgeUser(candidates, s.CurTagNames, p)
-			resp, err := h.tidyAIChat(ctx, uid, "tidy_knowledge", p.ID, sys, user, false)
+			// 五源素材采集（有则用无则缺席；单源查询失败按缺席降级不废整题判读）
+			sols, solErr := h.repo.TidyProblemSolutions(ctx, p.ID, tidySolutionLimit)
+			acs, acErr := h.repo.TidyACCodes(ctx, p.ID)
+			std, stdErr := readTidyStd(stdStore, p.ID)
+
+			user := tidyKnowledgeUser(candidates, s.CurTagNames, p, sols, acs, std)
+			resp, err := h.tidyAIChat(ctx, uid, "tidy_knowledge", p.ID, sys, user, true)
 			if err != nil {
 				if ctx.Err() == nil {
 					s.Note = "AI 调用失败：" + truncateTail(err.Error(), 120)
@@ -782,6 +796,14 @@ func (h *Handlers) runTidyKnowledge(ctx context.Context, job *tidyJob, uid int64
 					job.addSuggestion(s)
 				}
 				return
+			}
+			// 素材采集告警进 note（源缺席不拦判读，root 备注列可见）
+			if solErr != nil {
+				s.Note = "题解源读取失败，已按缺席判读：" + truncateTail(solErr.Error(), 80)
+			} else if acErr != nil {
+				s.Note = "AC 代码源读取失败，已按缺席判读：" + truncateTail(acErr.Error(), 80)
+			} else if stdErr != nil {
+				s.Note = "数据标程读取失败，已按缺席判读：" + truncateTail(stdErr.Error(), 80)
 			}
 			suggested := map[int64]bool{}
 			for _, name := range names {
@@ -992,13 +1014,17 @@ func parseTidyNameList(content string) ([]string, error) {
 
 // ---- prompt 组装 ----
 
-// 五源素材预算（v0.92）：题面 6000 + 题解 ≤2 篇×3000 + AC 代码 ≤6 份×6000，
-// 单题 prompt 有界（≈48K 字符），后台批量任务可承受。
+// 五源素材预算（v0.92 难度，v0.93 知识点同口径）：题面 6000 + 题解 ≤2 篇×3000 +
+// AC 代码 ≤6 份×6000 + 数据标程 6000，单题 prompt 有界（≈54K 字符），后台批量任务可承受。
 const (
 	tidyStatementMaxRunes = 6000
 	tidySolutionLimit     = int64(2)
 	tidySolutionMaxRunes  = 3000
 	tidyACCodeMaxRunes    = 6000
+	tidyStdCodeMaxRunes   = 6000
+	// tidyStdMaxBytes 标程文件读取硬上限（128KB）：现库 std.cpp 样本最大 ≈5KB，
+	// 上限只防异常大文件拖爆内存，截断到 6000 rune 由 rune 预算兜底。
+	tidyStdMaxBytes = 128 << 10
 )
 
 // tidyDifficultySystem 难度评估 system（锚点表 = root 后台当前 DifficultyNotes，与
@@ -1076,16 +1102,28 @@ func collectSubtreeNames(n repo.TagNode) []string {
 }
 
 func tidyKnowledgeSystem() string {
-	return `你是信息学竞赛题目的知识点标注专家。根据题目内容，从给定的候选知识点列表中选出该题考查的核心知识点。
+	return `你是信息学竞赛题目的知识点标注专家。综合题面、数据标程、站内题解、历史通过代码判断题目考查的核心算法与技术，对照候选知识点列表（锚点表）选出该题考查的核心知识点；如具备联网搜索能力，可搜索该题的公开资料（原题出处、网上题解的知识点标注）作参考。
 规则：
 1. 只能使用候选列表中出现过的名字，逐字一致；列表外、自造、同义改写的名字一律不要。
 2. 宁缺毋滥：没有把握的知识点不要选，通常 1–4 个。
-3. 只输出 JSON，格式为 {"tags": ["知识点1", "知识点2"]}，不要输出任何其他内容。`
+3. 数据标程是最可靠的判据——它就是该题的标准解法；若提供多份通过代码，最短实现最能代表算法本质。
+4. 只输出 JSON，格式为 {"tags": ["知识点1", "知识点2"]}，不要输出任何其他内容。`
 }
 
-func tidyKnowledgeUser(candidates string, curNames []string, p *repo.Problem) string {
+// tidyKnowledgeUser 知识点五源素材组装（v0.93 对齐难度口径：候选锚点表 + 现挂知识点 +
+// 题面 + 数据标程 + 站内题解 + 历史 AC 代码；有则用无则缺席，不伪造空源段落）。
+func tidyKnowledgeUser(candidates string, curNames []string, p *repo.Problem, sols []*repo.Solution, acs []repo.TidyACCode, stdCode string) string {
 	var b strings.Builder
-	b.WriteString("候选知识点（按分类分组）：\n")
+	fmt.Fprintf(&b, "题号：%d\n标题：%s\n", p.ID, p.Title)
+	switch p.Type {
+	case "objective":
+		b.WriteString("类型：客观题（选择/判断/填空）\n")
+	case "function":
+		b.WriteString("类型：函数实现题\n")
+	case "interactive":
+		b.WriteString("类型：交互题\n")
+	}
+	b.WriteString("候选知识点（按分类分组，判读锚点表）：\n")
 	b.WriteString(candidates)
 	if len(curNames) > 0 {
 		fmt.Fprintf(&b, "\n该题现挂知识点：%s（若其中某些与题目无关，结果中不要包含它们——将按差集作为移除建议）\n",
@@ -1093,9 +1131,38 @@ func tidyKnowledgeUser(candidates string, curNames []string, p *repo.Problem) st
 	} else {
 		b.WriteString("\n该题现挂知识点：无\n")
 	}
-	fmt.Fprintf(&b, "\n标题：%s\n题面：\n%s\n\n请输出知识点 JSON。",
-		p.Title, truncateTail(p.Statement, tidyStatementMaxRunes))
+	fmt.Fprintf(&b, "\n【题面】\n%s\n", truncateTail(p.Statement, tidyStatementMaxRunes))
+	if stdCode != "" {
+		fmt.Fprintf(&b, "\n【数据标程】\n%s\n", truncateTail(stdCode, tidyStdCodeMaxRunes))
+	}
+	for i, s := range sols {
+		fmt.Fprintf(&b, "\n【站内题解 %d】\n%s\n", i+1, truncateTail(s.Content, tidySolutionMaxRunes))
+	}
+	for i, a := range acs {
+		fmt.Fprintf(&b, "\n【历史通过代码 %d】（%s，耗时 %dms）\n%s\n",
+			i+1, a.Lang, a.TimeMS, truncateTail(a.Code, tidyACCodeMaxRunes))
+	}
+	b.WriteString("\n请综合上述素材（可联网搜索补充公开资料），从候选知识点中选出该题考查的核心知识点，输出知识点 JSON。")
 	return b.String()
+}
+
+// readTidyStd 数据标程素材（v0.93 五源之一）：读数据卷 data/std.cpp（数据包附属标程，
+// 现库命名统一）。无数据卷/无标程返回空串按缺席降级不报错；128KB 读取硬上限 +
+// 6000 rune 截断双闸有界。
+func readTidyStd(store *testdata.LocalFS, pid int64) (string, error) {
+	f, err := store.Open(pid, "data/std.cpp")
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	defer f.Close()
+	var buf bytes.Buffer
+	if _, err = io.CopyN(&buf, f, tidyStdMaxBytes); err != nil && err != io.EOF {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // filterRange 题号范围过滤（from/to 0 = 不限）。范围外的题不计入 excluded——

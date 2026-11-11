@@ -26,7 +26,7 @@ import type { TidyApplyItem, TidyHistoryBatch, TidyHistoryDetail, TidyKind, Tidy
 const MODE_META = {
   ai: {
     label: 'AI整理',
-    desc: '难度 = 题面+知识点+题解+AC代码+网上答案五源综合判读；知识点 = 知识树候选集选名；来源 = 标题规则重挂。只产建议不写库，预览勾选确认后才应用。',
+    desc: '难度 = 题面+知识点+题解+AC代码+网上答案五源综合判读；知识点 = 题面+题解+数据标程+AC代码+网上答案对照知识树锚点选名；来源 = 标题规则重挂。只产建议不写库，预览勾选确认后才应用。',
   },
   manual: {
     label: '手动整理',
@@ -50,7 +50,7 @@ const KIND_META: Record<TidyKind, { label: string; desc: string }> = {
   },
   knowledge: {
     label: '知识点',
-    desc: 'AI 从知识树候选集中选题（逐字一致），幻觉/歧义/树外名一律丢弃不自动建节点；现有标签认为无关的会出移除建议。新增/移除两列逐个知识点勾选采纳，可只采纳其中一部分。',
+    desc: 'AI 综合题面、数据标程、站内题解、历史 AC 代码与网上公开资料（联网搜索）对照知识树锚点表给建议，逐字一致；幻觉/歧义/树外名一律丢弃不自动建节点，现有标签认为无关的会出移除建议。新增/移除两列逐个知识点勾选采纳，可只采纳其中一部分。',
   },
   meta: {
     label: '来源标签',
