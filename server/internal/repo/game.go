@@ -617,15 +617,13 @@ type GameRankRow struct {
 	Best      int    `json:"best"`
 }
 
-// GameBoard 连击榜（v0.45 双排序：默认按历史 comboBest 倒序——退坑玩家的历史成绩
-// 仍在榜；by="cur" 切当前 comboCur）/ 坚持榜（streakDays 倒序）；users 集合字段直查。
+// GameBoard 连击榜按历史 comboBest 倒序——退坑玩家的历史成绩仍在榜 /
+// 坚持榜 streakDays 倒序；users 集合字段直查。
 // 行 Value = 排序维度值，Best = 另一维度（连击榜两维互为对照）。
-func (r *Repo) GameBoard(ctx context.Context, kind, by string, limit int) ([]GameRankRow, error) {
+func (r *Repo) GameBoard(ctx context.Context, kind string, limit int) ([]GameRankRow, error) {
 	sortField, curF, bestF := "comboBest", "comboCur", "comboBest"
 	if kind == "streak" {
 		sortField, curF, bestF = "streakDays", "streakDays", "streakBest"
-	} else if by == "cur" {
-		sortField = "comboCur"
 	}
 	filter := bson.M{sortField: bson.M{"$gt": 0}}
 	total, err := r.users.CountDocuments(ctx, filter)
@@ -657,12 +655,9 @@ func (r *Repo) GameBoard(ctx context.Context, kind, by string, limit int) ([]Gam
 		}
 		i++
 		gr := GameRankRow{Rank: i, UID: row.ID, Username: row.Uname, Nickname: row.Nickname}
-		switch {
-		case kind == "streak":
+		if kind == "streak" {
 			gr.Value, gr.Best = row.Streak, row.SBest
-		case by == "cur":
-			gr.Value, gr.Best = row.Val, row.Best
-		default:
+		} else {
 			gr.Value, gr.Best = row.Best, row.Val
 		}
 		if gr.Nickname == "" {
@@ -674,28 +669,23 @@ func (r *Repo) GameBoard(ctx context.Context, kind, by string, limit int) ([]Gam
 	return rows, cur.Err()
 }
 
-// GameBoardRank 榜外观察者名次（比我高的人数 +1）；0 = 不在榜。by 口径同 GameBoard。
-func (r *Repo) GameBoardRank(ctx context.Context, kind, by string, uid int64) (int, int) {
+// GameBoardRank 榜外观察者名次（比我高的人数 +1）；0 = 不在榜。口径同 GameBoard。
+func (r *Repo) GameBoardRank(ctx context.Context, kind string, uid int64) (int, int) {
 	field := "comboBest"
 	if kind == "streak" {
 		field = "streakDays"
-	} else if by == "cur" {
-		field = "comboCur"
 	}
 	var u struct {
-		Val int `bson:"comboCur"`
 		St  int `bson:"streakDays"`
 		Bst int `bson:"comboBest"`
 	}
 	if err := r.users.FindOne(ctx, bson.M{"_id": uid},
-		options.FindOne().SetProjection(bson.M{"comboCur": 1, "streakDays": 1, "comboBest": 1})).Decode(&u); err != nil {
+		options.FindOne().SetProjection(bson.M{"streakDays": 1, "comboBest": 1})).Decode(&u); err != nil {
 		return 0, 0
 	}
 	val := u.Bst
 	if kind == "streak" {
 		val = u.St
-	} else if by == "cur" {
-		val = u.Val
 	}
 	if val <= 0 {
 		return 0, val

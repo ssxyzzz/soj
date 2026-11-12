@@ -72,8 +72,8 @@ type RepoAPI interface {
 	AchievementsForSubmit(ctx context.Context, uid, sid int64) ([]string, error)
 	EnsureDailyProblem(ctx context.Context) (*repo.DailyProblem, error)
 	EvaluateAchievements(ctx context.Context, uid, sid, pid int64, score int, judgedAt time.Time, perfectOneShot, isChallenge bool) ([]string, error)
-	GameBoard(ctx context.Context, kind, by string, limit int) ([]repo.GameRankRow, error)
-	GameBoardRank(ctx context.Context, kind, by string, uid int64) (int, int)
+	GameBoard(ctx context.Context, kind string, limit int) ([]repo.GameRankRow, error)
+	GameBoardRank(ctx context.Context, kind string, uid int64) (int, int)
 	GetDailyProblemMeta(ctx context.Context) (*repo.DailyProblem, *repo.Problem, error)
 	GetGameStats(ctx context.Context, uid int64) (*repo.GameStats, error)
 	IsTodayDaily(ctx context.Context, pid int64) bool

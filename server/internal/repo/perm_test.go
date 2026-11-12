@@ -14,6 +14,7 @@ func TestValidPermSet(t *testing.T) {
 		{"空集合法", []string{}, true},
 		{"nil 合法", nil, true},
 		{"目录内合法", []string{PermProblemCreate, PermClassCreate}, true},
+		{"班级编辑双位合法", []string{PermClassEditAll, PermClassEditOwn}, true},
 		{"拆分新位合法", []string{PermProblemImport}, true},
 		{"通配符拒绝", []string{PermAll}, false},
 		{"混合通配符拒绝", []string{PermProblemCreate, PermAll}, false},
@@ -60,6 +61,30 @@ func TestBuiltinAdminHasCreateAndImport(t *testing.T) {
 		}
 		if !has(PermProblemCreate) || !has(PermProblemImport) {
 			t.Fatalf("admin 内置角色应同时含建题与批量导入位: %v", r.Perms)
+		}
+	}
+}
+
+func TestBuiltinClassEditPerms(t *testing.T) {
+	// v0.96 班级编辑权限位化：default/admin 内置含 class.edit.own（建班人/班级管理员
+	// 现状可编辑，存量库由 classEditPermV1 迁移补发）；edit.all 刻意不给任何内置角色
+	for _, r := range builtinRoles {
+		has := func(p string) bool {
+			for _, x := range r.Perms {
+				if x == p {
+					return true
+				}
+			}
+			return false
+		}
+		switch r.ID {
+		case RoleDefault, RoleAdmin:
+			if !has(PermClassEditOwn) {
+				t.Fatalf("%s 内置角色应含 class.edit.own: %v", r.ID, r.Perms)
+			}
+		}
+		if has(PermClassEditAll) && r.ID != RoleRoot {
+			t.Fatalf("%s 内置角色不应含 class.edit.all（按需授予自定义角色）: %v", r.ID, r.Perms)
 		}
 	}
 }

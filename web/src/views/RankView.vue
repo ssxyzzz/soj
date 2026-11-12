@@ -68,7 +68,7 @@ const pageSub = computed(() =>
   ({
     level: '按等级与经验排序 · 每页 100 名 · 等级实时聚合，调整难度全员等级自动跟随',
     solve: '按通过题数排序 · 每页 100 名',
-    combo: `跨日累计连续 AC，WA/断更清零 · 同题重交不涨 · 按${comboBy.value === 'best' ? '历史' : '当前'}连击排序`,
+    combo: '跨日累计连续 AC，WA/断更清零 · 同题重交不涨 · 按历史连击排序',
     streak: '每天至少 AC 一题，断更清零 · 当前天数',
   })[board.value],
 )
@@ -78,26 +78,18 @@ const gameRows = ref<{ rank: number; user_id: number; username: string; nickname
 const gameMeRank = ref(0)
 const gameMeValue = ref(0)
 const gameLoading = ref(false)
-// 连击榜双排序（v0.45）：默认按历史连击（退坑玩家的历史成绩仍在榜），可切当前连击
-const comboBy = ref<'best' | 'cur'>('best')
 
 async function loadGameBoard() {
   gameLoading.value = true
   try {
     const kind: 'combo' | 'streak' = board.value === 'streak' ? 'streak' : 'combo'
-    const r = await import('@/api').then((m) => m.gameApi.gameRank(kind, comboBy.value))
+    const r = await import('@/api').then((m) => m.gameApi.gameRank(kind))
     gameRows.value = r.list
     gameMeRank.value = r.my_rank ?? 0
     gameMeValue.value = r.my_value ?? 0
   } finally {
     gameLoading.value = false
   }
-}
-
-function switchComboBy(by: 'best' | 'cur') {
-  if (comboBy.value === by) return
-  comboBy.value = by
-  void loadGameBoard()
 }
 
 function switchBoard(b: 'level' | 'solve' | 'combo' | 'streak') {
@@ -163,10 +155,6 @@ onMounted(() => {
         {{ { level: '🏆 等级榜', solve: '⚔️ 刷题榜', combo: '🔥 连击榜', streak: '📅 坚持榜' }[b] }}
       </button>
     </div>
-    <div v-if="board === 'combo'" class="board-tabs" style="margin-top: calc(-1 * var(--soj-sp-12))">
-      <button class="board-tab" :class="{ on: comboBy === 'best' }" @click="switchComboBy('best')">🏆 历史连击</button>
-      <button class="board-tab" :class="{ on: comboBy === 'cur' }" @click="switchComboBy('cur')">🔥 当前连击</button>
-    </div>
 
     <!-- 领奖台（前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3）；整卡可点进公开主页 -->
     <div v-if="podium.length" class="podium" v-loading="loading || gameLoading">
@@ -184,7 +172,7 @@ onMounted(() => {
         </div>
         <div class="pname">{{ p.nickname || p.username }}</div>
         <TierBadge v-if="p.level" :tier="p.level" kind="level" size="md" />
-        <div v-if="board === 'combo'" class="psolved">{{ comboBy === 'best' ? '历史连击' : '当前连击' }} <b>{{ p.value ?? p.solved }}</b></div>
+        <div v-if="board === 'combo'" class="psolved">历史连击 <b>{{ p.value ?? p.solved }}</b></div>
         <div v-else-if="board === 'streak'" class="psolved">坚持 <b>{{ p.value ?? p.solved }}</b> 天</div>
         <div v-else class="psolved">解题 <b>{{ p.solved }}</b></div>
       </div>
@@ -192,7 +180,7 @@ onMounted(() => {
 
     <el-card class="tbl-card">
       <div v-if="(board === 'combo' || board === 'streak') && gameMeRank" class="my-game-rank">
-        我的{{ boardTitle }}名次：<b>#{{ gameMeRank }}</b>（{{ board === 'combo' && comboBy === 'best' ? '历史' : '当前' }} {{ gameMeValue }}）
+        我的{{ boardTitle }}名次：<b>#{{ gameMeRank }}</b>（{{ board === 'combo' ? '历史' : '当前' }} {{ gameMeValue }}）
       </div>
       <el-table
         v-loading="gameLoading"
@@ -214,15 +202,12 @@ onMounted(() => {
           </template>
         </el-table-column>
         <template v-if="board === 'combo' || board === 'streak'">
-          <el-table-column
-            :label="board === 'streak' ? '连续天数' : comboBy === 'best' ? '历史连击' : '当前连击'"
-            width="130"
-          >
+          <el-table-column :label="board === 'streak' ? '连续天数' : '历史连击'" width="130">
             <template #default="{ row }">
               <span class="mono game-val">{{ row.value }}</span>
             </template>
           </el-table-column>
-          <el-table-column :label="board === 'streak' ? '历史最佳' : comboBy === 'best' ? '当前连击' : '历史最佳'" width="110">
+          <el-table-column :label="board === 'streak' ? '历史最佳' : '当前连击'" width="110">
             <template #default="{ row }">
               <span class="mono dim">{{ row.best }}</span>
             </template>

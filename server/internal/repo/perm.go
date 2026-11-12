@@ -17,6 +17,8 @@ const (
 	PermContestScoreView     = "contest.score.view"     // 查看比赛/考试成绩表（root/admin 默认开启，default 无）
 	PermContestScoreDetail   = "contest.score.detail"   // 比赛成绩表详情：点看他人某题提交明细与代码（root/admin 默认开启，default 无）
 	PermClassCreate          = "class.create"           // 创建班级
+	PermClassEditAll         = "class.edit.all"         // 修改全部班级（不限于自己建/管理的班）
+	PermClassEditOwn         = "class.edit.own"         // 修改自己的班级（自己建班或任班级管理员）
 	PermClassViewAll         = "class.view.all"         // 查看全部班级（含私密班详情/邀请码）
 	PermClassLeave           = "class.leave"            // 成员自行退出班级（default 默认关闭，v0.7.2）
 	PermAssignmentScoreView  = "assignment.score.view"  // 查看班级作业成绩表（本班作业全班完成情况，default 默认开启）
@@ -86,6 +88,8 @@ var PermCatalog = []PermInfo{
 	{PermListReorder, "调整题单排序", "在题单页拖动调整题单的展示顺序（全局次序）；默认仅 root", "list"},
 	{PermListDelete, "删除任意题单", "可删除任意人的题单；创建者删除自己的题单不受此位限制", "list"},
 	{PermClassCreate, "创建班级", "建班并成为建班人", "class"},
+	{PermClassEditAll, "修改全部班级", "可编辑任意班级的资料与内容（班级名称/公告、作业、考试、课堂 PK、成员管理与邀请码），不限于自己建/管理的班；转让/解散/可见性切换仍限建班人与 root", "class"},
+	{PermClassEditOwn, "修改自己的班级", "可编辑自己建班或任班级管理员的班级（资料、作业、考试等）；关闭后建班人也无法编辑（root 不受限）。default/admin 默认开启", "class"},
 	{PermClassViewAll, "查看全部班级", "可见私密班级的详情、成员与邀请码", "class"},
 	{PermClassLeave, "退出班级", "成员可自行退出所在班级；关闭后只能由老师移出（default 角色默认关闭）", "class"},
 	{PermAssignmentScoreView, "查看班级作业成绩表", "班级成员可查看本班作业的完整成绩表（全班各题得分与排名）；关闭后只能看到自己的完成进度。点看他人提交代码仍受「查看用户提交明细」或该题满分约束，不随此位放开", "class"},

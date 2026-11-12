@@ -22,18 +22,20 @@ type Role struct {
 // v0.7.2 起 admin 增退出班级——default 刻意不给，v0.8.3 起 admin 增下载数据，
 // v0.11 起 default/admin 增查看班级作业成绩表、admin 增比赛/考试成绩表查看与详情——default 刻意不给，
 // v0.18.3 起 admin 增题单管理，v0.48 起 admin 增发讨论贴——default 刻意不给，
-// v0.74 起 admin 增批量导入题目——自 problem.create 拆分的独立位，保持 admin 双能力不变）。
+// v0.74 起 admin 增批量导入题目——自 problem.create 拆分的独立位，保持 admin 双能力不变，
+// v0.96 起 default/admin 增修改自己的班级——class.edit.own 权限位化保持建班人/班级管理员
+// 现状可编辑；修改全部班级（class.edit.all）刻意不给——按需授予教务类自定义角色）。
 // 存量库由 solutionManageV1 / submissionViewUserV1 / nicknameEditV1 / classLeaveV1 /
 // dataDownloadPermV1 / assignmentScoreViewV1 / contestScorePermV1 / listManageV1 /
-// discussCreatePermV1 / problemImportPermV1 迁移补发新位。
+// discussCreatePermV1 / problemImportPermV1 / classEditPermV1 迁移补发新位。
 var builtinRoles = []Role{
-	{ID: RoleDefault, Name: "普通用户", Perms: []string{PermUserNicknameEdit, PermAssignmentScoreView}, Builtin: true},
+	{ID: RoleDefault, Name: "普通用户", Perms: []string{PermUserNicknameEdit, PermClassEditOwn, PermAssignmentScoreView}, Builtin: true},
 	{ID: RoleAdmin, Name: "管理员", Perms: []string{
 		PermProblemViewAll, PermProblemCreate, PermProblemImport, PermProblemEditOwn,
 		PermProblemDataDownload,
 		PermContestBankCreate, PermContestScoreView, PermContestScoreDetail,
 		PermListManage,
-		PermClassCreate, PermClassViewAll, PermClassLeave, PermAssignmentScoreView,
+		PermClassCreate, PermClassEditOwn, PermClassViewAll, PermClassLeave, PermAssignmentScoreView,
 		PermSubmissionViewAll, PermSubmissionViewUser, PermSubmissionRateExempt,
 		PermSolutionManage, PermUserNicknameEdit,
 		PermDiscussCreate, PermDiscussManage, PermDiscussRateExempt, // v0.24：全站公告广播刻意不给（默认仅 root）；代码门槛豁免随 v0.53 门槛退役下线

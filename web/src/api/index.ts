@@ -209,10 +209,10 @@ export const gameApi = {
     get<{ list: { id: number; title: string; difficulty: number; at: string }[] }>(`/users/${uid}/favorites`),
   heralds: () =>
     get<{ list: { uid: number; level: number; nickname: string; at: string }[] }>('/heralds'),
-  gameRank: (type: 'combo' | 'streak', by: 'best' | 'cur' = 'best') =>
-    get<{ list: { rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]; my_rank?: number; my_value?: number; by?: string }>(
+  gameRank: (type: 'combo' | 'streak') =>
+    get<{ list: { rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]; my_rank?: number; my_value?: number }>(
       '/game-rank',
-      { type, by },
+      { type },
     ),
 }
 

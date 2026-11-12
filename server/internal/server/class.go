@@ -13,13 +13,22 @@ import (
 	"soj/internal/repo"
 )
 
-// classManageable 判断用户能否管理某班级（建班人、班级管理员或 root）。
+// classManageable 判断用户能否管理某班级（编辑班级资料、作业、考试、课堂 PK、成员
+// 管理等内容的统一收口）。v0.96 权限位化：class.edit.all 可管理任意班级；class.edit.own
+// 限自己建班或任班级管理员的班（root 恒通过）。转让/解散/可见性切换是属主操作，
+// 不在此列（建班人 ∨ root，见各 handler）。
 func (h *Handlers) classManageable(c *gin.Context, cl *repo.Class) bool {
-	uid, _, role, logged := currentUser(c)
+	uid, _, _, logged := currentUser(c)
 	if !logged {
 		return false
 	}
-	if role == repo.RoleRoot || uid == cl.OwnerID {
+	if hasPerm(c, repo.PermClassEditAll) {
+		return true
+	}
+	if !hasPerm(c, repo.PermClassEditOwn) {
+		return false
+	}
+	if uid == cl.OwnerID {
 		return true
 	}
 	memberRole, err := h.repo.ClassMemberRole(c.Request.Context(), cl.ID, uid)

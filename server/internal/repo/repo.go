@@ -418,7 +418,7 @@ var freshSkipFlags = []string{
 	"roundFlagsV1", "classLeaveV1", "assignmentScoreViewV1", "contestScorePermV1",
 	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
 	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2", "listManageV1",
-	"gradeNoV1", "discussCreatePermV1", "problemImportPermV1",
+	"gradeNoV1", "discussCreatePermV1", "problemImportPermV1", "classEditPermV1",
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
@@ -684,6 +684,20 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		slog.Info("admin 角色已补发批量导入题目权限位（problem.import）", "component", "boot")
+	}
+	if !flagDone("classEditPermV1") {
+		// v0.96：班级编辑权限位化（class.edit.own / class.edit.all）。此前建班人/班级管理员
+		// 无权限位恒可编辑，位化后 default/admin 补发 edit.own 保持现状（班级管理员可由
+		// 任意角色成员担任，两位都补）；edit.all 刻意不给——按需授予教务类自定义角色
+		if _, err := r.roles.UpdateMany(ctx,
+			bson.M{"_id": bson.M{"$in": []string{RoleDefault, RoleAdmin}}},
+			bson.M{"$addToSet": bson.M{"perms": PermClassEditOwn}}); err != nil {
+			return err
+		}
+		if err := setFlag("classEditPermV1"); err != nil {
+			return err
+		}
+		slog.Info("default/admin 角色已补发修改自己的班级权限位（class.edit.own）", "component", "boot")
 	}
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次
