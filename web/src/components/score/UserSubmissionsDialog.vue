@@ -54,7 +54,9 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
                 </template>
               </el-table-column>
               <el-table-column label="耗时" width="120">
-                <template #default="{ row: c }">{{ c.time_ms ? fmtSec(c.time_ms) : '' }}</template>
+                <!-- 有判定结果即显示（0ms 显示 "0.0 s"，同其余逐测试点表格口径）；
+                     微秒级测试点在后端纳秒整除毫秒下为 0，truthy 守卫会把 0 藏成空列（v0.96.2 修） -->
+                <template #default="{ row: c }">{{ c.status ? fmtSec(c.time_ms) : '' }}</template>
               </el-table-column>
               <el-table-column label="内存" width="120">
                 <template #default="{ row: c }">{{ c.memory_kb ? fmtMem(c.memory_kb) : '' }}</template>

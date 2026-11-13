@@ -5,7 +5,7 @@
 // 状态位只报「已记录」不出分。
 import RailCard from '@/components/RailCard.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtRel, fmtShort } from '@/utils/format'
+import { fmtRel, fmtShort, isQueueStatus } from '@/utils/format'
 import type { Submission } from '@/types'
 
 defineProps<{
@@ -25,7 +25,8 @@ const emit = defineEmits<{ (e: 'open'): void }>()
         <span class="grow mono">#{{ s.id }}</span>
         <!-- 相对时间列（2026-10-25 用户反馈）：N 秒/分钟/小时前；含中文不挂 mono（修复⑫） -->
         <span class="t">{{ fmtRel(s.created_at) }}</span>
-        <span class="t mono">{{ !masked && s.time_ms ? `${s.time_ms}ms` : fmtShort(s.created_at).split(' ')[1] }}</span>
+        <!-- 未揭榜/排队中回退提交时间；已判定即显示（0 总耗时也出 "0ms"，v0.96.2 同列表口径） -->
+        <span class="t mono">{{ !masked && !isQueueStatus(s.status) ? `${s.time_ms ?? 0}ms` : fmtShort(s.created_at).split(' ')[1] }}</span>
       </div>
     </template>
     <p v-else class="hint">还没有提交过本题。</p>

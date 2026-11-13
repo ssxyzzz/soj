@@ -10,7 +10,7 @@ import { usePolling } from '@/composables/usePolling'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtMem, fmtRel, fmtSec, statusDesc, statusMap } from '@/utils/format'
+import { fmtMem, fmtRel, fmtSec, isQueueStatus, statusDesc, statusMap } from '@/utils/format'
 import type { LookupUser, Submission } from '@/types'
 
 const route = useRoute()
@@ -276,7 +276,8 @@ onMounted(() => {
         <el-table-column prop="language" label="语言" width="90" />
         <el-table-column label="耗时" width="92">
           <template #default="{ row }">
-            <span class="mono">{{ row.time_ms ? fmtSec(row.time_ms) : '—' }}</span>
+            <!-- 未出结果 '—'；已判定即显示（全测试点 <1ms 时总耗时为 0，truthy 守卫会误显示 '—'，v0.96.2 修） -->
+            <span class="mono">{{ isQueueStatus(row.status) ? '—' : fmtSec(row.time_ms) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="内存" width="96">
