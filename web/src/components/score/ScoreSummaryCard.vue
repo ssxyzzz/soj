@@ -107,10 +107,8 @@ const totalRows = computed(() => props.board?.rows.length ?? 0)
   gap: var(--soj-sp-4);
 }
 
-.list {
-  max-height: 320px;
-  overflow-y: auto;
-}
+/* 不设高度帽（v0.96.1 用户拍板「滚动条删掉全部显示」）：挂载行本就有 TOP_N 截断
+   （前 10 + 榜外的我），卡片自然长高全部可见；完整榜仍走「查看全部」弹窗 */
 
 .empty {
   padding: var(--soj-sp-8) 0;
