@@ -57,6 +57,7 @@ import { useListener } from '@/composables/useWindowListener'
 import type {
   BBox,
   ColorSlot,
+  Corner,
   EdgeShape,
   NodeShape,
   Palette,
@@ -185,6 +186,7 @@ interface DragState {
   erased?: boolean
   resizeId?: number
   resizeFrom?: BBox
+  resizeCorner?: Corner // 拖拽角：nw/ne/sw/se，对角为锚点
   // 笔迹缩放专用：拖拽开始时的原始点集快照（防逐事件复合放大）
   origPoints?: [number, number][]
   // 手势前基线（v0.64 patch 历史）：move = 受影响图形深拷贝、resize = 单图形
@@ -223,7 +225,7 @@ function flush(): void {
     const to = d?.mode === 'resize' ? d.resizeTo : undefined
     const s = d?.resizeId ? model.get(d.resizeId) : undefined
     if (d?.mode === 'resize' && s && to && d.resizeFrom) {
-      resizeShape(s, d.resizeFrom, to, d.origPoints)
+      resizeShape(s, d.resizeFrom, to, d.origPoints, d.resizeCorner)
       renderer.renderIds(model, [s.id])
       refreshOverlay()
     }
@@ -278,14 +280,31 @@ function singleTable(): TableShape | null {
   return s && s.type === 'table' ? s : null
 }
 
-// 缩放手柄锚点：单选图形（连线除外）的包围盒右下角
-function resizeHandle(): { id: number; x: number; y: number } | null {
-  if (selected.value.size !== 1) return null
+// 缩放手柄锚点：单选图形（连线除外）的包围盒四角，拖拽角跟手、对角锚定
+function resizeHandles(): { id: number; x: number; y: number; corner: Corner }[] {
+  if (selected.value.size !== 1) return []
   const s = model.get([...selected.value][0])
-  if (!s || s.type === 'edge') return null
+  if (!s || s.type === 'edge') return []
   const bb = bboxOf(s, model.nodeById())
-  if (!bb) return null
-  return { id: s.id, x: bb.x + bb.w, y: bb.y + bb.h }
+  if (!bb) return []
+  const x2 = bb.x + bb.w
+  const y2 = bb.y + bb.h
+  return [
+    { id: s.id, x: bb.x, y: bb.y, corner: 'nw' },
+    { id: s.id, x: x2, y: bb.y, corner: 'ne' },
+    { id: s.id, x: bb.x, y: y2, corner: 'sw' },
+    { id: s.id, x: x2, y: y2, corner: 'se' },
+  ]
+}
+
+// 拖拽角缩放的目标框：对角（anchor）固定不动，拖拽角跟手到光标处；
+// 最小 8（与原 se 行为一致），光标越过锚点时钳在最小尺寸而不是翻转
+function cornerResizeTarget(from: BBox, corner: Corner, w: { x: number; y: number }): BBox {
+  const ax = corner === 'nw' || corner === 'sw' ? from.x + from.w : from.x
+  const ay = corner === 'nw' || corner === 'ne' ? from.y + from.h : from.y
+  const w8 = Math.max(8, Math.abs(w.x - ax))
+  const h8 = Math.max(8, Math.abs(w.y - ay))
+  return { x: w.x >= ax ? ax : ax - w8, y: w.y >= ay ? ay : ay - h8, w: w8, h: h8 }
 }
 
 // —— 表格浮动条（单选表格时浮现在左上角）：±行/±列，讲 DP 表演算到哪加到哪 ——
@@ -343,7 +362,7 @@ function normalizeDraft(d: Shape): Shape {
 }
 
 function refreshOverlay(): void {
-  renderer?.refreshOverlay(model, selected.value, curMarquee(), cam.scale, resizeHandle())
+  renderer?.refreshOverlay(model, selected.value, curMarquee(), cam.scale, resizeHandles())
 }
 
 // ---------- 指针交互状态机 ----------
@@ -392,13 +411,23 @@ function onPointerDown(e: PointerEvent): void {
   const style = curStyle()
   switch (tool.value) {
     case 'select': {
-      // 单选图形右下角缩放手柄优先于图形命中
-      const h = resizeHandle()
-      if (h && Math.abs(w.x - h.x) <= 10 / cam.scale && Math.abs(w.y - h.y) <= 10 / cam.scale) {
+      // 单选图形四角缩放手柄优先于图形命中（取最近角，小图形角相邻时唯一命中）
+      const hitR = 10 / cam.scale
+      let h: { id: number; x: number; y: number; corner: Corner } | null = null
+      let best = Infinity
+      for (const c of resizeHandles()) {
+        const dist = Math.hypot(w.x - c.x, w.y - c.y)
+        if (dist <= hitR && dist < best) {
+          h = c
+          best = dist
+        }
+      }
+      if (h) {
         const hs = model.get(h.id)
         const bb = hs ? bboxOf(hs, model.nodeById()) : null
         st.mode = 'resize'
         st.resizeId = h.id
+        st.resizeCorner = h.corner
         if (bb) st.resizeFrom = bb
         if (hs && hs.type === 'stroke') st.origPoints = hs.points.map((p) => [p[0], p[1]] as [number, number])
         break
@@ -558,7 +587,7 @@ function onPointerMove(e: PointerEvent): void {
       const s = model.get(d.resizeId ?? 0)
       const from = d.resizeFrom
       if (!s || !from) return
-      d.resizeTo = { x: from.x, y: from.y, w: Math.max(8, w.x - from.x), h: Math.max(8, w.y - from.y) }
+      d.resizeTo = cornerResizeTarget(from, d.resizeCorner ?? 'se', w)
       if (!d.undoPushed) {
         d.undoPushed = true
         d.origShape = JSON.parse(JSON.stringify(s)) as Shape // 手势基线（单图形）
@@ -647,7 +676,7 @@ function onPointerUp(e: PointerEvent): void {
       const to = d.resizeTo
       const cur = d.resizeId ? model.get(d.resizeId) : undefined
       if (d.undoPushed && cur && to && d.resizeFrom) {
-        resizeShape(cur, d.resizeFrom, to, d.origPoints)
+        resizeShape(cur, d.resizeFrom, to, d.origPoints, d.resizeCorner)
         renderer?.renderIds(model, [cur.id])
         refreshOverlay()
       }
@@ -656,7 +685,7 @@ function onPointerUp(e: PointerEvent): void {
         const orig = d.origShape
         model.mutateFrom(model.docWithOverrides([orig]), (dd) => {
           const ds = dd.shapes.find((x) => x.id === orig.id)
-          if (ds && to) resizeShape(ds, d.resizeFrom!, to, d.origPoints)
+          if (ds && to) resizeShape(ds, d.resizeFrom!, to, d.origPoints, d.resizeCorner)
         })
         syncHistory()
         autosave()

@@ -499,12 +499,15 @@ export function bboxesIntersect(a: BBox, b: BBox): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 }
 
-// —— 单选手柄缩放：把 shape 几何从旧包围盒线性映射到新包围盒（锚定左上角）——
-// 连线(edge)由节点推导，不参与；文字缩放的是字号；表格缩放的是格子尺寸；
-// 直线/箭头=手柄所在端点直接跟手（零乘性，杜绝退化轴放大乱飞）；
+// 缩放手柄所在的包围盒角：nw/ne/sw/se，拖拽角跟手、对角锚定
+export type Corner = 'nw' | 'ne' | 'sw' | 'se'
+
+// —— 单选手柄缩放：把 shape 几何从旧包围盒线性映射到新包围盒（锚点=拖拽角的对角）——
+// 连线(edge)由节点推导，不参与；文字缩放的是字号；表格缩放的是格子尺寸（位置随 to 平移）；
+// 直线/箭头=距拖拽角最近的端点直接跟手（零乘性，杜绝退化轴放大乱飞）；
 // 笔迹必须传拖拽开始时的原始点集（origPoints）：映射若用「当前已缩放点」相对原始
 // 包围盒重算，每个 pointermove 复合乘一次系数（6.3^14≈天文数字，实测一拖爆到 3.8e9）
-export function resizeShape(s: Shape, from: BBox, to: BBox, origPoints?: [number, number][]): void {
+export function resizeShape(s: Shape, from: BBox, to: BBox, origPoints?: [number, number][], corner: Corner = 'se'): void {
   const sx = from.w > 0.5 ? to.w / from.w : 1
   const sy = from.h > 0.5 ? to.h / from.h : 1
   const rx = (x: number) => to.x + (x - from.x) * sx
@@ -525,13 +528,13 @@ export function resizeShape(s: Shape, from: BBox, to: BBox, origPoints?: [number
     }
     case 'line':
     case 'arrow': {
-      // 手柄锚在包围盒右下角=距角最近的端点；拖拽即把该端点移到光标处（另一端不动）
-      const cx = from.x + from.w
-      const cy = from.y + from.h
+      // 手柄锚在包围盒角=距该角最近的端点；拖拽即把该端点移到新角处（另一端不动）
+      const cx = corner === 'nw' || corner === 'sw' ? from.x : from.x + from.w
+      const cy = corner === 'nw' || corner === 'ne' ? from.y : from.y + from.h
       const d1 = Math.hypot(s.x1 - cx, s.y1 - cy)
       const d2 = Math.hypot(s.x2 - cx, s.y2 - cy)
-      const nx = from.x + to.w
-      const ny = from.y + to.h
+      const nx = corner === 'nw' || corner === 'sw' ? to.x : to.x + to.w
+      const ny = corner === 'nw' || corner === 'ne' ? to.y : to.y + to.h
       if (d2 <= d1) {
         s.x2 = nx
         s.y2 = ny
@@ -558,6 +561,9 @@ export function resizeShape(s: Shape, from: BBox, to: BBox, origPoints?: [number
       break
     }
     case 'table':
+      // 位置随 to：se 拖拽 to.x/y=原点（原行为不变），nw/ne/sw 拖拽左上角跟手平移
+      s.x = to.x
+      s.y = to.y
       s.cw = Math.max(20, Math.min(220, to.w / s.cols))
       s.ch = Math.max(16, Math.min(180, to.h / s.rows))
       break
@@ -647,14 +653,14 @@ export class BoardRenderer {
     if (fn) fn(this.previewLayer, this.pal)
   }
 
-  // 选区覆盖层：选中框 + 框选矩形 + 表格缩放手柄（虚线 non-scaling-stroke 随缩放恒定线宽；
-  // 手柄为恒定屏幕尺寸的白底方块，锚在表格右下角）
+  // 选区覆盖层：选中框 + 框选矩形 + 单选缩放手柄（虚线 non-scaling-stroke 随缩放恒定线宽；
+  // 手柄为恒定屏幕尺寸的白底方块，锚在包围盒四角）
   refreshOverlay(
     model: BoardModel,
     selected: Set<number>,
     marquee: BBox | null = null,
     scale = 1,
-    handle: { x: number; y: number } | null = null,
+    handles: { x: number; y: number }[] = [],
   ): void {
     this.overlayLayer.replaceChildren()
     const byId = model.nodeById()
@@ -666,12 +672,12 @@ export class BoardRenderer {
       this.overlayLayer.appendChild(this.dashRect(bb.x - 4, bb.y - 4, bb.w + 8, bb.h + 8))
     }
     if (marquee) this.overlayLayer.appendChild(this.dashRect(marquee.x, marquee.y, marquee.w, marquee.h))
-    if (handle) {
-      const hs = 12 / scale
+    const hs = 12 / scale
+    for (const h of handles) {
       this.overlayLayer.appendChild(
         el('rect', {
-          x: (handle.x - hs / 2).toFixed(1),
-          y: (handle.y - hs / 2).toFixed(1),
+          x: (h.x - hs / 2).toFixed(1),
+          y: (h.y - hs / 2).toFixed(1),
           width: hs.toFixed(1),
           height: hs.toFixed(1),
           fill: this.pal.paper,
