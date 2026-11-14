@@ -499,8 +499,9 @@ export function bboxesIntersect(a: BBox, b: BBox): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 }
 
-// 缩放手柄所在的包围盒角：nw/ne/sw/se，拖拽角跟手、对角锚定
-export type Corner = 'nw' | 'ne' | 'sw' | 'se'
+// 缩放手柄位置：nw/ne/sw/se = 包围盒角（拖拽角跟手、对角锚定）；
+// p1/p2 = 直线/箭头的两端点（Excalidraw 式，拖=把该端点钉到光标处定方向长度）
+export type Corner = 'nw' | 'ne' | 'sw' | 'se' | 'p1' | 'p2'
 
 // —— 单选手柄缩放：把 shape 几何从旧包围盒线性映射到新包围盒（锚点=拖拽角的对角）——
 // 连线(edge)由节点推导，不参与；文字缩放的是字号；表格缩放的是格子尺寸（位置随 to 平移）；
@@ -528,19 +529,15 @@ export function resizeShape(s: Shape, from: BBox, to: BBox, origPoints?: [number
     }
     case 'line':
     case 'arrow': {
-      // 手柄锚在包围盒角=距该角最近的端点；拖拽即把该端点移到新角处（另一端不动）
-      const cx = corner === 'nw' || corner === 'sw' ? from.x : from.x + from.w
-      const cy = corner === 'nw' || corner === 'ne' ? from.y : from.y + from.h
-      const d1 = Math.hypot(s.x1 - cx, s.y1 - cy)
-      const d2 = Math.hypot(s.x2 - cx, s.y2 - cy)
-      const nx = corner === 'nw' || corner === 'sw' ? to.x : to.x + to.w
-      const ny = corner === 'nw' || corner === 'ne' ? to.y : to.y + to.h
-      if (d2 <= d1) {
-        s.x2 = nx
-        s.y2 = ny
+      // 端点手柄（Excalidraw 式）：p1/p2 = 把该端点钉到光标处（to 为退化框，x/y 即端点
+      // 目标），另一端不动——方向与长度全由两端手柄决定，无包围盒缩放语义（零乘性，
+      // 杜绝退化轴放大乱飞）
+      if (corner === 'p1') {
+        s.x1 = to.x
+        s.y1 = to.y
       } else {
-        s.x1 = nx
-        s.y1 = ny
+        s.x2 = to.x
+        s.y2 = to.y
       }
       break
     }
@@ -654,19 +651,21 @@ export class BoardRenderer {
   }
 
   // 选区覆盖层：选中框 + 框选矩形 + 单选缩放手柄（虚线 non-scaling-stroke 随缩放恒定线宽；
-  // 手柄为恒定屏幕尺寸的白底方块，锚在包围盒四角）
+  // 手柄为恒定屏幕尺寸的白底方块锚在包围盒四角；直线/箭头单选无包围盒，两端点画圆点手柄，
+  // Excalidraw 同款交互）
   refreshOverlay(
     model: BoardModel,
     selected: Set<number>,
     marquee: BBox | null = null,
     scale = 1,
-    handles: { x: number; y: number }[] = [],
+    handles: { x: number; y: number; dot?: boolean }[] = [],
   ): void {
     this.overlayLayer.replaceChildren()
     const byId = model.nodeById()
     for (const id of selected) {
       const s = model.get(id)
       if (!s) continue
+      if (selected.size === 1 && (s.type === 'line' || s.type === 'arrow')) continue // 端点手柄即选中态
       const bb = bboxOf(s, byId)
       if (!bb) continue
       this.overlayLayer.appendChild(this.dashRect(bb.x - 4, bb.y - 4, bb.w + 8, bb.h + 8))
@@ -675,16 +674,26 @@ export class BoardRenderer {
     const hs = 12 / scale
     for (const h of handles) {
       this.overlayLayer.appendChild(
-        el('rect', {
-          x: (h.x - hs / 2).toFixed(1),
-          y: (h.y - hs / 2).toFixed(1),
-          width: hs.toFixed(1),
-          height: hs.toFixed(1),
-          fill: this.pal.paper,
-          stroke: this.pal.blue,
-          'stroke-width': 1.5,
-          'vector-effect': 'non-scaling-stroke',
-        }),
+        h.dot
+          ? el('circle', {
+              cx: h.x.toFixed(1),
+              cy: h.y.toFixed(1),
+              r: (hs / 2).toFixed(1),
+              fill: this.pal.paper,
+              stroke: this.pal.blue,
+              'stroke-width': 1.5,
+              'vector-effect': 'non-scaling-stroke',
+            })
+          : el('rect', {
+              x: (h.x - hs / 2).toFixed(1),
+              y: (h.y - hs / 2).toFixed(1),
+              width: hs.toFixed(1),
+              height: hs.toFixed(1),
+              fill: this.pal.paper,
+              stroke: this.pal.blue,
+              'stroke-width': 1.5,
+              'vector-effect': 'non-scaling-stroke',
+            }),
       )
     }
   }

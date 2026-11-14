@@ -280,11 +280,18 @@ function singleTable(): TableShape | null {
   return s && s.type === 'table' ? s : null
 }
 
-// 缩放手柄锚点：单选图形（连线除外）的包围盒四角，拖拽角跟手、对角锚定
-function resizeHandles(): { id: number; x: number; y: number; corner: Corner }[] {
+// 缩放手柄锚点：单选图形的包围盒四角（拖拽角跟手、对角锚定）；
+// 直线/箭头为 Excalidraw 式两端点圆点手柄（拖端点定方向长度，无包围盒角）；连线无手柄
+function resizeHandles(): { id: number; x: number; y: number; corner: Corner; dot?: boolean }[] {
   if (selected.value.size !== 1) return []
   const s = model.get([...selected.value][0])
   if (!s || s.type === 'edge') return []
+  if (s.type === 'line' || s.type === 'arrow') {
+    return [
+      { id: s.id, x: s.x1, y: s.y1, corner: 'p1', dot: true },
+      { id: s.id, x: s.x2, y: s.y2, corner: 'p2', dot: true },
+    ]
+  }
   const bb = bboxOf(s, model.nodeById())
   if (!bb) return []
   const x2 = bb.x + bb.w
@@ -297,9 +304,10 @@ function resizeHandles(): { id: number; x: number; y: number; corner: Corner }[]
   ]
 }
 
-// 拖拽角缩放的目标框：对角（anchor）固定不动，拖拽角跟手到光标处；
-// 最小 8（与原 se 行为一致），光标越过锚点时钳在最小尺寸而不是翻转
+// 拖拽缩放的目标框：角手柄=对角（anchor）固定不动，拖拽角跟手到光标处，最小 8 防翻转；
+// 端点手柄（p1/p2）=退化框锚在光标处，resizeShape 直接把端点钉过去
 function cornerResizeTarget(from: BBox, corner: Corner, w: { x: number; y: number }): BBox {
+  if (corner === 'p1' || corner === 'p2') return { x: w.x, y: w.y, w: 0, h: 0 }
   const ax = corner === 'nw' || corner === 'sw' ? from.x + from.w : from.x
   const ay = corner === 'nw' || corner === 'ne' ? from.y + from.h : from.y
   const w8 = Math.max(8, Math.abs(w.x - ax))
@@ -411,9 +419,9 @@ function onPointerDown(e: PointerEvent): void {
   const style = curStyle()
   switch (tool.value) {
     case 'select': {
-      // 单选图形四角缩放手柄优先于图形命中（取最近角，小图形角相邻时唯一命中）
+      // 单选缩放手柄（四角 / 线类两端点）优先于图形命中（取最近者，小图形相邻时唯一命中）
       const hitR = 10 / cam.scale
-      let h: { id: number; x: number; y: number; corner: Corner } | null = null
+      let h: { id: number; x: number; y: number; corner: Corner; dot?: boolean } | null = null
       let best = Infinity
       for (const c of resizeHandles()) {
         const dist = Math.hypot(w.x - c.x, w.y - c.y)
