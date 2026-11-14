@@ -10,6 +10,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { contestApi, examApi, type RoundKind } from '@/api'
 import { downloadFile } from '@/api/download'
 import { judgeQueueApi } from '@/api/judgeQueue'
+import AiSummaryDialog from '@/components/AiSummaryDialog.vue'
 import EditRoundDialog from '@/components/EditRoundDialog.vue'
 import PageCrumbs from '@/components/PageCrumbs.vue'
 import MdView from '@/components/MdView.vue'
@@ -226,6 +227,18 @@ async function exportCsv() {
   }
 }
 
+// AI 生成考试总结（v0.97，组织者/root；点名表勾选 → 生成；入口按钮仅考试挂，比赛无此需求）
+const showSummary = ref(false)
+async function loadSummaryStudents() {
+  if (!round.value) return []
+  return (await api.value.rollcall(round.value.id)).list
+}
+async function generateSummary(uids: number[], notes: string) {
+  if (!round.value) return ''
+  const r = await api.value.generateSummary(round.value.id, uids, notes)
+  return r.summary
+}
+
 async function remove() {
   if (!round.value) return
   try {
@@ -337,6 +350,7 @@ onMounted(() => {
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit('full')">编辑{{ name }}</el-button>
             <el-button style="width: 100%" @click="openEdit('problems')">调整题目</el-button>
+            <el-button v-if="kind === 'exam'" style="width: 100%" @click="showSummary = true">AI 生成总结</el-button>
             <el-button style="width: 100%" :loading="rejudgeAllRunning" @click="rejudgeAll">重测本场提交</el-button>
             <el-button v-if="round.deletable" type="danger" style="width: 100%" @click="remove">删除{{ name }}</el-button>
           </div>
@@ -415,6 +429,8 @@ onMounted(() => {
       :loading="userSubsLoading"
       :list="userSubs"
     />
+
+    <AiSummaryDialog v-model="showSummary" :scene="name" :load-students="loadSummaryStudents" :generate="generateSummary" />
   </div>
 </template>
 

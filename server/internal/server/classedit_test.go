@@ -7,6 +7,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"sort"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -35,8 +36,21 @@ func (f *fakeRepo) UpdateClass(_ context.Context, id int64, p repo.ClassPatch) e
 	return nil
 }
 
-func (f *fakeRepo) ListMembers(context.Context, int64) ([]repo.ClassMember, error) {
-	return nil, nil
+// ListMembers 从成员角色表派生（v0.97 作业总结测试起需要真实成员清单；uid 升序稳定）。
+func (f *fakeRepo) ListMembers(_ context.Context, classID int64) ([]repo.ClassMember, error) {
+	out := make([]repo.ClassMember, 0, len(f.memberRoles))
+	for key, role := range f.memberRoles {
+		if key[0] != classID {
+			continue
+		}
+		uname := ""
+		if u := f.users[key[1]]; u != nil {
+			uname = u.Username
+		}
+		out = append(out, repo.ClassMember{ClassID: classID, UID: key[1], Uname: uname, Role: role})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UID < out[j].UID })
+	return out, nil
 }
 
 func classEngine(h *Handlers) *gin.Engine {

@@ -12,6 +12,7 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AiPanel: typeof import('./components/admin/AiPanel.vue')['default']
+    AiSummaryDialog: typeof import('./components/AiSummaryDialog.vue')['default']
     AiTutorPanel: typeof import('./components/AiTutorPanel.vue')['default']
     AllCodesDialog: typeof import('./components/problem/AllCodesDialog.vue')['default']
     AmbientGrid: typeof import('./components/AmbientGrid.vue')['default']

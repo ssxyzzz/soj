@@ -63,6 +63,9 @@ type fakeRepo struct {
 	classes      map[int64]*repo.Class
 	memberRoles  map[[2]int64]string
 	classPatches map[int64]repo.ClassPatch
+	// AI 作业/考试总结（v0.97）：作业种子 + 完成情况行回放（AssignmentProgress 用）
+	assignments  map[int64]*repo.Assignment
+	progressRows []*repo.ProgressRow
 	// 整理历史（v0.92）：apply 留痕内存版（InsertTidyHistory/ListTidyHistory/GetTidyHistory）
 	tidyHistory map[int64]*repo.TidyHistory
 	tidyHistSeq int64
@@ -219,8 +222,14 @@ func (f *fakeRepo) LikedDiscussTargets(context.Context, int64, string, []int64) 
 	return map[int64]bool{}, nil
 }
 
-func (f *fakeRepo) GetUsersByIDs(context.Context, []int64) (map[int64]*repo.User, error) {
-	return map[int64]*repo.User{}, nil
+func (f *fakeRepo) GetUsersByIDs(_ context.Context, ids []int64) (map[int64]*repo.User, error) {
+	out := map[int64]*repo.User{}
+	for _, id := range ids {
+		if u, ok := f.users[id]; ok {
+			out[id] = u
+		}
+	}
+	return out, nil
 }
 
 // ---- fake 玉账本（内存版，调玉端点测试用）----
@@ -330,9 +339,10 @@ func baseFake() *fakeRepo {
 		bestScores: map[int64]int{},
 		jadeBal:    map[int64]int64{},
 		tidyHistory: map[int64]*repo.TidyHistory{},
-		classes:     map[int64]*repo.Class{},
-		memberRoles: map[[2]int64]string{},
+		classes:      map[int64]*repo.Class{},
+		memberRoles:  map[[2]int64]string{},
 		classPatches: map[int64]repo.ClassPatch{},
+		assignments:  map[int64]*repo.Assignment{},
 	}
 }
 

@@ -7,6 +7,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, problemApi } from '@/api'
 import { downloadFile } from '@/api/download'
+import AiSummaryDialog from '@/components/AiSummaryDialog.vue'
 import MdEditor from '@/components/MdEditor.vue'
 import PageCrumbs from '@/components/PageCrumbs.vue'
 import ProblemPicker from '@/components/ProblemPicker.vue'
@@ -123,6 +124,18 @@ async function exportCsv() {
   } finally {
     exporting.value = false
   }
+}
+
+// AI 生成作业总结（v0.97，班级管理员）：点名表勾选 → 弹窗复制即走，不落库
+const showSummary = ref(false)
+async function loadSummaryStudents() {
+  if (!assignment.value) return []
+  return (await assignmentApi.rollcall(assignment.value.id)).list
+}
+async function generateSummary(uids: number[], notes: string) {
+  if (!assignment.value) return ''
+  const r = await assignmentApi.generateSummary(assignment.value.id, uids, notes)
+  return r.summary
 }
 
 const showUserSubs = ref(false)
@@ -293,6 +306,7 @@ onMounted(() => {
           <div class="entry-actions">
             <el-button type="primary" style="width: 100%" @click="openEdit">编辑作业</el-button>
             <el-button style="width: 100%" @click="openAdjust">调整题目</el-button>
+            <el-button style="width: 100%" @click="showSummary = true">AI 生成总结</el-button>
           </div>
         </RailCard>
 
@@ -378,6 +392,8 @@ onMounted(() => {
       :list="userSubs"
       empty-text="该学生在此题没有提交"
     />
+
+    <AiSummaryDialog v-model="showSummary" scene="作业" :load-students="loadSummaryStudents" :generate="generateSummary" />
   </div>
 </template>
 

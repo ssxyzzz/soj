@@ -342,6 +342,8 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.DELETE("/assignments/:id/problems/:pid", h.RemoveAssignmentProblem)
 			authed.GET("/assignments/:id/progress", h.AssignmentProgress)
 			authed.GET("/assignments/:id/problems/:pid/submissions", h.AssignmentUserSubmissions)
+			authed.POST("/assignments/:id/summary", h.AssignmentSummary) // AI 生成作业小结（v0.97，班级管理员）
+			authed.GET("/assignments/:id/rollcall", h.AssignmentRollcall) // 点名表：总结勾选名单（老师剔除，默认勾做过题者）
 			api.GET("/assignments/:id/export", h.dlAuth(), h.AssignmentExport) // 成绩导出 CSV（v0.5.6；v0.64 直链化）
 
 			// 比赛：创建（主题库=root，班级=班级管理员，handler 内校验）/删除/赛时提交/我的提交/榜单
@@ -365,6 +367,8 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/exams/:id/submissions/mine", h.ExamMySubmissions)
 			authed.GET("/exams/:id/problems/:pid/submissions", h.ExamUserSubmissions)
 			authed.GET("/exams/:id/leaderboard", h.ExamLeaderboard)
+			authed.POST("/exams/:id/summary", h.ExamSummary) // AI 生成考试小结（v0.97，组织者/root）
+			authed.GET("/exams/:id/rollcall", h.ExamRollcall) // 点名表：总结勾选名单（老师剔除，默认勾有提交者）
 			api.GET("/exams/:id/export", h.dlAuth(), h.ExamExport) // 成绩导出 CSV（v0.5.6；v0.64 直链化）
 			authed.GET("/exams/:id/paper", h.ExamPaper)   // 打印试卷数据（v0.10，organizer/root）
 			authed.PATCH("/contests/:id/file-io", h.SetContestFileIO)

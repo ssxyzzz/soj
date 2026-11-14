@@ -531,6 +531,20 @@ export interface ProgressRow {
   problems: ProgressCell[]
 }
 
+// AI 生成作业/考试总结（v0.97）：即用即走不落库，前端弹窗复制即走
+export interface SummaryResult {
+  summary: string
+}
+
+// 点名表学生行（v0.97：总结勾选名单；老师由服务端权威判定后整行剔除，
+// checked = 默认勾选——作业做过≥1题 / 考试有提交；0 题学生列出供老师手勾）
+export interface RollcallStudent {
+  uid: number
+  name: string
+  hint: string
+  checked: boolean
+}
+
 export interface ClassMember {
   uid: number
   username: string
