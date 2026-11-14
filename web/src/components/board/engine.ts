@@ -246,6 +246,30 @@ export function textBaselineInBox(size: number, lineHeight: number): number {
   return (lineHeight - (a + d)) / 2 + a
 }
 
+// 字体下伸比例（descent / em，探针同 textBaselineInBox，'Ag' 纯 ASCII 防混入 CJK 度量；
+// 兜底 0.25）：文字包围盒底部 = 末行基线 + descent——基线即包围盒底会让字形下缘贴死
+// 选框（字号越大越明显，Excalidraw 式留白要求包围盒含下伸区）。比例与字号无关，探一次缓存
+let textDescentRatio: number | null = null
+export function textDescentOf(size: number): number {
+  if (textDescentRatio == null) {
+    let ratio = 0.25
+    if (!measureCtx) measureCtx = document.createElement('canvas').getContext('2d')
+    if (measureCtx) {
+      measureCtx.font = `${size}px ${BOARD_FONT}`
+      const m = measureCtx.measureText('Ag')
+      if (m.fontBoundingBoxDescent) ratio = m.fontBoundingBoxDescent / size
+    }
+    textDescentRatio = ratio
+  }
+  return size * textDescentRatio
+}
+
+// 文字包围盒高度系数：per = 1 + 下伸比例 + 多行行距系数；包围盒高 = 字号 × per，
+// resizeShape 取其逆（size = to.h ÷ per）——两处共用一个系数保证缩放手柄钉光标 1:1
+export function textBoxPer(lines: number, size: number): number {
+  return 1 + textDescentOf(size) / size + (lines - 1) * TEXT_LINE_H
+}
+
 // ---------- 渲染 ----------
 
 // perfect-freehand 输出 → SVG path d（官方 quadratic 平滑收口法）
@@ -468,10 +492,12 @@ export function bboxOf(s: Shape, nodeById: Map<number, NodeShape>): BBox | null 
       return { x: s.x, y: s.y, w: s.w, h: s.h }
     case 'text': {
       // 多行（v0.76）：块宽=最长行，块高=首行字高+多行行距；首行底=基线（y 锚点不变），
-      // 单行时与旧坐标逐像素一致。行高只吃 1 倍字号的教训仍在：包围盒高一旦多算行距，
-      // 缩放手柄钉光标 1:1 与字形 1:1 不能同时成立（曾用 1.35 倍行高致文字拖拽脱手）
+      // 单行时与旧坐标逐像素一致。底部含下伸区（textBoxPer，Excalidraw 式留白）——
+      // 高度公式与 resizeShape 共用 textBoxPer 系数（h = size × per），保证缩放手柄
+      // 钉光标 1:1 与字形 1:1 同时成立
+      const lines = s.content.split('\n').length
       const w = textBlockWidth(s.content, s.size)
-      return { x: s.x, y: s.y - s.size, w: Math.max(w, s.size), h: s.size + (s.content.split('\n').length - 1) * s.size * TEXT_LINE_H }
+      return { x: s.x, y: s.y - s.size, w: Math.max(w, s.size), h: s.size * textBoxPer(lines, s.size) }
     }
     case 'table':
       return { x: s.x, y: s.y, w: s.cols * s.cw, h: s.rows * s.ch }
@@ -549,11 +575,13 @@ export function resizeShape(s: Shape, from: BBox, to: BBox, origPoints?: [number
       s.h = to.h
       break
     case 'text': {
-      // 包围盒高=字号（见 bboxOf），to.h 即光标相对原盒顶的位移：字号直接取 to.h，
-      // 手柄（盒底=基线）精确钉在光标下，字形同速 1:1，拖多少长多少
-      const size = Math.max(10, Math.min(72, Math.round(to.h)))
+      // bboxOf 高度公式的逆运算（共用 textBoxPer）：size = to.h ÷ per，
+      // 手柄（盒底=基线+下伸区）精确钉在光标下，单行多行都字形同速 1:1，拖多少长多少
+      const lines = s.content.split('\n').length
+      const per = textBoxPer(lines, s.size)
+      const size = Math.max(10, Math.min(72, Math.round(to.h / per)))
       s.x = to.x
-      s.y = to.y + size // 基线锚在新包围盒底（bbox.y 即基线减字号）
+      s.y = to.y + size // 基线锚在包围盒顶下方 size 处（bbox.y = 基线减字号不变）
       s.size = size
       break
     }
@@ -986,7 +1014,7 @@ export class BoardModel {
       }
       case 'text': {
         const bb = bboxOf(s, byId)
-        // 盒高=字号（底=基线），tol 外扩覆盖下伸部（g/p/y 尾与汉字底缘）保证点选/双击命中
+        // 盒底已含下伸区（见 bboxOf），tol 外扩留点选/双击容差
         return (
           !!bb && x >= bb.x - tol && x <= bb.x + bb.w + tol && y >= bb.y - tol && y <= bb.y + bb.h + tol
         )
