@@ -631,7 +631,11 @@ export class BoardRenderer {
     this.layer.replaceChildren()
     this.groups.clear()
     const byId = model.nodeById()
-    for (const s of model.shapes) this.groups.set(s.id, renderShapeInto(this.layer, s, this.pal, byId))
+    for (const s of model.shapes) {
+      const g = renderShapeInto(this.layer, s, this.pal, byId)
+      this.applyEditingHidden(s.id, g)
+      this.groups.set(s.id, g)
+    }
   }
 
   // 按 id 原位重建（保持 z 序）
@@ -644,6 +648,7 @@ export class BoardRenderer {
       const next = old.nextSibling
       old.remove()
       const g = renderShapeInto(this.layer, s, this.pal, byId)
+      this.applyEditingHidden(s.id, g)
       if (next) this.layer.insertBefore(g, next)
       this.groups.set(id, g)
     }
@@ -660,7 +665,24 @@ export class BoardRenderer {
     const s = model.get(id)
     if (!s) return
     const g = renderShapeInto(this.layer, s, this.pal, model.nodeById())
+    this.applyEditingHidden(id, g)
     this.groups.set(id, g)
+  }
+
+  // 编辑态隐藏（文字编辑浮层透明化后防双层文字）：组重建（renderIds/upsert/renderAll）后仍生效，
+  // 收尾 setEditingHidden(null) 统一恢复
+  private editingHidden: number | null = null
+
+  setEditingHidden(id: number | null): void {
+    const old = this.editingHidden
+    this.editingHidden = id
+    if (old != null && old !== id) this.groups.get(old)?.style.removeProperty('visibility')
+    const g = id != null ? this.groups.get(id) : undefined
+    if (g) g.style.setProperty('visibility', id != null ? 'hidden' : '')
+  }
+
+  private applyEditingHidden(id: number, g: SVGGElement): void {
+    if (this.editingHidden === id) g.style.setProperty('visibility', 'hidden')
   }
 
   // 拖动期零重渲染：仅平移已渲染的 <g>（含被拖节点的连线），落点后再 renderIds 校正

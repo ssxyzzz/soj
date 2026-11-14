@@ -4,7 +4,7 @@
 // 自然画笔，viewBox 无限画布；懒加载独立 chunk（gzip 红线 ≤30KB）。画稿只存 localStorage
 // （后端零存储、讲完即删，沿 v0.56 拍板边界）。生成器 draw.io 式可视化交互：表格拖行列、
 // 树/图点选建边。引擎在 components/board/engine.ts（纯 TS 无 UI），本文件只做交互状态机与工具栏。
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { Component } from 'vue'
 
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -124,9 +124,14 @@ const cursorClass = computed(() => {
   if (spacePressed.value || tool.value === 'hand') return drag?.mode === 'pan' ? 'cur-grabbing' : 'cur-grab'
   return tool.value === 'select' ? 'cur-move' : 'cur-draw'
 })
+// 悬停反馈优先于工具默认光标（仅 select 且未拖拽时给出方向/移动提示，见 onPointerMove）
+const svgCursor = computed(() => hoverCls.value || cursorClass.value)
 
 function curStyle(): ShapeStyle {
-  return { color: color.value, weight: weight.value }
+  // markRaw：style 跟随图形进 model（纯数据层，无响应式需求）——ref 深层响应会把
+  // 编辑浮层里的 style 包成 Proxy，structuredClone 基线时抛 DataCloneError，
+  // 文字的就地再编辑（双击/Enter）从此静默失灵（Excalidraw 式交互的地基，必须纯对象）
+  return markRaw({ color: color.value, weight: weight.value })
 }
 
 function syncHistory(): void {
@@ -168,6 +173,7 @@ let panFlag = false // v0.65：pan 合帧旗
 let resizeFlag = false // v0.65：resize 合帧旗
 let wheelRaf = 0 // v0.65：滚轮缩放合帧（增量累积，一帧一次 zoomAt）
 let wheelPend: { factor: number; px: number; py: number } | null = null
+const hoverCls = ref('') // 悬停光标反馈（Excalidraw 式）：手柄/图形命中时给方向光标，空白恢复默认
 
 interface DragState {
   mode: 'draw' | 'move' | 'marquee' | 'pan' | 'erase' | 'link' | 'click' | 'resize'
@@ -523,7 +529,26 @@ function clampToViewport(w: { x: number; y: number }) {
 }
 
 function onPointerMove(e: PointerEvent): void {
-  if (!drag) return
+  if (!drag) {
+    // 悬停光标反馈（Excalidraw 式，仅 select 且非编辑态）：手柄=方向缩放、线端点/图形=移动、空白=默认。
+    // 每次 mousemove 一次 hitTest——与 Excalidraw 同做法，课堂画板量级无压力
+    if (tool.value === 'select' && !editing.value) {
+      const w = toWorld(e)
+      const hitR = 10 / cam.scale
+      let cls = ''
+      let best = Infinity
+      for (const c of resizeHandles()) {
+        const dist = Math.hypot(w.x - c.x, w.y - c.y)
+        if (dist <= hitR && dist < best) {
+          best = dist
+          cls = c.corner === 'nw' || c.corner === 'se' ? 'cur-nwse' : c.corner === 'ne' || c.corner === 'sw' ? 'cur-nesw' : 'cur-move'
+        }
+      }
+      if (!cls && model.hitTest(w.x, w.y, 8 / cam.scale)) cls = 'cur-move'
+      hoverCls.value = cls
+    } else if (hoverCls.value) hoverCls.value = ''
+    return
+  }
   const w = clampToViewport(toWorld(e))
   const d = drag
   switch (d.mode) {
@@ -833,6 +858,8 @@ function openEditor(ed: Omit<EditState, 'base' | 'origId'>, value: string): void
   const base = model.docWithOverrides(shapeId ? [structuredClone(model.get(shapeId)!)] : [])
   editing.value = { ...ed, shapeId, origId: shapeId, base }
   editorText.value = value
+  // Excalidraw 式隐形编辑：浮层透明后隐藏画布原字防双层（新建文字 live 落形时再补挂）
+  renderer?.setEditingHidden(ed.kind === 'text' && shapeId ? shapeId : null)
   void nextTick(() => {
     editorEl.value?.focus()
     editorEl.value?.select()
@@ -908,8 +935,8 @@ const editorStyle = computed<Record<string, string>>(() => {
         fontSize: `${fs.toFixed(1)}px`,
         color: palette.value[ed.style.color],
         textAlign: 'left',
-        left: `${(sx(ed.wx) - 1).toFixed(1)}px`,
-        top: `${(sy(ed.wy) - textBaselineInBox(ed.size, lh) - 1).toFixed(1)}px`,
+        left: `${sx(ed.wx).toFixed(1)}px`,
+        top: `${(sy(ed.wy) - textBaselineInBox(ed.size, lh)).toFixed(1)}px`,
         width: `${w.toFixed(1)}px`,
         height: `${h.toFixed(1)}px`,
         lineHeight: `${lh.toFixed(1)}px`,
@@ -949,6 +976,7 @@ function onEditorInput(e: Event): void {
           model.delete(new Set([ed.shapeId]))
           renderer?.removeIds([ed.shapeId])
           ed.shapeId = 0
+          renderer?.setEditingHidden(null) // 组已删，摘隐藏标记
         }
         break
       }
@@ -959,11 +987,13 @@ function onEditorInput(e: Event): void {
           renderer?.renderIds(model, [s.id])
         }
       } else {
-        // 首个非空字符落形：idSeq 单调递增不复用，基线 idSeq 较小由 adopt max 兜底
-        const t: TextShape = { id: model.idSeq++, type: 'text', x: ed.wx, y: ed.wy, content: val, size: ed.size, style: ed.style }
+        // 首个非空字符落形：idSeq 单调递增不复用，基线 idSeq 较小由 adopt max 兜底；
+        // style 纯拷贝兜底（与 commitEdit 同口径）
+        const t: TextShape = { id: model.idSeq++, type: 'text', x: ed.wx, y: ed.wy, content: val, size: ed.size, style: { ...ed.style } }
         model.insertLive(t)
         renderer?.upsert(model, t.id)
         ed.shapeId = t.id
+        renderer?.setEditingHidden(t.id) // 浮层透明后隐藏画布原字防双层（新建 live 落形此刻才出现）
       }
       break
     }
@@ -998,6 +1028,7 @@ function commitEdit(): void {
   const ed = editing.value
   if (!ed) return
   editing.value = null
+  renderer?.setEditingHidden(null) // 恢复画布原字（renderAll 会重建组，先摘隐藏标记）
   const val = editorText.value
   const { kind, origId, cellIndex } = ed
   if (kind === 'text' && !origId && !val.trim()) return // 新建文字未落形：无事发生
@@ -1015,8 +1046,9 @@ function commitEdit(): void {
           const dt = d.shapes.find((x) => x.id === origId)
           if (dt && dt.type === 'text') dt.content = val
         } else {
-          // 新建：live 阶段已分配 id（ed.shapeId），回放同一 id 保证 DOM 复用
-          const t: TextShape = { id: ed.shapeId, type: 'text', x: ed.wx, y: ed.wy, content: val, size: ed.size, style: ed.style }
+          // 新建：live 阶段已分配 id（ed.shapeId），回放同一 id 保证 DOM 复用；
+          // style 纯拷贝兜底（旧会话遗留的 Proxy style 不再外溢）
+          const t: TextShape = { id: ed.shapeId, type: 'text', x: ed.wx, y: ed.wy, content: val, size: ed.size, style: { ...ed.style } }
           d.shapes.push(t)
           d.idSeq = Math.max(d.idSeq, ed.shapeId + 1)
         }
@@ -1043,6 +1075,11 @@ function commitEdit(): void {
   renderer?.renderAll(model)
   syncHistory()
   autosave()
+  // Excalidraw 同款：文字收尾保持选中 + 回到选择工具，紧接着就能拖动/缩放/Enter 再编辑
+  if (kind === 'text') {
+    selected.value = new Set([origId || ed.shapeId])
+    tool.value = 'select'
+  }
   refreshOverlay()
 }
 
@@ -1384,6 +1421,15 @@ function onKeydown(e: KeyboardEvent): void {
   if ((e.key === 'Delete' || e.key === 'Backspace') && selected.value.size) {
     e.preventDefault()
     deleteSelected()
+    return
+  }
+  // Excalidraw 同款：Enter 进入选中文字的就地编辑
+  if (e.key === 'Enter' && !editing.value && tool.value === 'select' && selected.value.size === 1) {
+    const s = model.get([...selected.value][0])
+    if (s?.type === 'text') {
+      e.preventDefault()
+      openTextEdit(s)
+    }
   }
 }
 
@@ -1460,6 +1506,7 @@ onBeforeUnmount(() => {
 
 watch(tool, () => {
   drag = null
+  hoverCls.value = ''
   renderer?.setPreview(null)
   refreshOverlay()
 })
@@ -1545,7 +1592,7 @@ watch(tool, () => {
         <svg
           ref="svgEl"
           class="board-svg"
-          :class="cursorClass"
+          :class="svgCursor"
           :viewBox="viewBox"
           @pointerdown="onPointerDown"
           @pointermove="onPointerMove"
@@ -1555,12 +1602,14 @@ watch(tool, () => {
           @wheel.prevent="onWheel"
         />
         <!-- v0.76：Enter 放行为换行；Esc/失焦/点击空白 = 结束编辑并保留实时内容；
-             输入实时同步画布（onEditorInput 直改形状，收尾 commitEdit 固化一条历史） -->
+             输入实时同步画布（onEditorInput 直改形状，收尾 commitEdit 固化一条历史）；
+             自由文字走 editor-plain 隐形浮层（Excalidraw 式所见即所得，画布原字临时隐藏） -->
         <textarea
           v-if="editing"
           ref="editorEl"
           v-model="editorText"
           class="board-editor"
+          :class="{ 'editor-plain': editing.kind === 'text' }"
           :style="editorStyle"
           wrap="soft"
           @keydown.stop
@@ -1814,6 +1863,25 @@ watch(tool, () => {
   line-height: 1.3;
   overflow: hidden;
   box-shadow: var(--soj-shadow-card);
+}
+
+/* Excalidraw 式隐形编辑（仅自由文字）：无框无底无阴影，字体字号行高由 editorStyle
+   对齐画布渲染——打字即所见；光标墨色可见。节点/表格格/边权编辑保留盒式样式 */
+.board-editor.editor-plain {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  caret-color: var(--soj-ink);
+}
+
+.cur-nwse {
+  cursor: nwse-resize;
+}
+
+.cur-nesw {
+  cursor: nesw-resize;
 }
 
 .table-bar {
