@@ -34,9 +34,10 @@ const (
 	summaryOutMaxRunes   = 4000 // 模型输出兜底截断
 )
 
-// summaryReq 生成请求体：notes 教师补充说明选填（如今天课上额外强调的点）；
-// uids = 点名表勾选名单（空 = 默认口径：非老师且至少做出 1 题 / 考试=有提交的非老师）。
+// summaryReq 生成请求体：style 小结风格（summaryStyles 枚举，空=默认专业贴心）；
+// notes 教师补充说明选填（如今天课上额外强调的点）；uids = 点名表勾选名单（空 = 默认口径）。
 type summaryReq struct {
+	Style string  `json:"style"`
 	Notes string  `json:"notes"`
 	UIDs  []int64 `json:"uids"`
 }
@@ -73,7 +74,13 @@ func (p summaryProblem) line() string {
 		fmt.Fprintf(&b, "｜平均分%d", p.AvgScore)
 	}
 	if p.SiteTotal > 0 {
-		fmt.Fprintf(&b, "｜全网通过率%.0f%%（%d份提交）", float64(p.SiteAC)/float64(p.SiteTotal)*100, p.SiteTotal)
+		// 小样本不给比例（1 份提交「通过率100%」既误导又容易被模型揉成一团），
+		// 只给事实数；样本够才输出比例
+		if p.SiteTotal >= 5 {
+			fmt.Fprintf(&b, "｜全网通过率%.0f%%（%d份提交）", float64(p.SiteAC)/float64(p.SiteTotal)*100, p.SiteTotal)
+		} else {
+			fmt.Fprintf(&b, "｜全网仅%d份提交、通过%d份", p.SiteTotal, p.SiteAC)
+		}
 	}
 	return b.String()
 }
@@ -141,24 +148,25 @@ func buildSummaryProblems(pids []int64, sums map[int64]*repo.ProblemSummary, tag
 	return out
 }
 
-// summaryAssignStudentLines 作业学生成绩行（ProgressRow 已按名次排好）。
-// 返回行列表与做过题的人数（0 提交 guard 用）。
+// summaryAssignStudentLines 作业学生成绩行。名次按计入名单重新编号（1 起连续）：
+// ProgressRow.Rank 是含老师的全班全局名次，剔师后直接用会写出「第二名」却无第一名
+// 的自相矛盾数据（rows 已按全局名次序，剔行后相对序不变，顺序重编即名单内名次）。
 func summaryAssignStudentLines(rows []*repo.ProgressRow, pids []int64) ([]string, int) {
 	attempted := 0
 	lines := make([]string, 0, len(rows))
-	for _, r := range rows {
+	for i, r := range rows {
 		name := summaryDisplayName(r.Nickname, r.Username)
 		var cells []string
 		if r.Attempt > 0 {
 			attempted++
-			for i, pid := range pids {
+			for j, pid := range pids {
 				if cell := r.Cells[pid]; cell != nil && cell.Best > 0 {
-					cells = append(cells, fmt.Sprintf("T%d:%d", i+1, cell.Best))
+					cells = append(cells, fmt.Sprintf("T%d:%d", j+1, cell.Best))
 				}
 			}
 		}
 		lines = append(lines, fmt.Sprintf("%d. %s：总分%d，通过%d/%d题%s",
-			r.Rank, name, r.Total, r.Solved, len(pids), summaryScoreNotes(cells)))
+			i+1, name, r.Total, r.Solved, len(pids), summaryScoreNotes(cells)))
 	}
 	return lines, attempted
 }
@@ -179,43 +187,101 @@ func summaryExamStudentLines(rows []*repo.LeaderRow, pids []int64) []string {
 	return lines
 }
 
-// summarySystem 系统提示：微信群小结的排版与风格契约 + 数据铁律。示例里的名字全部虚构。
-func summarySystem() string {
-	return strings.TrimSpace(`你是一位受学生欢迎的编程班老师，要发一段班级微信群小结。请根据用户消息里给出的「精确数据」，写一段小结正文。
+// summaryStyle 小结风格：受众统一是家长（专业性 + 大白话是共享底线），风格只换语气外衣。
+// 人设全部正向描述（怎么写），把语气细节（波浪线/emoji/称呼）下放到各风格里，不做全局禁令堆叠。
+type summaryStyle struct {
+	ID      string
+	Label   string // 前端选择器文案
+	Persona string // prompt 里的风格人设
+}
 
-排版铁律（微信群纯文本）：
+const summaryStyleDefault = "professional"
+
+var summaryStyles = []summaryStyle{
+	{ID: "professional", Label: "专业贴心", Persona: `
+- 像老师跟家长平时一对一沟通：客气自然，句子平实
+- 把今天学的知识用家长听得懂的话讲清楚，顺带点一句它为什么重要（如「这是后面学循环的基础」）；技术词（分支、循环这类）要么不用，用到就当场用一句大白话解释
+- 完成情况整体与个人都说：表现突出的同学点名+事实，还没做完的不点名批评，只说下一步安排
+- 结尾给家长一条具体可执行的配合建议（如「每天做两三道，本周内完成」）
+- emoji 只在段落标题用；波浪线「～」最多 1 处`},
+	{ID: "warm", Label: "温暖鼓励", Persona: `
+- 多肯定孩子们的努力和进步细节（结合具体事实），让家长放心
+- 还没做完的往好处说：刚入门都这样，已经安排好后续
+- 语气柔和，像老师带着笑意在说话；emoji 正文可少量（1~2 个），波浪线最多 1 处
+- 结尾给家长一句安心话 + 一条小建议`},
+	{ID: "lively", Label: "活泼亲切", Persona: `
+- 语气轻快俏皮，可以用形象比喻讲课堂内容（闯关、打擂台、升级），让家长感受到课堂的热闹
+- emoji 和波浪线「～」可以适量多用（全文 3~5 处）
+- 比喻要少而准（最多一两处），数字和事实照旧准确，不编造
+- 结尾轻快收尾 + 一条小提醒`},
+	{ID: "formal", Label: "严谨汇报", Persona: `
+- 得体周正的汇报体：今天课堂内容 → 整体完成情况 → 希望家长配合的事，条理分明
+- 措辞专业但避免行话，技术概念用家长听得懂的话表达
+- 正文不用 emoji 和语气词，句子完整通顺，语气客气有分寸
+- 结尾明确写出希望家长配合的具体事项`},
+	{ID: "strict", Label: "严师督促", Persona: `
+- 直接明确：学了什么、要求是什么、没达到的怎么补，一条条说清楚
+- 表扬克制，一句事实带过；问题直说不绕，但对事不对人，不点名批评没完成的同学
+- 给家长明确的督促要求（如「每天固定 30 分钟做两道」），语气坚定但不指责
+- 正文不用 emoji 和语气词`},
+}
+
+// summaryStyleByID 取风格，未知/空回默认（专业贴心）。
+func summaryStyleByID(id string) summaryStyle {
+	for _, s := range summaryStyles {
+		if s.ID == id {
+			return s
+		}
+	}
+	return summaryStyleByID(summaryStyleDefault)
+}
+
+// summarySystem 系统提示：受众定调（家长）+ 所选风格人设 + 排版契约 + 数据铁律。示例名字全部虚构。
+func summarySystem(style summaryStyle) string {
+	return strings.TrimSpace(`你是一位编程班老师，要发一段班级微信群小结，看到这条消息的主要是家长。请根据用户消息里给出的「精确数据」，按下面的要求写一段小结正文。
+
+本次风格：` + style.Label + `。要求：
+` + style.Persona + `
+
+排版要求（微信群纯文本）：
 - 每个段落标题（🌟【…】📖【…】📊【…】📌【…】）都独占一行，内容从下一行开始写
 - 段落与段落之间空一行
-- 段落里并列的多个内容点用 1、2、3 分点，每点独占一行
+- 段落里有几个并列的内容点，就 用 1、2、3 分点，每点独占一行；只有一两句话要说就别硬凑编号
 
-结构与风格（可适量 emoji）：
+结构与内容：
 1. 开头：🌟【标题】独占一行——作业固定写「今日课堂小结」，考试固定写「考试小结」，不要自创标题写法；下一行起一句开场（可先给一行从题目内容提炼的主题副题）
-2. 📖【课堂重点】（作业）或📊【考情速览】（考试）：优先依据数据里的「作业说明/考试说明」（老师写的介绍）归纳本次知识主题；没有说明就从题目标题与知识点归纳，用通俗的话串讲；多个知识主题分 1、2、3 点
-3. 📊【完成情况】：点名表扬——第一名（成绩+名次）、在全网通过率低的题上拿高分的同学、满分/全部完成的同学群像；人多时点名 3~5 个代表，其余用「等 N 名同学」概括；多项亮点分点写
-4. 📌【课后作业】（作业）或一句展望（考试）：没做完的题鼓励课后在 OJ 上继续完成；多条安排分点写；末尾再来一句温暖收尾
+2. 📖【课堂重点】（作业）或📊【考情速览】（考试）：优先依据数据里的「作业说明/考试说明」（老师写的介绍）归纳今天学了什么、为什么学这个；没有说明就从题目标题与知识点归纳，用家长听得懂的大白话讲
+3. 📊【完成情况】：点名表扬——第一名（成绩+名次）、在通过率低的题上拿高分的同学、满分/全部完成的同学群像；人多时点名 3~5 个代表，其余用「等 N 名同学」概括
+4. 📌【课后作业】（作业）或一句展望（考试）：没做完的题提醒课后在 OJ 上继续完成；末尾按风格收尾
+
+通用口吻底线：
+- 像老师本人随手打的话，口语自然，句子有长有短
+- 开场别报数：不要拿「一共 n 题」「这次 n 人」当第一句，先说今天练了什么
+- 正文别出现「计入」「勾选」「名单」「T1/T2」这类内部词，题目写题目名
+- 做题就说「做」，不用「啃」这类字
 
 数据铁律：
 - 所有数字（分数、人数、名次、通过率）和人名只能来自给定数据，一个都不许编造
 - 学生名单就是本次到场的全部学生；名单之外的人（包括老师、缺席的同学）一律不得提及、点名或评价
-- 学生一律用数据里给的展示名；成绩靠后或没做题的不点名批评，只写进课后作业段鼓励
+- 学生一律用数据里给的展示名；成绩靠后或没做题的不点名批评，只写进课后作业段提醒
 - 全文 300~600 字；纯文本，不要 markdown 标记、不要代码块、不要复述数据清单
 - 直接输出小结正文，不要任何前置说明或解释
 
-口吻示例（数据与人名均为虚构，仅示意语气与排版）：
+口吻示例（数据与人名均为虚构，仅示意排版与数据用法，语气按上面所选风格来）：
 🌟【今日课堂小结】
-循环语句初体验——打擂台找最值 + 经典案例
-第一次接触循环语句，大家迈出了漂亮的一步～
+循环语句初体验
+今天开始学 for 循环。
 
 📖【课堂重点】
-1. for 循环三件套：起点、终点、每走一步——像操场跑圈，数着圈数跑到终点就停～
-2. 循环变量忘记更新就会「无限跑圈」，调试时先查它～
+1. for 循环三件套：起点、终点、步长，这三样定好循环就能跑
+2. 循环变量忘了更新会变成死循环，调试的时候先查它
 
 📊【完成情况】
-小星同学 3 题全部完成高居第一！全网通过率仅 15% 的「数星星」她也拿下满分，全班独一份✅ 小明、小刚等 6 名同学各过 2 题，稳步推进～
+小星 3 题全部完成，第一名。全网通过率只有 15% 的「数星星」她拿了满分，全班就她一个。小明、小刚等 6 名同学各过 2 题，节奏不错。
 
 📌【课后作业】
-1. 课上没做完的题就是本周作业，登录 OJ 继续完成哦✍️
-2. 卡住了随时找我🤝`)
+1. 没做完的题本周内登录 OJ 完成
+2. 卡住了群里找我`)
 }
 
 // summaryUser 组用户消息：数据块（场景 + 说明 + 题目事实 + 学生成绩 + 教师补充说明）。
@@ -462,7 +528,7 @@ func (h *Handlers) AssignmentSummary(c *gin.Context) {
 	students = summaryTrimStudents(students, len(selected))
 	scene := fmt.Sprintf("班级：%s · 作业「%s」（共%d题，每题满分100；计入学生%d人，名单=老师点名勾选）",
 		cl.Name, a.Title, len(a.Problems), len(selected))
-	h.summaryRespond(c, uid, "summary_assign", summarySystem(),
+	h.summaryRespond(c, uid, "summary_assign", summarySystem(summaryStyleByID(req.Style)),
 		summaryUser(scene, time.Now().Format("2006-01-02"), "作业说明", a.Intro, probs, students, len(selected), notes))
 }
 
@@ -579,7 +645,7 @@ func (h *Handlers) ExamSummary(c *gin.Context) {
 	}
 	scene := fmt.Sprintf("班级：%s · 考试「%s」（%s ~ %s，共%d题；计入学生%d人，名单=老师点名勾选）", className, ct.Title,
 		ct.Start.Format("2006-01-02 15:04"), ct.End.Format("2006-01-02 15:04"), len(pids), len(selected))
-	h.summaryRespond(c, uid, "summary_exam", summarySystem(),
+	h.summaryRespond(c, uid, "summary_exam", summarySystem(summaryStyleByID(req.Style)),
 		summaryUser(scene, time.Now().Format("2006-01-02"), "考试说明", ct.Intro, probs, students, len(selected), notes))
 }
 

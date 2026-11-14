@@ -571,11 +571,11 @@ export const assignmentApi = {
   progress: (id: number) => get<ProgressRow[]>(`/assignments/${id}/progress`),
   userSubmissions: (id: number, pid: number, uid: number) =>
     get<{ list: Submission[] }>(`/assignments/${id}/problems/${pid}/submissions`, { uid }),
-  // AI 生成作业小结（v0.97，班级管理员）：uids=点名表勾选名单（后端强制剔除老师）；
-  // 真生成常超 20s，放开到 130s 对齐后端（同 aiTutor 口径）
-  generateSummary: (id: number, uids: number[], notes?: string) =>
+  // AI 生成作业小结（v0.97，班级管理员）：style=小结风格（后端枚举），uids=点名表勾选名单
+  // （后端强制剔除老师）；真生成常超 20s，放开到 130s 对齐后端（同 aiTutor 口径）
+  generateSummary: (id: number, style: string, uids: number[], notes?: string) =>
     client
-      .post<ApiResponse<SummaryResult>>(`/assignments/${id}/summary`, { uids, notes: notes ?? '' }, { timeout: 130000 })
+      .post<ApiResponse<SummaryResult>>(`/assignments/${id}/summary`, { style, uids, notes: notes ?? '' }, { timeout: 130000 })
       .then((r) => r.data.data),
   // 点名表（v0.97）：全班学生 + 默认勾选（做过≥1题；老师整行剔除）
   rollcall: (id: number) => get<{ list: RollcallStudent[] }>(`/assignments/${id}/rollcall`),
@@ -800,10 +800,10 @@ const roundApiOf = (kind: RoundKind) => {
       patch<{ file_io: boolean }>(`${base}/${roundId}/file-io`, { enabled }),
     userSubmissions: (roundId: number, pid: number, uid: number) =>
       get<{ list: Submission[] }>(`${base}/${roundId}/problems/${pid}/submissions`, { uid }),
-    // AI 生成考试小结（v0.97，组织者/root；uids=点名表勾选名单，后端强制剔除老师）
-    generateSummary: (roundId: number, uids: number[], notes?: string) =>
+    // AI 生成考试小结（v0.97，组织者/root；style=小结风格，uids=点名表勾选名单）
+    generateSummary: (roundId: number, style: string, uids: number[], notes?: string) =>
       client
-        .post<ApiResponse<SummaryResult>>(`${base}/${roundId}/summary`, { uids, notes: notes ?? '' }, { timeout: 130000 })
+        .post<ApiResponse<SummaryResult>>(`${base}/${roundId}/summary`, { style, uids, notes: notes ?? '' }, { timeout: 130000 })
         .then((r) => r.data.data),
     // 点名表（v0.97）：全班学生 + 默认勾选（有提交者；老师整行剔除）
     rollcall: (roundId: number) => get<{ list: RollcallStudent[] }>(`${base}/${roundId}/rollcall`),

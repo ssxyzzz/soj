@@ -117,6 +117,13 @@ func TestSummaryProblemBlockLine(t *testing.T) {
 	if probs[1].Title != "P22" || strings.Contains(probs[1].line(), "全网通过率") {
 		t.Fatalf("已删除题应以题号兜底且全网无数据不出通过率：%s", probs[1].line())
 	}
+	// 小样本不给比例只给事实数（防「通过率100%（1份提交）」误导）
+	probsSmall := buildSummaryProblems([]int64{33}, map[int64]*repo.ProblemSummary{33: {ID: 33, Title: "小样本题"}},
+		nil, map[int64]repo.ProblemStat{33: {Total: 1, Accepted: 1}}, nil, nil, nil, nil, false)
+	ls := probsSmall[0].line()
+	if !strings.Contains(ls, "全网仅1份提交、通过1份") || strings.Contains(ls, "通过率") {
+		t.Fatalf("小样本应只给事实数不出比例：%s", ls)
+	}
 
 	// 考试形态：满分 50 + 平均分展示
 	probsExam := buildSummaryProblems([]int64{22}, map[int64]*repo.ProblemSummary{22: {ID: 22, Title: "牛吃草"}},
@@ -138,8 +145,8 @@ func TestSummaryStudentLines(t *testing.T) {
 	if attempted != 1 {
 		t.Fatalf("做过题人数 = %d，期望 1", attempted)
 	}
-	if !strings.Contains(lines[0], "昵称A：总分190，通过2/2题（T1:100 T2:90）") {
-		t.Fatalf("学生行缺得分明细：%s", lines[0])
+	if !strings.Contains(lines[0], "1. 昵称A：总分190，通过2/2题（T1:100 T2:90）") {
+		t.Fatalf("学生行名次应在名单内重新编号且带得分明细：%s", lines[0])
 	}
 	if !strings.Contains(lines[1], "ub") || strings.Contains(lines[1], "（T") {
 		t.Fatalf("昵称应回退用户名且未动笔无明细：%s", lines[1])
@@ -174,11 +181,41 @@ func TestSummaryOutputAndNotes(t *testing.T) {
 }
 
 func TestSummarySystemContract(t *testing.T) {
-	s := summarySystem()
-	for _, want := range []string{"只能来自给定数据", "名单之外的人", "300~600", "纯文本", "展示名", "课后作业", "独占一行", "分点", "作业说明", "今日课堂小结", "考试小结"} {
-		if !strings.Contains(s, want) {
-			t.Fatalf("系统提示缺关键契约 %q", want)
+	// 风格枚举：5 个、ID/Label 齐全、默认回退
+	if len(summaryStyles) != 5 {
+		t.Fatalf("风格数 = %d，期望 5", len(summaryStyles))
+	}
+	seen := map[string]bool{}
+	for _, s := range summaryStyles {
+		if s.ID == "" || s.Label == "" || s.Persona == "" {
+			t.Fatalf("风格 %q 字段缺失：%+v", s.ID, s)
 		}
+		if seen[s.ID] {
+			t.Fatalf("风格 ID 重复：%s", s.ID)
+		}
+		seen[s.ID] = true
+	}
+	if _, ok := seen[summaryStyleDefault]; !ok {
+		t.Fatalf("默认风格 %q 不在枚举里", summaryStyleDefault)
+	}
+	if got := summaryStyleByID("nope"); got.ID != summaryStyleDefault {
+		t.Fatalf("未知风格应回默认，got %s", got.ID)
+	}
+
+	// 共享骨架：排版/数据铁律/点名表纪律在各风格下都在
+	for _, want := range []string{"只能来自给定数据", "名单之外的人", "300~600", "纯文本", "展示名", "课后作业", "独占一行", "分点", "作业说明", "今日课堂小结", "考试小结", "做题就说「做」", "家长"} {
+		for _, s := range summaryStyles {
+			if !strings.Contains(summarySystem(s), want) {
+				t.Fatalf("风格 %s 的系统提示缺关键契约 %q", s.ID, want)
+			}
+		}
+	}
+	// 风格人设差异落进各自 prompt
+	if got := summarySystem(summaryStyleByID("lively")); !strings.Contains(got, "活泼亲切") {
+		t.Fatal("lively 风格人设未注入")
+	}
+	if got := summarySystem(summaryStyleByID("formal")); strings.Contains(got, "活泼亲切") {
+		t.Fatal("formal 不应带活泼人设")
 	}
 	// 无说明/无补充时不应出现对应数据行；有说明时整块注入（课堂重点依据它归纳）
 	u := summaryUser("班级：九班 · 作业「分支」", "2026-11-14", "作业说明", "", nil, nil, 0, "")

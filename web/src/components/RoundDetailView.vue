@@ -233,9 +233,9 @@ async function loadSummaryStudents() {
   if (!round.value) return []
   return (await api.value.rollcall(round.value.id)).list
 }
-async function generateSummary(uids: number[], notes: string) {
+async function generateSummary(style: string, uids: number[], notes: string) {
   if (!round.value) return ''
-  const r = await api.value.generateSummary(round.value.id, uids, notes)
+  const r = await api.value.generateSummary(round.value.id, style, uids, notes)
   return r.summary
 }
 

@@ -1,22 +1,32 @@
 <script setup lang="ts">
-// AI 生成作业/考试总结弹窗（v0.97；点名表 v0.97 同批）：打开先拉点名表——服务端
+// AI 生成作业/考试总结弹窗（v0.97；点名表 + 风格选择）：打开先拉点名表——服务端
 // 权威剔除老师、默认勾选至少做出 1 题的学生（考试=有提交者，0 题学生列出供手勾），
 // 生成只按勾选名单出数据，名单外的老师/缺席同学进不了 prompt，想提也提不了。
-// 结果纯文本复制即走（不落库，重新生成即换一版）。
+// 风格（受众=家长）弹窗内选，默认专业贴心；结果纯文本复制即走（不落库）。
 import { computed, ref, watch } from 'vue'
 
 import { copyText } from '@/utils/clipboard'
 import type { RollcallStudent } from '@/types'
 
+// 小结风格（与后端 summaryStyles 枚举一一对应；人设说明在后端 prompt 里）
+const STYLES = [
+  { id: 'professional', label: '专业贴心' },
+  { id: 'warm', label: '温暖鼓励' },
+  { id: 'lively', label: '活泼亲切' },
+  { id: 'formal', label: '严谨汇报' },
+  { id: 'strict', label: '严师督促' },
+]
+
 const props = defineProps<{
   modelValue: boolean
   scene: string // 场景名（作业/考试），标题文案用
   loadStudents: () => Promise<RollcallStudent[]> // 宿主页注入的点名表拉取
-  generate: (uids: number[], notes: string) => Promise<string> // 宿主页注入的生成调用（含 130s 长超时）
+  generate: (style: string, uids: number[], notes: string) => Promise<string> // 宿主页注入的生成调用（含 130s 长超时）
 }>()
 
 const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
 
+const style = ref('professional')
 const students = ref<RollcallStudent[]>([])
 const defaultUids = ref<number[]>([])
 const rollLoading = ref(false)
@@ -26,7 +36,7 @@ const busy = ref(false)
 
 const selCount = computed(() => students.value.filter((s) => s.checked).length)
 
-// 每次打开重置并拉点名表：即用即走，不留上一次的结果与勾选（v0.95.1 弃置复活教训的对偶面）
+// 每次打开重置点名表与结果（风格选择保留为会话内偏好）；即用即走不留上一次的结果
 watch(
   () => props.modelValue,
   async (v) => {
@@ -56,6 +66,7 @@ async function run() {
   busy.value = true
   try {
     summary.value = await props.generate(
+      style.value,
       students.value.filter((s) => s.checked).map((s) => s.uid),
       notes.value.trim(),
     )
@@ -85,6 +96,13 @@ function copy() {
       show-icon
       title="基于当前成绩实时数据生成微信群风格小结，数字与人名全部来自真实统计；只统计勾选的学生，复制即走。"
     />
+
+    <div class="style-row">
+      <span class="style-label">小结风格</span>
+      <el-select v-model="style" size="small" style="width: 180px">
+        <el-option v-for="s in STYLES" :key="s.id" :value="s.id" :label="s.label" />
+      </el-select>
+    </div>
 
     <!-- 点名表：勾选=计入总结；默认勾选至少做出 1 题的同学（老师由服务端剔除） -->
     <div class="rollcall-head">
@@ -133,6 +151,18 @@ function copy() {
 </template>
 
 <style scoped>
+/* 风格选择行 */
+.style-row {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-8);
+  margin-top: var(--soj-sp-12);
+}
+
+.style-label {
+  font-weight: var(--soj-fw-emphasis);
+}
+
 /* 点名表：限高滚动 + 行内勾选（全班名册，默认只勾做过题的） */
 .rollcall-head {
   display: flex;

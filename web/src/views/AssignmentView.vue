@@ -132,9 +132,9 @@ async function loadSummaryStudents() {
   if (!assignment.value) return []
   return (await assignmentApi.rollcall(assignment.value.id)).list
 }
-async function generateSummary(uids: number[], notes: string) {
+async function generateSummary(style: string, uids: number[], notes: string) {
   if (!assignment.value) return ''
-  const r = await assignmentApi.generateSummary(assignment.value.id, uids, notes)
+  const r = await assignmentApi.generateSummary(assignment.value.id, style, uids, notes)
   return r.summary
 }
 
