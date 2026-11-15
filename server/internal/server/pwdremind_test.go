@@ -1,8 +1,9 @@
 package server
 
 // 首登改密提醒（用户拍板：提醒可跳过，跳过=不再提醒）HTTP 契约测试：
-// ① 跳过端点清标志（未登录 401）；② 管理员建号置位（无 ID 分支走 CreateUserWithPassword
-// 与注册/种子同源，置位在建号成功后补刀）；③ 登录/me 载荷带 pwdRemind 字段。
+// ① 跳过端点清标志（未登录 401）；② 管理员建号走 CreateUserWithProfile 带资料建号
+//（v0.97.8 统一单路：pwdRemind 随建号落库自带，repo 层契约见 repo/userprofile_test.go，
+// handler 侧断言委托与资料透传）；③ 登录/me 载荷带 pwdRemind 字段。
 
 import (
 	"context"
@@ -28,9 +29,26 @@ func (f *fakeRepo) SetPwdRemind(_ context.Context, uid int64, pending bool) erro
 
 func (f *fakeRepo) AddSecurityLog(context.Context, repo.SecurityLog) error { return nil }
 
-func (f *fakeRepo) CreateUserWithPassword(_ context.Context, username, _, nickname, role string) (int64, error) {
-	f.users[900] = &repo.User{ID: 900, Username: username, Nickname: nickname, Role: role}
-	return 900, nil
+// 带资料建号覆盖：记录（uid, profile）供建号委托断言；id≤0（自动取号分支）fake 固定落 900
+var profileCalls []struct {
+	uid     int64
+	profile repo.UserProfile
+}
+
+func (f *fakeRepo) CreateUserWithProfile(_ context.Context, id int64, username, _, nickname, role string, p repo.UserProfile) (int64, error) {
+	profileCalls = append(profileCalls, struct {
+		uid     int64
+		profile repo.UserProfile
+	}{id, p}) // 记录原始 id：0 = 自动取号分支，断言传参口径用
+	uid := id
+	if uid <= 0 {
+		uid = 900
+	}
+	f.users[uid] = &repo.User{
+		ID: uid, Username: username, Nickname: nickname, Role: role,
+		Gender: p.Gender, GradeNo: p.GradeNo, School: p.School, Region: p.Region,
+	}
+	return uid, nil
 }
 
 func TestSkipPwdRemind(t *testing.T) {
@@ -53,7 +71,7 @@ func TestSkipPwdRemind(t *testing.T) {
 	}
 }
 
-func TestAdminCreateUserSetsPwdRemind(t *testing.T) {
+func TestAdminCreateUserProfileDelegate(t *testing.T) {
 	f := baseFake()
 	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
 	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
@@ -62,14 +80,35 @@ func TestAdminCreateUserSetsPwdRemind(t *testing.T) {
 	r.POST("/api/admin/users", AuthRequired(h), RequireRoot(), h.AdminCreateUser)
 	rootTok := f.addUser(h, 1, "root", repo.RoleRoot, 0)
 
-	pwdRemindCalls = nil
+	// 无资料建号：委托 CreateUserWithProfile 自动取号分支（id=0），资料全空；
+	// pwdRemind 由落库自带（repo 层钉死），handler 不再经 SetPwdRemind 补刀
+	profileCalls = nil
 	code, body := doJSON(r, "POST", "/api/admin/users", rootTok,
 		`{"username":"newstu","password":"Passw0rd!9"}`)
 	if code != http.StatusOK || body["code"] != float64(0) {
 		t.Fatalf("管理员建号 = %d %v，期望 200 code=0", code, body)
 	}
-	if len(pwdRemindCalls) != 1 || pwdRemindCalls[0].uid != 900 || !pwdRemindCalls[0].pending {
-		t.Fatalf("管理员建号应置位 SetPwdRemind(900,true)，实际 %+v", pwdRemindCalls)
+	if len(profileCalls) != 1 || profileCalls[0].uid != 0 || profileCalls[0].profile != (repo.UserProfile{}) {
+		t.Fatalf("建号应委托 CreateUserWithProfile(0, 空资料)，实际 %+v", profileCalls)
+	}
+
+	// 带资料建号：四字段透传，年级显示名在 handler 侧解析为档位
+	profileCalls = nil
+	code, body = doJSON(r, "POST", "/api/admin/users", rootTok,
+		`{"username":"newstu2","password":"Passw0rd!9","gender":"女","grade":"六年级","school":"实验中学","region":"高新区"}`)
+	if code != http.StatusOK || body["code"] != float64(0) {
+		t.Fatalf("带资料建号 = %d %v，期望 200 code=0", code, body)
+	}
+	want := repo.UserProfile{Gender: "女", GradeNo: 6, School: "实验中学", Region: "高新区"}
+	if len(profileCalls) != 1 || profileCalls[0].profile != want {
+		t.Fatalf("资料应原样透传 %+v，实际 %+v", want, profileCalls)
+	}
+
+	// 年级无法识别：拒绝建号
+	profileCalls = nil
+	if code, _ := doJSON(r, "POST", "/api/admin/users", rootTok,
+		`{"username":"newstu3","password":"Passw0rd!9","grade":"大四"}`); code != http.StatusBadRequest {
+		t.Fatalf("未知年级 = %d，期望 400", code)
 	}
 }
 

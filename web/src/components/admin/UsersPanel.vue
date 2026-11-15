@@ -113,7 +113,18 @@ function roleClass(role: string): string {
 // ---- 新建用户 ----
 const showCreate = ref(false)
 const creating = ref(false)
-const createForm = reactive({ username: '', password: '', nickname: '', role: 'default', id: undefined as number | undefined })
+// gender/grade/school/region：详细资料（v0.97.8，选填）——与编辑弹窗同款控件与口径
+const createForm = reactive({
+  username: '',
+  password: '',
+  nickname: '',
+  gender: '',
+  grade: '',
+  school: '',
+  region: '',
+  role: 'default',
+  id: undefined as number | undefined,
+})
 
 async function create() {
   if (!createForm.username || !createForm.password) {
@@ -128,12 +139,22 @@ async function create() {
       createForm.nickname,
       createForm.role,
       createForm.id,
+      {
+        gender: createForm.gender,
+        grade: createForm.grade,
+        school: createForm.school.trim(),
+        region: createForm.region.trim(),
+      },
     )
     ElMessage.success('用户已创建')
     showCreate.value = false
     createForm.username = ''
     createForm.password = ''
     createForm.nickname = ''
+    createForm.gender = ''
+    createForm.grade = ''
+    createForm.school = ''
+    createForm.region = ''
     createForm.role = 'default'
     createForm.id = undefined
     await load()
@@ -705,6 +726,27 @@ defineExpose({ refresh: () => load() })
         <el-form-item label="昵称">
           <el-input v-model="createForm.nickname" placeholder="默认与用户名相同" />
         </el-form-item>
+        <!-- 详细资料（v0.97.8，选填）：控件/字段顺序/截断口径与编辑弹窗一致，建号一步到位免二次补录 -->
+        <el-divider content-position="left">详细资料（选填）</el-divider>
+        <div class="edit-grid">
+          <el-form-item label="性别">
+            <el-select v-model="createForm.gender" clearable placeholder="未填写" style="width: 160px">
+              <el-option value="男" label="男" />
+              <el-option value="女" label="女" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="地区">
+            <el-input v-model="createForm.region" maxlength="32" placeholder="选填" />
+          </el-form-item>
+          <el-form-item label="学校">
+            <el-input v-model="createForm.school" maxlength="64" placeholder="选填" />
+          </el-form-item>
+          <el-form-item label="年级">
+            <el-select v-model="createForm.grade" clearable placeholder="未设置" style="width: 160px">
+              <el-option v-for="g in GRADE_OPTIONS" :key="g" :value="g" :label="g" />
+            </el-select>
+          </el-form-item>
+        </div>
         <el-form-item>
           <template #label>
             <TipLabel label="用户 ID" tip="留空自动分配：从注册起点起按序补未占用的号（起点见系统设置）；手动指定/改 ID 占用的号自动跳过" />
@@ -953,7 +995,7 @@ defineExpose({ refresh: () => load() })
   margin-bottom: var(--soj-sp-14);
 }
 
-/* 编辑弹窗账号字段两列排（加宽后用满 720） */
+/* 编辑/新建弹窗资料字段两列排（编辑加宽后用满 720，新建 560 内同款网格） */
 .edit-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

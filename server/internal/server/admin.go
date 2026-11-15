@@ -71,6 +71,11 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 		Nickname string `json:"nickname"`
 		Role     string `json:"role"`
 		ID       *int64 `json:"id"` // 手动指定用户 ID（v0.24 小批；缺省自动从 100 起取号）
+		// 资料（v0.97.8）：建号弹窗选填，与编辑弹窗/批量导入同源口径（性别/学校/地区 trim 截断，年级 ParseGrade）
+		Gender string `json:"gender"`
+		Grade  string `json:"grade"` // 显示名/数字（空串 = 未设置）
+		School string `json:"school"`
+		Region string `json:"region"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fail(c, http.StatusBadRequest, "参数不完整")
@@ -103,15 +108,31 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 	if nickname == "" {
 		nickname = req.Username
 	}
+	// 资料字段（v0.97.8）：截断/解析同 AdminUpdateUser 口径；年级无法识别即拒绝
+	gradeNo := 0
+	if g := strings.TrimSpace(req.Grade); g != "" {
+		gradeNo = repo.ParseGrade(g)
+		if gradeNo == 0 {
+			fail(c, http.StatusBadRequest, "年级无法识别（支持：一年级…高三 / 初一…初三 / 已毕业 / 数字 1-12）")
+			return
+		}
+	}
+	profile := repo.UserProfile{
+		Gender:  trimTo(req.Gender, 8),
+		GradeNo: gradeNo,
+		School:  trimTo(req.School, 64),
+		Region:  trimTo(req.Region, 32),
+	}
 	var (
 		uid int64
 		err error
 	)
+	// 统一走带资料建号（批量导入同源）：id 缺省 nil→0 自动取号，指定 ID 直接插入；
+	// 占用冲突在唯一索引层兜底（用户名/ID 两个唯一键都可能撞）
 	if req.ID != nil {
-		// 手动指定 ID：占用冲突在唯一索引层兜底（用户名/ID 两个唯一键都可能撞）
-		uid, err = h.repo.CreateUserWithID(c.Request.Context(), *req.ID, req.Username, req.Password, nickname, role)
+		uid, err = h.repo.CreateUserWithProfile(c.Request.Context(), *req.ID, req.Username, req.Password, nickname, role, profile)
 	} else {
-		uid, err = h.repo.CreateUserWithPassword(c.Request.Context(), req.Username, req.Password, nickname, role)
+		uid, err = h.repo.CreateUserWithProfile(c.Request.Context(), 0, req.Username, req.Password, nickname, role, profile)
 	}
 	if err != nil {
 		if isDupKey(err) {
@@ -130,12 +151,9 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "创建用户失败")
 		return
 	}
-	// 首登改密提醒：无 ID 分支走 CreateUserWithPassword（注册/种子同源）不带标志，
-	// 建号后补置位——初始密码由管理员发放，下次登录提醒改密（可跳过）。best-effort 不阻断建号。
-	if err := h.repo.SetPwdRemind(c.Request.Context(), uid, true); err != nil {
-		slog.Warn("首登改密提醒置位失败", "component", "admin", "uid", uid, "error", err)
-	}
-	ok(c, gin.H{"id": uid, "username": req.Username, "role": role})
+		// 首登改密提醒已在 CreateUserWithProfile 落库时置位（初始密码由管理员发放，
+		// 下次登录提醒改密可跳过），此处无需补置位。
+		ok(c, gin.H{"id": uid, "username": req.Username, "role": role})
 }
 
 func (h *Handlers) AdminUpdateUser(c *gin.Context) {
