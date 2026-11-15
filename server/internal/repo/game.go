@@ -1,8 +1,9 @@
 package repo
 
-// 游戏感批数据地基（v0.41）：连击/坚持计数器（判题回写维护）、每日一题（确定性
-// 选题 + 当日首 AC 掉落 ×2）、每日复仇（错题重战掉落 ×1.5）、成就判定、知识星图、
-// 降临横幅、连击/坚持双榜。总原则「钩住不施压」：只记正向数据，无任何惩罚状态。
+// 游戏感批数据地基（v0.41）：连击/坚持计数器（判题回写维护）、今日挑战（v0.97.12
+// 起登录专属 + 按账号等级个性化确定性选题，首 AC 掉落 ×2）、每日复仇（错题重战
+// 掉落 ×1.5）、成就判定、知识星图、降临横幅、连击/坚持双榜。总原则「钩住不施压」：
+// 只记正向数据，无任何惩罚状态。
 
 import (
 	"context"
@@ -130,76 +131,82 @@ func (r *Repo) GetGameStats(ctx context.Context, uid int64) (*GameStats, error) 
 		StreakDays: u.StreakDays, StreakBest: u.StreakBest}, nil
 }
 
-// ---- 每日一题（确定性选题：按日期 seed 轮转难度，同日全站同题） ----
+// ---- 今日挑战（v0.97.12 起登录专属 + 按账号等级个性化；v0.41 全站同题落库
+// dailyProblems 的旧口径退役）----
+// 选题确定性不落库：种子 = 日期|uid（同日同人恒定，人人各异的「今日挑战」），
+// 从账号等级档起逐环外扩 ±1 档，档档皆空兜底全难度池——GetDaily 与判题发玉
+// isMyDaily 共用同一函数，同日重算必同题。
 
-// DailyProblem 当日每日一题（dailyProblems 文档，_id = 日期串）。
-type DailyProblem struct {
-	Day        string `bson:"_id"`
-	PID        int64  `bson:"pid"`
-	Difficulty int    `bson:"difficulty"`
+// dailyProblemFilter 今日挑战题池（沿用原全站每日一题口径）：公开未隐藏/未标
+// 重复、有测试数据（cases.0）的传统题；d>0 限同难度档，d=0 不限（兜底全池）。
+func dailyProblemFilter(d int) bson.M {
+	f := bson.M{
+		"hidden": bson.M{"$ne": true}, "duplicate": bson.M{"$ne": true},
+		"visibility": "public", "cases.0": bson.M{"$exists": true},
+		"$or": bson.A{bson.M{"type": bson.M{"$exists": false}}, bson.M{"type": ""}},
+	}
+	if d > 0 {
+		f["difficulty"] = d
+	}
+	return f
 }
 
-// EnsureDailyProblem 取当日每日一题（无则确定性计算并落库，dup 并发回读）。
-// 选题：北京日期年积日 → 难度轮转 1–10 → 该难度公开未隐藏、有数据的传统题中
-// 按日期 hash 取一本档无题逐档向下兜底。
-func (r *Repo) EnsureDailyProblem(ctx context.Context) (*DailyProblem, error) {
-	day := beijingDay(time.Now())
-	var dp DailyProblem
-	err := r.db.Collection("dailyProblems").FindOne(ctx, bson.M{"_id": day}).Decode(&dp)
-	if err == nil {
-		return &dp, nil
+// dailyPickAt 难度档池内按种子确定性取一题 pid（池空/失败返回 0）。
+func (r *Repo) dailyPickAt(ctx context.Context, seed string, d int) int64 {
+	n, err := r.problems.CountDocuments(ctx, dailyProblemFilter(d))
+	if err != nil || n == 0 {
+		return 0
 	}
-	if !IsNotFound(err) {
-		return nil, err
+	h := fnv.New32a()
+	h.Write([]byte(seed))
+	skip := int64(h.Sum32() % uint32(n))
+	cur, err := r.problems.Find(ctx, dailyProblemFilter(d),
+		options.Find().SetProjection(bson.M{"_id": 1}).
+			SetSort(bson.D{{Key: "_id", Value: 1}}).SetSkip(skip).SetLimit(1))
+	if err != nil {
+		return 0
 	}
-	bt, _ := time.ParseInLocation("2006-01-02", day, beijingZone)
-	seed := bt.YearDay()
-	for d := seed%10 + 1; d >= 1; d-- {
-		filter := bson.M{
-			"difficulty": d, "hidden": bson.M{"$ne": true}, "duplicate": bson.M{"$ne": true},
-			"visibility": "public", "cases.0": bson.M{"$exists": true},
-			"$or": bson.A{bson.M{"type": bson.M{"$exists": false}}, bson.M{"type": ""}},
-		}
-		n, err := r.problems.CountDocuments(ctx, filter)
-		if err != nil || n == 0 {
-			continue
-		}
-		h := fnv.New32a()
-		h.Write([]byte(day))
-		skip := int64(h.Sum32() % uint32(n))
-		cur, err := r.problems.Find(ctx, filter,
-			options.Find().SetProjection(bson.M{"_id": 1}).
-				SetSort(bson.D{{Key: "_id", Value: 1}}).SetSkip(skip).SetLimit(1))
-		if err != nil {
-			return nil, err
-		}
-		var p struct {
-			ID int64 `bson:"_id"`
-		}
-		has := cur.Next(ctx)
-		cur.Close(ctx)
-		if !has {
-			continue
-		}
-		if err := cur.Decode(&p); err != nil {
-			return nil, err
-		}
-		dp = DailyProblem{Day: day, PID: p.ID, Difficulty: d}
-		if _, err := r.db.Collection("dailyProblems").InsertOne(ctx, dp); err != nil {
-			if mongo.IsDuplicateKeyError(err) { // 并发：回读胜者
-				return r.EnsureDailyProblem(ctx)
+	defer cur.Close(ctx)
+	var p struct {
+		ID int64 `bson:"_id"`
+	}
+	if !cur.Next(ctx) {
+		return 0
+	}
+	if err := cur.Decode(&p); err != nil {
+		return 0
+	}
+	return p.ID
+}
+
+// PickDailyProblem 该用户今日挑战题（含标题/难度元数据；全站无可用题返回 nil）。
+func (r *Repo) PickDailyProblem(ctx context.Context, uid int64) (*Problem, error) {
+	seed := beijingDay(time.Now()) + "|" + strconv.FormatInt(uid, 10)
+	tier := r.UserTier(ctx, uid)
+	tried := [11]bool{}
+	for ring := 0; ring < 10; ring++ {
+		for _, d := range [2]int{tier - ring, tier + ring} {
+			if d < 1 || d > 10 || tried[d] {
+				continue
 			}
-			return nil, err
+			tried[d] = true
+			if pid := r.dailyPickAt(ctx, seed, d); pid != 0 {
+				return r.GetProblemMeta(ctx, pid)
+			}
 		}
-		return &dp, nil
 	}
-	return nil, nil // 全站无可用题（空库）
+	pid := r.dailyPickAt(ctx, seed, 0) // 全档皆空兜底全难度池
+	if pid == 0 {
+		return nil, nil
+	}
+	return r.GetProblemMeta(ctx, pid)
 }
 
-// IsTodayDaily 该题是否今日每日一题（判题发玉路径）。
-func (r *Repo) IsTodayDaily(ctx context.Context, pid int64) bool {
-	dp, err := r.EnsureDailyProblem(ctx)
-	return err == nil && dp != nil && dp.PID == pid
+// isMyDaily pid 是否该用户今日挑战题（判题发玉 ×2 倍率判定）：与 GetDaily 同源
+// 确定性重算比对；只在首过发玉路径调用（低频），不做缓存。
+func (r *Repo) isMyDaily(ctx context.Context, uid, pid int64) bool {
+	p, err := r.PickDailyProblem(ctx, uid)
+	return err == nil && p != nil && p.ID == pid
 }
 
 // ---- 复仇（错题重战）----
@@ -697,12 +704,6 @@ func (r *Repo) GameBoardRank(ctx context.Context, kind string, uid int64) (int, 
 	return int(n) + 1, val
 }
 
-// CountDailySolved 今日该题的完成人数（jadeAwards 自 dayStart 起，从众软钩）。
-func (r *Repo) CountDailySolved(ctx context.Context, pid int64, dayStart time.Time) int64 {
-	n, _ := r.jadeAwards.CountDocuments(ctx, bson.M{"pid": pid, "at": bson.M{"$gte": dayStart}})
-	return n
-}
-
 // RawAchievements 个人成就解锁记录（端点层与定义表 join）。
 func (r *Repo) RawAchievements(ctx context.Context, uid int64) ([]Achievement, error) {
 	cur, err := r.achievements.Find(ctx, bson.M{"uid": uid}, options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}))
@@ -711,17 +712,4 @@ func (r *Repo) RawAchievements(ctx context.Context, uid int64) ([]Achievement, e
 	}
 	var rows []Achievement
 	return rows, cur.All(ctx, &rows)
-}
-
-// GetDailyProblemMeta 当日每日一题 + 题目元数据（标题/难度；无可用题返回 nil, nil, nil）。
-func (r *Repo) GetDailyProblemMeta(ctx context.Context) (*DailyProblem, *Problem, error) {
-	dp, err := r.EnsureDailyProblem(ctx)
-	if err != nil || dp == nil {
-		return nil, nil, err
-	}
-	p, err := r.GetProblemMeta(ctx, dp.PID)
-	if err != nil {
-		return dp, nil, nil
-	}
-	return dp, p, nil
 }

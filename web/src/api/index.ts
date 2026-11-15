@@ -185,6 +185,8 @@ export const mdApi = {
 
 // 游戏感批（v0.41）：每日钩子 / 成就星图 / 降临 / 双榜
 export const gameApi = {
+  // 今日挑战（v0.97.12 起登录专属 + 按账号等级个性化选题；未登录 enabled:false，
+  // solved_today 从众计数退役）
   daily: () =>
     get<{
       enabled: boolean
@@ -192,7 +194,6 @@ export const gameApi = {
       title?: string
       difficulty?: number
       done?: boolean
-      solved_today?: number
     }>('/daily'),
   revenge: () => get<{ list: RevengeRow[]; used: boolean }>('/me/revenge'),
   // 公开主页游戏三卡（v0.85 随主页公开，uid = 主页主人）：成就墙 / 星图 / 错题本
@@ -276,20 +277,14 @@ export const siteApi = {
       discuss_contest_enabled: boolean
       jade_shop_enabled?: boolean
     }>('/site'),
-  // 公开站点统计（v0.19 首页对齐 v3 预览）：计数 + 平均判题时长 + 今日一题（可空，含标签名）
+  // 公开站点统计（v0.19 首页对齐 v3 预览）：计数 + 平均判题时长（v0.97.12 今日一题
+  // featured 随降级卡退役，统计行只剩四个数字）
   stats: () =>
     get<{
       problem_count: number
       user_count: number
       today_submissions: number
       avg_judge_ms: number
-      featured: {
-        id: number
-        title: string
-        difficulty: number
-        accept_rate: number
-        tags: string[] | null
-      } | null
     }>('/site/stats'),
 }
 

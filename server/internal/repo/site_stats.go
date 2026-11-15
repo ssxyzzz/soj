@@ -10,7 +10,6 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // visibleProblemFilter 可见题池（hidden/duplicate ≠ true，v0.47 并入重复题）；
@@ -23,46 +22,10 @@ func visibleProblemFilter(difficulty int) bson.M {
 	return q
 }
 
-// CountVisibleProblems 可见题池总数（今日一题的池大小 / 首页题量）。
+// CountVisibleProblems 可见题池总数（首页「收录题目」统计 / 题库页量；今日挑战
+// 选题走 repo/game.go 的 dailyProblemFilter 专用池，不用本宽松口径）。
 func (r *Repo) CountVisibleProblems(ctx context.Context, difficulty int) (int64, error) {
 	return r.problems.CountDocuments(ctx, visibleProblemFilter(difficulty))
-}
-
-// FeaturedRow 今日一题候选行的最小投影。
-type FeaturedRow struct {
-	ID         int64   `bson:"_id"`
-	Title      string  `bson:"title"`
-	Difficulty int     `bson:"difficulty,omitempty"`
-	Tags       []int64 `bson:"tags"`
-}
-
-// VisibleProblemAt 可见题池按 _id 升序偏移 skip 取一题（今日一题的稳定取样）；
-// 池空返回 (nil, nil)。
-func (r *Repo) VisibleProblemAt(ctx context.Context, difficulty int, skip int64) (*FeaturedRow, error) {
-	cur, err := r.problems.Find(ctx, visibleProblemFilter(difficulty),
-		options.Find().SetSort(bson.D{{Key: "_id", Value: 1}}).SetSkip(skip).SetLimit(1))
-	if err != nil {
-		return nil, err
-	}
-	defer cur.Close(ctx)
-	var rows []FeaturedRow
-	if err := cur.All(ctx, &rows); err != nil {
-		return nil, err
-	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-	return &rows[0], nil
-}
-
-// ProblemSubmitCounts 某题提交总数与 AC 数（题库同口径；accepted 计数失败按 0，
-// 与原 stats 降级行为一致）。
-func (r *Repo) ProblemSubmitCounts(ctx context.Context, pid int64) (total, accepted int64, err error) {
-	if total, err = r.submissions.CountDocuments(ctx, bson.M{"pid": pid}); err != nil {
-		return 0, 0, err
-	}
-	ac, _ := r.submissions.CountDocuments(ctx, bson.M{"pid": pid, "status": StatusAccepted})
-	return total, ac, nil
 }
 
 // CountAllUsers 注册用户总数。

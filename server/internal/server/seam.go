@@ -70,16 +70,14 @@ type RepoAPI interface {
 	UserBlessUntil(ctx context.Context, uid int64) (time.Time, error)
 	// v0.41 游戏感批：开箱 payload / 每日钩子 / 成就星图 / 降临 / 双榜
 	AchievementsForSubmit(ctx context.Context, uid, sid int64) ([]string, error)
-	EnsureDailyProblem(ctx context.Context) (*repo.DailyProblem, error)
 	EvaluateAchievements(ctx context.Context, uid, sid, pid int64, score int, judgedAt time.Time, perfectOneShot, isChallenge bool) ([]string, error)
 	GameBoard(ctx context.Context, kind string, limit int) ([]repo.GameRankRow, error)
 	GameBoardRank(ctx context.Context, kind string, uid int64) (int, int)
-	GetDailyProblemMeta(ctx context.Context) (*repo.DailyProblem, *repo.Problem, error)
+	// 今日挑战（v0.97.12 登录专属 + 按等级个性化，与判题发玉 isMyDaily 同源）
+	PickDailyProblem(ctx context.Context, uid int64) (*repo.Problem, error)
 	GetGameStats(ctx context.Context, uid int64) (*repo.GameStats, error)
-	IsTodayDaily(ctx context.Context, pid int64) bool
 	RecentHeralds(ctx context.Context, limit int) ([]repo.HeraldRow, error)
 	StarMap(ctx context.Context, uid int64, includeHidden bool) ([]repo.StarNode, error)
-	CountDailySolved(ctx context.Context, pid int64, dayStart time.Time) int64
 	GetJadeAward(ctx context.Context, uid, pid int64) (*repo.JadeAward, error)
 	RawAchievements(ctx context.Context, uid int64) ([]repo.Achievement, error)
 	TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted, cancelled bool) (*repo.GameStats, error)
@@ -228,7 +226,6 @@ type RepoAPI interface {
 	PendingDepth(ctx context.Context) (int64, error)
 	Ping(ctx context.Context) error
 	ProblemIDExists(ctx context.Context, pid int64) (bool, error)
-	ProblemSubmitCounts(ctx context.Context, pid int64) (total, accepted int64, err error)
 	ProblemSummariesByIDs(ctx context.Context, pids []int64) (map[int64]*repo.ProblemSummary, error)
 	ProblemTitleExists(ctx context.Context, title string) (bool, error)
 	QueryVerifyCodeRate(ctx context.Context, purpose, target, ip string) (*repo.VerifyCodeRateQuery, error)
@@ -309,7 +306,6 @@ type RepoAPI interface {
 	UserSubmissionStats(ctx context.Context, uid int64) (total, accepted int64, err error)
 	ValidateMetaTagRefs(ctx context.Context, ids []int64) error
 	ValidateTagRefs(ctx context.Context, ids []int64) error
-	VisibleProblemAt(ctx context.Context, difficulty int, skip int64) (*repo.FeaturedRow, error)
 }
 
 // 编译期断言：生产形态 *repo.Repo 恒实现 RepoAPI（repo 侧新增方法而接口未跟随时，

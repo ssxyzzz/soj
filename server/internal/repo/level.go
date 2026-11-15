@@ -233,6 +233,26 @@ func LevelProgress(cfg *LevelConfig, counts [10]int64, adjust int64) (level int,
 	return level, xp, curThr, nextThr, hasNext
 }
 
+// UserTier 用户当前等级 1–10（今日挑战个性化选题用，v0.97.12）：定级三件套
+//（配置 + 各难度 AC 数 + 经验调整）单点组装——口径与 server 层 levelAgg/排行榜
+// 一致；配置或 AC 数失败回 1（青铜），经验调整失败按全 0 不拖垮。
+func (r *Repo) UserTier(ctx context.Context, uid int64) int {
+	cfg, err := r.GetLevelConfig(ctx)
+	if err != nil {
+		return 1
+	}
+	counts, err := r.SolvedDifficultyCounts(ctx, []int64{uid})
+	if err != nil {
+		return 1
+	}
+	adjs, _ := r.SumXpAdjust(ctx, []int64{uid})
+	lv, _, _, _, _ := LevelProgress(cfg, counts[uid], adjs[uid])
+	if lv < 1 || lv > 10 {
+		return 1
+	}
+	return lv
+}
+
 // SolvedDifficultyCounts 批量统计用户「各难度 AC 题数」（uid → counts[难度-1]）。
 // 口径与总榜一致（status=Accepted ∧ published）；题目已删除的不计。
 // 难度缺省按 3（EffectiveDifficulty 同规则）。

@@ -1,11 +1,12 @@
 package server
 
-// 游戏感批端点（v0.41）：每日一题 / 每日复仇与错题本 / 成就墙 / 知识星图 / 降临
+// 游戏感批端点（v0.41）：今日挑战 / 每日复仇与错题本 / 成就墙 / 知识星图 / 降临
 // 横幅 / 连击与坚持双榜。挂在 AuthOptional 或登录，均只读 + 本人数据（无副作用）。
 
 import (
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,34 +14,68 @@ import (
 	"soj/internal/repo"
 )
 
-// GetDaily GET /api/daily —— 今日挑战（公开：未登录可见题卡，登录附带完成态）。
+// 今日挑战选题缓存（v0.97.12 随个性化从 stats 迁来）：按 (uid, 日期) 缓存选题结果
+// 30s——tier 三件套 + 最多 11 档池计数/取样不便宜（v0.66 压测 p50 曾 279ms）；
+// 条目量 = 登录用户数（与 identCache 同量级），按日键过期、常驻进程内存。
+var (
+	dailyMu    sync.Mutex
+	dailyCache = map[int64]dailyEntry{}
+)
+
+type dailyEntry struct {
+	day string
+	pid int64
+	at  time.Time
+}
+
+const dailyCacheTTL = 30 * time.Second
+
+// GetDaily GET /api/daily —— 今日挑战（v0.97.12 起登录专属：未登录 enabled:false
+// 前端整卡隐藏；选题按账号等级个性化——种子 日期|uid 同日恒定、同档无题逐环外扩
+// ±1 档、兜底全池，人人各异的今日挑战；v0.41 全站同题与 solved_today 从众计数退役）。
 func (h *Handlers) GetDaily(c *gin.Context) {
-	dp, p, err := h.repo.GetDailyProblemMeta(c.Request.Context())
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取每日一题失败")
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		ok(c, gin.H{"enabled": false})
 		return
 	}
-	if dp == nil || p == nil {
-		ok(c, gin.H{"enabled": false}) // 全站无可用题（空库）
+	day := time.Now().In(repo.BeijingZone()).Format("2006-01-02")
+	dailyMu.Lock()
+	pe, hit := dailyCache[uid]
+	dailyMu.Unlock()
+	var pid int64
+	if !hit || pe.day != day || time.Since(pe.at) >= dailyCacheTTL {
+		p, err := h.repo.PickDailyProblem(c.Request.Context(), uid)
+		if err != nil {
+			fail(c, http.StatusInternalServerError, "读取今日挑战失败")
+			return
+		}
+		if p == nil {
+			ok(c, gin.H{"enabled": false}) // 全站无可用题（空库）
+			return
+		}
+		pid = p.ID
+		dailyMu.Lock()
+		dailyCache[uid] = dailyEntry{day: day, pid: pid, at: time.Now()}
+		dailyMu.Unlock()
+	} else {
+		pid = pe.pid
+	}
+	p, err := h.repo.GetProblemMeta(c.Request.Context(), pid)
+	if err != nil || p == nil {
+		ok(c, gin.H{"enabled": false}) // 缓存命中但题目已被删/下架：降级隐藏
 		return
 	}
 	resp := gin.H{
 		"enabled":    true,
-		"pid":        dp.PID,
+		"pid":        pid,
 		"title":      p.Title,
 		"difficulty": p.EffDifficulty(),
-	}
-	if uid, _, _, logged := currentUser(c); logged {
-		resp["done"] = func() bool {
-			a, err := h.repo.GetJadeAward(c.Request.Context(), uid, dp.PID)
+		// done 现查不走缓存：首过后立即变 true（30s 滞后不可接受），单条 FindOne 便宜
+		"done": func() bool {
+			a, err := h.repo.GetJadeAward(c.Request.Context(), uid, pid)
 			return err == nil && a != nil
-		}()
-		// 全站完成计数（今日 00:00 后该题的 jadeAwards 数——从众软钩）
-		dayStart := time.Now().In(repo.BeijingZone()).Truncate(24 * time.Hour)
-		// Truncate 按 UTC 截断，手动对齐北京零点
-		bt := time.Now().In(repo.BeijingZone())
-		dayStart = time.Date(bt.Year(), bt.Month(), bt.Day(), 0, 0, 0, 0, repo.BeijingZone())
-		resp["solved_today"] = h.repo.CountDailySolved(c.Request.Context(), dp.PID, dayStart)
+		}(),
 	}
 	ok(c, resp)
 }

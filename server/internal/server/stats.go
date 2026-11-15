@@ -1,16 +1,15 @@
 package server
 
-// 站点公开统计（v0.19 首页对齐 v3 预览）：收录题目 / 注册选手 / 今日提交 / 平均判题时长
-// + 今日一题（按日随机一道可见题，同一天恒定；2026-10-25 起登录用户按账号等级推荐
-// 相应难度——同档无题逐环外扩 ±1 档，最后兜底全池；匿名保持全局每日一题）。
-// 只读聚合、60s 内存缓存（缓存存全局口径，个性化在命中后按请求覆盖）。
+// 站点公开统计（v0.19 首页对齐 v3 预览）：收录题目 / 注册选手 / 今日提交 / 平均判题
+// 时长。只读聚合、60s 内存缓存。
+// v0.97.12：今日一题（featured 全局随机 + 登录按等级个性化推荐）随首页降级卡退役
+// 整链拆除——登录用户的个性化选题迁往 /api/daily 今日挑战（repo.PickDailyProblem
+// 同源），本接口只剩四个统计数。
 
 import (
 	"context"
-	"hash/fnv"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -19,20 +18,11 @@ import (
 	"soj/internal/repo"
 )
 
-type featuredProblem struct {
-	ID         int64    `json:"id"`
-	Title      string   `json:"title"`
-	Difficulty int      `json:"difficulty"`
-	AcceptRate float64  `json:"accept_rate"` // 0–100；无提交为 0
-	Tags       []string `json:"tags"`        // 标签树节点名（首页今日一题 meta 展示，最多 4 个）
-}
-
 type siteStats struct {
-	ProblemCount     int64            `json:"problem_count"`
-	UserCount        int64            `json:"user_count"`
-	TodaySubmissions int64            `json:"today_submissions"`
-	AvgJudgeMS       float64          `json:"avg_judge_ms"`
-	Featured         *featuredProblem `json:"featured"`
+	ProblemCount     int64   `json:"problem_count"`
+	UserCount        int64   `json:"user_count"`
+	TodaySubmissions int64   `json:"today_submissions"`
+	AvgJudgeMS       float64 `json:"avg_judge_ms"`
 }
 
 var (
@@ -41,83 +31,10 @@ var (
 	statsCacheAt time.Time
 )
 
-// 登录态个性化缓存（v0.66 批④）：tier 判定 + 个人今日一题按 (uid, 日期) 缓存——原
-// 每请求现算 2 聚合 + 最多 11 轮 pickFeatured（压测 p50 279ms）；30s 内刷新首页零 DB。
-// 条目量 = 登录用户数（与 identCache 同量级），按日键过期、常驻进程内存。
-var (
-	personalMu    sync.Mutex
-	personalCache = map[int64]personalEntry{}
-)
-
-type personalEntry struct {
-	day string
-	fp  *featuredProblem
-	at  time.Time
-}
-
-const personalCacheTTL = 30 * time.Second
-
-// pickFeatured 按种子从可见题池挑一道（difficulty>0 时限同难度档），装配标签名与通过率。
-// 池为空（或查询失败）返回 nil，由调用方扩大范围/兜底。种子 = 日期（全局）或 日期|uid（个性化）。
-func (h *Handlers) pickFeatured(ctx context.Context, seed string, difficulty int) *featuredProblem {
-	n, err := h.repo.CountVisibleProblems(ctx, difficulty)
-	if err != nil || n == 0 {
-		return nil
-	}
-	hseed := fnv.New32a()
-	_, _ = hseed.Write([]byte(seed))
-	skip := int64(hseed.Sum32()) % n
-	row, err := h.repo.VisibleProblemAt(ctx, difficulty, skip)
-	if err != nil || row == nil {
-		return nil
-	}
-	fp := &featuredProblem{
-		ID:         row.ID,
-		Title:      row.Title,
-		Difficulty: row.Difficulty,
-	}
-	// 标签树节点名（首页今日一题 meta 展示，最多 4 个；树读取失败静默跳过）
-	if len(row.Tags) > 0 {
-		if nodes, terr := h.repo.GetTagTree(ctx); terr == nil {
-			names := repo.TagIDNames(nodes)
-			for _, id := range row.Tags {
-				if n, found := names[id]; found {
-					fp.Tags = append(fp.Tags, n)
-					if len(fp.Tags) >= 4 {
-						break
-					}
-				}
-			}
-		}
-	}
-	// 通过率（AC / 总提交，题库同口径）；两次 count 开销可忽略
-	if total, ac, err := h.repo.ProblemSubmitCounts(ctx, fp.ID); err == nil && total > 0 {
-		fp.AcceptRate = float64(ac) / float64(total) * 100
-	}
-	return fp
-}
-
-// userTier 账号当前等级（1–10，聚合口径与排行榜一致：难度分布 + 经验调整）；
-// 读取失败回 1（青铜）。
-func (h *Handlers) userTier(ctx context.Context, uid int64) int {
-	cfg, counts, adjs, ok := levelAgg(ctx, h.repo, []int64{uid})
-	if !ok {
-		return 1
-	}
-	lv, _, _, _, _ := repo.LevelProgress(cfg, counts[uid], adjs[uid])
-	if lv < 1 || lv > 10 {
-		return 1
-	}
-	return lv
-}
-
-// GetSiteStats 站点统计（免登录可访；AuthOptional 供个性化今日一题读 uid）。
-// 60s 全局缓存防聚合压库；登录用户在缓存命中后按请求覆盖 Featured（不写回共享缓存）。
+// GetSiteStats 站点统计（免登录可访）。60s 全局缓存防聚合压库。
 // v0.26 缩界：聚合计算移出全局互斥锁（原持锁查库，Mongo 慢时统计请求串行排队）——
 // 锁只护缓存字段读写，缓存失效的并发请求各自计算、后写覆盖，代价可忽略。
 func (h *Handlers) GetSiteStats(c *gin.Context) {
-	uid, _, _, logged := currentUser(c)
-
 	statsMu.Lock()
 	st := statsCache
 	fresh := st != nil && time.Since(statsCacheAt) < time.Minute
@@ -157,51 +74,9 @@ func (h *Handlers) GetSiteStats(c *gin.Context) {
 			TodaySubmissions: ts,
 			AvgJudgeMS:       avg,
 		}
-		if pc > 0 {
-			st.Featured = h.pickFeatured(ctx, time.Now().Format("2006-01-02"), 0)
-		}
 		statsMu.Lock()
 		statsCache, statsCacheAt = st, time.Now()
 		statsMu.Unlock()
-	}
-
-	// 登录用户：按账号等级档推荐今日一题——种子 = 日期|uid（当天恒定），同档无题逐环外扩。
-	// v0.66 批④：个性化部分（tier+推荐）按 (uid, 日期) 缓存 30s，刷新首页零 DB
-	if logged {
-		day := time.Now().Format("2006-01-02")
-		personalMu.Lock()
-		pe, hit := personalCache[uid]
-		personalMu.Unlock()
-		if !hit || pe.day != day || time.Since(pe.at) >= personalCacheTTL {
-			ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-			seed := day + "|" + strconv.FormatInt(uid, 10)
-			tier := h.userTier(ctx, uid)
-			var personal *featuredProblem // 必须从 nil 起跑：初值若取 st.Featured 会因非 nil 跳过整个外扩循环
-			tried := [11]bool{}
-			for ring := 0; ring < 10 && personal == nil; ring++ {
-				for _, d := range [2]int{tier - ring, tier + ring} {
-					if d < 1 || d > 10 || tried[d] {
-						continue
-					}
-					tried[d] = true
-					if fp := h.pickFeatured(ctx, seed, d); fp != nil {
-						personal = fp
-						break
-					}
-				}
-			}
-			if personal == nil {
-				personal = h.pickFeatured(ctx, seed, 0) // 全档皆空兜底全池
-			}
-			cancel()
-			pe = personalEntry{day: day, fp: personal, at: time.Now()}
-			personalMu.Lock()
-			personalCache[uid] = pe
-			personalMu.Unlock()
-		}
-		copied := *st
-		copied.Featured = pe.fp
-		st = &copied
 	}
 	ok(c, st)
 }

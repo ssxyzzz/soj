@@ -4,14 +4,14 @@
 #
 # 棘轮模式：存量违规冻结为基线（只降不升），新增即 fail；清偿存量后手动下调基线。
 # 四条守卫（基线 2026-11-04 冻结；G4 2026-11-15 v0.97.9 增）：
-#   G1 repo 包无 projection 的 Find 调用（D 类慢查询源头）       基线 41
+#   G1 repo 包无 projection 的 Find 调用（D 类慢查询源头）       基线 39
 #   G2 http.Client 字面量无 Timeout（外部调用悬挂源头）           基线 0（硬性）
 #   G3 server 包 time.Sleep（请求路径同步睡眠禁令）               基线 0（硬性）
 #   G4 copyOutCached 获取点允许名单（沙箱文件仓库泄漏复发路径）   基线 0（硬性）
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-G1_BASE=40 # v0.66 批④下调 41→40：discuss 列表补 content 投影清偿一处
+G1_BASE=39 # v0.66 批④ 41→40（discuss 补投影）；v0.97.12 40→39：VisibleProblemAt 随今日一题退役清偿一处
 G2_BASE=0
 G3_BASE=0
 fail=0

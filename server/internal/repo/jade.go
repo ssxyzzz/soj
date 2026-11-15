@@ -47,12 +47,11 @@ const (
 var ErrInsufficientJade = errors.New("余额不足")
 
 // EnsureJadeIndexes 玉三集合索引（随 Bootstrap 执行）：awards {uid,pid} 唯一防重发；
-// ledger {uid,_id desc} 流水分页。
+// ledger {uid,_id desc} 流水分页。（v0.51 的 {pid,at} 索引随 CountDailySolved 退役
+// 撤销创建，v0.97.12；存量库里旧索引留存无害。）
 func (r *Repo) EnsureJadeIndexes(ctx context.Context) error {
 	if _, err := r.jadeAwards.Indexes().CreateMany(ctx, []mongo.IndexModel{
 		{Keys: bson.D{{Key: "uid", Value: 1}, {Key: "pid", Value: 1}}, Options: options.Index().SetUnique(true)},
-		// v0.51：CountDailySolved 每日一题页按 (pid, 当日) 计数（原 pid 非任何索引前导全表扫）
-		{Keys: bson.D{{Key: "pid", Value: 1}, {Key: "at", Value: -1}}},
 	}); err != nil {
 		return err
 	}
@@ -515,7 +514,7 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64, raceRankPct, 
 	if cp := set.JadeComboBonusPct(combo); cp > 100 {
 		claim(cp, "连击加成")
 	}
-	daily := r.IsTodayDaily(ctx, pid)
+	daily := r.isMyDaily(ctx, uid, pid)
 	if daily {
 		claim(200, "每日一题")
 	}

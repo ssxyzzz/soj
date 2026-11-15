@@ -24,6 +24,9 @@ func jadeTestProblem(t *testing.T, r *Repo, objective bool, difficulty int) int6
 	}
 	p := &Problem{ID: pid, Title: "T", Difficulty: difficulty,
 		TimeLimitMS: 1000, MemoryLimitKB: 65536, Visibility: "public"}
+	if !objective {
+		p.Cases = []CaseMeta{{Index: 1}} // 今日挑战池要求有测试数据（cases.0 存在，v0.97.12 夹具跟随）
+	}
 	if objective {
 		p.Type = TypeObjective
 		p.Questions = []ObjectiveQuestion{{}} // IsObjective 要求非空小题集
@@ -158,6 +161,11 @@ func TestMaybeAwardJadeBlessing(t *testing.T) {
 	r := openTestRepo(t)
 	ctx := context.Background()
 	pid := jadeTestProblem(t, r, false, 4) // 传统题 D4：基础 4、掉落 ∈{0,4}
+	// v0.97.12 夹具防串：标隐藏不进今日挑战池——否则本用例的题若成为 uid 的个性化
+	// 今日题，「未祝福」也会吃到每日 ×2，倍率断言失真
+	if _, err := r.problems.UpdateOne(ctx, bson.M{"_id": pid}, bson.M{"$set": bson.M{"hidden": true}}); err != nil {
+		t.Fatal(err)
+	}
 
 	// 未祝福：base=4、倍率 100（无加成）
 	if _, _, err := r.MaybeAwardJade(ctx, 21, pid, 0, 0); err != nil {
@@ -349,11 +357,13 @@ func TestJadeMultRule(t *testing.T) {
 	r := openTestRepo(t)
 	ctx := context.Background()
 
-	// ① 祝福 + 每日一题并列 → ×2 不 ×4
+	// ① 祝福 + 今日挑战并列 → ×2 不 ×4（v0.97.12 起今日挑战按等级个性化：
+	// uid31 的今日题由 PickDailyProblem 对拍取得——池内唯一有数据的公开传统题，
+	// dailyProblems 直插夹具随全站同题口径退役）
 	pid1 := jadeTestProblem(t, r, false, 4) // base 4、drop∈{0,4}
-	if _, err := r.db.Collection("dailyProblems").InsertOne(ctx, bson.M{
-		"_id": beijingDay(time.Now()), "pid": pid1, "difficulty": 4}); err != nil {
-		t.Fatal(err)
+	dp, err := r.PickDailyProblem(ctx, 31)
+	if err != nil || dp == nil || dp.ID != pid1 {
+		t.Fatalf("uid31 今日挑战题应为池内唯一题 %d，got %v (err %v)", pid1, dp, err)
 	}
 	if _, err := r.users.UpdateOne(ctx, bson.M{"_id": int64(31)},
 		bson.M{"$set": bson.M{"blessedLevel": 5, "blessUntil": time.Now().Add(time.Hour)}},

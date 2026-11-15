@@ -45,6 +45,11 @@ type fakeRepo struct {
 	lastStarIncludeHidden bool
 	wbRows                []repo.RevengeRow
 
+	// 今日挑战（v0.97.12）契约挂钩：捕获选题收到的 uid、空库/首过态可控
+	lastDailyUID int64
+	dailyNil     bool
+	dailyDone    bool
+
 	// 题目收藏（v0.86）契约挂钩：uid → pid → 已收藏
 	favorites map[int64]map[int64]bool
 
@@ -298,6 +303,8 @@ func testEngine(h *Handlers) *gin.Engine {
 	authed.GET("/users/:id/achievements", h.UserAchievements)
 	authed.GET("/users/:id/starmap", h.UserStarMap)
 	authed.GET("/users/:id/wrongbook", h.UserWrongbook)
+	// 今日挑战（v0.97.12 登录专属判定在 handler 内）：与生产同口径挂 AuthOptional
+	api.GET("/daily", AuthOptional(h), h.GetDaily)
 	return r
 }
 

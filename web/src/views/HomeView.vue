@@ -15,8 +15,9 @@ import type { ClassCard, ContestListItem } from '@/types'
 const router = useRouter()
 const userStore = useUserStore()
 
-// 游戏感批（v0.41）：每日钩子
-const daily = ref<{ enabled: boolean; pid?: number; title?: string; difficulty?: number; done?: boolean; solved_today?: number } | null>(null)
+// 游戏感批（v0.41）：每日钩子（v0.97.12 今日挑战登录专属 + 按等级个性化选题，
+// solved_today 从众计数退役）
+const daily = ref<{ enabled: boolean; pid?: number; title?: string; difficulty?: number; done?: boolean } | null>(null)
 const revenge = ref<{ pid: number; title: string; difficulty: number; best_score: number }[]>([])
 const revengeUsed = ref(false)
 const streakDays = ref(0)
@@ -25,7 +26,8 @@ const classes = ref<ClassCard[]>([])
 const notice = ref('')
 const noticeHtml = ref('')
 
-// v0.19 三期（对齐 v3-full 首页）：hero 搜索 + 站点统计行 + 今日一题 + 最近赛事卡
+// v0.19 三期（对齐 v3-full 首页）：hero 搜索 + 站点统计行 + 最近赛事卡
+//（v0.97.12 今日一题 featured 随降级卡退役，统计行只剩四个数字）
 const q = ref('')
 const stats = ref<Awaited<ReturnType<typeof siteApi.stats>> | null>(null)
 const contests = ref<ContestListItem[]>([])
@@ -68,7 +70,8 @@ onMounted(async () => {
       .catch(() => {
         // 公告加载失败不影响首页其他内容
       }),
-    // 每日一题（v0.41：/api/daily 确定性选题，带 ×2 与完成态）
+    // 今日挑战（v0.41 /api/daily → v0.97.12 登录专属 + 按等级个性化选题，带 ×2
+    // 与完成态；未登录 enabled:false 整卡隐藏）
     gameApi
       .daily()
       .then((d) => {
@@ -174,6 +177,9 @@ onMounted(async () => {
         <span v-if="streakDays > 0" class="gq-flame" title="连续有 AC 的天数">🔥 连续 {{ streakDays }} 天</span>
       </div>
 
+      <!-- 今日挑战（v0.97.12 起登录专属：后端按账号等级个性化选题——同档无题逐环
+           外扩，人人各异的今日挑战；未登录/接口失败整卡隐藏，v0.41「今日一题」
+           降级卡随全站同题口径退役） -->
       <div v-if="daily" class="gcard" @click="router.push(`/problems/${daily.pid}`)">
         <div class="gc-main">
           <div class="gc-cap">
@@ -185,24 +191,9 @@ onMounted(async () => {
           <div class="gc-name">{{ daily.pid }} {{ daily.title }}</div>
           <div class="gc-meta">
             <TierBadge :tier="daily.difficulty || 3" kind="difficulty" size="sm" />
-            <span v-if="daily.solved_today != null">今日 {{ daily.solved_today }} 人已通过</span>
           </div>
         </div>
         <el-button type="primary">{{ daily.done ? '再做一遍' : '接受挑战' }}</el-button>
-      </div>
-      <div v-else-if="stats?.featured" class="gcard" @click="router.push(`/problems/${stats.featured.id}`)">
-        <div class="gc-main">
-          <div class="gc-cap">
-            <span class="gc-title">📖 今日一题</span>
-            <span class="gc-date">{{ today }}</span>
-          </div>
-          <div class="gc-name">{{ stats.featured.id }} {{ stats.featured.title }}</div>
-          <div class="gc-meta">
-            <TierBadge :tier="stats.featured.difficulty || 3" kind="difficulty" size="sm" />
-            <span v-if="stats.featured.accept_rate > 0">通过率 {{ stats.featured.accept_rate.toFixed(0) }}%</span>
-          </div>
-        </div>
-        <el-button type="primary">去做这道题</el-button>
       </div>
 
       <div v-if="revenge.length" class="gcard gc-block">
