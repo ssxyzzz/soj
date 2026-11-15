@@ -165,7 +165,7 @@ type RepoAPI interface {
 	ListShopOrders(ctx context.Context, status string, page, pageSize int) ([]*repo.ShopOrder, int64, error)
 	MyShopOrders(ctx context.Context, uid int64) ([]*repo.ShopOrder, error)
 	GetShopOrder(ctx context.Context, id int64) (*repo.ShopOrder, error)
-	ResolveShopOrder(ctx context.Context, orderID int64, action string) error
+	ResolveShopOrder(ctx context.Context, orderID int64, status string) error
 	UserIDsByRole(ctx context.Context, role string) ([]int64, error)
 	GetAIConfig(ctx context.Context) (*ai.Config, error)
 	SaveAIConfig(ctx context.Context, cfg *ai.Config) error

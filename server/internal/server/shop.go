@@ -224,6 +224,7 @@ func (h *Handlers) AdminShopOrders(c *gin.Context) {
 }
 
 // AdminResolveShopOrder POST /api/admin/shop/orders/:id/resolve {action: fulfill|reject}（root）。
+// 契约动词在边界归一为目标终态再进 repo（repo 按终态落库）：fulfill→fulfilled、reject→rejected。
 func (h *Handlers) AdminResolveShopOrder(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -232,17 +233,26 @@ func (h *Handlers) AdminResolveShopOrder(c *gin.Context) {
 	var req struct {
 		Action string `json:"action"`
 	}
-	if err := c.ShouldBindJSON(&req); err != nil ||
-		(req.Action != repo.ShopOrderFulfilled && req.Action != repo.ShopOrderRejected) {
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "action 需为 fulfill 或 reject")
+		return
+	}
+	var status string
+	switch req.Action {
+	case "fulfill":
+		status = repo.ShopOrderFulfilled
+	case "reject":
+		status = repo.ShopOrderRejected
+	default:
 		fail(c, http.StatusBadRequest, "action 需为 fulfill 或 reject")
 		return
 	}
 	ctx := c.Request.Context()
-	if err := h.repo.ResolveShopOrder(ctx, id, req.Action); err != nil {
+	if err := h.repo.ResolveShopOrder(ctx, id, status); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if req.Action == repo.ShopOrderRejected {
+	if status == repo.ShopOrderRejected {
 		// 拒绝已由 repo 退玉；再通知学生
 		if o, err := h.repo.GetShopOrder(ctx, id); err == nil {
 			s, _ := h.repo.GetSystemSettings(ctx)

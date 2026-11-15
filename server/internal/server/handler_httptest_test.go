@@ -22,8 +22,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
-	"soj/internal/auth"
 	"soj/internal/ai"
+	"soj/internal/auth"
 	"soj/internal/config"
 	"soj/internal/repo"
 )
@@ -74,8 +74,8 @@ type fakeRepo struct {
 	// 整理历史（v0.92）：apply 留痕内存版（InsertTidyHistory/ListTidyHistory/GetTidyHistory）
 	tidyHistory map[int64]*repo.TidyHistory
 	tidyHistSeq int64
-	lists         map[int64]*repo.ProblemList // 题单 AI 一键整理（v0.71）：题单种子（GetProblemList 用）
-	aiCfg         *ai.Config                  // AI 供应商配置种子（GetAIConfig 用；无启用档 = 未配置）
+	lists       map[int64]*repo.ProblemList // 题单 AI 一键整理（v0.71）：题单种子（GetProblemList 用）
+	aiCfg       *ai.Config                  // AI 供应商配置种子（GetAIConfig 用；无启用档 = 未配置）
 
 	// 题库三视角：捕获 server 传给 repo 的过滤契约 + 回放列表
 	lastFilter *repo.ProblemListFilter
@@ -87,6 +87,11 @@ type fakeRepo struct {
 
 	rounds    []*repo.Contest    // 比赛详情（roundmy_test 用）
 	roundSubs []*repo.Submission // 场内「我的提交」回放（roundmy_test 用）
+
+	// 兑换订单履约（shop_test）契约挂钩：订单种子 + 传给 repo 的终态捕获 + 通知计数
+	shopOrders     map[int64]*repo.ShopOrder
+	resolvedStatus map[int64]string
+	notifications  int
 }
 
 func (f *fakeRepo) GetUserByID(_ context.Context, id int64) (*repo.User, error) {
@@ -266,6 +271,34 @@ func (f *fakeRepo) JadeLedgerPage(context.Context, int64, int, int) ([]*repo.Jad
 	return nil, 0, nil
 }
 
+// ---- fake 兑换订单（内存版，履约端点测试用；语义对齐真库 ResolveShopOrder）----
+
+func (f *fakeRepo) ResolveShopOrder(_ context.Context, orderID int64, status string) error {
+	o, ok := f.shopOrders[orderID]
+	if !ok || o.Status != repo.ShopOrderPending {
+		return mongo.ErrNoDocuments
+	}
+	o.Status = status
+	o.DoneAt = time.Now()
+	f.resolvedStatus[orderID] = status
+	if status == repo.ShopOrderRejected { // 拒绝全额退玉（真库同款语义）
+		return f.JadeCredit(context.Background(), o.UID, o.Price, repo.JadeKindBountyRefund, "退玉", o.ID)
+	}
+	return nil
+}
+
+func (f *fakeRepo) GetShopOrder(_ context.Context, id int64) (*repo.ShopOrder, error) {
+	if o, ok := f.shopOrders[id]; ok {
+		return o, nil
+	}
+	return nil, mongo.ErrNoDocuments
+}
+
+func (f *fakeRepo) UpsertNotification(context.Context, int64, repo.NotifyInput, int) error {
+	f.notifications++
+	return nil
+}
+
 // ---- 测试装配 ----
 
 const testJWTSecret = "httptest-secret-0123456789abcdef"
@@ -298,6 +331,8 @@ func testEngine(h *Handlers) *gin.Engine {
 	authed.GET("/admin/judge/stats", RequireRoot(), h.AdminJudgeStats)
 	authed.GET("/admin/users/:id/jade", RequireRoot(), h.AdminUserJade)
 	authed.POST("/admin/users/:id/jade-adjust", RequireRoot(), h.AdminJadeAdjust)
+	// 兑换订单履约（shop_test）：与生产同口径挂 RequireRoot
+	authed.POST("/admin/shop/orders/:id/resolve", RequireRoot(), h.AdminResolveShopOrder)
 	authed.GET("/me/jade", h.MyJade)
 	// 公开主页游戏三卡（v0.85）：与生产同口径挂 AuthRequired
 	authed.GET("/users/:id/achievements", h.UserAchievements)
@@ -337,19 +372,21 @@ func doJSON(r *gin.Engine, method, path, token string, body string) (int, map[st
 
 func baseFake() *fakeRepo {
 	return &fakeRepo{
-		users:      map[int64]*repo.User{},
-		roles:      map[string]*repo.Role{},
-		problems:   map[int64]*repo.Problem{},
-		lists:      map[int64]*repo.ProblemList{},
-		settings:   &repo.SystemSettings{RateLimitPerMinute: 100},
-		aiCfg:      &ai.Config{},
-		bestScores: map[int64]int{},
-		jadeBal:    map[int64]int64{},
-		tidyHistory: map[int64]*repo.TidyHistory{},
-		classes:      map[int64]*repo.Class{},
-		memberRoles:  map[[2]int64]string{},
-		classPatches: map[int64]repo.ClassPatch{},
-		assignments:  map[int64]*repo.Assignment{},
+		users:          map[int64]*repo.User{},
+		roles:          map[string]*repo.Role{},
+		problems:       map[int64]*repo.Problem{},
+		lists:          map[int64]*repo.ProblemList{},
+		settings:       &repo.SystemSettings{RateLimitPerMinute: 100},
+		aiCfg:          &ai.Config{},
+		bestScores:     map[int64]int{},
+		jadeBal:        map[int64]int64{},
+		tidyHistory:    map[int64]*repo.TidyHistory{},
+		classes:        map[int64]*repo.Class{},
+		memberRoles:    map[[2]int64]string{},
+		classPatches:   map[int64]repo.ClassPatch{},
+		assignments:    map[int64]*repo.Assignment{},
+		shopOrders:     map[int64]*repo.ShopOrder{},
+		resolvedStatus: map[int64]string{},
 	}
 }
 

@@ -19,9 +19,9 @@ import (
 type ShopItem struct {
 	ID           int64     `bson:"_id"`
 	Name         string    `bson:"name"`
-	Image        string    `bson:"image,omitempty"` // 图片 URL（可空 = 纯文字卡）
-	Price        int64     `bson:"price"`           // 玉
-	Stock        int64     `bson:"stock"`           // -1 = 不限库存
+	Image        string    `bson:"image,omitempty"`        // 图片 URL（可空 = 纯文字卡）
+	Price        int64     `bson:"price"`                  // 玉
+	Stock        int64     `bson:"stock"`                  // -1 = 不限库存
 	PerUserLimit int64     `bson:"perUserLimit,omitempty"` // 0 = 不限购
 	Active       bool      `bson:"active"`
 	CreatedAt    time.Time `bson:"createdAt"`
@@ -34,8 +34,8 @@ type ShopOrder struct {
 	ItemName  string    `bson:"itemName"`
 	UID       int64     `bson:"uid"`
 	Uname     string    `bson:"uname"`
-	Price     int64     `bson:"price"` // 下单时价（物价后调不追）
-	Status    string    `bson:"status"` // pending | fulfilled | rejected
+	Price     int64     `bson:"price"`          // 下单时价（物价后调不追）
+	Status    string    `bson:"status"`         // pending | fulfilled | rejected
 	Note      string    `bson:"note,omitempty"` // 学生留言
 	CreatedAt time.Time `bson:"createdAt"`
 	DoneAt    time.Time `bson:"doneAt,omitempty"`
@@ -152,7 +152,9 @@ func (r *Repo) PlaceShopOrder(ctx context.Context, uid int64, uname string, item
 	if res.MatchedCount == 0 {
 		return 0, ErrShopOutOfStock
 	}
-	rollback := func() { _, _ = r.db.Collection("shopItems").UpdateOne(ctx, bson.M{"_id": itemID}, bson.M{"$inc": bson.M{"stock": 1}}) }
+	rollback := func() {
+		_, _ = r.db.Collection("shopItems").UpdateOne(ctx, bson.M{"_id": itemID}, bson.M{"$inc": bson.M{"stock": 1}})
+	}
 	if err := r.JadeSpend(ctx, uid, it.Price, JadeKindShopOrder,
 		fmt.Sprintf("兑换「%s」", it.Name), itemID); err != nil {
 		if err == ErrInsufficientJade {
@@ -216,22 +218,23 @@ func (r *Repo) MyShopOrders(ctx context.Context, uid int64) ([]*ShopOrder, error
 	return list, cursor.All(ctx, &list)
 }
 
-// ResolveShopOrder 履约/拒绝（root）：pending → fulfilled（不退玉）/ rejected（全额退玉）。
-func (r *Repo) ResolveShopOrder(ctx context.Context, orderID int64, action string) error {
+// ResolveShopOrder 履约/拒绝（root）：入参为目标终态（fulfilled 不退玉 / rejected 全额退玉），
+// pending → 终态；动词→终态的归一在 server 边界完成。
+func (r *Repo) ResolveShopOrder(ctx context.Context, orderID int64, status string) error {
 	var o ShopOrder
 	if err := r.db.Collection("shopOrders").FindOne(ctx, bson.M{"_id": orderID}).Decode(&o); err != nil {
 		return err
 	}
 	res, err := r.db.Collection("shopOrders").UpdateOne(ctx,
 		bson.M{"_id": orderID, "status": ShopOrderPending},
-		bson.M{"$set": bson.M{"status": action, "doneAt": time.Now()}})
+		bson.M{"$set": bson.M{"status": status, "doneAt": time.Now()}})
 	if err != nil {
 		return err
 	}
 	if res.MatchedCount == 0 {
 		return errors.New("订单不存在或已处理")
 	}
-	if action == ShopOrderRejected {
+	if status == ShopOrderRejected {
 		if err := r.JadeCredit(ctx, o.UID, o.Price, JadeKindBountyRefund,
 			fmt.Sprintf("兑换被拒退回（订单 #%d「%s」）", o.ID, o.ItemName), o.ID); err != nil {
 			return err
