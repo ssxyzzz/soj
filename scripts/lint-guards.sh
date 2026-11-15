@@ -3,10 +3,11 @@
 # agent 的必然路径就是 reviewer。
 #
 # 棘轮模式：存量违规冻结为基线（只降不升），新增即 fail；清偿存量后手动下调基线。
-# 三条守卫（基线 2026-11-04 冻结）：
+# 四条守卫（基线 2026-11-04 冻结；G4 2026-11-15 v0.97.9 增）：
 #   G1 repo 包无 projection 的 Find 调用（D 类慢查询源头）       基线 41
 #   G2 http.Client 字面量无 Timeout（外部调用悬挂源头）           基线 0（硬性）
 #   G3 server 包 time.Sleep（请求路径同步睡眠禁令）               基线 0（硬性）
+#   G4 copyOutCached 获取点允许名单（沙箱文件仓库泄漏复发路径）   基线 0（硬性）
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -46,7 +47,22 @@ if [ "$g3" -gt "$G3_BASE" ]; then
 	fail=1
 fi
 
+# G4：copyOutCached 获取点允许名单（v0.97.9 File Error 事故的复发路径封死）——
+# 沙箱文件仓库的缓存获取只允许出现在 judge/judge.go（释放单点 releaseResultFiles /
+# releaseBinary 同文件）与 sandbox 包（结构体定义）。别处新增获取点即 fail：先接好
+# 释放路径（defer 删 fileId），再 consciously 把文件加进本名单。判后即清 + 沙箱侧
+# -file-timeout TTL 是现状不变量，别在别的文件里开无释放的获取口。
+g4=$(grep -rn 'CopyOutCached' server/internal --include='*.go' 2>/dev/null \
+	| grep -v _test \
+	| grep -v 'internal/judge/judge\.go:' \
+	| grep -v 'internal/sandbox/' \
+	| wc -l)
+if [ "$g4" -gt 0 ]; then
+	echo "❌ 性能守卫 G4：copyOutCached 出现在 judge.go/sandbox 包之外 $g4 处——沙箱缓存获取必须配释放（judge.go 的 releaseResultFiles 是唯一范式；新增获取点先接 defer 删除再进名单）"
+	fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then
 	exit 1
 fi
-echo "性能守卫：G1 ${g1}/${G1_BASE} · G2 ${g2}/${G2_BASE} · G3 ${g3}/${G3_BASE} ✓（棘轮：清偿存量后下调基线，只降不升）"
+echo "性能守卫：G1 ${g1}/${G1_BASE} · G2 ${g2}/${G2_BASE} · G3 ${g3}/${G3_BASE} · G4 $g4/0 ✓（棘轮：清偿存量后下调基线，只降不升）"
