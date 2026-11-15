@@ -63,21 +63,11 @@ func (ir *interactorRunner) ensureCompiled(ctx context.Context) (string, error) 
 	return fileID, nil
 }
 
-// recompile 丢弃失效的编译产物缓存并重编一次（沙箱容器重建/清理后旧 fileId 不再存在）。
+// recompile 丢弃失效的编译产物缓存并重编一次（沙箱容器重建/清理/TTL 过期后旧 fileId 不再存在）。
 func (ir *interactorRunner) recompile(ctx context.Context) (string, error) {
 	ir.p.InteractorFileID = ""
 	_ = ir.j.Repo.UpdateProblemMeta(ctx, ir.p.ID, repo.ProblemMetaPatch{InteractorFileID: new(string)})
 	return ir.ensureCompiled(ctx)
-}
-
-// staleInteractorFile 判断沙箱错误是否指向交互器缓存产物丢失（错误里点名了当前 fileId）。
-func staleInteractorFile(err error, fileID string) bool {
-	if err == nil || fileID == "" {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, fileID) &&
-		(strings.Contains(msg, "file does not exist") || strings.Contains(msg, "file not found"))
 }
 
 // evaluateInteractive 交互题主判：逐测试点双进程管道执行。
@@ -155,9 +145,9 @@ func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, 
 			{In: sandbox.PipeIndex{Index: 0, Fd: 1}, Out: sandbox.PipeIndex{Index: 1, Fd: 0}}, // 交互器 stdout → 选手 stdin
 		}
 		results, err := j.Sandbox.RunPiped(ctx, []sandbox.Cmd{interCmd, userCmd}, pipes)
-		if err != nil && staleInteractorFile(err, irID) {
-			// 沙箱容器重建/清理会让题目元数据里的 fileId 失效：清缓存重编一次再跑，
-			// 与 checker 的 File Error 兜底同口径，避免整道交互题直接 System Error。
+		if err != nil && sandbox.StaleFileID(err, irID) {
+			// 沙箱容器重建/清理/TTL 过期会让题目元数据里的 fileId 失效：清缓存重编
+			// 一次再跑，与 checker 的失效兜底同口径，避免整道交互题直接 System Error。
 			irID, err = ir.recompile(ctx)
 			if err != nil {
 				return repo.StatusSystemError, sumTime, sumMem, partialScore(passed, n), "交互器缓存失效且重编失败: " + err.Error(), detail

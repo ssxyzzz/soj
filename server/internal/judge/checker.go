@@ -64,8 +64,14 @@ func (cr *checkerRunner) run(ctx context.Context, tc repo.CaseMeta, input, ans, 
 		return false, "", err
 	}
 	ok, msg, sysErr, retry := cr.tryRun(ctx, fileID, tc, input, ans, stdout)
-	if sysErr != nil && retry {
-		cr.p.CheckerFileID = "" // 产物缓存失效：重编一次再试
+	if sysErr == nil {
+		return ok, msg, nil
+	}
+	// 缓存产物失效兜底（v0.97.9）：结果态 File Error（copyOut 收集失败）或 HTTP 态
+	// file not found（copyIn 引用已删/TTL 过期的 fileId，go-judge 不走结果态）
+	// 都指向产物丢失 → 清缓存重编一次再试（与 interactor 同口径）
+	if retry || sandbox.StaleFileID(sysErr, fileID) {
+		cr.p.CheckerFileID = ""
 		fileID, err = cr.ensureCompiled(ctx)
 		if err != nil {
 			return false, "", err

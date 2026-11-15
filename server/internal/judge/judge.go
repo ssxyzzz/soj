@@ -42,8 +42,8 @@ type Judger struct {
 	Repo     *repo.Repo
 	Sandbox  *sandbox.Client
 	Provider testdata.Provider
-	Name     string // 判题进程标识，写入提交便于排查
-	Waker    *Waker // 提交即时唤醒（v0.7.1）：Web 进程入队后非阻塞通知，空闲 worker 近零延迟领取
+	Name     string       // 判题进程标识，写入提交便于排查
+	Waker    *Waker       // 提交即时唤醒（v0.7.1）：Web 进程入队后非阻塞通知，空闲 worker 近零延迟领取
 	sbFails  atomic.Int32 // 连续沙箱故障计数（熔断退避用，多 worker 并发递增）
 }
 
@@ -80,7 +80,7 @@ func (w *Waker) C() <-chan struct{} {
 }
 
 // Pool 启动 workers 个判题循环，直到 ctx 取消。workers=0 为 Web-only 形态
-//（v0.66 批②：判题交给独立 judge 容器，Web 进程不启判题循环与巡检；自测仍借
+// （v0.66 批②：判题交给独立 judge 容器，Web 进程不启判题循环与巡检；自测仍借
 // 本进程的编译闸与沙箱客户端，不受影响）。
 func (j *Judger) Pool(ctx context.Context, workers int) {
 	if workers < 0 {
@@ -491,7 +491,11 @@ func caseVerdict(res *sandbox.Result, progOut, ans string, cmp outputComparer) (
 	case "Output Limit Exceeded":
 		return "OLE", repo.StatusRE, "输出超过限制"
 	default:
-		return "SE", repo.StatusSystemError, "沙箱状态异常: " + res.Status
+		reason := "沙箱状态异常: " + res.Status
+		if res.Error != "" {
+			reason += "（" + truncate(res.Error, 200) + "）"
+		}
+		return "SE", repo.StatusSystemError, reason
 	}
 }
 
@@ -504,7 +508,9 @@ type fileIOParams struct {
 }
 
 // programOutput 取考生输出：优先响应内联内容；copyOutCached 形态（大输出走沙箱文件
-// 缓存、不经 /run 响应 JSON——MB 级输出会撑爆响应读取上限）按 fileID 拉取，取完即删。
+// 缓存、不经 /run 响应 JSON——MB 级输出会撑爆响应读取上限）按 fileID 拉取。
+// 只读不删：缓存文件的删除统一由 judgeCase 出口的 releaseResultFiles 收口（本函数
+// 原本的「取完即删」只在 AC 路径走到，正是 v0.97.9 前缓存泄漏的根因）。
 // err 非 nil 为基础设施错误（调用方判 System Error）。
 func (j *Judger) programOutput(ctx context.Context, res *sandbox.Result, fio fileIOParams) (string, bool, error) {
 	name := "stdout"
@@ -521,22 +527,38 @@ func (j *Judger) programOutput(ctx context.Context, res *sandbox.Result, fio fil
 	fctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	data, err := j.Sandbox.FetchFile(fctx, id, maxStdout)
-	dctx, dcancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer dcancel()
-	if derr := j.Sandbox.DeleteFile(dctx, id); derr != nil {
-		slog.Warn("清理输出缓存文件失败", "component", "judge", "error", derr)
-	}
 	if err != nil {
 		return "", false, fmt.Errorf("拉取考生输出失败: %w", err)
 	}
 	return string(data), true, nil
 }
 
+// releaseResultFiles 删除测试点结果里全部 copyOutCached 缓存文件（best-effort）。
+// 单点文件秒级生命周期：判定读取完即无用，逐个删除失败仅告警不中断（沙箱侧还有
+// -file-timeout TTL 兜底，见 docker-compose sandbox command）。
+func (j *Judger) releaseResultFiles(res *sandbox.Result) {
+	for name, id := range res.FileIDs {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := j.Sandbox.DeleteFile(ctx, id)
+		cancel()
+		if err != nil {
+			slog.Warn("清理测试点缓存文件失败", "component", "judge", "file", name, "error", err)
+		}
+	}
+}
+
 // judgeCase 单测试点判定核心（v0.5.4 ③ 去重：evaluatePoints 与 evaluateSubtasks 原各持一份同构实现）。
 // input 为该点输入内容（runOne 已读，透传给 checker，省一次重复读盘——快赢批⑤）。
 // 返回 caseStatus（明细行）/ finalStatus（整体终态，空 = 继续）/ reason；err 非 nil 为致命错误
 // （答案读取/校验器异常），由调用方整体判 System Error。
+//
+// 缓存文件统一释放（v0.97.9）：defer 单出口，结果里全部 copyOutCached 文件
+// （stdio 的 stdout、文件 IO 的 stdout+输出文件）判定读取完毕即删。此前只有
+// programOutput 拉取路径删除且只在 AC 路径走到——非 AC 点（TLE/MLE/RE）的 stdout
+// 缓存在沙箱文件仓库（/dev/shm/go-judge）只进不出，仓库塞满后编译批量 File Error
+// （生产 2026-11-15 实锤：2.5 天攒满 256MB，所有 C/C++ 提交 CE）。
 func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.Result, input string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (caseStatus, finalStatus, reason string, err error) {
+	defer j.releaseResultFiles(res)
 	if res.Status != "Accepted" {
 		if fio.enabled && res.Status == "File Error" {
 			// 文件模式：CopyOut 收集不到配置的输出文件（程序未写/freopen 名字错）
@@ -768,6 +790,12 @@ func (j *Judger) compile(ctx context.Context, l *lang.Language, code string) (fi
 		detail := "编译进程异常终止: " + r.Status
 		if stderr != "" {
 			detail += "\n" + truncate(stderr, 4096)
+		}
+		if r.Error != "" {
+			// go-judge 的 error 字段（v0.97.9 起解析）带根因（如文件仓库写满的
+			// "no space left on device"）——File Error 不再只报状态不报原因
+			detail += "\n沙箱错误: " + truncate(r.Error, 256)
+			slog.Warn("编译沙箱错误", "component", "judge", "status", r.Status, "error", truncate(r.Error, 256))
 		}
 		if attempt < maxAttempts {
 			slog.Warn("编译瞬时失败，自动重试", "component", "judge", "status", r.Status, "stderr", truncate(stderr, 200))

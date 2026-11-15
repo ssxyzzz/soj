@@ -22,8 +22,13 @@ up: check ## 构建发版并对齐镜像（= check + bin + image：先过代码�
 	# sandbox 镜像缺失时 up 仍会按 build: 自动补建，全新机器行为不变。
 	# 同日二修：up 必须显式带 judge——分进程后 soj 不再 depends_on judge（解耦本意），
 	# 漏带的生产实锤：soj 已切 workers=0 而 judge 未建，判题能力归零约一分钟。
-	SOJ_VERSION=$(VERSION) docker compose build soj
-	docker compose up -d soj judge
+	# v0.97.9 三修：补 sandbox——compose 配置变更（如 -file-timeout）要靠 up 落到容器；
+	# 不带 --build 不触发镜像构建，仅按配置差异重建容器，不碰 Docker Hub。
+	# v0.97.9 四修：build 必须带上 judge——judge 服务有自己的镜像 tag（soj-judge），
+	# 只 build soj 时 judge 镜像永远停在首次构建，生产实锤：judge 镜像落后 10 天、
+	# 旧二进制一直在线判题。两服务同构建上下文，共享层缓存近乎零成本。
+	SOJ_VERSION=$(VERSION) docker compose build soj judge
+	docker compose up -d soj judge sandbox
 
 down: ## 停止并移除容器（数据卷保留）
 	docker compose down

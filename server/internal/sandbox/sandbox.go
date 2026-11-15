@@ -58,8 +58,8 @@ func PipeReader(name string) File {
 
 // CopyFile 描述 copyIn 的文件来源：内容或已缓存的 fileId 二选一。
 // Content 与 File.Content 同理用指针：string+omitempty 会把「空内容的合法拷入」
-//（如文件 IO 模式下 0 字节的测试点输入）整个丢成 {}，被沙箱以 400 拒绝
-//（2026-10-27 比赛文件 IO 判题 System Error 的根因）。经 CopyContent 构造。
+// （如文件 IO 模式下 0 字节的测试点输入）整个丢成 {}，被沙箱以 400 拒绝
+// （2026-10-27 比赛文件 IO 判题 System Error 的根因）。经 CopyContent 构造。
 type CopyFile struct {
 	Content *string `json:"content,omitempty"`
 	FileID  string  `json:"fileId,omitempty"`
@@ -86,12 +86,29 @@ type Cmd struct {
 // Output Limit Exceeded / Non Zero Exit Status / Signalled / File Error /
 // Dangerous Syscall / Internal Error（其中 Accepted 表示退出码为 0 且未超限）。
 type Result struct {
-	Status     string            `json:"status"`
-	ExitStatus int               `json:"exitStatus"`
-	Time       int64             `json:"time"`
-	Memory     int64             `json:"memory"`
-	Files      map[string]string `json:"files"`
-	FileIDs    map[string]string `json:"fileIds"`
+	Status     string `json:"status"`
+	ExitStatus int    `json:"exitStatus"`
+	// Error go-judge 附加的错误说明：File Error 时给出根因（如文件仓库写满的
+	// "no space left on device"）。此前不解析，File Error 只报状态不报原因，
+	// 生产排查只能登机看 /dev/shm——2026-11-15 实锤后随缓存泄漏修复一并接上。
+	Error   string            `json:"error"`
+	Time    int64             `json:"time"`
+	Memory  int64             `json:"memory"`
+	Files   map[string]string `json:"files"`
+	FileIDs map[string]string `json:"fileIds"`
+}
+
+// StaleFileID 判断沙箱错误是否指向某缓存产物丢失：copyIn 引用已删除/过期的 fileId
+// 时，go-judge 以 HTTP 错误（而非结果态 File Error）返回
+// `file does not exist with id "xxx": file not found`。判题侧据此触发失效重编
+// （checker/interactor 的题目级缓存产物），与结果态 File Error 兜底同口径。
+func StaleFileID(err error, fileID string) bool {
+	if err == nil || fileID == "" {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, fileID) &&
+		(strings.Contains(msg, "file does not exist") || strings.Contains(msg, "file not found"))
 }
 
 // Stdout / Stderr 取出管道收集的输出内容。

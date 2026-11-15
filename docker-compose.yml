@@ -42,6 +42,11 @@ services:
     privileged: true
     shm_size: 256m
     logging: *default-logging
+    # 文件仓库 TTL（v0.97.9 纵深防御）：copyOutCached 文件 30 分钟无访问自动清除
+    # （15s 一巡检）——判题产物秒级生命周期远短于 TTL；题目 checker/interactor 缓存
+    # 产物过期由判题侧失效重编兜底（sandbox.StaleFileID）。历史泄漏（非 AC 点的
+    # stdout 缓存只进不出）曾 2.5 天塞满 256MB → 编译批量 File Error。
+    command: ["-file-timeout", "30m"]
     ports:
       - "5050:5050" # 本地开发时供宿主机连接，上云建议移除
 
