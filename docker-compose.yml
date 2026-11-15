@@ -42,11 +42,16 @@ services:
     privileged: true
     shm_size: 256m
     logging: *default-logging
-    # 文件仓库 TTL（v0.97.9 纵深防御）：copyOutCached 文件 30 分钟无访问自动清除
-    # （15s 一巡检）——判题产物秒级生命周期远短于 TTL；题目 checker/interactor 缓存
-    # 产物过期由判题侧失效重编兜底（sandbox.StaleFileID）。历史泄漏（非 AC 点的
-    # stdout 缓存只进不出）曾 2.5 天塞满 256MB → 编译批量 File Error。
-    command: ["-file-timeout", "30m"]
+    # 文件仓库治理（v0.97.9 纵深防御，双闸）：
+    # ① -dir 落盘：copyOutCached 文件仓库挪出 /dev/shm（默认位置，256MB tmpfs 天花板）
+    #    → 磁盘仓。判题峰值瞬时占用 = 并发 worker(5) × 64MB stdout 缓存，文件 IO 模式
+    #    再叠加单文件 256MB copyOutMax，最坏 ~1.6GB——256MB shm 必然瞬时打满（班级
+    #    集中交死循环打印即可触发，无需任何 bug）；磁盘仓余量 500 倍，容量天花板
+    #    结构性移除。文件本身秒级生命周期 + TTL，不占常态磁盘。
+    # ② -file-timeout 30m：文件 30 分钟无访问自动清除（15s 巡检）——任何未来泄漏
+    #    路径的兜底 GC；题目 checker/interactor 缓存产物过期由判题侧失效重编兜底
+    #    （sandbox.StaleFileID）。
+    command: ["-file-timeout", "30m", "-dir", "/var/lib/go-judge"]
     ports:
       - "5050:5050" # 本地开发时供宿主机连接，上云建议移除
 
