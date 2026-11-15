@@ -32,7 +32,7 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
           <div class="user-subs-detail">
             <template v-if="row.code">
               <div class="detail-sub">代码</div>
-              <CodePane class="sub-code" :code="row.code" :language="row.language" />
+              <CodePane class="detail-code" :code="row.code" :language="row.language" />
             </template>
             <!-- 有测试点明细时错误原因已在明细列展示，仅无明细时独立成行兜底（如编译错误） -->
             <el-table
@@ -97,7 +97,9 @@ const emit = defineEmits<{ (e: 'update:modelValue', v: boolean): void }>()
   margin-bottom: var(--soj-sp-8);
 }
 
-.user-subs-detail .sub-code {
+/* CodePane 与测试点明细表的间距（勿挂 main.css 的 .sub-code：那是旧 <pre> 代码窗
+   的 max-height/overflow 遗留类，套在固定 360px 的 CodeEditor 外会多出一条滚动条） */
+.user-subs-detail .detail-code {
   margin-bottom: var(--soj-sp-12);
 }
 </style>
