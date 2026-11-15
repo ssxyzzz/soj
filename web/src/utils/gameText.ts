@@ -1,4 +1,4 @@
-// 游戏文案字库（v0.41）：欢迎语四级 / 每日一句 / WA 吐槽。前端版本化内置（后台
+// 游戏文案字库（v0.41）：欢迎语四级 / 每日一句。前端版本化内置（后台
 // 自定义句子二期）。随机由调用方做（每日句用日期 seed——同日全站同句）。
 
 /** 登录欢迎语：按等级分档随机（新锐/中坚/大佬/传说） */
@@ -56,18 +56,6 @@ export const DAILY_QUOTES: string[] = [
   'Debug 之路，道阻且长，行则将至。',
 ]
 
-/** WA 吐槽（自嘲式，不伤人） */
-export const WA_TAUNTS: string[] = [
-  '差一点点，江湖再见。',
-  '测试点在嘲笑你（划掉）在等你。',
-  'WA：还没到说再见的时候。',
-  '这题在给你暗示：换个角度试试。',
-  '第 N 个测试点向你扔了一只袜子。',
-  '再检查一眼边界？就一眼。',
-  '恭喜发现一种错误做法（也是一种进步）。',
-  '答案在路上，WA 在脚下。',
-]
-
 /** 时间段彩蛋（叠加在每日一句前） */
 export function pickDailyQuote(date = new Date()): string {
   const h = date.getHours()
@@ -82,8 +70,4 @@ export function pickWelcome(level: number): string {
     if (level >= t.min) return t.lines[Math.floor(Math.random() * t.lines.length)]
   }
   return '欢迎回来'
-}
-
-export function pickTaunt(): string {
-  return WA_TAUNTS[Math.floor(Math.random() * WA_TAUNTS.length)]
 }
