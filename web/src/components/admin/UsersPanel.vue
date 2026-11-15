@@ -127,13 +127,18 @@ const createForm = reactive({
 })
 
 async function create() {
-  if (!createForm.username || !createForm.password) {
-    ElMessage.warning('请填写用户名和密码')
+  // 用户名/昵称二选一（v0.97.10）：只填昵称 → 后端按拼音+ID 生成用户名并随响应回传
+  if (!createForm.username.trim() && !createForm.nickname.trim()) {
+    ElMessage.warning('用户名和昵称至少填一项')
+    return
+  }
+  if (!createForm.password) {
+    ElMessage.warning('请填写初始密码')
     return
   }
   creating.value = true
   try {
-    await adminApi.createUser(
+    const r = await adminApi.createUser(
       createForm.username,
       createForm.password,
       createForm.nickname,
@@ -146,7 +151,7 @@ async function create() {
         region: createForm.region.trim(),
       },
     )
-    ElMessage.success('用户已创建')
+    ElMessage.success(`用户已创建：${r.username}（ID ${r.id}）`)
     showCreate.value = false
     createForm.username = ''
     createForm.password = ''
@@ -717,14 +722,18 @@ defineExpose({ refresh: () => load() })
 
     <el-dialog v-model="showCreate" title="新建用户" width="560">
       <el-form label-position="top">
-        <el-form-item label="用户名" required>
-          <el-input v-model="createForm.username" placeholder="3-32 位字母/数字/下划线" />
+        <!-- 用户名/昵称二选一（v0.97.10）：只填昵称 → 后端拼音+ID 生成用户名（花名册同源） -->
+        <el-form-item>
+          <template #label>
+            <TipLabel label="用户名" tip="与昵称二选一：留空时用户名 = 昵称拼音小写连写 + 用户 ID（如昵称张三 → zhangsan101，同批量导入花名册规则）；手动填写则需 3-32 位字母/数字/下划线" />
+          </template>
+          <el-input v-model="createForm.username" placeholder="留空按昵称拼音自动生成" />
         </el-form-item>
         <el-form-item label="初始密码" required>
           <el-input v-model="createForm.password" placeholder="至少 8 位" />
         </el-form-item>
         <el-form-item label="昵称">
-          <el-input v-model="createForm.nickname" placeholder="默认与用户名相同" />
+          <el-input v-model="createForm.nickname" maxlength="6" placeholder="与用户名二选一；留空默认与用户名相同（6 字以内）" />
         </el-form-item>
         <!-- 详细资料（v0.97.8，选填）：控件/字段顺序/截断口径与编辑弹窗一致，建号一步到位免二次补录 -->
         <el-divider content-position="left">详细资料（选填）</el-divider>

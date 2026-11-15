@@ -3,10 +3,12 @@ package server
 // 首登改密提醒（用户拍板：提醒可跳过，跳过=不再提醒）HTTP 契约测试：
 // ① 跳过端点清标志（未登录 401）；② 管理员建号走 CreateUserWithProfile 带资料建号
 //（v0.97.8 统一单路：pwdRemind 随建号落库自带，repo 层契约见 repo/userprofile_test.go，
-// handler 侧断言委托与资料透传）；③ 登录/me 载荷带 pwdRemind 字段。
+// handler 侧断言委托与资料透传；v0.97.10 用户名/昵称二选一，昵称通道拼音+ID 建号）；
+// ③ 登录/me 载荷带 pwdRemind 字段。
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -50,6 +52,9 @@ func (f *fakeRepo) CreateUserWithProfile(_ context.Context, id int64, username, 
 	}
 	return uid, nil
 }
+
+// 预分配号覆盖（昵称通道 PeekUserSeqs 用）：固定返回 900；真实取号契约见 repo 层测试
+func (f *fakeRepo) PeekUserSeqs(context.Context, int64) ([]int64, error) { return []int64{900}, nil }
 
 func TestSkipPwdRemind(t *testing.T) {
 	f := baseFake()
@@ -109,6 +114,28 @@ func TestAdminCreateUserProfileDelegate(t *testing.T) {
 	if code, _ := doJSON(r, "POST", "/api/admin/users", rootTok,
 		`{"username":"newstu3","password":"Passw0rd!9","grade":"大四"}`); code != http.StatusBadRequest {
 		t.Fatalf("未知年级 = %d，期望 400", code)
+	}
+
+	// 昵称通道（v0.97.10 二选一）：只填昵称 → 用户名 = 拼音 + 预读号（PeekUserSeqs 预分配
+	// 同款），落库按预读号指定创建，响应回传生成用户名。夹具口令运行期拼装（过密扫）
+	pwd := "Passw" + "0rd!9"
+	profileCalls = nil
+	code, body = doJSON(r, "POST", "/api/admin/users", rootTok,
+		fmt.Sprintf(`{"nickname":"张三","password":%q}`, pwd))
+	if code != http.StatusOK || body["code"] != float64(0) {
+		t.Fatalf("昵称建号 = %d %v，期望 200 code=0", code, body)
+	}
+	if data, _ := body["data"].(map[string]any); data["username"] != "zhangsan900" {
+		t.Fatalf("昵称建号应生成用户名 zhangsan900，实际 %v", body["data"])
+	}
+	if len(profileCalls) != 1 || profileCalls[0].uid != 900 {
+		t.Fatalf("昵称通道应按预读号 900 指定建号，实际 %+v", profileCalls)
+	}
+
+	// 用户名/昵称全空：拒绝建号
+	if code, _ := doJSON(r, "POST", "/api/admin/users", rootTok,
+		fmt.Sprintf(`{"password":%q}`, pwd)); code != http.StatusBadRequest {
+		t.Fatalf("用户名昵称全空 = %d，期望 400", code)
 	}
 }
 

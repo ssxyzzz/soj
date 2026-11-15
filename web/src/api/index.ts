@@ -596,7 +596,7 @@ export const adminApi = {
     role: string,
     id?: number,
     profile?: { gender?: string; grade?: string; school?: string; region?: string },
-  ) => post<{ id: number }>('/admin/users', { username, password, nickname, role, id, ...profile }),
+  ) => post<{ id: number; username: string }>('/admin/users', { username, password, nickname, role, id, ...profile }),
   // 批量建号·中文花名册（v0.34 两段式）：上传识别 → 预览确认 → 建号；模板下载走 download.ts
   importUsersPreview: (form: FormData) =>
     client

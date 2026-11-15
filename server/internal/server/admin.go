@@ -66,7 +66,8 @@ func (h *Handlers) AdminUnbindEmail(c *gin.Context) {
 
 func (h *Handlers) AdminCreateUser(c *gin.Context) {
 	var req struct {
-		Username string `json:"username" binding:"required"`
+		// 用户名/昵称二选一（v0.97.10）：只填昵称 → 用户名 = 昵称拼音小写连写 + 用户 ID（花名册同源）
+		Username string `json:"username"`
 		Password string `json:"password" binding:"required"`
 		Nickname string `json:"nickname"`
 		Role     string `json:"role"`
@@ -81,7 +82,11 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "参数不完整")
 		return
 	}
-	if !usernameRE.MatchString(req.Username) {
+	if req.Username == "" && req.Nickname == "" {
+		fail(c, http.StatusBadRequest, "用户名和昵称至少填一项")
+		return
+	}
+	if req.Username != "" && !usernameRE.MatchString(req.Username) {
 		fail(c, http.StatusBadRequest, "用户名需为 3-32 位字母/数字/下划线")
 		return
 	}
@@ -123,21 +128,36 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 		School:  trimTo(req.School, 64),
 		Region:  trimTo(req.Region, 32),
 	}
-	var (
-		uid int64
-		err error
-	)
-	// 统一走带资料建号（批量导入同源）：id 缺省 nil→0 自动取号，指定 ID 直接插入；
-	// 占用冲突在唯一索引层兜底（用户名/ID 两个唯一键都可能撞）
+	// 建号用户名与落库 ID：显式用户名原样；昵称通道（v0.97.10）= 昵称拼音小写连写 + ID，
+	// ID 未指定时预读注册起点空缺号（批量导入同款 PeekUserSeqs 预分配，只读不占号，
+	// 并发抢占由唯一索引兜底报冲突、重试即换号重生成）
+	uname := req.Username
+	targetID := int64(0)
 	if req.ID != nil {
-		uid, err = h.repo.CreateUserWithProfile(c.Request.Context(), *req.ID, req.Username, req.Password, nickname, role, profile)
-	} else {
-		uid, err = h.repo.CreateUserWithProfile(c.Request.Context(), 0, req.Username, req.Password, nickname, role, profile)
+		targetID = *req.ID
 	}
+	if uname == "" {
+		if targetID == 0 {
+			ids, perr := h.repo.PeekUserSeqs(c.Request.Context(), 1)
+			if perr != nil || len(ids) == 0 {
+				fail(c, http.StatusInternalServerError, "自动取号失败，请重试")
+				return
+			}
+			targetID = ids[0]
+		}
+		uname = pinyinUsername(nickname, targetID)
+		if !usernameRE.MatchString(uname) {
+			fail(c, http.StatusBadRequest, "昵称无法生成合法用户名（3-32 位字母/数字/下划线），请手动填写用户名")
+			return
+		}
+	}
+	// 统一走带资料建号（批量导入同源）：指定 ID 直接插入，占用冲突在唯一索引层兜底
+	//（用户名/ID 两个唯一键都可能撞）
+	uid, err := h.repo.CreateUserWithProfile(c.Request.Context(), targetID, uname, req.Password, nickname, role, profile)
 	if err != nil {
 		if isDupKey(err) {
 			// 两个唯一键都可能撞（uname / _id）：先分辨给准确提示
-			if _, _, uerr := h.repo.GetUserByUsername(c.Request.Context(), req.Username); uerr == nil {
+			if _, _, uerr := h.repo.GetUserByUsername(c.Request.Context(), uname); uerr == nil {
 				fail(c, http.StatusConflict, "用户名已存在")
 				return
 			}
@@ -145,15 +165,15 @@ func (h *Handlers) AdminCreateUser(c *gin.Context) {
 				fail(c, http.StatusConflict, "该用户 ID 已被占用")
 				return
 			}
-			fail(c, http.StatusConflict, "用户已存在")
+			fail(c, http.StatusConflict, "取号被并发抢占，请重试")
 			return
 		}
 		fail(c, http.StatusInternalServerError, "创建用户失败")
 		return
 	}
-		// 首登改密提醒已在 CreateUserWithProfile 落库时置位（初始密码由管理员发放，
-		// 下次登录提醒改密可跳过），此处无需补置位。
-		ok(c, gin.H{"id": uid, "username": req.Username, "role": role})
+	// 首登改密提醒已在 CreateUserWithProfile 落库时置位（初始密码由管理员发放，
+	// 下次登录提醒改密可跳过），此处无需补置位。
+	ok(c, gin.H{"id": uid, "username": uname, "role": role})
 }
 
 func (h *Handlers) AdminUpdateUser(c *gin.Context) {
