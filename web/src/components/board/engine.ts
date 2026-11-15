@@ -220,7 +220,9 @@ function appendMultiLineText(
   const lh = Number(attrs['font-size']) * TEXT_LINE_H
   const n = lines.length
   let dy = baseline === 'first' ? 0 : (-(n - 1) / 2) * lh
-  const t = el('text', attrs)
+  // xml:space=preserve：空白逐字保留（连续空格不折叠、行首缩进不剥除、tab 不吞），
+  // 与 textWidth 的 measureText 测宽口径一致——所见即所得
+  const t = el('text', { ...attrs, 'xml:space': 'preserve' })
   for (const line of lines) {
     const ts = el('tspan', { x: attrs.x, dy: dy.toFixed(1) })
     ts.textContent = line

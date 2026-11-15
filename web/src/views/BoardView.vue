@@ -1083,9 +1083,21 @@ function commitEdit(): void {
   refreshOverlay()
 }
 
+// Tab 缩进（Excalidraw 同款保真输入）：插入制表符而不是移动焦点——execCommand 走
+// 用户代理编辑（保留撤销栈、自动触发 input 让实时同步/测高照跑）；不支持时降级
+// setRangeText + 手动派发 input
+function insertTabIndent(e: KeyboardEvent): void {
+  const ta = e.target as HTMLTextAreaElement
+  if (!ta) return
+  e.preventDefault()
+  if (!document.execCommand('insertText', false, '\t')) {
+    ta.setRangeText('\t', ta.selectionStart, ta.selectionEnd, 'end')
+    ta.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+}
+
 function autosizeEditor(e: Event): void {
   if (editing.value?.kind === 'cell') return
-  // 单元格定高；文字盒高度随内容实时测量（editorStyle），均不走高度自适应
   const t = e.target as HTMLTextAreaElement
   t.style.height = 'auto'
   t.style.height = `${t.scrollHeight}px`
@@ -1614,6 +1626,7 @@ watch(tool, () => {
           wrap="soft"
           @keydown.stop
           @keydown.enter.exact.stop
+          @keydown.tab.exact.prevent="insertTabIndent"
           @keydown.esc.prevent="commitEdit"
           @blur="commitEdit"
           @input="onEditorInput($event); autosizeEditor($event)"
