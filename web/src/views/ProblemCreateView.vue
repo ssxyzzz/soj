@@ -8,32 +8,30 @@ import type { ProblemFormPayload } from '@/components/ProblemForm.vue'
 import { problemApi } from '@/api'
 
 // 网页建题：表单字段/布局/校验在 ProblemForm 共享组件（编辑页复用同一套），
-// 本页只保留提交流程：元数据 + 题面 + 测试数据 zip 一次 FormData 交齐。
+// 本页只保留提交流程：元数据 + 题面 + 已暂存数据 zip 凭据（v0.97.15 选包即传，
+// ProblemForm 内进度条）一次交齐，保存全程秒级、无上传等待。
 const router = useRouter()
 const saving = ref(false)
-// 上传进度（v0.37）：-1 = 非上传态；大 zip 在慢链路上传时按钮旁给实感，不再盲转
-const uploadPct = ref(-1)
-const onUploadProgress = (pct: number) => {
-  uploadPct.value = pct
-}
 
 async function onSubmit(p: ProblemFormPayload) {
   saving.value = true
-  uploadPct.value = -1
   try {
     const fd = new FormData()
     fd.append('title', p.title)
+    const withStage = () => {
+      if (p.stage) fd.append('stage', p.stage)
+    }
     // 函数题（v0.9.1）：type + driver/template 文件；zip 可选（含 cases）
     if (p.type === 'function') {
       fd.append('type', 'function')
       fd.append('statement', p.statement)
       fd.append('tag_ids', JSON.stringify(p.tag_ids))
-    fd.append('meta_tag_ids', JSON.stringify(p.meta_tag_ids ?? []))
+      fd.append('meta_tag_ids', JSON.stringify(p.meta_tag_ids ?? []))
       fd.append('difficulty', String(p.difficulty))
       if (p.driver) fd.append('driver', p.driver)
       if (p.template) fd.append('template', p.template)
-      if (p.zip) fd.append('zip', p.zip)
-      const r = await problemApi.create(fd, onUploadProgress)
+      withStage()
+      const r = await problemApi.create(fd)
       ElMessage.success(`题目 #${r.id} 创建成功`)
       router.push(`/problems/${r.id}`)
       return
@@ -43,11 +41,11 @@ async function onSubmit(p: ProblemFormPayload) {
       fd.append('type', 'interactive')
       fd.append('statement', p.statement)
       fd.append('tag_ids', JSON.stringify(p.tag_ids))
-    fd.append('meta_tag_ids', JSON.stringify(p.meta_tag_ids ?? []))
-    fd.append('difficulty', String(p.difficulty))
+      fd.append('meta_tag_ids', JSON.stringify(p.meta_tag_ids ?? []))
+      fd.append('difficulty', String(p.difficulty))
       if (p.interactor) fd.append('interactor', p.interactor)
-      if (p.zip) fd.append('zip', p.zip)
-      const r = await problemApi.create(fd, onUploadProgress)
+      withStage()
+      const r = await problemApi.create(fd)
       ElMessage.success(`题目 #${r.id} 创建成功`)
       router.push(`/problems/${r.id}`)
       return
@@ -57,10 +55,10 @@ async function onSubmit(p: ProblemFormPayload) {
       fd.append('type', 'objective')
       fd.append('statement', p.statement)
       fd.append('tag_ids', JSON.stringify(p.tag_ids))
-    fd.append('meta_tag_ids', JSON.stringify(p.meta_tag_ids ?? []))
-    fd.append('difficulty', String(p.difficulty))
+      fd.append('meta_tag_ids', JSON.stringify(p.meta_tag_ids ?? []))
+      fd.append('difficulty', String(p.difficulty))
       fd.append('questions_json', JSON.stringify(p.questions))
-      const r = await problemApi.create(fd, onUploadProgress)
+      const r = await problemApi.create(fd)
       ElMessage.success(`题目 #${r.id} 创建成功`)
       router.push(`/problems/${r.id}`)
       return
@@ -78,14 +76,13 @@ async function onSubmit(p: ProblemFormPayload) {
     fd.append('tag_ids', JSON.stringify(p.tag_ids))
     fd.append('meta_tag_ids', JSON.stringify(p.meta_tag_ids ?? []))
     fd.append('difficulty', String(p.difficulty))
-    fd.append('zip', p.zip!)
+    withStage()
     if (p.checker) fd.append('checker', p.checker)
-    const r = await problemApi.create(fd, onUploadProgress)
+    const r = await problemApi.create(fd)
     ElMessage.success(`题目 #${r.id} 创建成功`)
     router.push(`/problems/${r.id}`)
   } finally {
     saving.value = false
-    uploadPct.value = -1
   }
 }
 </script>
@@ -103,7 +100,7 @@ async function onSubmit(p: ProblemFormPayload) {
         <template #header><span>建题须知</span></template>
         <div class="tips">
           <p>创建后题目默认公开可见，可在题目详情页对学生隐藏。</p>
-          <p>题面在上方编辑器里写——数据 zip 只认 data/ 目录（数据对保持原名 + config.yaml + gen.py 等附属文件），包内不收题面；带题面的题包请走题库页「导入题目」。</p>
+          <p>题面在上方编辑器里写——数据 zip 只认 data/ 目录（数据对保持原名 + config.yaml + gen.py 等附属文件），包内不收题面；带题面的题包请走题库页「导入题目」。选入 zip 即自动上传暂存，点「确认创建」才正式生效。</p>
           <p>测试点按文件名末段数字从小到大计分（单点等分）；子任务分组与校验器可由 data/config.yaml 声明；样例直接写在题面里。</p>
           <p>题面可直接粘贴截图，图片自动上传并插入引用。</p>
           <p>客观题（单选/多选/判断/填空）在「题目类型」切换：题干写在题面里、选项与答案在下方配置；填空题用连续 4 个下划线（____）标记空位。</p>
@@ -112,19 +109,4 @@ async function onSubmit(p: ProblemFormPayload) {
       </el-card>
     </template>
   </ProblemForm>
-  <!-- 数据 zip 上传进度（v0.37）：大包在慢链路上传期给实感，传完随保存结束消失 -->
-  <el-progress
-    v-if="uploadPct >= 0"
-    :percentage="uploadPct"
-    :stroke-width="14"
-    striped
-    striped-flow
-    class="upload-progress"
-  />
 </template>
-
-<style scoped>
-.upload-progress {
-  margin-top: var(--soj-sp-10);
-}
-</style>

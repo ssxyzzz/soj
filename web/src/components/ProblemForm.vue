@@ -12,6 +12,7 @@ import type { UploadUserFile } from 'element-plus'
 import { ElMessage } from 'element-plus'
 
 import { downloadFile } from '@/api/download'
+import { problemApi } from '@/api'
 
 import MdEditor from '@/components/MdEditor.vue'
 import ObjectiveEditor from '@/components/ObjectiveEditor.vue'
@@ -39,7 +40,7 @@ export interface ProblemFormPayload {
   tag_ids: number[]
   challenge_time_sec: number // 挑战时长秒（v0.23；0 = 按难度×5min 默认）
   video_url: string // 答案解析视频链接（v0.23；B 站/直链 mp4，可空）
-  zip: File | null
+  stage: string | null // 已暂存数据 zip 的凭据（v0.97.15 选包即传，确认时引用；null = 无新数据）
   checker: File | null
   questions: ObjectiveQuestionDraft[] | null
   driver: File | null // 函数题驱动器（v0.9.1）
@@ -204,18 +205,63 @@ function checkerFile(): File | null {
   return (f?.raw as File) ?? null
 }
 
+// ---- 数据 zip 暂存上传（v0.97.15）：选包即传、确认才生效 ----
+// 大包直传曾把建题/编辑请求拖成分钟级整页遮罩（生产 22MB 包实测白屏卡死）；
+// 剥离出提交路径后上传自带实时进度、页面全程可操作，确认只剩秒级落库。
+const zipUp = reactive({
+  state: 'idle' as 'idle' | 'uploading' | 'done' | 'error',
+  pct: 0,
+  stage: '', // 服务端暂存凭据（确认时随表单提交）
+  name: '',
+  size: 0,
+  err: '',
+})
+let zipUpSeq = 0 // 换包重传时作废旧响应（慢链路上先选 A 再换 B，A 的迟到结果不覆盖 B）
+
 function onZipChange(_file: UploadUserFile, files: UploadUserFile[]) {
-  // 只保留最新选择的一个 zip
+  // 只保留最新选择的一个 zip，选定即上传暂存
   fileList.value = files.slice(-1)
+  startZipStage()
 }
 
 function onZipRemove(_file: UploadUserFile, files: UploadUserFile[]) {
   fileList.value = files
+  zipUpSeq++ // 作废在途响应；已暂存文件留给服务端 TTL 清扫
+  zipUp.state = 'idle'
+  zipUp.stage = ''
 }
 
-function zipFile(): File | null {
-  const f = fileList.value[0]
-  return (f?.raw as File) ?? null
+function startZipStage() {
+  const f = fileList.value[0]?.raw as File | undefined
+  if (!f) return
+  const seq = ++zipUpSeq
+  zipUp.state = 'uploading'
+  zipUp.pct = 0
+  zipUp.err = ''
+  zipUp.name = f.name
+  problemApi
+    .stageTestdata(f, (pct) => {
+      if (seq === zipUpSeq) zipUp.pct = pct
+    })
+    .then((r) => {
+      if (seq !== zipUpSeq) return
+      zipUp.state = 'done'
+      zipUp.stage = r.stage
+      zipUp.name = r.name
+      zipUp.size = r.size
+    })
+    .catch((e: unknown) => {
+      if (seq !== zipUpSeq) return
+      // 失败详情已由全局拦截器 toast；内联常驻文案取后端具体原因
+      //（axios 对 HTTP 4xx 的 e.message 只有泛化状态码，真消息在 response.data.message）
+      zipUp.state = 'error'
+      const resp = (e as { response?: { data?: { message?: string } } }).response
+      zipUp.err = resp?.data?.message || (e instanceof Error ? e.message : '上传失败')
+    })
+}
+
+function fmtMB(bytes: number): string {
+  return bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`
 }
 
 // ---- 客观题整卷草稿（v0.9.3）：小题列表由 ObjectiveEditor 维护，这里只存数组 ----
@@ -267,7 +313,12 @@ function payload(): ProblemFormPayload | null {
     ElMessage.error('题面过长（上限 256KB）')
     return null
   }
-  const zip = zipFile() // 可选：不传则创建暂无数据的题目（详情页提示 + 禁提交），数据后续编辑页补齐
+  // 数据 zip 可选：未选则创建暂无数据的题目（详情页提示 + 禁提交），数据后续编辑页补齐
+  if (zipUp.state === 'uploading') {
+    ElMessage.warning(`数据包还在上传中（${zipUp.pct}%），请等它传完再确认`)
+    return null
+  }
+  const stage = zipUp.state === 'done' ? zipUp.stage : null
   let questions: ObjectiveQuestionDraft[] | null = null
   if (form.type === 'objective') {
     ensureObjectiveScores()
@@ -280,11 +331,11 @@ function payload(): ProblemFormPayload | null {
   }
   const driver = oneFile(driverList.value)
   const interactor = oneFile(interactorList.value)
-  if (form.type === 'function' && props.mode === 'create' && !driver && !zip) {
+  if (form.type === 'function' && props.mode === 'create' && !driver && !stage) {
     ElMessage.warning('函数题需要上传 driver.cpp（含 main、调用学生实现的函数）')
     return null
   }
-  if (form.type === 'interactive' && props.mode === 'create' && !interactor && !zip) {
+  if (form.type === 'interactive' && props.mode === 'create' && !interactor && !stage) {
     ElMessage.warning('交互题需要上传 interactor.cpp（读输入文件、与选手双向通信、退出码 0 = 通过）')
     return null
   }
@@ -295,7 +346,7 @@ function payload(): ProblemFormPayload | null {
     file_io_name: form.file_io_name.trim(),
     tag_ids: [...form.tag_ids],
     meta_tag_ids: [...form.meta_tag_ids],
-    zip,
+    stage,
     checker: checkerFile(),
     questions,
     driver,
@@ -458,8 +509,14 @@ function onSubmitClick() {
           </div>
 
           <div class="entry-actions">
-            <el-button type="primary" style="width: 100%" :loading="saving" @click="onSubmitClick">
-              {{ confirmText }}
+            <el-button
+              type="primary"
+              style="width: 100%"
+              :loading="saving"
+              :disabled="zipUp.state === 'uploading'"
+              @click="onSubmitClick"
+            >
+              {{ zipUp.state === 'uploading' ? `上传中 ${zipUp.pct}%` : confirmText }}
             </el-button>
             <el-button style="width: 100%" @click="emit('cancel')">取消</el-button>
           </div>
@@ -476,9 +533,15 @@ function onSubmitClick() {
               {{ statementNote }}
             </div>
             <div v-if="form.type !== 'objective'" class="row">
-              <span v-if="hasData || fileList.length" class="ok">✓</span>
+              <span v-if="hasData || zipUp.state === 'done'" class="ok">✓</span>
               <span v-else class="todo">–</span>
-              {{ hasData ? '已有测试数据，新 zip 可整包替换' : fileList.length ? '新测试数据已选择' : '测试数据未上传——可先创建' }}
+              {{ zipUp.state === 'uploading'
+                ? `数据包上传中 ${zipUp.pct}%`
+                : hasData
+                  ? '已有测试数据，新 zip 可整包替换'
+                  : zipUp.state === 'done'
+                    ? '新数据已上传，确认后生效'
+                    : '测试数据未上传——可先创建' }}
             </div>
           </div>
         </el-card>
@@ -532,6 +595,18 @@ function onSubmitClick() {
                 <p>{{ mode === 'create' ? '拖入 zip 或点击选择' : '拖入新 zip 整包替换' }}</p>
               </div>
             </el-upload>
+            <!-- 选包即传（v0.97.15）：进度与结果就在手边；确认前服务器只暂存，页面全程可操作 -->
+            <div v-if="zipUp.state === 'uploading'" class="zip-stage">
+              <div class="soj-pbar"><i :style="{ width: `${zipUp.pct}%` }" /></div>
+              <div class="zip-stage-text">上传中 {{ zipUp.pct }}% · {{ zipUp.name }}</div>
+            </div>
+            <div v-else-if="zipUp.state === 'done'" class="zip-stage done">
+              <span class="ok">✓</span>
+              <span>已上传 {{ zipUp.name }}（{{ fmtMB(zipUp.size) }}）——{{ mode === 'create' ? '确认创建后生效' : '确认修改后整包替换' }}</span>
+            </div>
+            <div v-else-if="zipUp.state === 'error'" class="zip-stage err">
+              上传失败：{{ zipUp.err }}——请重新选择 zip 再试
+            </div>
           </el-form-item>
         </el-card>
 
@@ -1014,6 +1089,45 @@ function onSubmitClick() {
 .zip-hint p:first-of-type {
   font-size: var(--soj-fs-14);
   color: var(--el-text-color-primary);
+}
+
+/* 暂存上传状态区（v0.97.15）：进度条（全局 .soj-pbar）/ 完成绿勾 / 失败红字，
+   跟在拖放区正下方——进度永远在视口可及处，不再沉到页底 */
+.zip-stage {
+  margin-top: var(--soj-sp-10);
+}
+
+.zip-stage-text {
+  margin-top: var(--soj-sp-6);
+  font-size: var(--soj-fs-13);
+  color: var(--el-text-color-regular);
+}
+
+.zip-stage.done {
+  display: flex;
+  align-items: center;
+  gap: var(--soj-sp-6);
+  font-size: var(--soj-fs-13);
+  color: var(--el-color-success);
+}
+
+.zip-stage.done .ok {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--el-color-success-light-8);
+  color: var(--el-color-success);
+  display: grid;
+  place-items: center;
+  font-size: var(--soj-fs-12);
+  font-weight: var(--soj-fw-bold);
+  flex: none;
+}
+
+.zip-stage.err {
+  font-size: var(--soj-fs-13);
+  color: var(--el-color-danger);
+  line-height: 1.6;
 }
 
 /* 已有测试数据状态行：绿勾与「下载数据」按钮同一行 */

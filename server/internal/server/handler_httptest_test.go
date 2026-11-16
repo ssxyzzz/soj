@@ -333,6 +333,8 @@ func testEngine(h *Handlers) *gin.Engine {
 	authed.POST("/admin/users/:id/jade-adjust", RequireRoot(), h.AdminJadeAdjust)
 	// 兑换订单履约（shop_test）：与生产同口径挂 RequireRoot
 	authed.POST("/admin/shop/orders/:id/resolve", RequireRoot(), h.AdminResolveShopOrder)
+	// 数据 zip 暂存上传（stage_test）：与生产同口径挂 RequirePermAny
+	authed.POST("/problems/testdata/stage", RequirePermAny(repo.PermProblemCreate, repo.PermProblemEditAll, repo.PermProblemEditOwn), h.StageTestdata)
 	authed.GET("/me/jade", h.MyJade)
 	// 公开主页游戏三卡（v0.85）：与生产同口径挂 AuthRequired
 	authed.GET("/users/:id/achievements", h.UserAchievements)

@@ -18,8 +18,6 @@ const pid = Number(route.params.id)
 const problem = ref<ProblemDetail | null>(null)
 const loading = ref(true)
 const savingEdit = ref(false)
-// 数据 zip 替换上传进度（v0.37）：-1 = 非上传态；大包上传期给实感不盲转
-const uploadPct = ref(-1)
 const editInitial = ref<{
   title?: string
   type?: 'default' | 'objective' | 'function' | 'interactive'
@@ -179,8 +177,10 @@ async function load() {
 }
 
 // ---- 保存：题面 → 元数据 → （可选）整包替换测试数据，成功回详情 ----
+// v0.97.14 起 zip 在选包时已暂存上传（ProblemForm 内进度条），此处只带凭据引用，
+// 保存全程秒级——不再有分钟级上传等待与整页遮罩
 async function onSubmit(p: ProblemFormPayload) {
-  if (p.zip) {
+  if (p.stage) {
     const confirmed = await ElMessageBox.confirm(
       '将以新 zip 整包替换测试数据：旧测试点全部删除，样例章节按新数据重建。确认替换？',
       '替换测试数据',
@@ -219,18 +219,15 @@ async function onSubmit(p: ProblemFormPayload) {
       challenge_time_sec: p.challenge_time_sec ?? 0,
       ...(p.compare === 'tolerant' ? { float_tolerance: p.float_tolerance } : {}),
     })
-    if (p.zip) {
+    if (p.stage) {
       const fd = new FormData()
-      fd.append('zip', p.zip)
-      await problemApi.replaceTestdata(pid, fd, (pct) => {
-        uploadPct.value = pct
-      })
+      fd.append('stage', p.stage)
+      await problemApi.replaceTestdata(pid, fd)
     }
     ElMessage.success('题目已保存')
     router.push(`/problems/${pid}`)
   } finally {
     savingEdit.value = false
-    uploadPct.value = -1
   }
 }
 
@@ -359,23 +356,10 @@ function onCancel() {
         </el-card>
       </template>
     </ProblemForm>
-    <!-- 数据 zip 替换上传进度（v0.37）：大包在慢链路上传期给实感，传完随保存结束消失 -->
-    <el-progress
-      v-if="uploadPct >= 0"
-      :percentage="uploadPct"
-      :stroke-width="14"
-      striped
-      striped-flow
-      class="upload-progress"
-    />
   </div>
 </template>
 
 <style scoped>
-.upload-progress {
-  margin-top: var(--soj-sp-10);
-}
-
 .obj-tips p {
   font-size: var(--soj-fs-body);
   line-height: 1.7;

@@ -36,7 +36,7 @@ const (
 	maxCreateRequest   = 64 << 20  // 建题/替换请求体上限（数据 zip 走建题页的小包；大包走导入）
 	maxZipEntries      = 2000      // zip 条目数上限
 	maxZipUncompressed = 200 << 20 // zip 解压总量上限（防炸弹）
-	maxZipFile         = 20 << 20  // zip 单文件上限
+	maxZipFile         = 64 << 20  // zip 单文件上限（v0.97.15 提限 20MB→64MB 与请求体对齐：大数据题单 .in 普遍数十 MB）
 )
 
 // CreateProblem 网页建题（全题型单管道）：表单字段构造临时 SOJ 题目录
@@ -118,12 +118,16 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 			return
 		}
 	}
-	zips := form.File["zip"]
-	if len(zips) > 1 {
-		fail(c, http.StatusBadRequest, "请上传一个数据 zip（根下含 data/ 目录：数据对 + config.yaml + 附属文件）")
+	// 数据 zip 来源（v0.97.15）：stage=<id> 暂存式（选包即传）优先，回落 zip part 直传
+	zipPath, zipStaged, zerr := resolveUploadZip(form, uid)
+	if zerr != nil {
+		fail(c, http.StatusBadRequest, zerr.Error())
 		return
 	}
-	if ptype == repo.TypeObjective && len(zips) > 0 {
+	if zipPath != "" && !zipStaged {
+		defer os.Remove(zipPath) // 直传临时副本；暂存文件只在建题成功后删（失败可原凭据重试）
+	}
+	if ptype == repo.TypeObjective && zipPath != "" {
 		fail(c, http.StatusBadRequest, "客观题不需要测试数据包（请在题面里出题）")
 		return
 	}
@@ -179,14 +183,14 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	}
 
 	// 数据 zip：解压 → 摊平唯一根目录 → 只取 data/（其余忽略；题面/元数据以表单为准）
-	if len(zips) == 1 {
+	if zipPath != "" {
 		extractDir, err := os.MkdirTemp("", "soj-create-zip-")
 		if err != nil {
 			fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
 			return
 		}
 		defer os.RemoveAll(extractDir)
-		if err := extractUploadZip(zips[0], extractDir); err != nil {
+		if err := safeExtractZip(zipPath, extractDir); err != nil {
 			fail(c, http.StatusBadRequest, "数据包不合法："+err.Error())
 			return
 		}
@@ -279,6 +283,9 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	}
 	// 题面外链图后台异步转存（v0.31）：零按钮零感知，失败静默保外链
 	go h.importer().TransferStatementAssetsAsync(pr.ID)
+	if zipStaged {
+		os.Remove(zipPath) // 暂存一次性凭据：建题成功即回收（失败保留供重试，TTL 兜底）
+	}
 	ok(c, gin.H{"id": pr.ID})
 }
 
@@ -299,26 +306,6 @@ func parseObjectiveQuestionsForm(raw string) ([]repo.ObjectiveQuestion, error) {
 		return nil, err
 	}
 	return qs, nil
-}
-
-// extractUploadZip 上传 zip 安全解压到 dst（建题/替换共用小限额）。
-func extractUploadZip(fh *multipart.FileHeader, dst string) error {
-	tmpZip, err := os.CreateTemp("", "soj-zip-*.zip")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmpZip.Name())
-	f, err := fh.Open()
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err = io.Copy(tmpZip, f); err != nil {
-		tmpZip.Close()
-		return err
-	}
-	tmpZip.Close()
-	return safeExtractZip(tmpZip.Name(), dst)
 }
 
 // UpdateChecker 上传/替换题目校验器（C++ 源文件，problemEditable 语义）。
@@ -558,45 +545,37 @@ func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
 		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
 		return
 	}
+	uid, _, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxCreateRequest)
 	form, err := c.MultipartForm()
 	if err != nil {
 		fail(c, http.StatusBadRequest, "请求体过大或格式错误（数据 zip 上限 64MB，更大的包请走「导入题目」）")
 		return
 	}
-	zips := form.File["zip"]
-	if len(zips) != 1 {
+	// 数据 zip 来源（v0.97.15）：stage=<id> 暂存式（选包即传）优先，回落 zip part 直传
+	zipPath, zipStaged, zerr := resolveUploadZip(form, uid)
+	if zerr != nil {
+		fail(c, http.StatusBadRequest, zerr.Error())
+		return
+	}
+	if zipPath == "" {
 		fail(c, http.StatusBadRequest, "请上传一个数据 zip（根下含 data/ 目录）")
 		return
 	}
-
-	tmpZip, err := os.CreateTemp("", "soj-replace-*.zip")
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "服务器临时文件创建失败")
-		return
+	if !zipStaged {
+		defer os.Remove(zipPath) // 直传临时副本；暂存文件只在替换成功后删（失败可原凭据重试）
 	}
-	defer os.Remove(tmpZip.Name())
-	// 上传 zip 原样落盘（修复：此前把解压目标误传成 tmpZip 文件路径，
-	// extractUploadZip 会对文件路径 MkdirAll 导致「not a directory」，接口必坏）
-	fh, err := zips[0].Open()
-	if err != nil {
-		fail(c, http.StatusBadRequest, "读取上传文件失败："+err.Error())
-		return
-	}
-	if _, err = io.Copy(tmpZip, fh); err != nil {
-		tmpZip.Close()
-		fail(c, http.StatusInternalServerError, "保存上传文件失败："+err.Error())
-		return
-	}
-	fh.Close()
-	tmpZip.Close()
 	tmpDir, err := os.MkdirTemp("", "soj-replace-dir-")
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "服务器临时目录创建失败")
 		return
 	}
 	defer os.RemoveAll(tmpDir)
-	if err := safeExtractZip(tmpZip.Name(), tmpDir); err != nil {
+	if err := safeExtractZip(zipPath, tmpDir); err != nil {
 		fail(c, http.StatusBadRequest, "数据包不合法："+err.Error())
 		return
 	}
@@ -608,6 +587,9 @@ func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
 	if err != nil {
 		fail(c, http.StatusBadRequest, "替换失败："+err.Error())
 		return
+	}
+	if zipStaged {
+		os.Remove(zipPath) // 暂存一次性凭据：替换成功即回收（失败保留供重试，TTL 兜底）
 	}
 	ok(c, gin.H{"cases": len(pr.Cases)})
 }
@@ -855,7 +837,7 @@ func parsePositiveFloat(s string, def float64) float64 {
 // 的实现自 v0.32 起独立 internal/archive 包；批量导入走 archive.SafeExtractZipLimits
 // 参数化大限额）。
 func safeExtractZip(zipPath, dst string) error {
-	return archive.SafeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "20MB", "200MB", nil)
+	return archive.SafeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "64MB", "200MB", nil)
 }
 
 // DownloadProblemTestdata 下载题包（权威导出新 SOJ 格式，import-design.md §3）：

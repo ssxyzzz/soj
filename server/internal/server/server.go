@@ -259,6 +259,9 @@ func Run(ctx context.Context, deps *Deps) {
 			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
 			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)
 			authed.POST("/problems/:id/testdata", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ReplaceProblemTestdata)
+			// 数据 zip 暂存上传（v0.97.15）：建题/编辑页选包即传、确认才生效；静态段
+			// 与 /problems/:id/... 参数路由同级（gin 静态优先匹配，/problems/export 同先例）
+			authed.POST("/problems/testdata/stage", RequirePermAny(repo.PermProblemCreate, repo.PermProblemEditAll, repo.PermProblemEditOwn), h.StageTestdata)
 			// 下载直链（v0.64 病根③收口）：下载端点挪出 authed、挂 dlAuth——带
 			// Authorization 头照旧登录态+权限位；无头凭 5min 短签直链放行（浏览器
 			// 原生下载器接管，前端零 blob 中转）。签发见 /download-link；权限由

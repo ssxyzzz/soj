@@ -315,18 +315,25 @@ export const problemApi = {
   // 按题号批量取摘要（v0.73 选题器「按题号导入」）：invalid = 不存在/隐藏/重复的题号（统一不区分）
   batch: (ids: number[]) => get<{ items: { id: number; title: string }[]; invalid: number[] }>('/problems/batch', { ids: ids.join(',') }),
   paper: (id: number) => get<PaperData>(`/problems/${id}/paper`),
-  create: (form: FormData, onProgress?: (pct: number) => void) =>
-    client
-      .post<ApiResponse<{ id: number }>>('/problems', form, {
+  // 数据 zip 暂存上传（v0.97.15）：建题/编辑页选包即传、确认才生效——大包上传
+  // 有实时进度且脱离提交路径；返回 {stage,name,size} 供确认时引用
+  stageTestdata: (file: File, onProgress?: (pct: number) => void) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return client
+      .post<ApiResponse<{ stage: string; name: string; size: number }>>('/problems/testdata/stage', fd, {
         timeout: 0,
-        // v0.37：测试数据 zip 上传进度（巨型包上传期不再盲等转圈，同 importApi.upload）
         onUploadProgress: onProgress
           ? (e) => {
               if (e.total) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)))
             }
           : undefined,
       })
-      .then((r) => r.data.data),
+      .then((r) => r.data.data)
+  },
+  // 建题请求体只有小字段（数据 zip 走 stageTestdata 暂存），timeout 0 保留兜底慢库
+  create: (form: FormData) =>
+    client.post<ApiResponse<{ id: number }>>('/problems', form, { timeout: 0 }).then((r) => r.data.data),
   updateMeta: (id: number, body: Record<string, unknown>) =>
     patch<{ updated: number }>(`/problems/${id}/meta`, body), // 客观题编辑带 question_json（v0.9）
   parseObjectiveYaml: (yaml: string) =>
@@ -359,18 +366,10 @@ export const problemApi = {
   // 重复标记（v0.47）：语义同隐藏，学生端立即不可见
   setDuplicate: (id: number, duplicate: boolean) =>
     patch<{ id: number; duplicate: boolean }>(`/problems/${id}/duplicate`, { duplicate }),
-  // 整包替换测试数据（编辑题目）：旧测试点全部删除，按新 zip 重建（v0.37 附上传进度）
-  replaceTestdata: (id: number, form: FormData, onProgress?: (pct: number) => void) =>
-    client
-      .post(`/problems/${id}/testdata`, form, {
-        timeout: 0,
-        onUploadProgress: onProgress
-          ? (e) => {
-              if (e.total) onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)))
-            }
-          : undefined,
-      })
-      .then((r) => r.data.data),
+  // 整包替换测试数据（编辑题目）：旧测试点全部删除，按新 zip 重建；v0.97.15 起
+  // zip 走 stage 暂存引用（选包即传），请求体只有小字段、不再有上传等待
+  replaceTestdata: (id: number, form: FormData) =>
+    client.post(`/problems/${id}/testdata`, form, { timeout: 0 }).then((r) => r.data.data),
   submissions: (id: number, page: number, pageSize: number, sort?: string, lang?: string, uid?: number) =>
     get<SubmissionListResult>(`/problems/${id}/submissions`, {
       page,

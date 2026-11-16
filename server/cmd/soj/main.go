@@ -178,4 +178,8 @@ func cleanupStaleTemp(cfg *config.Config) {
 	if n := backup.CleanupStaleTemp(cfg.BackupDir, olderThan); n > 0 {
 		slog.Info("已清扫残留备份临时目录", "component", "boot", "count", n)
 	}
+	// 暂存 zip 的 TTL 是 24h（选包到确认的正常间隔），启动清扫须同阈值才不误杀
+	if n := server.CleanupStaleStage(24 * time.Hour); n > 0 {
+		slog.Info("已清扫过期暂存数据包", "component", "boot", "count", n)
+	}
 }
