@@ -105,8 +105,9 @@ func validateStagedZip(zipPath string) string {
 	if err := archive.UnwrapSingleRootDir(tmpDir); err != nil {
 		return "整理数据目录失败"
 	}
-	if fi, err := os.Stat(filepath.Join(tmpDir, "data")); err != nil || !fi.IsDir() {
-		return "数据 zip 缺少 data/ 目录（zip 内放 data/：数据对 + config.yaml + 附属文件；带题面的题包请走「导入题目」）"
+	// 根平铺兼容（v0.97.16）：无 data/ 但根目录是数据对时自动收拢，坏结构在此刻报给用户
+	if !ensureDataDir(tmpDir) {
+		return "数据 zip 里未发现测试数据（数据对 *.in + *.out/.ans 平铺或包在 data/ 目录均可；带题面的题包请走「导入题目」）"
 	}
 	return ""
 }

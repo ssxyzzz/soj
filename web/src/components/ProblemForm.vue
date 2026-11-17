@@ -557,8 +557,8 @@ function onSubmitClick() {
                 <TipLabel
                   label="测试数据"
                   :tip="mode === 'create'
-                    ? '不上传可先创建；zip 里 data/ 下的数据对保持原名'
-                    : '新 zip 整包替换数据与配置；zip 里 data/ 下的数据对保持原名'"
+                    ? '不上传可先创建；数据对平铺或 data/ 目录均可，文件保持原名'
+                    : '新 zip 整包替换数据与配置；数据对平铺或 data/ 目录均可，文件保持原名'"
                 />
               </div>
             </div>

@@ -198,8 +198,8 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 			fail(c, http.StatusInternalServerError, "整理数据目录失败")
 			return
 		}
-		if fi, err := os.Stat(filepath.Join(extractDir, "data")); err != nil || !fi.IsDir() {
-			fail(c, http.StatusBadRequest, "数据 zip 缺少 data/ 目录（zip 内放 data/：数据对 + config.yaml + 附属文件；带题面的题包请走「导入题目」）")
+		if !ensureDataDir(extractDir) {
+			fail(c, http.StatusBadRequest, "数据 zip 里未发现测试数据（数据对 *.in + *.out/.ans 平铺或包在 data/ 目录均可；带题面的题包请走「导入题目」）")
 			return
 		}
 		if err := os.Rename(filepath.Join(extractDir, "data"), filepath.Join(tmpDir, "data")); err != nil {
@@ -583,6 +583,10 @@ func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "整理数据目录失败")
 		return
 	}
+	if !ensureDataDir(tmpDir) {
+		fail(c, http.StatusBadRequest, "数据 zip 里未发现测试数据（数据对 *.in + *.out/.ans 平铺或包在 data/ 目录均可）")
+		return
+	}
 	pr, err := (&repo.Importer{Repo: h.concreteRepo(), DataDir: h.cfg.DataDir}).ReplaceData(c.Request.Context(), id, tmpDir)
 	if err != nil {
 		fail(c, http.StatusBadRequest, "替换失败："+err.Error())
@@ -838,6 +842,46 @@ func parsePositiveFloat(s string, def float64) float64 {
 // 参数化大限额）。
 func safeExtractZip(zipPath, dst string) error {
 	return archive.SafeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "64MB", "200MB", nil)
+}
+
+// ensureDataDir 数据 zip 根平铺兼容（v0.97.16）：摊平后无 data/ 目录但根目录有 .in
+// 数据对时，把根目录活文件收拢进 data/ 再走原管道——单独数据包不再强制 data/ 包裹
+//（data/ 包裹源自 v0.15 统一题包格式对网页建题管道的复用，对「只有数据」的包是多余
+// 要求）。题包与批量导入的结构语义不动，存量 data/ 包行为不变；未收拢（无 data/ 也
+// 无数据对，如误传整题包）返回 false，由调用方走「缺少数据」原报错。
+func ensureDataDir(dir string) bool {
+	dataPath := filepath.Join(dir, "data")
+	if fi, err := os.Stat(dataPath); err == nil && fi.IsDir() {
+		return true
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	hasPair := false
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".in") {
+			hasPair = true
+			break
+		}
+	}
+	if !hasPair {
+		return false
+	}
+	// 收拢：根目录活文件整体挪入临时子目录后改名 data/（entries 先读后建，wrap 不在清单内）
+	wrap := filepath.Join(dir, "soj-flat-wrap")
+	if err := os.Mkdir(wrap, 0o755); err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if archive.IsPackagingJunk(e.Name()) {
+			continue
+		}
+		if err := os.Rename(filepath.Join(dir, e.Name()), filepath.Join(wrap, e.Name())); err != nil {
+			return false
+		}
+	}
+	return os.Rename(wrap, dataPath) == nil
 }
 
 // DownloadProblemTestdata 下载题包（权威导出新 SOJ 格式，import-design.md §3）：

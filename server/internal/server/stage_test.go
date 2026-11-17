@@ -128,12 +128,12 @@ func TestStageUploadContract(t *testing.T) {
 		t.Fatalf("坏包留下残留：%v", after)
 	}
 
-	// 缺 data/：400 明确提示
+	// 无数据对（v0.97.16 起平铺也可，所以此例是「未发现测试数据」而非「缺 data/」）：400 明确提示
 	noData := zipBytes(t, map[string]string{"foo.txt": "hi"})
 	if code, body := doMultipart(r, "/api/problems/testdata/stage", rootTok, "file", "nodata.zip", noData); code != http.StatusBadRequest {
-		t.Fatalf("缺 data/ stage = %d，期望 400：%v", code, body)
-	} else if msg := body["message"].(string); !strings.Contains(msg, "data/") {
-		t.Fatalf("缺 data/ 提示不含关键字：%q", msg)
+		t.Fatalf("无数据对 stage = %d，期望 400：%v", code, body)
+	} else if msg := body["message"].(string); !strings.Contains(msg, "未发现测试数据") {
+		t.Fatalf("无数据对提示不含关键字：%q", msg)
 	}
 
 	// 缺 file 字段：400
@@ -210,6 +210,62 @@ func TestStageEvictAndCleanup(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(os.TempDir(), newf)); err != nil {
 		t.Fatal("新鲜暂存被误删")
+	}
+}
+
+// 根平铺兼容（v0.97.16）：无 data/ 的平铺数据包 stage 应放行；误传整题包（无数据对）仍拒；
+// ensureDataDir 单元钉死三路——平铺收拢（杂物不进 data/）/ 已有 data/ 原样 / 无数据对不动。
+func TestStageFlatZipAccepted(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleRoot] = &repo.Role{ID: repo.RoleRoot, Perms: []string{repo.PermAll}}
+	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
+	h := newTestHandlers(f)
+	r := testEngine(h)
+	rootTok := f.addUser(h, 1, "root", repo.RoleRoot, 0)
+	stageTestSweep(t, 1)
+
+	// 平铺数据包（config.yaml + std.cpp + 数据对全在 zip 根）→ 200
+	flat := zipBytes(t, map[string]string{"config.yaml": "time: 1000\n", "std.cpp": "int main(){}\n", "a.in": "1\n", "a.ans": "2\n"})
+	if code, body := doMultipart(r, "/api/problems/testdata/stage", rootTok, "file", "flat.zip", flat); code != http.StatusOK {
+		t.Fatalf("平铺数据包 stage = %d，期望 200：%v", code, body)
+	}
+
+	// 误传整题包（problem.md 在根、无数据对）→ 400
+	pack := zipBytes(t, map[string]string{"problem.md": "# 题面\n"})
+	if code, body := doMultipart(r, "/api/problems/testdata/stage", rootTok, "file", "pack.zip", pack); code != http.StatusBadRequest {
+		t.Fatalf("整题包 stage = %d，期望 400：%v", code, body)
+	}
+
+	// ensureDataDir 单元
+	dir := t.TempDir()
+	for name, content := range map[string]string{"x.in": "1", "x.out": "2", ".DS_Store": "j", "gen.py": "pass"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !ensureDataDir(dir) {
+		t.Fatal("平铺目录应收拢")
+	}
+	for _, want := range []string{"x.in", "x.out", "gen.py"} {
+		if _, err := os.Stat(filepath.Join(dir, "data", want)); err != nil {
+			t.Fatalf("收拢后 data/%s 缺失", want)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "data", ".DS_Store")); !os.IsNotExist(err) {
+		t.Fatal("打包杂物不应收进 data/")
+	}
+	if !ensureDataDir(dir) {
+		t.Fatal("已有 data/ 应直接放行")
+	}
+	empty := t.TempDir()
+	if err := os.WriteFile(filepath.Join(empty, "problem.md"), []byte("m"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ensureDataDir(empty) {
+		t.Fatal("无数据对目录不应收拢")
+	}
+	if _, err := os.Stat(filepath.Join(empty, "problem.md")); err != nil {
+		t.Fatal("未收拢时原文件应保持原位")
 	}
 }
 
