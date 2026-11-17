@@ -214,6 +214,7 @@ func TestStageEvictAndCleanup(t *testing.T) {
 }
 
 // 根平铺兼容（v0.97.16）：无 data/ 的平铺数据包 stage 应放行；误传整题包（无数据对）仍拒；
+// v0.97.17 起校验走元数据扫描（零写盘），补单根包裹与路径穿越两形态。
 // ensureDataDir 单元钉死三路——平铺收拢（杂物不进 data/）/ 已有 data/ 原样 / 无数据对不动。
 func TestStageFlatZipAccepted(t *testing.T) {
 	f := baseFake()
@@ -230,10 +231,24 @@ func TestStageFlatZipAccepted(t *testing.T) {
 		t.Fatalf("平铺数据包 stage = %d，期望 200：%v", code, body)
 	}
 
+	// 单根目录包裹（2338_tree/data/...）→ 200（元数据版 UnwrapSingleRootDir 判定）
+	wrapped := zipBytes(t, map[string]string{"2338_tree/data/a.in": "1\n", "2338_tree/data/a.out": "2\n"})
+	if code, body := doMultipart(r, "/api/problems/testdata/stage", rootTok, "file", "wrapped.zip", wrapped); code != http.StatusOK {
+		t.Fatalf("单根包裹 stage = %d，期望 200：%v", code, body)
+	}
+
 	// 误传整题包（problem.md 在根、无数据对）→ 400
 	pack := zipBytes(t, map[string]string{"problem.md": "# 题面\n"})
 	if code, body := doMultipart(r, "/api/problems/testdata/stage", rootTok, "file", "pack.zip", pack); code != http.StatusBadRequest {
 		t.Fatalf("整题包 stage = %d，期望 400：%v", code, body)
+	}
+
+	// 路径穿越条目 → 400（元数据扫描与 SafeExtractZipLimits 同一条非法路径规则）
+	evil := zipBytes(t, map[string]string{"../evil.in": "1\n"})
+	if code, body := doMultipart(r, "/api/problems/testdata/stage", rootTok, "file", "evil.zip", evil); code != http.StatusBadRequest {
+		t.Fatalf("路径穿越 stage = %d，期望 400：%v", code, body)
+	} else if msg := body["message"].(string); !strings.Contains(msg, "非法路径") {
+		t.Fatalf("路径穿越提示不含关键字：%q", msg)
 	}
 
 	// ensureDataDir 单元

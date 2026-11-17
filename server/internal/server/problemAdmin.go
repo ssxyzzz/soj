@@ -33,10 +33,10 @@ import (
 )
 
 const (
-	maxCreateRequest   = 64 << 20  // 建题/替换请求体上限（数据 zip 走建题页的小包；大包走导入）
+	maxCreateRequest   = 512 << 20 // 建题/替换请求体上限（数据 zip 压缩后 512MB；v0.97.17 64MB→512MB）
 	maxZipEntries      = 2000      // zip 条目数上限
-	maxZipUncompressed = 200 << 20 // zip 解压总量上限（防炸弹）
-	maxZipFile         = 64 << 20  // zip 单文件上限（v0.97.15 提限 20MB→64MB 与请求体对齐：大数据题单 .in 普遍数十 MB）
+	maxZipUncompressed = 20 << 30  // zip 解压总量防炸弹闸 20GB（v0.97.17 解压侧从业务限制转防炸弹：正常数据永不出头，只挡病态压缩比）
+	maxZipFile         = 10 << 30  // zip 单文件防炸弹闸 10GB（同上；非业务限制）
 )
 
 // CreateProblem 网页建题（全题型单管道）：表单字段构造临时 SOJ 题目录
@@ -52,7 +52,7 @@ func (h *Handlers) CreateProblem(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxCreateRequest)
 	form, err := c.MultipartForm()
 	if err != nil {
-		fail(c, http.StatusBadRequest, "建题失败：请求体过大或格式错误（数据 zip 上限 64MB，更大的包请走「导入题目」）")
+		fail(c, http.StatusBadRequest, "建题失败：请求体过大或格式错误（数据 zip 压缩后上限 512MB）")
 		return
 	}
 
@@ -553,7 +553,7 @@ func (h *Handlers) ReplaceProblemTestdata(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxCreateRequest)
 	form, err := c.MultipartForm()
 	if err != nil {
-		fail(c, http.StatusBadRequest, "请求体过大或格式错误（数据 zip 上限 64MB，更大的包请走「导入题目」）")
+		fail(c, http.StatusBadRequest, "请求体过大或格式错误（数据 zip 压缩后上限 512MB）")
 		return
 	}
 	// 数据 zip 来源（v0.97.15）：stage=<id> 暂存式（选包即传）优先，回落 zip part 直传
@@ -841,7 +841,7 @@ func parsePositiveFloat(s string, def float64) float64 {
 // 的实现自 v0.32 起独立 internal/archive 包；批量导入走 archive.SafeExtractZipLimits
 // 参数化大限额）。
 func safeExtractZip(zipPath, dst string) error {
-	return archive.SafeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "64MB", "200MB", nil)
+	return archive.SafeExtractZipLimits(zipPath, dst, maxZipEntries, maxZipUncompressed, maxZipFile, "10GB", "20GB", nil)
 }
 
 // ensureDataDir 数据 zip 根平铺兼容（v0.97.16）：摊平后无 data/ 目录但根目录有 .in

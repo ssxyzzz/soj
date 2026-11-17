@@ -31,9 +31,9 @@ type SystemSettings struct {
 	IcpNumber string `bson:"icpNumber"`
 	// 公安网备号（2026-11-02）：页脚悬挂并链接公安部备案查询；空 = 不展示（未备案部署不显示）。
 	MpsNumber string `bson:"mpsNumber"`
-	// 批量导入限额（v0.15，MB）：单题数据上限 / 整包 zip 上限；nil = 未设置按默认（100 / 2048）。
-	BatchImportProblemMB *int `bson:"batchImportProblemMB,omitempty"`
-	BatchImportZipMB     *int `bson:"batchImportZipMB,omitempty"`
+	// 批量导入整包 zip 上限（v0.15，MB；v0.97.17 单题数据上限退役——解压侧只剩防炸弹
+	// 总量闸）：nil = 未设置按默认（10240 = 10GB）。
+	BatchImportZipMB *int `bson:"batchImportZipMB,omitempty"`
 	// 邮件通道（v0.16）：log = 打日志不外发（默认，人工转告）；smtp = 真实发信。
 	MailChannel string `bson:"mailChannel,omitempty"`
 	// SMTP 连接参数（MailChannel=smtp 时使用；启动校验配置完整性，不完整拒绝启动）。
@@ -147,9 +147,8 @@ const (
 	DefaultRateLimitPerMinute    = 3
 	DefaultDataDownloadWeekLimit = 5
 	DefaultAutocompleteMinLevel  = 4
-	DefaultAllowRegister        = true
-	DefaultBatchImportProblemMB = 100  // 单题数据 100MB
-	DefaultBatchImportZipMB     = 2048 // 整包 zip 2GB
+	DefaultAllowRegister    = true
+	DefaultBatchImportZipMB = 10240 // 整包 zip 10GB（v0.97.17 2GB→10GB；单题数据上限随解压业务限额一并退役）
 
 	// 讨论区（v0.24）默认值。
 	DefaultDiscussTopicDailyLimit = 5 // 主楼每日上限
@@ -253,9 +252,6 @@ func (r *Repo) loadSystemSettings(ctx context.Context) (*SystemSettings, error) 
 	}
 	if s.AllowRegister == nil {
 		s.AllowRegister = boolPtr(DefaultAllowRegister)
-	}
-	if s.BatchImportProblemMB == nil || *s.BatchImportProblemMB < 1 {
-		s.BatchImportProblemMB = intPtr(DefaultBatchImportProblemMB)
 	}
 	if s.BatchImportZipMB == nil || *s.BatchImportZipMB < 1 {
 		s.BatchImportZipMB = intPtr(DefaultBatchImportZipMB)
@@ -663,7 +659,6 @@ func (r *Repo) UpdateSystemSettings(ctx context.Context, s *SystemSettings) erro
 			"allowRegister":           s.RegistrationOpen(),
 			"icpNumber":               s.IcpNumber,
 			"mpsNumber":               s.MpsNumber,
-			"batchImportProblemMB":    s.BatchImportProblemMBVal(),
 			"batchImportZipMB":        s.BatchImportZipMBVal(),
 			"mailChannel":             s.MailChannel,
 			"smtp":                    s.SMTP,
@@ -811,15 +806,7 @@ func (r *Repo) TestDataDownloadedInWeek(ctx context.Context, uid int64, exclude 
 	return int64(len(vals)), nil
 }
 
-// BatchImportProblemMBVal 批量导入单题数据上限（MB）：未设置/越界回默认 100。
-func (s *SystemSettings) BatchImportProblemMBVal() int {
-	if s.BatchImportProblemMB == nil || *s.BatchImportProblemMB < 1 {
-		return DefaultBatchImportProblemMB
-	}
-	return *s.BatchImportProblemMB
-}
-
-// BatchImportZipMBVal 批量导入整包 zip 上限（MB）：未设置/越界回默认 2048。
+// BatchImportZipMBVal 批量导入整包 zip 上限（MB）：未设置/越界回默认 10240（10GB）。
 func (s *SystemSettings) BatchImportZipMBVal() int {
 	if s.BatchImportZipMB == nil || *s.BatchImportZipMB < 1 {
 		return DefaultBatchImportZipMB

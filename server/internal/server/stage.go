@@ -11,6 +11,7 @@ package server
 // 上传有进度、页面全程可操作，确认只剩秒级落库。
 
 import (
+	"archive/zip"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,7 +51,7 @@ func (h *Handlers) StageTestdata(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxCreateRequest)
 	form, err := c.MultipartForm()
 	if err != nil {
-		fail(c, http.StatusBadRequest, "上传失败：请求体过大（数据 zip 上限 64MB）或格式错误")
+		fail(c, http.StatusBadRequest, "上传失败：请求体过大（数据 zip 上限 512MB）或格式错误")
 		return
 	}
 	files := form.File["file"]
@@ -83,8 +85,9 @@ func (h *Handlers) StageTestdata(c *gin.Context) {
 		return
 	}
 
-	// 即时校验：与确认时同一条链（坏包在此刻报给用户，进度条旁直接可见）
-	if msg := validateStagedZip(path); msg != "" {
+	// 即时校验（v0.97.17 起元数据级零写盘秒回）：坏包在此刻报给用户，进度条旁直接可见；
+	// 完整解压挪到确认时由 SafeExtractZipLimits 预检最终执法
+	if msg := validateStagedZipMeta(path); msg != "" {
 		os.Remove(path)
 		fail(c, http.StatusBadRequest, msg)
 		return
@@ -92,24 +95,94 @@ func (h *Handlers) StageTestdata(c *gin.Context) {
 	ok(c, gin.H{"stage": id, "name": files[0].Filename, "size": size})
 }
 
-// validateStagedZip 与建题/替换一致的包合法性预检；返回空串 = 合法。
-func validateStagedZip(zipPath string) string {
-	tmpDir, err := os.MkdirTemp("", "soj-stage-check-")
+// validateStagedZipMeta 元数据级预检（v0.97.17）：只读 zip 中央目录、零写盘秒回——
+// 512MB 级大包的完整解压校验挪到确认时（SafeExtractZipLimits 预检在那里最终执法）。
+// 检查面与解压路径同一套：条目数 / 非法路径 / 单文件与总量防炸弹闸 / 数据形态
+//（data/ 前缀 ∨ 根平铺 *.in ∨ 单根目录包裹前两者，语义对齐 UnwrapSingleRootDir +
+// ensureDataDir）。代价：zip 内容 CRC 损坏这类极罕见包从「选包即报」退化为
+//「确认时才报」（暂存凭据保留供重试）。返回空串 = 合法。
+func validateStagedZipMeta(zipPath string) string {
+	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
-		return "服务器临时目录创建失败"
+		return "数据包不合法：不是合法的 zip 文件"
 	}
-	defer os.RemoveAll(tmpDir)
-	if err := safeExtractZip(zipPath, tmpDir); err != nil {
-		return "数据包不合法：" + err.Error()
+	defer zr.Close()
+	if len(zr.File) > maxZipEntries {
+		return "数据包不合法：压缩包条目过多"
 	}
-	if err := archive.UnwrapSingleRootDir(tmpDir); err != nil {
-		return "整理数据目录失败"
+	var names []string
+	total := int64(0)
+	for _, f := range zr.File {
+		name := f.Name
+		if strings.Contains(name, "..") || strings.HasPrefix(name, "/") || strings.Contains(name, "\\") {
+			return "数据包不合法：压缩包含非法路径"
+		}
+		if f.Mode().IsDir() {
+			continue
+		}
+		if f.UncompressedSize64 > uint64(maxZipFile) {
+			return "数据包不合法：压缩包内单文件超过 10GB"
+		}
+		total += int64(f.UncompressedSize64)
+		if total > maxZipUncompressed {
+			return "数据包不合法：压缩包解压总量超过 20GB"
+		}
+		names = append(names, name)
 	}
-	// 根平铺兼容（v0.97.16）：无 data/ 但根目录是数据对时自动收拢，坏结构在此刻报给用户
-	if !ensureDataDir(tmpDir) {
-		return "数据 zip 里未发现测试数据（数据对 *.in + *.out/.ans 平铺或包在 data/ 目录均可；带题面的题包请走「导入题目」）"
+	if hasDataShape(names) {
+		return ""
 	}
-	return ""
+	return "数据 zip 里未发现测试数据（数据对 *.in + *.out/.ans 平铺或包在 data/ 目录均可；带题面的题包请走「导入题目」）"
+}
+
+// hasDataShape 条目名集合是否含测试数据形态：data/ 前缀 ∨ 根平铺 *.in ∨ 全部
+// 活条目共享同一非 data/cases 根目录时剥掉前缀再判（元数据版 UnwrapSingleRootDir，
+// 打包杂物不计入根判定）。
+func hasDataShape(names []string) bool {
+	if dataShapeIn(names) {
+		return true
+	}
+	root := ""
+	for _, n := range names {
+		seg := n
+		if i := strings.IndexByte(n, '/'); i >= 0 {
+			seg = n[:i]
+		}
+		if archive.IsPackagingJunk(n) || archive.IsPackagingJunk(seg) {
+			continue
+		}
+		if !strings.Contains(n, "/") {
+			return false // 根级散文件与目录混布 = 无可剥根
+		}
+		if root == "" {
+			root = seg
+		} else if seg != root {
+			return false
+		}
+	}
+	if root == "" || root == "data" || root == "cases" {
+		return false
+	}
+	stripped := make([]string, 0, len(names))
+	for _, n := range names {
+		if strings.HasPrefix(n, root+"/") {
+			stripped = append(stripped, n[len(root)+1:])
+		}
+	}
+	return dataShapeIn(stripped)
+}
+
+// dataShapeIn 直接形态判定：data/ 前缀或根平铺数据对。
+func dataShapeIn(names []string) bool {
+	for _, n := range names {
+		if strings.HasPrefix(n, "data/") {
+			return true
+		}
+		if !strings.Contains(n, "/") && strings.HasSuffix(n, ".in") {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveUploadZip 建题/替换共用的 zip 来源裁决（v0.97.15）：表单带 stage=<id>

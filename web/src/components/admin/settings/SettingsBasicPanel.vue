@@ -15,9 +15,8 @@ const autocompleteMinLevel = ref(4)
 const icpNumber = ref('')
 // 公安网备号（2026-11-02）：同页脚悬挂，备案号中数字即公安部备案查询 code；空 = 不展示
 const mpsNumber = ref('')
-// 批量导入限额（v0.15）：单题数据 / 整包 zip（MB）
-const batchProblemMB = ref(100)
-const batchZipMB = ref(2048)
+// 批量导入限额（v0.15）：整包 zip（MB；v0.97.17 单题数据上限退役）
+const batchZipMB = ref(10240)
 // 自动题号起点：无前缀自动取号的最小题号（默认 1001，1~起点-1 留给带题号的导入题包）
 const problemSeqStart = ref(1001)
 // 玉经济体（v0.33-①）：货币名（1–6 字，全站文案统一读此值）+ 比赛奖池获奖比例
@@ -46,7 +45,6 @@ onMounted(async () => {
     autocompleteMinLevel.value = s.autocomplete_min_level
     icpNumber.value = s.icp_number || ''
     mpsNumber.value = s.mps_number || ''
-    batchProblemMB.value = s.batch_import_problem_mb
     batchZipMB.value = s.batch_import_zip_mb
     problemSeqStart.value = s.problem_seq_start ?? 1001
     currencyName.value = s.currency_name || '玉'
@@ -74,7 +72,6 @@ async function save() {
       autocomplete_min_level: autocompleteMinLevel.value,
       icp_number: icpNumber.value.trim(),
       mps_number: mpsNumber.value.trim(),
-      batch_import_problem_mb: batchProblemMB.value,
       batch_import_zip_mb: batchZipMB.value,
       problem_seq_start: problemSeqStart.value,
       currency_name: currencyName.value.trim(),
@@ -130,15 +127,9 @@ async function save() {
       <el-divider content-position="left">批量导入</el-divider>
       <el-form-item>
         <template #label>
-          <TipLabel label="单题数据上限（MB）" tip="后台「导入题目」页单道题数据的体积上限，超限该题跳过" />
+          <TipLabel label="整包上限（MB）" tip="单次上传题包 zip（压缩后）的体积上限，默认 10240 = 10GB；题多请分批传。单题数据不再设解压后体积上限（v0.97.17 起，仅保留防炸弹总量闸）" />
         </template>
-        <el-input-number v-model="batchProblemMB" :min="1" :max="4096" />
-      </el-form-item>
-      <el-form-item>
-        <template #label>
-          <TipLabel label="整包上限（MB）" tip="单次上传题包 zip 的体积上限；题多请分批传" />
-        </template>
-        <el-input-number v-model="batchZipMB" :min="1" :max="8192" />
+        <el-input-number v-model="batchZipMB" :min="1" :max="20480" />
       </el-form-item>
       <el-form-item>
         <template #label>

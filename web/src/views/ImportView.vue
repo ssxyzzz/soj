@@ -273,7 +273,7 @@ const finishedIssues = computed(() =>
           <!-- 大号上传图标（2026-10-27 拍板：参考云上传块样式，上传入口更显眼） -->
           <div class="drop-icon"><el-icon><UploadFilled /></el-icon></div>
           <p>{{ running ? '导入进行中，等待完成或取消' : '拖入题包 zip 或点击选择' }}</p>
-          <p class="dim">单题数据 ≤100MB、整包 ≤2GB（root 可在系统设置调整）；题多分批传</p>
+          <p class="dim">整包 zip ≤10GB（压缩后，root 可在系统设置调整）；单题数据不设解压体积上限；题多分批传</p>
         </div>
       </el-upload>
 

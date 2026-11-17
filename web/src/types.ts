@@ -1252,7 +1252,6 @@ export interface AdminSettings {
   allow_register: boolean
   icp_number: string
   mps_number: string
-  batch_import_problem_mb: number
   batch_import_zip_mb: number
   /** 邮箱通道（v0.16） */
   mail_channel: 'log' | 'smtp'

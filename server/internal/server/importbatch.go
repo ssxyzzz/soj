@@ -7,13 +7,12 @@ package server
 //     NormalizeHydroDir 归一为 SOJ 格式后走 ImportDir。
 // 全站单任务（进行中 409）；秒级进度轮询；**取消立马生效**（context 取消中断在途库操作、
 // 后续目录不再识别，已导入保留）；单题失败跳过出报告；同标题跳过 / 默认隐藏开关；
-// root 限额（单题数据 / 整包 zip）。
+// root 整包 zip 限额（v0.97.17 单题数据上限退役，解压侧只剩防炸弹总量闸）。
 
 import (
 	"context"
 	"fmt"
 	"io"
-	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -205,7 +204,6 @@ func (h *Handlers) StartImport(c *gin.Context) {
 		return
 	}
 	zipMB := st.BatchImportZipMBVal()
-	problemMB := st.BatchImportProblemMBVal()
 
 	// 单任务排队：已有 running 任务直接拒绝（前端轮询其进度）
 	h.batchMu.Lock()
@@ -277,12 +275,12 @@ func (h *Handlers) StartImport(c *gin.Context) {
 	zf.Close()
 	tmpZip.Close()
 
-	go h.runImportJob(ctx, job, tmpZip.Name(), uid, skipSame, defaultHidden, transferImages, problemMB, zipMB)
-	ok(c, gin.H{"started": true, "source": source, "zip_mb": zipMB, "problem_mb": problemMB})
+	go h.runImportJob(ctx, job, tmpZip.Name(), uid, skipSame, defaultHidden, transferImages, zipMB)
+	ok(c, gin.H{"started": true, "source": source, "zip_mb": zipMB})
 }
 
 // runImportJob 后台逐题导入；整包级失败（zip/结构）落 job.State=failed。
-func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPath string, uid int64, skipSame, defaultHidden, transferImages bool, problemMB, zipMB int) {
+func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPath string, uid int64, skipSame, defaultHidden, transferImages bool, zipMB int) {
 	defer os.Remove(zipPath)
 	defer func() {
 		if r := recover(); r != nil {
@@ -297,13 +295,19 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// 放宽面解压：条目数随整包限额放大，单文件 = 单题限额，总量 = 整包 ×2
+	// 放宽面解压：条目数随整包限额放大；解压侧只剩防炸弹总量闸（整包压缩后 ×2，
+	// v0.97.17 单题解压业务限额退役——单文件闸挂同总量，总量是唯一绑定约束）
 	maxEntries := zipMB * 8
 	if maxEntries < 2000 {
 		maxEntries = 2000
 	}
-	if err := archive.SafeExtractZipLimits(zipPath, tmpDir, maxEntries, int64(zipMB)*2<<20, int64(problemMB)<<20,
-		fmt.Sprintf("%dMB", problemMB), fmt.Sprintf("%dMB", zipMB*2), func(done, total int64) {
+	bombMB := zipMB * 2
+	bombHint := fmt.Sprintf("%dMB", bombMB)
+	if bombMB >= 1024 {
+		bombHint = fmt.Sprintf("%dGB", bombMB/1024)
+	}
+	if err := archive.SafeExtractZipLimits(zipPath, tmpDir, maxEntries, int64(bombMB)<<20, int64(bombMB)<<20,
+		bombHint, bombHint, func(done, total int64) {
 			job.setExtract(done, total) // v0.18.2 解压实时进度
 		}); err != nil {
 		job.finish("failed", "题包不合法："+err.Error())
@@ -351,10 +355,6 @@ func (h *Handlers) runImportJob(ctx context.Context, job *batchImportJob, zipPat
 				job.addResult(batchResult{Name: name, Status: "skipped", Title: title, Reason: "题库已存在同标题题，按开关跳过"})
 				continue
 			}
-		}
-		if size, err := dirSize(dir); err == nil && size > int64(problemMB)<<20 {
-			job.addResult(batchResult{Name: name, Status: "failed", Title: title, Reason: fmt.Sprintf("单题数据超过 %dMB 上限，请拆分后单独传", problemMB)})
-			continue
 		}
 		if err := archive.UnwrapSingleRootDir(dir); err != nil {
 			job.addResult(batchResult{Name: name, Status: "failed", Title: title, Reason: err.Error()})
@@ -444,23 +444,6 @@ func importDirTitle(dir string) string {
 		return ""
 	}
 	return dirTitleFallbackRepo(base)
-}
-
-// dirSize 目录内全部常规文件字节数。
-func dirSize(dir string) (int64, error) {
-	var total int64
-	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.Type().IsRegular() {
-			if fi, err := d.Info(); err == nil {
-				total += fi.Size()
-			}
-		}
-		return nil
-	})
-	return total, err
 }
 
 // describeImportEntries 错误信息里「包里实际看到了什么」。

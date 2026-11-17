@@ -400,7 +400,6 @@ func (h *Handlers) GetSettings(c *gin.Context) {
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
 		"mps_number":                s.MpsNumber,
-		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
 		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
 		// 邮箱通道（v0.16）
 		"mail_channel":           s.MailChannelVal(),
@@ -504,7 +503,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		AllowRegister          *bool   `json:"allow_register"`
 		IcpNumber              *string `json:"icp_number"`
 		MpsNumber              *string `json:"mps_number"`
-		BatchImportProblemMB   *int    `json:"batch_import_problem_mb"` // 批量导入单题数据上限 MB（v0.15）
 		BatchImportZipMB       *int    `json:"batch_import_zip_mb"`     // 批量导入整包 zip 上限 MB（v0.15）
 		// 邮箱通道（v0.16）
 		MailChannel          *string `json:"mail_channel"`
@@ -602,16 +600,9 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		}
 		s.MpsNumber = mps
 	}
-	if req.BatchImportProblemMB != nil {
-		if *req.BatchImportProblemMB < 1 || *req.BatchImportProblemMB > 4096 {
-			fail(c, http.StatusBadRequest, "批量导入单题数据上限需在 1-4096MB 之间")
-			return
-		}
-		s.BatchImportProblemMB = req.BatchImportProblemMB
-	}
 	if req.BatchImportZipMB != nil {
-		if *req.BatchImportZipMB < 1 || *req.BatchImportZipMB > 8192 {
-			fail(c, http.StatusBadRequest, "批量导入整包上限需在 1-8192MB 之间")
+		if *req.BatchImportZipMB < 1 || *req.BatchImportZipMB > 20480 {
+			fail(c, http.StatusBadRequest, "批量导入整包上限需在 1-20480MB（20GB）之间")
 			return
 		}
 		s.BatchImportZipMB = req.BatchImportZipMB
@@ -862,7 +853,6 @@ func (h *Handlers) UpdateSettings(c *gin.Context) {
 		"allow_register":            s.RegistrationOpen(),
 		"icp_number":                s.IcpNumber,
 		"mps_number":                s.MpsNumber,
-		"batch_import_problem_mb":   s.BatchImportProblemMBVal(),
 		"batch_import_zip_mb":       s.BatchImportZipMBVal(),
 		// 邮箱通道（v0.16）
 		"mail_channel":           s.MailChannelVal(),
