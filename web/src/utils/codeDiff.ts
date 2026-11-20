@@ -322,7 +322,12 @@ export function prepareForDiff(
 // merge 的 diffConfig.override 只能替换 diff 算法、不能替换参与比对的文本，而「原文显示 +
 // 归一口径比对」需要：两侧原文喂给 merge 展示，override 内先归一再 diff，最后把归一坐标
 // 映射回原文坐标。因 stripComments/collapseWhitespace 均保行数与换行位置不变（行 1:1），
-// 映射只需行号中转：归一 offset → 行号 → 原文行边界（吸到行首/行尾，merge 以行为单位染色）。
+// 映射只需行号中转：from 吸所在行行首；to 恰在归一行首（差异在上一行行尾收口，其后整行
+// 相等）原位保留不吞等同行，否则吸所在行行尾之后——该行有内容参与差异，整行染色。
+// 两端映射后皆为原文行首，merge toChunks 的 fromLine/toLine 对其恒等，染色行范围由本函数
+// 全权决定。行内差异（long long ↔ int、c ↔ op 这类学生代码最高频差异）from/to 同在
+// 一行，to 若同吸行首则映射成零长 Change——merge buildChunkDeco 对空 chunk 零渲染，
+// 差异整段消失，故 to 必须外扩到行尾。
 
 // 每行行首 offset + 末尾哨兵（值 = doc.length；末尾恰为换行时与最后一空行行首重合，
 // 二分取「最后一个 ≤ pos」仍落哨兵位，lineOf 正确返回 lines.length）
@@ -368,10 +373,17 @@ export function mapNormalizedChanges(
   const saB = lineStarts(origB)
   const snA = lineStarts(normA)
   const snB = lineStarts(normB)
+  // to 吸色：恰在归一行首/EOF 哨兵 → 吸原文同行行首（lineOf 命中行首位）；行中 → 吸原文
+  // 下一行行首（= 所在行行尾之后）。行号两侧行数 1:1 通用，偏移必须取原文数组；sn 含末尾
+  // 哨兵，行中时 line+1 必存在，pos 为 EOF 时恒命中哨兵走同行行首（= 原文 EOF）
+  const toSnap = (sn: number[], so: number[], pos: number): number => {
+    const line = lineOf(sn, pos)
+    return sn[line] === pos ? so[line] : so[line + 1]
+  }
   return changes.map((c) => ({
     fromA: saA[lineOf(snA, c.fromA)],
-    toA: saA[lineOf(snA, c.toA)],
+    toA: toSnap(snA, saA, c.toA),
     fromB: saB[lineOf(snB, c.fromB)],
-    toB: saB[lineOf(snB, c.toB)],
+    toB: toSnap(snB, saB, c.toB),
   }))
 }
