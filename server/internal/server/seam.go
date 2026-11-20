@@ -240,6 +240,7 @@ type RepoAPI interface {
 	RejudgeRound(ctx context.Context, kind string, rid int64) (int64, error)
 	RejudgeSubmission(ctx context.Context, id int64) error
 	RemoveAssignmentProblem(ctx context.Context, id, pid int64) error
+	RemoveMember(ctx context.Context, classID, uid int64) error
 	ReorderAssignments(ctx context.Context, classID int64, ids []int64) (int64, error)
 	ReplaceTagTreeDoc(ctx context.Context, docID string, nodes []repo.TagNode) error
 	RequestCancelSubmission(ctx context.Context, sid int64) (string, error)

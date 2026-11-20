@@ -537,6 +537,8 @@ export const classApi = {
     post<{ saved: boolean }>('/me/classes/marks', { pins, order }),
   setMemberRole: (id: number, uid: number, role: string) =>
     post<{ updated: number; role: string }>(`/classes/${id}/members/${uid}/role`, { role }),
+  // 移除成员（老师移出学生；建班人不可移，后端 classManageable 校验）
+  removeMember: (id: number, uid: number) => del<{ removed: number }>(`/classes/${id}/members/${uid}`),
   listAssignments: (id: number) =>
     get<{ visible: boolean; list: AssignmentListItem[] }>(`/classes/${id}/assignments`),
   // 课堂 PK（v0.42）：发起/取消走 manageable，查看与榜单班级成员可读

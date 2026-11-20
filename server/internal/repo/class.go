@@ -404,6 +404,20 @@ func (r *Repo) SetClassMemberRole(ctx context.Context, classID, uid int64, role 
 	return nil
 }
 
+// RemoveMember 移除班级成员（老师移出学生；建班人不可移，与 SetClassMemberRole
+// 同款双层防护：repo 侧 role != owner 过滤 + handler 侧建班人 400）。
+func (r *Repo) RemoveMember(ctx context.Context, classID, uid int64) error {
+	res, err := r.db.Collection("classmembers").DeleteOne(ctx,
+		bson.M{"classId": classID, "uid": uid, "role": bson.M{"$ne": ClassRoleOwner}})
+	if err != nil {
+		return err
+	}
+	if res.DeletedCount == 0 {
+		return mongo.ErrNoDocuments
+	}
+	return nil
+}
+
 func (r *Repo) ListMembers(ctx context.Context, classID int64) ([]ClassMember, error) {
 	cursor, err := r.db.Collection("classmembers").Find(ctx,
 		bson.M{"classId": classID}, options.Find().SetSort(bson.D{{Key: "joinedAt", Value: 1}}))

@@ -642,3 +642,41 @@ func (h *Handlers) SetMemberRole(c *gin.Context) {
 	}
 	ok(c, gin.H{"updated": targetUID, "role": req.Role})
 }
+
+// RemoveClassMember 移除班级成员（老师移出学生；classManageable 统一收口，
+// 建班人不可移；PermClassLeave 被关的班级由此出口，与退出提示文案对齐）。
+func (h *Handlers) RemoveClassMember(c *gin.Context) {
+	classID, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	targetUID, okUID := parseID(c, "uid")
+	if !okUID {
+		return
+	}
+	ctx := c.Request.Context()
+	cl, err := h.repo.GetClass(ctx, classID)
+	if repo.IsNotFound(err) {
+		fail(c, http.StatusNotFound, "班级不存在")
+		return
+	}
+	if err != nil || !h.classManageable(c, cl) {
+		fail(c, http.StatusForbidden, "仅班级管理员可以移出成员")
+		return
+	}
+	if targetUID == cl.OwnerID {
+		fail(c, http.StatusBadRequest, "不能移除建班人")
+		return
+	}
+	if err := h.repo.RemoveMember(ctx, classID, targetUID); err != nil {
+		if repo.IsNotFound(err) {
+			fail(c, http.StatusNotFound, "该用户不是班级成员")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "移除失败")
+		return
+	}
+	_, uname, _, _ := currentUser(c)
+	slog.Info("成员被移出班级", "component", "web", "operator", uname, "class_id", classID, "uid", targetUID)
+	ok(c, gin.H{"removed": targetUID})
+}

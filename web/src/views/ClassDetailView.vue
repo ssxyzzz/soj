@@ -446,6 +446,23 @@ async function changeMemberRole(row: ClassMember, role: string) {
   await load()
 }
 
+// 移出成员（老师移出学生）：二次确认后删除成员关系，历史提交保留，可凭邀请码重新加入
+async function removeMember(row: ClassMember) {
+  if (!cl.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定把「${row.username}」移出班级吗？对方将不再看到本班作业与考试，历史提交保留；可重新通过邀请码加入。`,
+      '移出成员',
+      { type: 'warning', confirmButtonText: '确认移出', cancelButtonText: '取消', confirmButtonClass: 'el-button--danger' },
+    )
+  } catch {
+    return
+  }
+  await classApi.removeMember(cl.value.id, row.uid)
+  ElMessage.success(`已把 ${row.username} 移出班级`)
+  await load()
+}
+
 async function importMembers() {
   if (!cl.value || !importText.value.trim()) {
     ElMessage.warning('请填写用户名列表')
@@ -758,6 +775,18 @@ onMounted(load)
               </el-table-column>
               <el-table-column label="加入时间" width="200">
                 <template #default="{ row }">{{ fmtDate(row.joined_at) }}</template>
+              </el-table-column>
+              <el-table-column v-if="cl.manageable" label="操作" width="90">
+                <template #default="{ row }">
+                  <!-- 建班人不可移（只能转让/解散），不渲染按钮 -->
+                  <el-button
+                    v-if="!row.is_owner"
+                    link type="danger" size="small"
+                    @click="removeMember(row as ClassMember)"
+                  >
+                    移出
+                  </el-button>
+                </template>
               </el-table-column>
             </el-table>
             <div v-if="cl.manageable" class="import">

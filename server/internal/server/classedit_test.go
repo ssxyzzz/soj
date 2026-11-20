@@ -59,7 +59,84 @@ func classEngine(h *Handlers) *gin.Engine {
 	authed := r.Group("/api", AuthRequired(h))
 	authed.GET("/classes/:id", h.GetClass)
 	authed.PATCH("/classes/:id", h.UpdateClass)
+	authed.DELETE("/classes/:id/members/:uid", h.RemoveClassMember)
 	return r
+}
+
+// RemoveMember 内存版：role==owner 过滤同真库（建班人不可移 = 找不到文档）。
+func (f *fakeRepo) RemoveMember(_ context.Context, classID, uid int64) error {
+	key := [2]int64{classID, uid}
+	if f.memberRoles[key] == "" || f.memberRoles[key] == repo.ClassRoleOwner {
+		return mongo.ErrNoDocuments
+	}
+	delete(f.memberRoles, key)
+	return nil
+}
+
+func TestClassRemoveMember(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault, Perms: []string{repo.PermClassEditOwn}}
+	f.roles[repo.RoleAdmin] = &repo.Role{ID: repo.RoleAdmin, Perms: []string{repo.PermClassEditOwn, repo.PermClassViewAll}}
+	f.roles["locked"] = &repo.Role{ID: "locked"}
+
+	f.classes[9] = &repo.Class{ID: 9, Name: "九班", OwnerID: 100, InviteCode: "ab12"}
+	h := newTestHandlers(f)
+	r := classEngine(h)
+	owner := f.addUser(h, 100, "teacher", repo.RoleAdmin, 0)
+	classAdmin := f.addUser(h, 101, "monitor", repo.RoleDefault, 0)
+	member := f.addUser(h, 102, "stu", repo.RoleDefault, 0)
+	stranger := f.addUser(h, 103, "stranger", repo.RoleDefault, 0)
+	lockedOwner := f.addUser(h, 104, "locked", "locked", 0)
+	f.memberRoles[[2]int64{9, 100}] = repo.ClassRoleOwner
+	f.memberRoles[[2]int64{9, 101}] = repo.ClassRoleAdmin
+	f.memberRoles[[2]int64{9, 102}] = repo.ClassRoleMember
+
+	del := func(tok string, classID, uid string) int {
+		code, _ := doJSON(r, "DELETE", "/api/classes/"+classID+"/members/"+uid, tok, "")
+		return code
+	}
+
+	// 班级管理员移出普通成员：200 且成员表落删除
+	if code := del(classAdmin, "9", "102"); code != http.StatusOK {
+		t.Fatalf("班级管理员移出成员 = %d，期望 200", code)
+	}
+	if _, ok := f.memberRoles[[2]int64{9, 102}]; ok {
+		t.Fatal("被移出成员应从成员表中删除")
+	}
+	// 移出后该用户已非成员：再删一次 404
+	if code := del(classAdmin, "9", "102"); code != http.StatusNotFound {
+		t.Fatalf("重复移除非成员 = %d，期望 404", code)
+	}
+
+	// 回种成员，建班人自己移普通成员同样可行；两路管理者均不可移建班人
+	f.memberRoles[[2]int64{9, 102}] = repo.ClassRoleMember
+	if code := del(owner, "9", "102"); code != http.StatusOK {
+		t.Fatalf("建班人移出成员 = %d，期望 200", code)
+	}
+	f.memberRoles[[2]int64{9, 102}] = repo.ClassRoleMember
+	if code := del(owner, "9", "100"); code != http.StatusBadRequest {
+		t.Fatalf("移除建班人 = %d，期望 400", code)
+	}
+	if code := del(classAdmin, "9", "100"); code != http.StatusBadRequest {
+		t.Fatalf("班级管理员移除建班人 = %d，期望 400", code)
+	}
+
+	// 权限：普通成员 / 班外路人无权移除；无 edit.own 的建班人被收权
+	f.memberRoles[[2]int64{9, 102}] = repo.ClassRoleMember
+	if code := del(member, "9", "102"); code != http.StatusForbidden {
+		t.Fatalf("普通成员移人 = %d，期望 403", code)
+	}
+	if code := del(stranger, "9", "102"); code != http.StatusForbidden {
+		t.Fatalf("班外路人移人 = %d，期望 403", code)
+	}
+	if code := del(lockedOwner, "9", "102"); code != http.StatusForbidden {
+		t.Fatalf("无位角色（含建班人身份）移人 = %d，期望 403", code)
+	}
+
+	// 班级不存在 404
+	if code := del(classAdmin, "404", "102"); code != http.StatusNotFound {
+		t.Fatalf("移除不存在的班成员 = %d，期望 404", code)
+	}
 }
 
 func TestClassEditPerms(t *testing.T) {

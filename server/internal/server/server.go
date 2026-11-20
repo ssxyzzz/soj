@@ -325,6 +325,7 @@ func Run(ctx context.Context, deps *Deps) {
 			{
 				managed.POST("/invite", h.RegenInvite)
 				managed.POST("/members", h.ImportMembers)
+				managed.DELETE("/members/:uid", h.RemoveClassMember) // 移除成员（老师移出学生）
 			}
 			authed.POST("/classes/:id/members/:uid/role", h.SetMemberRole)
 
