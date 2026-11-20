@@ -845,7 +845,7 @@ onMounted(load)
 
         <RailCard ov="说明" title="可见性" class="aside-card">
           <p v-if="!cl.manageable && !cl.joined && cl.members" class="hint">
-            你持有全站班级透视权限（class.view.all）：任意班级（含私密班）详情只读可见；邀请码由建班人负责发放。
+            你持有全站班级查看权限：所有班级（含私密班）详情对你只读可见；邀请码由建班人负责发放。
           </p>
           <p v-else class="hint">私密班仅成员可见；作业与考试加入班级后才能查看和完成。</p>
         </RailCard>
