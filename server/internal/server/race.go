@@ -149,7 +149,7 @@ func (h *Handlers) GetClassRace(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取成员状态失败")
 		return
 	}
-	if !isMember && !h.classManageable(c, cl) {
+	if !isMember && !h.classManageable(c, cl) && !hasPerm(c, repo.PermClassViewAll) {
 		fail(c, http.StatusForbidden, "仅班级成员可查看课堂 PK")
 		return
 	}
@@ -168,7 +168,7 @@ func (h *Handlers) GetClassRace(c *gin.Context) {
 }
 
 // GetRaceByID 按 id 读一场（GET /races/:id）：ChallengeView ?race= 参数用；
-// 班级成员或管理员可读。
+// 班级成员、管理员或 class.view.all 透视者可读。
 func (h *Handlers) GetRaceByID(c *gin.Context) {
 	uid, _, _, logged := currentUser(c)
 	if !logged {
@@ -193,7 +193,7 @@ func (h *Handlers) GetRaceByID(c *gin.Context) {
 		fail(c, http.StatusInternalServerError, "读取成员状态失败")
 		return
 	}
-	if !isMember && !h.classManageable(c, &repo.Class{ID: rc.ClassID, OwnerID: rc.HostUID}) {
+	if !isMember && !h.classManageable(c, &repo.Class{ID: rc.ClassID, OwnerID: rc.HostUID}) && !hasPerm(c, repo.PermClassViewAll) {
 		fail(c, http.StatusForbidden, "仅班级成员可查看课堂 PK")
 		return
 	}

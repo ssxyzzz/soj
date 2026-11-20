@@ -12,12 +12,14 @@ import (
 	"soj/internal/repo"
 )
 
-// assignmentAccessible 作业仅本班成员与班级管理员/root 可见。
-func (h *Handlers) assignmentAccessible(ctx context.Context, classID, uid int64, role string, logged bool) bool {
+// assignmentAccessible 作业仅本班成员与班级管理员/root 可见；持 class.view.all
+// 位者只读透视（v0.97.20 实现追平权限目录文案：详情对透视者放行，管理操作仍在
+// classManageable 闸后）。
+func (h *Handlers) assignmentAccessible(c *gin.Context, ctx context.Context, classID, uid int64, role string, logged bool) bool {
 	if !logged {
 		return false
 	}
-	if role == repo.RoleRoot {
+	if role == repo.RoleRoot || hasPerm(c, repo.PermClassViewAll) {
 		return true
 	}
 	member, _ := h.repo.IsMember(ctx, classID, uid)
@@ -139,7 +141,7 @@ func (h *Handlers) ListClassAssignments(c *gin.Context) {
 		return
 	}
 	uid, _, role, logged := currentUser(c)
-	accessible := h.assignmentAccessible(c.Request.Context(), classID, uid, role, logged)
+	accessible := h.assignmentAccessible(c, c.Request.Context(), classID, uid, role, logged)
 	if !accessible {
 		ok(c, gin.H{"visible": false, "list": []gin.H{}})
 		return
@@ -218,7 +220,7 @@ func (h *Handlers) GetAssignmentDetail(c *gin.Context) {
 	if respondRepoErr(c, err, "作业不存在", "读取作业失败") {
 		return
 	}
-	if !h.assignmentAccessible(ctx, a.ClassID, uid, role, logged) {
+	if !h.assignmentAccessible(c, ctx, a.ClassID, uid, role, logged) {
 		fail(c, http.StatusForbidden, "加入班级后才能查看作业")
 		return
 	}
@@ -465,7 +467,7 @@ func (h *Handlers) AssignmentProgress(c *gin.Context) {
 		fail(c, http.StatusNotFound, "作业不存在")
 		return
 	}
-	if !h.assignmentAccessible(ctx, a.ClassID, uid, role, logged) {
+	if !h.assignmentAccessible(c, ctx, a.ClassID, uid, role, logged) {
 		fail(c, http.StatusForbidden, "加入班级后才能查看")
 		return
 	}
@@ -550,7 +552,7 @@ func (h *Handlers) AssignmentUserSubmissions(c *gin.Context) {
 	if respondRepoErr(c, err, "作业不存在", "读取作业失败") {
 		return
 	}
-	if !h.assignmentAccessible(ctx, a.ClassID, uid, role, logged) {
+	if !h.assignmentAccessible(c, ctx, a.ClassID, uid, role, logged) {
 		fail(c, http.StatusForbidden, "加入班级后才能查看")
 		return
 	}

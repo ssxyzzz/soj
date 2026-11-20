@@ -60,7 +60,96 @@ func classEngine(h *Handlers) *gin.Engine {
 	authed.GET("/classes/:id", h.GetClass)
 	authed.PATCH("/classes/:id", h.UpdateClass)
 	authed.DELETE("/classes/:id/members/:uid", h.RemoveClassMember)
+	authed.GET("/classes/:id/assignments", h.ListClassAssignments)
+	authed.GET("/classes/:id/exams", h.ListClassExams)
+	authed.GET("/classes/:id/race", h.GetClassRace)
 	return r
+}
+
+// ---------- class.view.all 只读透视（v0.97.20）内存件 ----------
+
+func (f *fakeRepo) ListAssignments(_ context.Context, classID int64) ([]*repo.Assignment, error) {
+	out := make([]*repo.Assignment, 0)
+	for _, a := range f.assignments {
+		if a.ClassID == classID {
+			out = append(out, a)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRepo) ListClassExams(_ context.Context, _ int64) ([]*repo.Exam, error) { return nil, nil }
+
+func (f *fakeRepo) ActiveClassroomRace(context.Context, int64) (*repo.ClassroomRace, error) {
+	return nil, nil
+}
+
+func (f *fakeRepo) LatestClassroomRace(context.Context, int64) (*repo.ClassroomRace, error) {
+	return nil, nil
+}
+
+// TestClassViewAllXray 钉死 class.view.all 只读透视契约（v0.97.20 实现追平权限目录
+// 文案）：私密班不 404、邀请码与成员表下发（manageable 仍 false）、作业/考试列表
+// visible、课堂 PK 可读；无位非成员四路全拒。
+func TestClassViewAllXray(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
+	f.roles["inspector"] = &repo.Role{ID: "inspector", Perms: []string{repo.PermClassViewAll}}
+
+	// 班 9 私密班：建班人 100，成员 101（admin）/102（member）
+	f.classes[9] = &repo.Class{ID: 9, Name: "九班", OwnerID: 100, InviteCode: "ab12", Private: true}
+	f.memberRoles[[2]int64{9, 100}] = repo.ClassRoleOwner
+	f.memberRoles[[2]int64{9, 101}] = repo.ClassRoleAdmin
+	f.memberRoles[[2]int64{9, 102}] = repo.ClassRoleMember
+	f.assignments[1] = &repo.Assignment{ID: 1, ClassID: 9, Title: "作业一"}
+
+	h := newTestHandlers(f)
+	r := classEngine(h)
+	inspector := f.addUser(h, 103, "inspector", "inspector", 0)
+	stranger := f.addUser(h, 104, "stranger", repo.RoleDefault, 0)
+
+	// 私密班详情：不 404，邀请码+成员表下发，joined/manageable 仍 false
+	code, body := doJSON(r, "GET", "/api/classes/9", inspector, "")
+	if code != http.StatusOK {
+		t.Fatalf("透视者看私密班 = %d，期望 200", code)
+	}
+	d := body["data"].(map[string]any)
+	if d["manageable"] != false || d["joined"] != false {
+		t.Fatalf("透视者 manageable/joined 应为 false，got %v/%v", d["manageable"], d["joined"])
+	}
+	if d["invite_code"] != "ab12" {
+		t.Fatalf("透视者应收到邀请码，got %v", d["invite_code"])
+	}
+	if ms, ok := d["members"].([]any); !ok || len(ms) != 3 {
+		t.Fatalf("透视者应收到 3 条成员（含建班人），got %v", d["members"])
+	}
+
+	// 作业/考试列表 visible；课堂 PK 可读（200 非 403）
+	for _, path := range []string{"/api/classes/9/assignments", "/api/classes/9/exams"} {
+		if code, b := doJSON(r, "GET", path, inspector, ""); code != http.StatusOK {
+			t.Fatalf("透视者 GET %s = %d", path, code)
+		} else if !b["data"].(map[string]any)["visible"].(bool) {
+			t.Fatalf("透视者 GET %s visible 应为 true", path)
+		}
+	}
+	if code := func() int { c, _ := doJSON(r, "GET", "/api/classes/9/race", inspector, ""); return c }(); code != http.StatusOK {
+		t.Fatalf("透视者看课堂 PK = %d，期望 200", code)
+	}
+
+	// 无位非成员四路全拒：私密班 404、作业/考试 visible=false、PK 403
+	if code, _ := doJSON(r, "GET", "/api/classes/9", stranger, ""); code != http.StatusNotFound {
+		t.Fatalf("无位非成员看私密班 = %d，期望 404", code)
+	}
+	for _, path := range []string{"/api/classes/9/assignments", "/api/classes/9/exams"} {
+		if code, b := doJSON(r, "GET", path, stranger, ""); code != http.StatusOK {
+			t.Fatalf("无位非成员 GET %s = %d", path, code)
+		} else if b["data"].(map[string]any)["visible"].(bool) {
+			t.Fatalf("无位非成员 GET %s visible 应为 false", path)
+		}
+	}
+	if code, _ := doJSON(r, "GET", "/api/classes/9/race", stranger, ""); code != http.StatusForbidden {
+		t.Fatalf("无位非成员看课堂 PK = %d，期望 403", code)
+	}
 }
 
 // RemoveMember 内存版：role==owner 过滤同真库（建班人不可移 = 找不到文档）。

@@ -196,8 +196,9 @@ func (h *Handlers) MyClasses(c *gin.Context) {
 	ok(c, cards)
 }
 
-// GetClass 班级详情：私密班仅本班成员（与 root/admin）可见；成员列表与邀请码仅班级管理员可见；
-// 作业列表单独走 /classes/:id/assignments（仅本班成员可见）。
+// GetClass 班级详情：私密班仅本班成员与持 class.view.all 位者可见；成员列表与
+// 邀请码管理视角（classManageable）全量、class.view.all 只读透视（v0.97.20）；
+// 作业列表单独走 /classes/:id/assignments（本班成员与透视者可见）。
 func (h *Handlers) GetClass(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -233,7 +234,9 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		"joined":     isMember,
 		"manageable": manage,
 	}
-	if manage {
+	// 邀请码与成员表：管理视角全量；class.view.all 只读透视（v0.97.20 实现追平
+	// 权限目录文案）——manageable 标志仍只反映管理身份，透视者前端不出管理按钮
+	if manage || privileged {
 		resp["invite_code"] = cl.InviteCode
 		members, err := h.repo.ListMembers(ctx, id)
 		if err == nil {

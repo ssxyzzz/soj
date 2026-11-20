@@ -365,7 +365,8 @@ func (h *Handlers) ContestDetail(c *gin.Context) {
 	h.roundDetailJSON(c, scopeContest, ct, logged)
 }
 
-// ExamDetail 考试详情（需登录；仅本班成员与组织者可见）。
+// ExamDetail 考试详情（需登录；本班成员、组织者与 class.view.all 透视者可见，
+// 透视者只读——提交仍限成员）。
 func (h *Handlers) ExamDetail(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -387,7 +388,8 @@ func (h *Handlers) ExamDetail(c *gin.Context) {
 	}
 	member, _ := h.repo.IsMember(c.Request.Context(), e.ClassID, uid)
 	isOrganizer := uid == e.CreatedBy || role == repo.RoleRoot
-	if !member && !isOrganizer {
+	// class.view.all 只读透视（v0.97.20）：可进详情与看题，提交资格仍走成员闸
+	if !member && !isOrganizer && !hasPerm(c, repo.PermClassViewAll) {
 		fail(c, http.StatusForbidden, "该考试仅限本班成员参加")
 		return
 	}
@@ -1253,7 +1255,7 @@ func (h *Handlers) ListClassExams(c *gin.Context) {
 		return
 	}
 	uid, _, role, logged := currentUser(c)
-	accessible := h.assignmentAccessible(c.Request.Context(), classID, uid, role, logged)
+	accessible := h.assignmentAccessible(c, c.Request.Context(), classID, uid, role, logged)
 	if !accessible {
 		ok(c, gin.H{"visible": false, "list": []gin.H{}})
 		return
