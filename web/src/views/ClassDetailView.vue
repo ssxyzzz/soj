@@ -561,8 +561,8 @@ onMounted(load)
           </div>
           <div v-if="cl.intro.trim()" class="intro"><MdView :html="cl.intro_html ?? ''" /></div>
           <!-- 创建时间在右栏「班级信息」卡展示，名称卡不再重复（v0.7.2 验收反馈） -->
-          <!-- 透视者（class.view.all）不显示加入条：只读可看全部，无需加入 -->
-          <div v-if="!cl.joined && !cl.manageable && !cl.invite_code" class="join-bar">
+          <!-- 透视者（class.view.all，members 下发）不显示加入条：只读可看全部，无需加入 -->
+          <div v-if="!cl.joined && !cl.manageable && !cl.members" class="join-bar">
             <el-input
               v-model="joinCode"
               placeholder="输入邀请码加入班级"
@@ -834,20 +834,6 @@ onMounted(load)
           <el-button type="danger" style="width: 100%" @click="leave">退出班级</el-button>
         </RailCard>
 
-        <!-- class.view.all 只读透视（v0.97.20）：非管理非成员但后端下发了邀请码 = 透视视角，
-             只读展示（无重置钮——重置是管理操作，仍走 classManageable 闸） -->
-        <RailCard v-else-if="cl.invite_code" ov="透视" title="班级透视" class="aside-card">
-          <button
-            type="button"
-            class="soj-inv-chip is-clickable"
-            title="点击复制邀请码"
-            @click="copyInvite"
-          >
-            复制邀请码：<span class="inv-code">{{ cl.invite_code }}</span>
-          </button>
-          <p class="hint">只读视角：可查看班级作业、考试与成员，管理操作不可用。</p>
-        </RailCard>
-
         <RailCard ov="信息" title="班级信息" class="aside-card">
           <div class="soj-kv">
             <div class="k"><b>{{ cl.members?.length ?? '—' }}</b><span>成员</span></div>
@@ -858,8 +844,8 @@ onMounted(load)
         </RailCard>
 
         <RailCard ov="说明" title="可见性" class="aside-card">
-          <p v-if="!cl.manageable && !cl.joined && cl.invite_code" class="hint">
-            你持有全站班级透视权限（class.view.all）：任意班级（含私密班）详情只读可见。
+          <p v-if="!cl.manageable && !cl.joined && cl.members" class="hint">
+            你持有全站班级透视权限（class.view.all）：任意班级（含私密班）详情只读可见；邀请码由建班人负责发放。
           </p>
           <p v-else class="hint">私密班仅成员可见；作业与考试加入班级后才能查看和完成。</p>
         </RailCard>

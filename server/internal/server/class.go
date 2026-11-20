@@ -196,9 +196,10 @@ func (h *Handlers) MyClasses(c *gin.Context) {
 	ok(c, cards)
 }
 
-// GetClass 班级详情：私密班仅本班成员与持 class.view.all 位者可见；成员列表与
-// 邀请码管理视角（classManageable）全量、class.view.all 只读透视（v0.97.20）；
-// 作业列表单独走 /classes/:id/assignments（本班成员与透视者可见）。
+// GetClass 班级详情：私密班仅本班成员与持 class.view.all 位者可见；成员列表
+// 管理视角（classManageable）全量、class.view.all 只读透视，邀请码仅管理视角
+// 下发（v0.97.21：由建班人/老师负责发放）；作业列表单独走
+// /classes/:id/assignments（本班成员与透视者可见）。
 func (h *Handlers) GetClass(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -234,10 +235,10 @@ func (h *Handlers) GetClass(c *gin.Context) {
 		"joined":     isMember,
 		"manageable": manage,
 	}
-	// 邀请码与成员表：管理视角全量；class.view.all 只读透视（v0.97.20 实现追平
-	// 权限目录文案）——manageable 标志仍只反映管理身份，透视者前端不出管理按钮
+	// 成员表：管理视角全量；class.view.all 只读透视（v0.97.20 实现追平权限目录
+	// 文案）。邀请码不下发（v0.97.21 用户拍板：邀请码由建班人/老师负责发放，
+	// 透视者不可见）——manageable 标志仍只反映管理身份，透视者前端不出管理按钮
 	if manage || privileged {
-		resp["invite_code"] = cl.InviteCode
 		members, err := h.repo.ListMembers(ctx, id)
 		if err == nil {
 			// 昵称回填（v0.91 成员表昵称列）：users 批量一次（GetUsersByIDs 索引点查），
@@ -267,6 +268,10 @@ func (h *Handlers) GetClass(c *gin.Context) {
 			}
 			resp["members"] = list
 		}
+	}
+	// 邀请码仅管理视角（v0.97.21 收回透视下发：由建班人/老师负责发放）
+	if manage {
+		resp["invite_code"] = cl.InviteCode
 	}
 	// 成员（非建班人）的可退判定：是成员 + 持 class.leave 位
 	if logged && isMember && uid != cl.OwnerID {

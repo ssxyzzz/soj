@@ -89,8 +89,8 @@ func (f *fakeRepo) LatestClassroomRace(context.Context, int64) (*repo.ClassroomR
 }
 
 // TestClassViewAllXray 钉死 class.view.all 只读透视契约（v0.97.20 实现追平权限目录
-// 文案）：私密班不 404、邀请码与成员表下发（manageable 仍 false）、作业/考试列表
-// visible、课堂 PK 可读；无位非成员四路全拒。
+// 文案；v0.97.21 邀请码收回管理闸）：私密班不 404、成员表下发而邀请码不下发
+// （manageable 仍 false）、作业/考试列表 visible、课堂 PK 可读；无位非成员四路全拒。
 func TestClassViewAllXray(t *testing.T) {
 	f := baseFake()
 	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
@@ -117,8 +117,9 @@ func TestClassViewAllXray(t *testing.T) {
 	if d["manageable"] != false || d["joined"] != false {
 		t.Fatalf("透视者 manageable/joined 应为 false，got %v/%v", d["manageable"], d["joined"])
 	}
-	if d["invite_code"] != "ab12" {
-		t.Fatalf("透视者应收到邀请码，got %v", d["invite_code"])
+	// 邀请码不下发（v0.97.21 用户拍板：由建班人/老师负责发放）；成员表仍透视
+	if _, has := d["invite_code"]; has {
+		t.Fatalf("透视者不应收到邀请码，got %v", d["invite_code"])
 	}
 	if ms, ok := d["members"].([]any); !ok || len(ms) != 3 {
 		t.Fatalf("透视者应收到 3 条成员（含建班人），got %v", d["members"])
