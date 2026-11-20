@@ -167,7 +167,9 @@ async function submitForgot() {
           </div>
         </div>
         <el-form label-position="top" @keyup.enter="submit">
-          <el-form-item label="用户名 / 昵称">
+          <!-- 仅用户名可登录（Login 只认 uname；昵称可重复可改，不作登录标识）——
+               label 不写「/ 昵称」虚假承诺 -->
+          <el-form-item label="用户名">
             <el-input v-model="form.username" placeholder="请输入用户名" />
           </el-form-item>
           <el-form-item v-if="mode === 'register'" label="昵称（可选）">
