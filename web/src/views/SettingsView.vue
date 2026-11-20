@@ -305,6 +305,7 @@ async function submitBind() {
               :disabled="!editable.nickname"
               maxlength="6"
               style="width: 320px"
+              autocomplete="nickname"
             />
             <span v-if="!editable.nickname" class="fd-inline">当前角色不允许或管理员已锁定昵称修改，请联系管理员</span>
           </div>
@@ -326,7 +327,7 @@ async function submitBind() {
         <div class="frow">
           <span class="fl">学校</span>
           <div class="fctrl-line">
-            <el-input v-model="profileForm.school" maxlength="64" placeholder="选填" :disabled="!editable.school" style="width: 320px" />
+            <el-input v-model="profileForm.school" maxlength="64" placeholder="选填" :disabled="!editable.school" style="width: 320px" name="school" autocomplete="off" />
             <label class="vis-sw">
               <el-switch v-model="profileVis.school" />
               <span>{{ profileVis.school ? '对外公开' : '仅自己可见' }}</span>
@@ -350,7 +351,7 @@ async function submitBind() {
         <div class="frow">
           <span class="fl">地区</span>
           <div class="fctrl-line">
-            <el-input v-model="profileForm.region" maxlength="32" placeholder="选填，如：安徽合肥" :disabled="!editable.region" style="width: 320px" />
+            <el-input v-model="profileForm.region" maxlength="32" placeholder="选填，如：安徽合肥" :disabled="!editable.region" style="width: 320px" name="region" autocomplete="off" />
             <label class="vis-sw">
               <el-switch v-model="profileVis.region" />
               <span>{{ profileVis.region ? '对外公开' : '仅自己可见' }}</span>
@@ -361,7 +362,10 @@ async function submitBind() {
         <div class="frow">
           <span class="fl">QQ</span>
           <div class="fctrl-line">
-            <el-input v-model="profileForm.qq" maxlength="16" placeholder="选填" style="width: 320px" />
+            <!-- name/autocomplete 语义标注：浏览器（Edge/Chrome）账号自动填充的启发式
+                 会跳过 disabled 的昵称框、把记住的登录用户名误填进表单里下一个可编辑
+                 文本框（QQ）——显式标注让浏览器认得出字段语义，不往这里塞用户名 -->
+            <el-input v-model="profileForm.qq" maxlength="16" placeholder="选填" style="width: 320px" name="qq" autocomplete="off" />
             <label class="vis-sw">
               <el-switch v-model="profileVis.qq" />
               <span>{{ profileVis.qq ? '对外公开' : '仅自己可见' }}</span>
