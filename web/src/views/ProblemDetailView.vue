@@ -9,7 +9,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, problemApi, submissionApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
-import { useStatementFocus } from '@/composables/useStatementFocus'
+import { useImmersiveMode } from '@/composables/useImmersiveMode'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
@@ -39,7 +39,7 @@ const route = useRoute()
 const router = useRouter()
 const site = useSiteStore()
 // 题面专注模式（v0.79）：真值时右栏/独立头/面包屑让位，题面铺满
-const { focused: stmtFocus } = useStatementFocus()
+const { focused: stmtFocus } = useImmersiveMode()
 const userStore = useUserStore()
 const feast = useGameFeastStore()
 

@@ -8,6 +8,8 @@ import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, reactive, ref,
 import type { Component } from 'vue'
 
 import { ElMessage, ElMessageBox } from 'element-plus'
+
+import { useImmersiveMode } from '@/composables/useImmersiveMode'
 import {
   Circle,
   Eraser,
@@ -51,6 +53,7 @@ import {
   textBaselineInBox,
   textBlockHeight,
   textBlockWidth,
+  textWidth,
   translateIn,
 } from '@/components/board/engine'
 import { useListener } from '@/composables/useWindowListener'
@@ -112,7 +115,9 @@ const selected = ref(new Set<number>())
 const canUndo = ref(false)
 const canRedo = ref(false)
 const spacePressed = ref(false)
-const isFullscreen = ref(false)
+// 铺满模式（v0.97.19 并入共用沉浸模式）：真值时 MainLayout 隐藏顶栏导航，画布铺满
+// 整个浏览器视口（题面专注同款链路）；Esc 退出走画布分支与 composable 文档监听双保险
+const { focused: isFullscreen, toggle: toggleFullscreen } = useImmersiveMode()
 
 const cam = reactive({ x: 0, y: 0, scale: 1 })
 const stage = reactive({ w: 800, h: 500 })
@@ -206,6 +211,11 @@ interface DragState {
   pdx?: number
   pdy?: number
   resizeTo?: BBox
+  // Excalidraw 式再点编辑（v0.97.19）：select 按下时命中的自由文字已是唯一选中，
+  // up 时仍是纯点击（未拖动）→ 就地开编辑器（首点选中、再点编辑；双击同效，编辑器
+  // 打开后 onDblClick 经 editing 守卫幂等跳过）
+  editOnUp?: boolean
+  editId?: number
   // 移动/缩放手势「已产生变更」标记：首帧置位，up 时据此收尾入史
   undoPushed?: boolean
 }
@@ -448,6 +458,11 @@ function onPointerDown(e: PointerEvent): void {
       }
       const hit = model.hitTest(w.x, w.y, tol)
       if (hit) {
+        // Excalidraw 式再点编辑：按下时该自由文字已是唯一选中（首点选中、再点编辑）
+        if (hit.type === 'text' && !e.shiftKey && selected.value.size === 1 && selected.value.has(hit.id)) {
+          st.editOnUp = true
+          st.editId = hit.id
+        }
         if (e.shiftKey) {
           const next = new Set(selected.value)
           if (next.has(hit.id)) {
@@ -677,6 +692,12 @@ function onPointerUp(e: PointerEvent): void {
         autosave()
       } else {
         renderer?.clearTransforms(d.movedIds ?? [])
+        // Excalidraw 式再点编辑：对已选中的自由文字纯点击（位移 < 5px 与 click 模式
+        // 同阈值，1px 抖动不误开）→ 就地开编辑器；拖动过的 move 不触发
+        if (d.editOnUp && d.editId && Math.hypot(e.clientX - d.lpx, e.clientY - d.lpy) < 5) {
+          const s = model.get(d.editId)
+          if (s?.type === 'text') openTextEdit(s, w)
+        }
       }
       return
     }
@@ -851,18 +872,39 @@ interface EditState {
 const editing = ref<EditState | null>(null)
 const editorText = ref('')
 
-function openEditor(ed: Omit<EditState, 'base' | 'origId'>, value: string): void {
+function openEditor(ed: Omit<EditState, 'base' | 'origId'>, value: string, caret?: number, viewOffsetY?: number): void {
   const shapeId = ed.shapeId
   // 基线：被编辑 shape 换成改前深拷贝（实时同步直改 model 里的对象，基线不受污染——
   // 与 move/resize 手势 docWithOverrides 同范式）；新建文字整份文档即基线
   const base = model.docWithOverrides(shapeId ? [structuredClone(model.get(shapeId)!)] : [])
-  editing.value = { ...ed, shapeId, origId: shapeId, base }
+  // markRaw 整份会话状态（v0.97.19 根修）：editing 是深层 ref，直赋值会把 base 里
+  // 的全体形状（含未编辑的旁邻）整棵包成 Proxy；commitEdit 以此 Proxy 基线走
+  // mutateFrom 重放，immer 结构共享对未触碰分支按引用复用——旁邻 Proxy 形状原样
+  // 落回 model，此后双击/Enter 再编辑任何旁邻，structuredClone 基线抛 DataCloneError
+  // 静默失灵（v0.97.5 只修了 ed.style 一条腿，base 这条腿漏网）。会话状态是纯 plumbing，
+  // 模板只读 editing.kind（开编辑时赋值即触发渲染），markRaw 零可观察行为损失
+  editing.value = markRaw({ ...ed, shapeId, origId: shapeId, base })
   editorText.value = value
   // Excalidraw 式隐形编辑：浮层透明后隐藏画布原字防双层（新建文字 live 落形时再补挂）
   renderer?.setEditingHidden(ed.kind === 'text' && shapeId ? shapeId : null)
   void nextTick(() => {
-    editorEl.value?.focus()
-    editorEl.value?.select()
+    const el = editorEl.value
+    if (!el) return
+    el.focus()
+    // caret 有值 = 点击点进入编辑：光标钉在点击字符处；select() 全选会把滚动视口拽到
+    // 选区尾（超长文本双击直接跳到文末），故仅无点击坐标的入口（Enter 再编辑/新建）保留
+    if (caret == null) {
+      el.select()
+      return
+    }
+    el.setSelectionRange(caret, caret)
+    // Chrome focus 会先把光标放到内容尾并滚到最大（scrollTop 实测=max），随后
+    // setSelectionRange 只改选区不回滚——视口停在底部、指针下的内容整体下偏（用户实锤
+    // 「双击往下偏移」）。显式把点击行滚回指针原位：可见范围内点击内容零跳位
+    const lh = Number.parseFloat(el.style.lineHeight) || 0
+    const line = el.value.slice(0, caret).split('\n').length - 1
+    const want = viewOffsetY == null ? 0 : line * lh - viewOffsetY
+    el.scrollTop = Math.max(0, want)
   })
 }
 
@@ -870,8 +912,40 @@ function openTextCreate(w: { x: number; y: number }): void {
   openEditor({ kind: 'text', shapeId: 0, cellIndex: -1, wx: w.x, wy: w.y, size: TEXT_SIZE, style: curStyle() }, '')
 }
 
-function openTextEdit(s: TextShape): void {
-  openEditor({ kind: 'text', shapeId: s.id, cellIndex: -1, wx: s.x, wy: s.y, size: s.size, style: s.style }, s.content)
+function openTextEdit(s: TextShape, at?: { x: number; y: number }): void {
+  let caret: number | undefined
+  let viewOffsetY: number | undefined
+  if (at) {
+    caret = textCaretAt(s, at)
+    // 指针相对编辑框顶的像素偏移（v0.97.19）：打开后把点击行滚回指针原位防下偏
+    const lhScreen = s.size * cam.scale * TEXT_LINE_H
+    viewOffsetY = (at.y - s.y) * cam.scale + textBaselineInBox(s.size, lhScreen)
+  }
+  openEditor(
+    { kind: 'text', shapeId: s.id, cellIndex: -1, wx: s.x, wy: s.y, size: s.size, style: s.style },
+    s.content,
+    caret,
+    viewOffsetY,
+  )
+}
+
+// 点击点 → 编辑光标字符偏移：行号 = 点击 y 对最近首行基线取整（基线序 = 行距均匀），
+// 列号 = 行内前缀测宽二分（textWidth 与画布渲染/编辑浮层测宽同源），超宽钳到行尾。
+// 行首缩进对齐前提：canvas dx 与 textarea 均按 ≈1 空格/tab 口径（tabSize:1）
+function textCaretAt(s: TextShape, at: { x: number; y: number }): number {
+  const lh = s.size * TEXT_LINE_H
+  const lines = s.content.split('\n')
+  const idx = Math.max(0, Math.min(lines.length - 1, Math.round((at.y - s.y) / lh)))
+  const line = lines[idx]
+  const target = at.x - s.x
+  let lo = 0
+  let hi = line.length
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (textWidth(line.slice(0, mid), s.size) <= target) lo = mid
+    else hi = mid - 1
+  }
+  return lines.slice(0, idx).reduce((n, l) => n + l.length + 1, 0) + lo
 }
 
 function openNodeEdit(s: NodeShape): void {
@@ -920,6 +994,9 @@ const editorStyle = computed<Record<string, string>>(() => {
     fontSize: `${Math.max(12, ed.size * cs).toFixed(1)}px`,
     color: palette.value[ed.style.color],
     textAlign: 'left',
+    // tab 显示宽度对齐画布：canvas measureText 的 tab 前进量 ≈ 1 空格宽（v0.97.19
+    // 实测），textarea 默认 8 列制表位会显示成大缩进——所见即所得两侧必须同宽
+    tabSize: '1',
   }
   switch (ed.kind) {
     case 'text': {
@@ -930,15 +1007,23 @@ const editorStyle = computed<Record<string, string>>(() => {
       const lh = fs * TEXT_LINE_H
       const w = Math.max(textBlockWidth(editorText.value, ed.size) * cs, ed.size * cs) + 4
       const h = textBlockHeight(editorText.value, ed.size) * cs
+      // 舞台视口钳制（v0.97.19）：超长文本（40 行代码块 × 高缩放）编辑框原样铺开会压过
+      // 缩放控件并越出舞台下缘被硬裁——下部不可见不可编。钳到「锚点→舞台右/下缘」内，
+      // 编辑框 overflow:auto 内滚（原生滚动跟手），提交后画布整块渲染不变
+      const left = sx(ed.wx)
+      const top = sy(ed.wy) - textBaselineInBox(ed.size, lh)
+      const capW = Math.max(160, stage.w - left)
+      const capH = Math.max(80, stage.h - top)
       return {
         fontFamily: BOARD_FONT,
         fontSize: `${fs.toFixed(1)}px`,
         color: palette.value[ed.style.color],
         textAlign: 'left',
-        left: `${sx(ed.wx).toFixed(1)}px`,
-        top: `${(sy(ed.wy) - textBaselineInBox(ed.size, lh)).toFixed(1)}px`,
-        width: `${w.toFixed(1)}px`,
-        height: `${h.toFixed(1)}px`,
+        tabSize: '1', // 与 base 同因：tab 显示宽度对齐画布（canvas ≈ 1 空格宽）
+        left: `${left.toFixed(1)}px`,
+        top: `${top.toFixed(1)}px`,
+        width: `${Math.min(w, capW).toFixed(1)}px`,
+        height: `${Math.min(h, capH).toFixed(1)}px`,
         lineHeight: `${lh.toFixed(1)}px`,
         padding: '0',
         whiteSpace: 'pre',
@@ -1100,7 +1185,10 @@ function autosizeEditor(e: Event): void {
   if (editing.value?.kind === 'cell') return
   const t = e.target as HTMLTextAreaElement
   t.style.height = 'auto'
-  t.style.height = `${t.scrollHeight}px`
+  // 与 editorStyle 舞台钳制同口径：超长内容不再撑到舞台外，内部滚动
+  const top = Number.parseFloat(t.style.top) || 0
+  const cap = Math.max(80, stage.h - top)
+  t.style.height = `${Math.min(t.scrollHeight, cap)}px`
 }
 
 function onDblClick(e: MouseEvent): void {
@@ -1111,7 +1199,7 @@ function onDblClick(e: MouseEvent): void {
     if (tool.value === 'select') openTextCreate(w)
     return
   }
-  if (hit.type === 'text') openTextEdit(hit)
+  if (hit.type === 'text') openTextEdit(hit, w)
   else if (hit.type === 'node') openNodeEdit(hit)
   else if (hit.type === 'table') openCellEdit(hit, w)
   else if (hit.type === 'edge') openEdgeEdit(hit)
@@ -1255,12 +1343,9 @@ function resetZoom(): void {
   zoomAt(1 / cam.scale)
 }
 
-// 画布铺满模式（浏览器内，非 Fullscreen API）：根节点转 fixed 盖住导航以下整页、
-// 隐藏页头，卡片吃满剩余高度；顶部站点菜单（sticky z-50）保持可见可点。
-// Esc 可退出（onKeydown 分支）；舞台尺寸变化由 ResizeObserver 感知自动重算视窗
-function toggleFullscreen(): void {
-  isFullscreen.value = !isFullscreen.value
-}
+// 画布铺满模式（浏览器内，非 Fullscreen API）：根节点转 fixed 盖住整个浏览器视口
+// （顶栏导航由共用沉浸模式隐藏，同题面专注链路）。Esc 可退出（onKeydown 分支与
+// composable 文档监听双保险）；舞台尺寸变化由 ResizeObserver 感知自动重算视窗
 
 function fitView(): void {
   const bb = model.contentBBox()
@@ -1597,7 +1682,7 @@ watch(tool, () => {
         <span class="ctx-hint">在画布上按住拖出表格（跟手显示行列），松手生成；双击单元格填写——DP 表直接开讲</span>
       </div>
       <div v-else-if="tool === 'text'" class="ctx-bar">
-        <span class="ctx-hint">点击画布放置文字；双击已有文字修改；输入实时上画布，Enter 换行，Esc / 点击空白完成；选中后 Delete 删除</span>
+        <span class="ctx-hint">点击画布放置文字；点文字选中，再点一下就地编辑（双击同效）；输入实时上画布，Enter 换行，Esc / 点击空白完成；选中后 Delete 删除</span>
       </div>
 
       <div ref="stageEl" class="board-stage">
@@ -1810,11 +1895,11 @@ watch(tool, () => {
   user-select: none;
 }
 
-/* 浏览器内铺满模式：fixed 盖住导航以下整页（导航 sticky z-50 保持可见可点），
+/* 浏览器内铺满模式：顶栏导航已由沉浸模式隐藏，fixed 铺满整个浏览器视口，
    隐藏页头标题区，卡片与舞台吃满剩余高度 */
 .page-fs {
   position: fixed;
-  inset: var(--soj-nav-h) 0 0;
+  inset: 0;
   z-index: 49;
   display: flex;
   flex-direction: column;
@@ -1874,7 +1959,8 @@ watch(tool, () => {
   resize: none;
   outline: none;
   line-height: 1.3;
-  overflow: hidden;
+  /* 舞台钳制后的内滚（v0.97.19）：超长文本编辑框高度封顶在舞台内，内容滚动编辑 */
+  overflow: auto;
   box-shadow: var(--soj-shadow-card);
 }
 

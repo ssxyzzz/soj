@@ -206,7 +206,7 @@ export function textBlockHeight(content: string, size: number): number {
   return content.split('\n').length * size * TEXT_LINE_H
 }
 
-// 多行 <text>：tspan 逐行排布（x 恒锚点，dy 步进行距）。baseline==='first' 时首行
+// 多行 <text>：tspan 逐行排布（x、y 逐行显式钉位）。baseline==='first' 时首行
 // 基线在锚点（自由文字，与旧单行坐标完全兼容）；'center' 时整块沿锚点垂直居中
 //（节点/单元格/边权，dominant-baseline:central 逐行继承）。单行退化后与旧渲染逐像素一致
 function appendMultiLineText(
@@ -219,15 +219,25 @@ function appendMultiLineText(
   const lines = content.split('\n')
   const lh = Number(attrs['font-size']) * TEXT_LINE_H
   const n = lines.length
-  let dy = baseline === 'first' ? 0 : (-(n - 1) / 2) * lh
+  const y0 = Number(attrs.y)
+  const lineY = (i: number) => y0 + (baseline === 'first' ? i * lh : (i - (n - 1) / 2) * lh)
   // xml:space=preserve：空白逐字保留（连续空格不折叠、行首缩进不剥除、tab 不吞），
   // 与 textWidth 的 measureText 测宽口径一致——所见即所得
   const t = el('text', { ...attrs, 'xml:space': 'preserve' })
-  for (const line of lines) {
-    const ts = el('tspan', { x: attrs.x, dy: dy.toFixed(1) })
-    ts.textContent = line
+  // 显式 y 逐行定位（v0.97.19）：不用 dy 链——Chrome 空字形 tspan 不施加偏移，连续
+  // 空行（多敲的换行）整段塌缩成一个行距（实测 "a\n\nb" 的 b 只落下一行、块高 2 行），
+  // 与编辑浮层 textarea（空行如实显示）背反，所见即所得被破坏；显式 y 与字形有无无关。
+  // 行距与首行基线/居中口径与旧 dy 链逐像素一致
+  for (const [i, line] of lines.entries()) {
+    // 行首缩进（v0.97.19）：xml:space=preserve 对「行首」空白不生效——Chrome 渲染时
+    // 行首空白前进量实测 ≈0（8 空格 dx≈0.5px；CSS white-space:pre 同样无效），缩进整段
+    // 丢失。行首空白剥出正文、其宽度走 measureText 写进 tspan dx（与 textBlockWidth
+    // 测宽同源同字体），正文外缩进逐字所见；中段空白 preserve 有效（历史行为保留）
+    const lead = line.match(/^[ \t]+/)?.[0] ?? ''
+    const ts = el('tspan', { x: attrs.x, y: lineY(i).toFixed(1) })
+    if (lead) ts.setAttribute('dx', textWidth(lead, Number(attrs['font-size'])).toFixed(1))
+    ts.textContent = line.slice(lead.length)
     t.appendChild(ts)
-    dy = lh
   }
   halo(t, paper)
   parent.appendChild(t)

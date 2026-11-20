@@ -7,14 +7,14 @@ import { computed } from 'vue'
 import { Maximize2, Minimize2 } from 'lucide-vue-next'
 import MdView from '@/components/MdView.vue'
 import TierBadge from '@/components/TierBadge.vue'
-import { useStatementFocus } from '@/composables/useStatementFocus'
+import { useImmersiveMode } from '@/composables/useImmersiveMode'
 import { useMetaTreeStore } from '@/stores/metaTree'
 import { useTagTreeStore } from '@/stores/tagtree'
 import { fmtMem, fmtSec } from '@/utils/format'
 import type { ProblemDetail } from '@/types'
 
 // 题面专注模式（v0.79）：限制条右端展开/收起钮，点击铺满浏览器视口（隐导航栏+右栏卡片）
-const { focused: stmtFocus, toggle: toggleStmtFocus } = useStatementFocus()
+const { focused: stmtFocus, toggle: toggleStmtFocus } = useImmersiveMode()
 
 const props = defineProps<{
   problem: ProblemDetail

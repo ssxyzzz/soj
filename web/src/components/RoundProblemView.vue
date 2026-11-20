@@ -8,7 +8,7 @@ import { ElMessage } from 'element-plus'
 
 import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import { usePolling } from '@/composables/usePolling'
-import { useStatementFocus } from '@/composables/useStatementFocus'
+import { useImmersiveMode } from '@/composables/useImmersiveMode'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
 import RailCard from '@/components/RailCard.vue'
@@ -34,7 +34,7 @@ const props = defineProps<{ kind: RoundKind }>()
 const route = useRoute()
 const router = useRouter()
 // 题面专注模式（v0.79）：真值时独立头/右栏让位
-const { focused: stmtFocus } = useStatementFocus()
+const { focused: stmtFocus } = useImmersiveMode()
 const userStore = useUserStore()
 
 const api = computed(() => (props.kind === 'exam' ? examApi : contestApi))

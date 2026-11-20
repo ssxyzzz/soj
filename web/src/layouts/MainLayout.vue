@@ -14,7 +14,7 @@ import { useUserStore } from '@/stores/user'
 import FeastOverlay from '@/components/game/FeastOverlay.vue'
 import { gameApi } from '@/api'
 import { isMuted, setMuted, playLevelUp } from '@/utils/gameSounds'
-import { useStatementFocus } from '@/composables/useStatementFocus'
+import { useImmersiveMode } from '@/composables/useImmersiveMode'
 import { pickWelcome } from '@/utils/gameText'
 import { applySWUpdate, swUpdateReady } from '@/utils/swClient'
 import { fmtRel } from '@/utils/format'
@@ -26,8 +26,8 @@ const router = useRouter()
 const userStore = useUserStore()
 const levels = useLevelsStore()
 const site = useSiteStore()
-// 题面专注模式（v0.79）：真值时隐藏顶栏导航（题面铺满浏览器视口）
-const { focused: stmtFocus } = useStatementFocus()
+// 沉浸模式（题面专注 v0.79 / 画板铺满 v0.97.19）：真值时隐藏顶栏导航（铺满浏览器视口）
+const { focused: immersive } = useImmersiveMode()
 
 const active = computed(() => route.path)
 
@@ -264,8 +264,8 @@ function onCommand(command: string) {
         <button type="button" class="sw-dismiss" aria-label="暂不刷新" @click="swUpdateReady = false">×</button>
       </div>
     </Transition>
-    <!-- v0.79 题面专注模式：导航栏隐藏（ProblemStatement 限制条右端钮切换，Esc/收起退出） -->
-    <el-header v-show="!stmtFocus" class="header">
+    <!-- 沉浸模式：导航栏隐藏（题面专注限制条钮 / 画板「全屏画布」钮切换，Esc 退出） -->
+    <el-header v-show="!immersive" class="header">
       <div class="header-inner">
         <!-- 品牌：渐变闪电标志（与 /favicon.svg 同源）+ 流彩渐变字 -->
         <div class="brand" @click="router.push('/')">
