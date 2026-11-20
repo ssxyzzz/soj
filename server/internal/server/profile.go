@@ -64,6 +64,7 @@ func profileJSON(u *repo.User, editable repo.ProfileEditConfig) gin.H {
 	}
 	vis := u.EffProfileVis()
 	info := gin.H{
+		"username": u.Username, // 登录用户名本人可见（只读展示；修改入口在用户管理，user.username.edit）
 		"nickname": u.Nickname,
 		"editable": gin.H{
 			"nickname": editable.Nickname,

@@ -823,6 +823,7 @@ export interface UserPrefs {
 
 // 本人视角的个人信息（仅本人与管理员后台可见，不进任何公开接口）
 export interface UserProfile {
+  username: string // 登录用户名本人可见（v0.97.24 只读展示；修改入口在用户管理）
   nickname: string
   /** 五字段自改标志（v0.34）：后端按「系统设置逐字段开关」现算（昵称再 AND 权限位） */
   editable: { nickname: boolean; gender: boolean; grade: boolean; school: boolean; region: boolean }

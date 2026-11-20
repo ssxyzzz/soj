@@ -21,6 +21,7 @@ const loading = ref(false)
 const savingProfile = ref(false)
 const savingPrefs = ref(false)
 
+const username = ref('') // 登录用户名（v0.97.24 只读展示；修改入口在用户管理）
 const nickname = ref('')
 const editable = reactive({ nickname: false, gender: false, grade: false, school: false, region: false })
 
@@ -53,6 +54,7 @@ async function load() {
   loading.value = true
   try {
     const p = await authApi.getProfile()
+    username.value = p.username ?? ''
     nickname.value = p.nickname ?? ''
     if (p.editable) Object.assign(editable, p.editable)
     profileForm.gender = p.gender ?? ''
@@ -297,6 +299,12 @@ async function submitBind() {
     <el-card shadow="never" class="fcard">
       <div class="panel-h" style="padding-left: 0"><span class="pt">个人信息</span></div>
       <div class="fbody">
+        <div class="frow">
+          <span class="fl">用户名<TipLabel tip="登录身份标识，不可自行修改；如需变更请联系管理员" /></span>
+          <div class="fctrl">
+            <el-input :model-value="username" disabled style="width: 320px" autocomplete="username" />
+          </div>
+        </div>
         <div class="frow">
           <span class="fl">昵称<TipLabel tip="用于榜单、题解等公开页面" /></span>
           <div class="fctrl">
