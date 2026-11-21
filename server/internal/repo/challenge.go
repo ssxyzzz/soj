@@ -60,10 +60,11 @@ func (p *Problem) EffChallengeSec() int {
 	return p.EffDifficulty() * 5 * 60
 }
 
-// ChallengeEligible 题目可挑战：stdio 传统题（客观题无代码、函数/交互题驱动文件、
-// 文件 IO 读的不是 stdin，自测与挑战同口径排除）。
+// ChallengeEligible 题目可挑战：stdio 传统题（客观题无代码、函数/交互题驱动文件）。
+// 文件 IO 名对不排除：文件 IO 是场次级开关（仅比赛/考试启用时生效，judge 同口径），
+// 挑战/自测/PK 提交不带场次，判题恒为 stdio，与题库练习一致。
 func (p *Problem) ChallengeEligible() bool {
-	return !p.IsObjective() && !p.IsFunction() && !p.IsInteractive() && !p.FileIO
+	return !p.IsObjective() && !p.IsFunction() && !p.IsInteractive()
 }
 
 // StartChallenge 开启挑战会话：同 (uid,pid) 的旧 running 会话顶为 quit（刷新/重开不背双会话）。

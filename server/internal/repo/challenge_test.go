@@ -36,15 +36,19 @@ func TestChallengeEligible(t *testing.T) {
 	if !stdio.ChallengeEligible() {
 		t.Error("传统 stdio 题应可挑战")
 	}
+	// 文件 IO 是场次级开关：题目名对配置不影响资格（挑战判题恒 stdio）
+	fio := Problem{Type: "", FileIO: true}
+	if !fio.ChallengeEligible() {
+		t.Error("配置文件 IO 名对的题应可挑战（判题恒 stdio）")
+	}
 	ineligible := []Problem{
 		{Type: TypeObjective, Questions: []ObjectiveQuestion{{Stem: "1+1="}}},
 		{Type: TypeFunction},
 		{Type: TypeInteractive},
-		{Type: "", FileIO: true},
 	}
 	for _, p := range ineligible {
 		if p.ChallengeEligible() {
-			t.Errorf("题型 %q FileIO=%v 不应可挑战", p.Type, p.FileIO)
+			t.Errorf("题型 %q 不应可挑战", p.Type)
 		}
 	}
 }
