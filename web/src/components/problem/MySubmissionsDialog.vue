@@ -155,7 +155,7 @@ async function onAiDebug() {
   if (!aiFree.value) {
     try {
       await ElMessageBox.confirm(
-        `花 ${aiDebugPrice.value} 玉让 ${aiName.value} 分析这份代码的错误？（最小改动修复，不重写）`,
+        `花 ${aiDebugPrice.value} 玉让 ${aiName.value} 分析这份代码的错误？（对照标程定位根因，附完整修正代码）`,
         `${aiName.value} 找 bug`,
         { confirmButtonText: `${aiDebugPrice.value} 玉分析`, cancelButtonText: '再想想', type: 'info' },
       )
