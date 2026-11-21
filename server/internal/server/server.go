@@ -450,7 +450,7 @@ func Run(ctx context.Context, deps *Deps) {
 				// 判题可观测（v0.32）：只读统计（窗口完成数/时长/Pending 深度），root 专属
 				adminG.GET("/judge/stats", RequireRoot(), h.AdminJudgeStats)
 
-				// 等级面板（v0.11）：名称/阈值/衰减系数/特效开关，仅 root
+				// 等级面板（v0.11）：名称/阈值/特效开关，仅 root
 				adminG.GET("/levelconfig", RequireRoot(), h.AdminGetLevelConfig)
 				adminG.PUT("/levelconfig", RequireRoot(), h.AdminUpdateLevelConfig)
 

@@ -4,10 +4,9 @@ package repo
 // 难度是题目属性（Problem.Difficulty）；等级是读时实时聚合值、不落库——
 // 由用户「各难度 AC 题数」按当前配置算 XP 再定级，老师调难度后全员等级自动跟随。
 //
-// 经验规则（网游式衰减）：每 AC 一题得 XP = 题目难度分 × 衰减系数。
-// 系数按「等级差 = 当前等级 − 题目难度」取值：题目难度 ≥ 当前等级全额；
-// 低 1/2/3 级分别乘 Decay1/2/3；低 ≥4 级为 0（打太简单的题不涨经验）。
-// 升级阈值 thresholds[i] = 达 Lv.(i+2) 所需累计 XP（默认 100×L×(L−1)，每档同难度题约 200 题）。
+// 经验规则：每 AC 一题得 XP = 2^(难度−1)（D1=1、D2=2、D3=4 … D10=512），
+// 逐档翻倍、不衰减。升级阈值 thresholds 默认 200×(2^(k−1)−1)：题库每档 200 题，
+// 清完一档恰好升一级，Lv.10 = D1–D9 九档全清。
 
 import (
 	"context"
@@ -22,8 +21,9 @@ import (
 // 等级配置默认值（root 后台可调；名字 2026-10-22 两字段位版定稿：取自王者荣耀段位体系）。
 var DefaultLevelNames = [10]string{"青铜", "白银", "黄金", "铂金", "钻石", "星耀", "宗师", "王者", "传奇", "极境"}
 
-// DefaultLevelThresholds 达 Lv.2–10 的累计 XP：100×L×(L−1)。
-var DefaultLevelThresholds = [9]int64{200, 600, 1200, 2000, 3000, 4200, 5600, 7200, 9000}
+// DefaultLevelThresholds 达 Lv.2–10 的累计 XP：200×(2^(k−1)−1)——每档 200 题全 AC
+// 恰好升一级，Lv.10 = D1–D9 全清（200×511）。
+var DefaultLevelThresholds = [9]int64{200, 600, 1400, 3000, 6200, 12600, 25400, 51000, 102200}
 
 // DefaultDifficultyNotes 每档难度说明的默认文案（2026-10-26 定稿：锚点对齐 NOI 大纲与教学进度；
 // 空档 = 说明卡不显示该行）。仅对从未保存过等级配置的库生效——后台一旦保存过，以后台内容为准。
@@ -47,19 +47,10 @@ const (
 	LevelGateChallenge = 3 // 挑战模式
 )
 
-const (
-	DefaultDecay1 = 0.5
-	DefaultDecay2 = 0.2
-	DefaultDecay3 = 0.05
-)
-
 // LevelConfig 等级体系配置（settings 集合 system 文档 levelConfig 字段；nil = 全默认）。
 type LevelConfig struct {
 	Names      [10]string `bson:"names" json:"names"`           // Lv.1–10 名称文字
 	Thresholds [9]int64   `bson:"thresholds" json:"thresholds"` // 达 Lv.2–10 的累计 XP，严格递增
-	Decay1     float64    `bson:"decay1" json:"decay1"`         // 低 1 级题的分系数
-	Decay2     float64    `bson:"decay2" json:"decay2"`         // 低 2 级
-	Decay3     float64    `bson:"decay3" json:"decay3"`         // 低 3 级；低 ≥4 级恒 0，不配置
 	// 题目难度名（D1–10 档的展示文字，2026-10-22 起 Difficulty 徽章/筛选/建题选择器均显示名字，
 	// 不再用「D1~D10」描述）；默认与等级名相同，root 后台独立可改。
 	DifficultyNames [10]string `bson:"difficultyNames" json:"difficulty_names"`
@@ -83,9 +74,6 @@ func DefaultLevelConfig() *LevelConfig {
 	cfg := &LevelConfig{
 		Names:           DefaultLevelNames,
 		Thresholds:      DefaultLevelThresholds,
-		Decay1:          DefaultDecay1,
-		Decay2:          DefaultDecay2,
-		Decay3:          DefaultDecay3,
 		DifficultyNames: DefaultLevelNames,
 		DifficultyNotes: DefaultDifficultyNotes,
 		EffectsEnabled:  true,
@@ -121,20 +109,7 @@ func (c *LevelConfig) Normalize() bool {
 		}
 		prev = c.Thresholds[i]
 	}
-	c.Decay1 = clamp01(c.Decay1)
-	c.Decay2 = clamp01(c.Decay2)
-	c.Decay3 = clamp01(c.Decay3)
 	return ok
-}
-
-func clamp01(v float64) float64 {
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
 }
 
 // GetLevelConfig 读等级配置，未设置/字段缺失处回默认。
@@ -180,42 +155,22 @@ func (r *Repo) UpdateLevelConfig(ctx context.Context, cfg *LevelConfig) error {
 	return err
 }
 
-// DecayFactor 等级差 gap = level − difficulty 对应的题分系数。
-func DecayFactor(cfg *LevelConfig, level, difficulty int) float64 {
-	switch level - difficulty {
-	case 1:
-		return cfg.Decay1
-	case 2:
-		return cfg.Decay2
-	case 3:
-		return cfg.Decay3
-	default:
-		if level-difficulty >= 4 {
-			return 0
-		}
-		return 1
-	}
-}
+// DifficultyXP 每道难度题的经验分：D1=1 起逐档翻倍（D2=2、D3=4 … D10=512）。
+func DifficultyXP(d int) int64 { return int64(1) << (d - 1) }
 
-// LevelProgress 由「各难度 AC 题数 + 经验调整量」算等级：等级 = 满足 XP(L)+adjust ≥ 阈值(L)
-// 的最大 L。XP 随假设等级单调不增（衰减变狠）、阈值严格递增，首个不满足即可停。
-// adjust 为管理端加/减经验的合计（可负）；返回 等级、该等级下的 XP（含调整、显示钳非负）、
-// 当前级阈值、下一级阈值（Lv.10 时 hasNext=false）。
+// LevelProgress 由「各难度 AC 题数 + 经验调整量」算等级：XP = Σ(题数 × 2^(难度−1))，
+// 与等级无关（不衰减）；等级 = 满足 XP ≥ 阈值(L) 的最大 L，阈值严格递增、首个
+// 不满足即可停。adjust 为管理端加/减经验的合计（可负）；返回 等级、XP（含调整、
+// 显示钳非负）、当前级阈值、下一级阈值（Lv.10 时 hasNext=false）。
 func LevelProgress(cfg *LevelConfig, counts [10]int64, adjust int64) (level int, xp int64, curThr, nextThr int64, hasNext bool) {
+	xp = adjust
+	for d := 1; d <= 10; d++ {
+		xp += counts[d-1] * DifficultyXP(d)
+	}
 	level = 1
-	for L := 1; L <= 10; L++ {
-		var xpL int64
-		for d := 1; d <= 10; d++ {
-			if counts[d-1] > 0 {
-				xpL += int64(float64(counts[d-1]*int64(d)) * DecayFactor(cfg, L, d))
-			}
-		}
-		thr := int64(0)
-		if L >= 2 {
-			thr = cfg.Thresholds[L-2]
-		}
-		if xpL+adjust >= thr {
-			level, xp = L, xpL+adjust
+	for L := 2; L <= 10; L++ {
+		if xp >= cfg.Thresholds[L-2] {
+			level = L
 		} else {
 			break
 		}

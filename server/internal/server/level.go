@@ -23,7 +23,6 @@ func levelView(cfg *repo.LevelConfig) gin.H {
 		"difficulty_names": cfg.DifficultyNames,
 		"difficulty_notes": cfg.DifficultyNotes,
 		"thresholds":       cfg.Thresholds,
-		"decay":            [3]float64{cfg.Decay1, cfg.Decay2, cfg.Decay3},
 		"effects_enabled":  cfg.EffectsEnabled,
 		"effects_tiers":    cfg.EffectsTiers,
 	}
@@ -54,7 +53,7 @@ func (h *Handlers) AdminGetLevelConfig(c *gin.Context) {
 	ok(c, gin.H{"config": cfg})
 }
 
-// AdminUpdateLevelConfig 等级面板保存（root）：名称/阈值/衰减系数/特效开关整体覆盖。
+// AdminUpdateLevelConfig 等级面板保存（root）：名称/阈值/特效开关整体覆盖。
 func (h *Handlers) AdminUpdateLevelConfig(c *gin.Context) {
 	var req struct {
 		Names             [10]string `json:"names"`
@@ -62,9 +61,6 @@ func (h *Handlers) AdminUpdateLevelConfig(c *gin.Context) {
 		DifficultyNotes   [10]string `json:"difficulty_notes"`
 		DifficultyAINotes [10]string `json:"difficulty_ai_notes"`
 		Thresholds        [9]int64   `json:"thresholds"`
-		Decay1            *float64   `json:"decay1"`
-		Decay2            *float64   `json:"decay2"`
-		Decay3            *float64   `json:"decay3"`
 		EffectsEnabled    *bool      `json:"effects_enabled"`
 		EffectsTiers      *[10]bool  `json:"effects_tiers"`
 	}
@@ -87,15 +83,6 @@ func (h *Handlers) AdminUpdateLevelConfig(c *gin.Context) {
 		cfg.DifficultyAINotes[i] = trimTo(req.DifficultyAINotes[i], 2000) // 每档 AI 整理说明 ≤2000 字，空档回退学生说明
 	}
 	cfg.Thresholds = req.Thresholds
-	if req.Decay1 != nil {
-		cfg.Decay1 = *req.Decay1
-	}
-	if req.Decay2 != nil {
-		cfg.Decay2 = *req.Decay2
-	}
-	if req.Decay3 != nil {
-		cfg.Decay3 = *req.Decay3
-	}
 	if req.EffectsEnabled != nil {
 		cfg.EffectsEnabled = *req.EffectsEnabled
 	}

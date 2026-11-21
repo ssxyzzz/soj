@@ -393,7 +393,6 @@ export interface LevelConfigInfo {
   difficulty_names?: string[] // 难度 1–10 档展示名（缺省与等级名相同）
   difficulty_notes?: string[] // 每档难度各一条说明（题库说明卡逐档展示；空档不显示）
   thresholds: number[] // 达 Lv.2–10 的累计 XP（9 项）
-  decay: [number, number, number] // 低 1/2/3 级题分系数（低 ≥4 级恒 0）
   effects_enabled: boolean
   effects_tiers: boolean[]
   autocomplete_min_level?: number // 代码自动补全解锁等级（缺省按 4）
@@ -406,9 +405,6 @@ export interface AdminLevelConfig {
   difficulty_notes: string[] // 学生说明（题库说明卡 + 建题提示展示；≤100 字）
   difficulty_ai_notes: string[] // AI 整理说明（详细知识点与难度锚点，≤2000 字；学生端不可见，空档回退学生说明）
   thresholds: number[]
-  decay1: number
-  decay2: number
-  decay3: number
   effects_enabled: boolean
   effects_tiers: boolean[]
 }

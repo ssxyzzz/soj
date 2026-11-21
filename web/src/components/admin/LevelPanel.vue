@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 等级面板（v0.11，root）：用户等级（名称/阈值/衰减）与难度等级（名称/双轨说明）双页签，
+// 等级面板（v0.11，root）：用户等级（名称/阈值）与难度等级（名称/双轨说明）双页签，
 // 切换同题目管理的知识树/标签树 el-tabs 形制（2026-10-26 拆分）。
 // 两个页签共用一份配置、任一侧保存都整体提交——后端 /admin/levelconfig 本就整体覆盖。
 // 难度说明双轨（v0.95）：学生说明（题库说明卡/建题提示展示）+ AI 整理说明（详细知识点与
@@ -22,10 +22,7 @@ const form = reactive({
   difficulty_names: [...DEFAULT_LEVEL_NAMES],
   difficulty_notes: Array.from({ length: 10 }, () => ''),
   difficulty_ai_notes: Array.from({ length: 10 }, () => ''),
-  thresholds: [200, 600, 1200, 2000, 3000, 4200, 5600, 7200, 9000] as number[],
-  decay1: 0.5,
-  decay2: 0.2,
-  decay3: 0.05,
+  thresholds: [200, 600, 1400, 3000, 6200, 12600, 25400, 51000, 102200] as number[],
   effects_enabled: true,
   effects_tiers: Array.from({ length: 10 }, () => true),
 })
@@ -39,9 +36,6 @@ onMounted(async () => {
     form.difficulty_notes = [...(config.difficulty_notes?.length === 10 ? config.difficulty_notes : Array.from({ length: 10 }, () => ''))]
     form.difficulty_ai_notes = [...(config.difficulty_ai_notes?.length === 10 ? config.difficulty_ai_notes : Array.from({ length: 10 }, () => ''))]
     form.thresholds = [...config.thresholds]
-    form.decay1 = config.decay1
-    form.decay2 = config.decay2
-    form.decay3 = config.decay3
     form.effects_enabled = config.effects_enabled
     form.effects_tiers = [...config.effects_tiers]
   } catch {
@@ -68,9 +62,6 @@ async function save() {
       difficulty_notes: form.difficulty_notes,
       difficulty_ai_notes: form.difficulty_ai_notes,
       thresholds: form.thresholds,
-      decay1: form.decay1,
-      decay2: form.decay2,
-      decay3: form.decay3,
       effects_enabled: form.effects_enabled,
       effects_tiers: [...form.effects_tiers],
     })
@@ -116,7 +107,7 @@ function diffChipClass(i: number): Record<string, boolean> {
       </div>
     </div>
 
-    <div class="section-title"><TipLabel label="升级阈值" tip="累计经验；默认 = 每档同难度题约 200 题；两行五列与上方名称区对应，Lv.1 起步档恒为 0" /></div>
+    <div class="section-title"><TipLabel label="升级阈值" tip="累计经验；经验不衰减，每题 = 难度分逐档翻倍（D1=1 … D10=512），默认阈值 = 每档 200 题全 AC 恰好升一级；两行五列与上方名称区对应，Lv.1 起步档恒为 0" /></div>
     <div class="thresholds-grid">
       <div class="threshold-cell">
         <span class="tier-chip" :class="chipClass(0)">Lv.1</span>
@@ -126,16 +117,6 @@ function diffChipClass(i: number): Record<string, boolean> {
         <span class="tier-chip" :class="chipClass(i + 1)">Lv.{{ i + 2 }}</span>
         <el-input-number v-model="form.thresholds[i]" :min="1" :step="50" :controls="false" style="width: 110px" />
       </div>
-    </div>
-
-    <div class="section-title"><TipLabel label="衰减系数" tip="打低于当前等级的题按系数折算经验；低 ≥4 级恒为 0" /></div>
-    <div class="decay-row">
-      <span class="dim">低 1 级</span>
-      <el-input-number v-model="form.decay1" :min="0" :max="1" :step="0.05" :precision="2" :controls="false" />
-      <span class="dim">低 2 级</span>
-      <el-input-number v-model="form.decay2" :min="0" :max="1" :step="0.05" :precision="2" :controls="false" />
-      <span class="dim">低 3 级</span>
-      <el-input-number v-model="form.decay3" :min="0" :max="1" :step="0.01" :precision="2" :controls="false" />
     </div>
   </el-card>
 
@@ -232,12 +213,6 @@ function diffChipClass(i: number): Record<string, boolean> {
   display: flex;
   align-items: center;
   gap: var(--soj-sp-8);
-}
-
-.decay-row {
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-10);
 }
 
 /* 逐档难度说明：色块 chip + 单行输入，一行一档；AI 说明段 textarea 行 chip 贴首行 */

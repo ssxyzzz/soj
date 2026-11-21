@@ -638,9 +638,6 @@ export const adminApi = {
     difficulty_notes: string[]
     difficulty_ai_notes: string[]
     thresholds: number[]
-    decay1: number
-    decay2: number
-    decay3: number
     effects_enabled: boolean
     effects_tiers: boolean[]
   }) => put<{ config: AdminLevelConfig }>('/admin/levelconfig', body),
