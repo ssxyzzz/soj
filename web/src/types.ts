@@ -291,6 +291,8 @@ export interface Submission {
   exam_title?: string
   detail?: CaseResult[]
   game?: SubmissionGame // 开箱数据（v0.41，本人终态可见）
+  score_cancelled?: boolean // 取消成绩（v0.97.29）：纪律作废，状态翻 Cancelled、原始结果归档可恢复
+  score_cancelled_reason?: string // 取消原因（可选）：本人 ∨ 提交管理特权视角下发
 }
 
 // 单个测试点结果（与后端 CaseResult 对应）
@@ -1120,6 +1122,8 @@ export interface ContestMySubmission {
   time_ms?: number
   memory_kb?: number
   error_info?: string
+  score_cancelled?: boolean // 取消成绩标记随已揭榜分支下发（v0.97.29）
+  score_cancelled_reason?: string // 本人视角下发（原因可见性=本人∨特权）
 }
 
 export interface LeaderCell {

@@ -59,7 +59,7 @@ const statusDocMap: Record<string, StatusDoc> = {
   },
   'Runtime Error': {
     meaning: '运行时错误',
-    cause: '常见原因：数组越界、除零、空指针、栈溢出（递归过深）',
+    cause: '数组越界、除零、空指针、栈溢出（递归过深）',
   },
   'Compile Error': {
     meaning: '编译错误',
@@ -78,6 +78,20 @@ const statusDocMap: Record<string, StatusDoc> = {
 // 取某状态的悬停说明；未知状态返回 undefined（标签按原文展示）。
 export function statusDesc(status: string): StatusDoc | undefined {
   return statusDocMap[status]
+}
+
+// 取消成绩（v0.97.29）展示口径：状态翻 Cancelled 后经 score_cancelled 区分纪律作废
+// 与本人自取消——说明文案改口径，原因（可选下发）由调用方单独成行展示。
+// 入参用结构化形状（Submission / ContestMySubmission 两投影通用）。
+export function statusDescFor(
+  sub: { status?: string; score_cancelled?: boolean; score_cancelled_reason?: string } | null | undefined,
+): StatusDoc | undefined {
+  const d = statusDesc(sub?.status ?? '')
+  if (!d) return undefined
+  if (sub?.score_cancelled) {
+    return { meaning: '成绩已被管理员取消：得分 0，不计入榜单/进度/经验（可由管理员恢复）' }
+  }
+  return d
 }
 
 // 队列态（未出结果）：排队/评测中/已请求取消。轮询「判题完成」的统一判据，

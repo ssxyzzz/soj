@@ -193,7 +193,7 @@ func (h *Handlers) ListSubmissions(c *gin.Context) {
 	nicks := h.submissionNicknames(c.Request.Context(), list)
 	items := make([]gin.H, 0, len(list))
 	for _, s := range list {
-		item := submissionJSON(s, false)
+		item := submissionJSON(s, false, canSeeCancelReason(c, s))
 		item["nickname"] = nicks[s.UID] // 「选手」列昵称优先展示（v0.75），前端用户名兜底
 		items = append(items, item)
 	}
@@ -273,7 +273,7 @@ func (h *Handlers) GetSubmission(c *gin.Context) {
 			}
 		}
 	}
-	resp := submissionJSON(s, withCode)
+	resp := submissionJSON(s, withCode, canSeeCancelReason(c, s))
 	if masked {
 		resp["masked"] = true
 	}
@@ -341,7 +341,7 @@ func (h *Handlers) ListProblemSubmissions(c *gin.Context) {
 	nicks := h.submissionNicknames(c.Request.Context(), list)
 	items := make([]gin.H, 0, len(list))
 	for _, s := range list {
-		item := submissionJSON(s, true)
+		item := submissionJSON(s, true, canSeeCancelReason(c, s))
 		item["nickname"] = nicks[s.UID] // 所有代码弹窗提交者列昵称优先（前端已按 nickname ∨ username 兜底）
 		items = append(items, item)
 	}
@@ -367,7 +367,7 @@ func (h *Handlers) MyProblemSubmissions(c *gin.Context) {
 	}
 	items := make([]gin.H, 0, len(list))
 	for _, s := range list {
-		items = append(items, submissionJSON(s, true))
+		items = append(items, submissionJSON(s, true, true)) // 本人列表：取消原因恒可见
 	}
 	ok(c, gin.H{"list": items, "total": total})
 }
@@ -390,8 +390,11 @@ func (h *Handlers) submissionNicknames(ctx context.Context, list []*repo.Submiss
 	return out
 }
 
-func submissionJSON(s *repo.Submission, withCode bool) gin.H {
-	h := gin.H{
+// submissionJSON 提交通用序列化。score_cancelled 公开下发（取消成绩的展示口径字段，
+// 取消后 score 本身已是 0，无额外泄露）；取消原因仅在「本人 ∨ 提交管理特权」视角附上
+// （见 canSeeCancelReason），普通围观者只见「成绩已取消」不见原因。
+func submissionJSON(s *repo.Submission, withCode bool, revealCancelReason bool) gin.H {
+	m := gin.H{
 		"id":            s.ID,
 		"user_id":       s.UID,
 		"username":      s.Username,
@@ -407,23 +410,37 @@ func submissionJSON(s *repo.Submission, withCode bool) gin.H {
 		"contest_id":    s.ContestID,
 		"exam_id":       s.ExamID,
 	}
+	if s.ScoreCancelled {
+		m["score_cancelled"] = true
+		if revealCancelReason {
+			m["score_cancelled_reason"] = s.ScoreCancelledReason // 可空：未填原因则前端不渲染原因行
+		}
+	}
 	if s.ContestTitle != "" {
-		h["contest_title"] = s.ContestTitle
+		m["contest_title"] = s.ContestTitle
 	}
 	if s.ExamTitle != "" {
-		h["exam_title"] = s.ExamTitle
+		m["exam_title"] = s.ExamTitle
 	}
 	if withCode {
-		h["code"] = s.Code
-		h["detail"] = s.Detail // 测试点明细与代码同门槛（本人/总表/满分解锁）
+		m["code"] = s.Code
+		m["detail"] = s.Detail // 测试点明细与代码同门槛（本人/总表/满分解锁）
 		if len(s.ObjectiveAnswers) > 0 {
-			h["answers"] = s.ObjectiveAnswers // 客观题整卷作答与代码同门槛（v0.9.3）
+			m["answers"] = s.ObjectiveAnswers // 客观题整卷作答与代码同门槛（v0.9.3）
 		}
 	}
 	if len(s.ObjectiveAnswers) > 0 {
-		h["is_objective"] = true
+		m["is_objective"] = true
 	}
-	return h
+	return m
+}
+
+// canSeeCancelReason 取消成绩原因可见性：提交者本人 ∨ 提交管理特权（查看全部 ∨ 取消成绩）。
+func canSeeCancelReason(c *gin.Context, s *repo.Submission) bool {
+	if uid, _, _, logged := currentUser(c); logged && uid == s.UID {
+		return true
+	}
+	return hasPermAny(c, repo.PermSubmissionViewAll, repo.PermSubmissionScoreCancel)
 }
 
 // RejudgeSubmission 重测一条提交（教师级权限）：重置 Pending 交还判题线程池自动重评。
@@ -433,8 +450,13 @@ func (h *Handlers) RejudgeSubmission(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "无效的提交 ID")
 		return
 	}
-	// 客观题（v0.9）：判分纯函数，同步重判后直接返回（不走队列）
+	// 客观题（v0.9）：判分纯函数，同步重判后直接返回（不走队列）。
+	// 已取消成绩的提交拒绝重测（v0.97.29：重测会让作废成绩变相复活），先恢复再重测。
 	if s0, serr := h.repo.GetSubmission(c.Request.Context(), id); serr == nil {
+		if s0.ScoreCancelled {
+			fail(c, http.StatusConflict, "该提交成绩已取消，如需恢复请先恢复成绩")
+			return
+		}
 		if pp, perr := h.repo.GetProblem(c.Request.Context(), s0.ProblemID); perr == nil && pp.IsObjective() {
 			if rerr := h.repo.RegradeObjective(c.Request.Context(), id); rerr != nil {
 				fail(c, http.StatusInternalServerError, "重测失败")
@@ -447,6 +469,10 @@ func (h *Handlers) RejudgeSubmission(c *gin.Context) {
 	err = h.repo.RejudgeSubmission(c.Request.Context(), id)
 	if errors.Is(err, repo.ErrJudging) {
 		fail(c, http.StatusConflict, "该提交正在评测中，稍后再试")
+		return
+	}
+	if errors.Is(err, repo.ErrScoreCancelled) {
+		fail(c, http.StatusConflict, "该提交成绩已取消，如需恢复请先恢复成绩")
 		return
 	}
 	if repo.IsNotFound(err) {
@@ -499,23 +525,74 @@ func (h *Handlers) CancelSubmission(c *gin.Context) {
 	ok(c, gin.H{"id": id, "status": status})
 }
 
+// CancelScoreSubmission 取消成绩（v0.97.29 纪律操作）：把一条已出结果的提交整体作废——
+// 得分归零、状态「成绩已取消」，榜单/进度/经验等全站聚合自动剔除；可选原因随详情下发
+// 给学生（本人 ∨ 提交管理特权可见）。可逆：RestoreScoreSubmission 原样写回归档结果。
+// 与「取消评测」互斥：取消评测只作用于队列态，取消成绩只作用于已出终态的提交。
+func (h *Handlers) CancelScoreSubmission(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	_, uname, _, logged := currentUser(c)
+	if !logged {
+		fail(c, http.StatusUnauthorized, "未登录")
+		return
+	}
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = c.ShouldBindJSON(&body) // 空体/无 reason 合法（原因可选，2026-11-21 拍板）
+	reason := []rune(strings.TrimSpace(body.Reason))
+	if len(reason) > 200 {
+		reason = reason[:200] // rune 截断（同站内文案双闸口径），防超长灌库
+	}
+	if err := h.repo.CancelScore(c.Request.Context(), id, string(reason), uname); err != nil {
+		if errors.Is(err, repo.ErrNoScore) {
+			fail(c, http.StatusConflict, "该提交无成绩可取消（未出结果、已自取消或已是取消成绩态）")
+			return
+		}
+		if repo.IsNotFound(err) {
+			fail(c, http.StatusNotFound, "提交不存在")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "取消成绩失败")
+		return
+	}
+	ok(c, gin.H{"id": id})
+}
+
+// RestoreScoreSubmission 恢复成绩：取消成绩的逆操作，归档的原始判题结果原样写回
+// （榜单/进度/经验自动回归；玉不重复发放，首 AC 幂等索引兜底）。
+func (h *Handlers) RestoreScoreSubmission(c *gin.Context) {
+	id, okID := parseID(c, "id")
+	if !okID {
+		return
+	}
+	if err := h.repo.RestoreScore(c.Request.Context(), id); err != nil {
+		if errors.Is(err, repo.ErrNoScore) {
+			fail(c, http.StatusConflict, "该提交不在取消成绩状态")
+			return
+		}
+		if repo.IsNotFound(err) {
+			fail(c, http.StatusNotFound, "提交不存在")
+			return
+		}
+		fail(c, http.StatusInternalServerError, "恢复成绩失败")
+		return
+	}
+	ok(c, gin.H{"id": id})
+}
+
 // RejudgeProblem 按题批量重测（v0.7.1）：本题全部已出结果的提交低优先级重排队，
-// 只在判题空闲容量里消化。权限 = 题目可编辑（edit.all ∨ edit.own+属主）。
+// 只在判题空闲容量里消化。权限 = submission.rejudge（v0.97.29 自题目编辑权拆出，
+// 与单独重测同一位；已取消成绩的提交由 repo 层跳过）。
 func (h *Handlers) RejudgeProblem(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
 		return
 	}
-	ctx := c.Request.Context()
-	p, err := h.repo.GetProblem(ctx, id)
-	if respondRepoErr(c, err, "题目不存在", "读取题目失败") {
-		return
-	}
-	if !h.problemEditable(c, p) {
-		fail(c, http.StatusForbidden, "无权管理该题目")
-		return
-	}
-	n, err := h.repo.RejudgeProblem(ctx, id)
+	n, err := h.repo.RejudgeProblem(c.Request.Context(), id)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, "批量重测失败")
 		return

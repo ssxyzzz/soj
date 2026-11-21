@@ -10,17 +10,21 @@ import { usePolling } from '@/composables/usePolling'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtMem, fmtRel, fmtSec, isQueueStatus, statusDesc, statusMap } from '@/utils/format'
+import { fmtMem, fmtRel, fmtSec, isQueueStatus, statusDescFor, statusMap } from '@/utils/format'
 import type { LookupUser, Submission } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
 const pageSize = 20
 
-// 状态悬停说明（v0.63 原生 title 化）：含义 + 常见原因拼两行
-function statusTitle(status: string): string | undefined {
-  const d = statusDesc(status)
+// 状态悬停说明（v0.63 原生 title 化）：含义 + 常见原因拼两行；取消成绩行改口径
+//（v0.97.29 statusDescFor）并附可选原因
+function statusTitle(row: Partial<Submission>): string | undefined {
+  const d = statusDescFor(row)
   if (!d) return undefined
+  if (row.score_cancelled) {
+    return row.score_cancelled_reason ? `${d.meaning}\n取消原因：${row.score_cancelled_reason}` : d.meaning
+  }
   return d.cause ? `${d.meaning}\n常见原因：${d.cause}` : d.meaning
 }
 
@@ -245,7 +249,7 @@ onMounted(() => {
           <template #default="{ row }">
             <span
               class="status-tag clickable"
-              :title="statusTitle(row.status)"
+              :title="statusTitle(row)"
               @click.stop="openDetail(row.id)"
             >
               <SubStatus :status="row.status" :score="row.score" />

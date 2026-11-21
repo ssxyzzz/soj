@@ -10,7 +10,8 @@ import { aiTutorApi, problemApi, submissionApi } from '@/api'
 import CodePane from '@/components/CodePane.vue'
 import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
+import { usePolling } from '@/composables/usePolling'
 import { useUserStore } from '@/stores/user'
 import type { ContestMySubmission, Submission } from '@/types'
 
@@ -76,6 +77,8 @@ watch(
       mineView.value = 'list'
       mineDetail.value = null
       loadMine(1)
+    } else {
+      minePoll.stop() // 关闭弹窗即停止重测轮询
     }
   },
 )
@@ -122,6 +125,120 @@ function openDebugDlg() {
   if (!s) return
   dbg.content = aiDebugMap.value[s.id] ?? ''
   dbg.show = true
+}
+
+// ---- 重测 / 取消成绩 / 恢复成绩（v0.97.29）----
+// 各自独立权限位（默认仅 root 手动授予）；与 SubmissionDetailDialog 同口径：
+// 取消成绩只作用于已出终态的提交，取消后重测拒绝、恢复须显式「恢复成绩」。
+const canRejudge = computed(() => userStore.can('submission.rejudge'))
+const canScoreCancel = computed(() => userStore.can('submission.score.cancel'))
+const rejudging = ref(false)
+const scoreCancelling = ref(false)
+const scoreRestoring = ref(false)
+const canRejudgeDetail = computed(() => {
+  const s = mineDetail.value
+  return canRejudge.value && !!s && !isQueueStatus(s.status) && !s.score_cancelled
+})
+const canCancelScore = computed(() => {
+  const s = mineDetail.value
+  return canScoreCancel.value && !!s && !isQueueStatus(s.status) && s.status !== 'Cancelled' && !s.score_cancelled
+})
+const canRestoreScore = computed(() => canScoreCancel.value && !!mineDetail.value?.score_cancelled)
+
+// 原位刷新详情 + 题库模式列表回拉（赛时模式 rows 由父页面注入，父层自行刷新）
+async function refreshMineDetail() {
+  const id = mineDetail.value?.id
+  if (id) {
+    try {
+      mineDetail.value = await submissionApi.get(id)
+    } catch {
+      /* 拦截器已提示 */
+    }
+  }
+  loadMine(myPage.value)
+}
+
+// 重测轮询（复用 usePolling 既有范式，口径同 SubmissionDetailDialog）：至终态停并提示
+let minePollId = 0
+const minePoll = usePolling(
+  async () => {
+    const s = await submissionApi.get(minePollId)
+    if (mineDetail.value?.id === s.id) mineDetail.value = s
+    if (isQueueStatus(s.status)) return // 队列/评测/取消中：续拍
+    ElMessage.success(`#${s.id} 重测完成`)
+    loadMine(myPage.value)
+    return false
+  },
+  1200,
+  {
+    maxDurationMs: 600_000,
+    onExpire: () => ElMessage.warning('评测等待时间过长，已停止自动刷新'),
+  },
+)
+
+async function onMineRejudge() {
+  const s = mineDetail.value
+  if (!s || rejudging.value) return
+  rejudging.value = true
+  try {
+    await submissionApi.rejudge(s.id)
+    ElMessage.success(`#${s.id} 已加入重测队列`)
+    minePollId = s.id
+    minePoll.restart()
+  } finally {
+    rejudging.value = false
+  }
+}
+
+async function onMineCancelScore() {
+  const s = mineDetail.value
+  if (!s || scoreCancelling.value) return
+  let reason = ''
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `确定取消 #${s.id} 的成绩吗？得分归零、状态「成绩已取消」，榜单/进度/经验同步回退；可随时点「恢复成绩」找回。`,
+      '取消成绩',
+      {
+        confirmButtonText: '取消成绩',
+        cancelButtonText: '再想想',
+        type: 'warning',
+        inputPlaceholder: '取消原因（可选，学生端可见），如：与题解代码雷同',
+      },
+    )
+    reason = (value ?? '').trim()
+  } catch {
+    return
+  }
+  scoreCancelling.value = true
+  try {
+    await submissionApi.scoreCancel(s.id, reason)
+    ElMessage.success(`#${s.id} 成绩已取消`)
+    await refreshMineDetail()
+  } finally {
+    scoreCancelling.value = false
+  }
+}
+
+async function onMineRestoreScore() {
+  const s = mineDetail.value
+  if (!s || scoreRestoring.value) return
+  try {
+    await ElMessageBox.confirm(`恢复 #${s.id} 的原始判题结果吗？榜单/进度/经验将同步回归。`, '恢复成绩', {
+      confirmButtonText: '恢复成绩',
+      cancelButtonText: '再想想',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  scoreRestoring.value = true
+  try {
+    await submissionApi.scoreRestore(s.id)
+    ElMessage.success(`#${s.id} 成绩已恢复`)
+    await refreshMineDetail()
+  } finally {
+    scoreRestoring.value = false
+  }
 }
 
 async function loadAiPrice() {
@@ -224,11 +341,12 @@ defineExpose({ refresh: loadMine })
             <template v-if="row.id">
               <!-- 赛时未揭榜（OI 赛制）：不出分，状态列只报「已记录」 -->
               <span v-if="!isRevealed" class="dim">已记录</span>
-              <el-tooltip v-else-if="statusDesc(row.status)" placement="top" effect="light">
+              <el-tooltip v-else-if="statusDescFor(row)" placement="top" effect="light">
                 <template #content>
                   <div class="status-tip">
-                    <div>{{ statusDesc(row.status)!.meaning }}</div>
-                    <div v-if="statusDesc(row.status)!.cause">常见原因：{{ statusDesc(row.status)!.cause }}</div>
+                    <div>{{ statusDescFor(row)!.meaning }}</div>
+                    <div v-if="!row.score_cancelled && statusDescFor(row)!.cause">常见原因：{{ statusDescFor(row)!.cause }}</div>
+                    <div v-if="row.score_cancelled && row.score_cancelled_reason">取消原因：{{ row.score_cancelled_reason }}</div>
                   </div>
                 </template>
                 <SubStatus :status="row.status" :score="row.score" />
@@ -267,10 +385,42 @@ defineExpose({ refresh: loadMine })
       </div>
     </template>
     <template v-else-if="mineDetail">
-      <!-- 详情头行：返回列表居左，AI 找 bug 居右（2026-10-30 反馈：从状态格挪出）；
-           AI 找 bug 赛时未揭榜不出现（服务端本就封锁，UI 同步收敛） -->
+      <!-- 详情头行：返回列表 + 管理操作居左，AI 找 bug 居右（2026-10-30 反馈：从状态格挪出）；
+           重测/取消成绩/恢复成绩 v0.97.29 各自权限位可见，赛时未揭榜不出现（服务端本就封锁，UI 同步收敛） -->
       <div class="detail-top">
-        <el-button @click="mineView = 'list'">← 返回列表</el-button>
+        <div class="detail-top-l">
+          <el-button @click="mineView = 'list'; minePoll.stop()">← 返回列表</el-button>
+          <el-button
+            v-if="isRevealed && canRejudgeDetail"
+            link
+            type="primary"
+            :loading="rejudging"
+            @click="onMineRejudge"
+          >
+            重测
+          </el-button>
+          <el-tag v-if="isRevealed && mineDetail?.score_cancelled" type="danger" size="small" effect="light">
+            成绩已取消
+          </el-tag>
+          <el-button
+            v-if="isRevealed && canCancelScore"
+            link
+            type="danger"
+            :loading="scoreCancelling"
+            @click="onMineCancelScore"
+          >
+            取消成绩
+          </el-button>
+          <el-button
+            v-if="isRevealed && canRestoreScore"
+            link
+            type="success"
+            :loading="scoreRestoring"
+            @click="onMineRestoreScore"
+          >
+            恢复成绩
+          </el-button>
+        </div>
         <el-button
           v-if="isRevealed && aiReady && canAiDebug"
           link
@@ -285,11 +435,12 @@ defineExpose({ refresh: loadMine })
       <el-descriptions :column="3" border class="detail-desc">
         <el-descriptions-item label="状态">
           <span v-if="!isRevealed" class="dim">已记录</span>
-          <el-tooltip v-else-if="statusDesc(mineDetail.status)" placement="top" effect="light">
+          <el-tooltip v-else-if="statusDescFor(mineDetail)" placement="top" effect="light">
             <template #content>
               <div class="status-tip">
-                <div>{{ statusDesc(mineDetail.status)!.meaning }}</div>
-                <div v-if="statusDesc(mineDetail.status)!.cause">常见原因：{{ statusDesc(mineDetail.status)!.cause }}</div>
+                <div>{{ statusDescFor(mineDetail)!.meaning }}</div>
+                <div v-if="!mineDetail.score_cancelled && statusDescFor(mineDetail)!.cause">常见原因：{{ statusDescFor(mineDetail)!.cause }}</div>
+                <div v-if="mineDetail.score_cancelled && mineDetail.score_cancelled_reason">取消原因：{{ mineDetail.score_cancelled_reason }}</div>
               </div>
             </template>
             <SubStatus :status="mineDetail.status" :score="mineDetail.score" />
@@ -384,5 +535,15 @@ defineExpose({ refresh: loadMine })
   min-height: 160px;
   max-height: 64vh;
   overflow: auto;
+}
+
+/* 详情头行左侧操作组：返回列表 + 重测/取消成绩/恢复成绩/成绩已取消标记 */
+.detail-top-l {
+  display: flex;
+  align-items: center;
+}
+
+.detail-top-l .el-tag {
+  margin-left: 12px;
 }
 </style>

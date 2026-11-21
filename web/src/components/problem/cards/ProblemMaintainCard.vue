@@ -2,17 +2,21 @@
 // 题目维护卡（v0.90 统一批③收编）：编辑题目 + 批量重测，题库/作业做题页与比赛/考试
 // 做题页共用——原两份近同款卡 + 两份逐字重复的 rejudgeAll 函数，此处唯一实现。
 // 显隐门控（can_edit_statement）由页面 v-if 决定（卡不自拉题目详情）。
-import { ref } from 'vue'
+// 批量重测自 v0.97.29 起挂 submission.rejudge 独立权限位（自题目编辑权拆出）。
+import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 
 import { judgeQueueApi } from '@/api/judgeQueue'
+import { useUserStore } from '@/stores/user'
 import RailCard from '@/components/RailCard.vue'
 
 const props = defineProps<{ problemId: number }>()
 
 const router = useRouter()
+const userStore = useUserStore()
 const rejudgeRunning = ref(false)
+const canRejudge = computed(() => userStore.can('submission.rejudge'))
 
 async function rejudgeAll() {
   if (rejudgeRunning.value) return
@@ -39,7 +43,7 @@ async function rejudgeAll() {
   <RailCard ov="管理" title="题目维护" class="aside-card">
     <div class="entry-actions">
       <el-button type="primary" @click="router.push(`/problems/${problemId}/edit`)">编辑题目</el-button>
-      <el-button :loading="rejudgeRunning" @click="rejudgeAll">批量重测本题</el-button>
+      <el-button v-if="canRejudge" :loading="rejudgeRunning" @click="rejudgeAll">批量重测本题</el-button>
     </div>
   </RailCard>
 </template>

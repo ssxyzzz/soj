@@ -202,9 +202,12 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/users/:id/wrongbook", AuthRequired(h), h.UserWrongbook)
 		api.GET("/users/:id/favorites", AuthRequired(h), h.UserFavorites)
 		api.GET("/submissions/:id", AuthOptional(h), h.GetSubmission)
-		api.POST("/submissions/:id/rejudge", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.RejudgeSubmission)
+		api.POST("/submissions/:id/rejudge", AuthRequired(h), RequirePerm(repo.PermSubmissionRejudge), h.RejudgeSubmission)
 		// 取消评测（v0.7.1）：本人 ∨ submission.view.all（handler 内校验）
 		api.POST("/submissions/:id/cancel", AuthRequired(h), h.CancelSubmission)
+		// 取消成绩/恢复成绩（v0.97.29）：submission.score.cancel，默认仅 root 手动授予
+		api.POST("/submissions/:id/score-cancel", AuthRequired(h), RequirePerm(repo.PermSubmissionScoreCancel), h.CancelScoreSubmission)
+		api.POST("/submissions/:id/score-restore", AuthRequired(h), RequirePerm(repo.PermSubmissionScoreCancel), h.RestoreScoreSubmission)
 
 		// 游客可见面收紧（v0.7.3）：仅首页/题库/题目详情公开，其余一律登录后访问
 		api.GET("/rank", AuthRequired(h), h.Rank)
@@ -256,8 +259,9 @@ func Run(ctx context.Context, deps *Deps) {
 			authed.GET("/import/status", RequirePerm(repo.PermProblemImport), h.ImportStatus)
 			authed.POST("/import/cancel", RequirePerm(repo.PermProblemImport), h.ImportCancel)
 			authed.PATCH("/problems/:id/meta", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateProblemMeta)
-			// 批量重测（v0.7.1）：按题（题目编辑权限）与按赛（组织者，round.go 注册）
-			authed.POST("/problems/:id/rejudge-all", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RejudgeProblem)
+			// 批量重测（v0.7.1）：按题（v0.97.29 起挂 submission.rejudge 位，自题目编辑权
+			// 拆出——重测权与编辑权解耦）；按赛（组织者，round.go 注册，不受此位约束）
+			authed.POST("/problems/:id/rejudge-all", RequirePerm(repo.PermSubmissionRejudge), h.RejudgeProblem)
 			authed.POST("/problems/:id/testdata", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.ReplaceProblemTestdata)
 			// 数据 zip 暂存上传（v0.97.15）：建题/编辑页选包即传、确认才生效；静态段
 			// 与 /problems/:id/... 参数路由同级（gin 静态优先匹配，/problems/export 同先例）

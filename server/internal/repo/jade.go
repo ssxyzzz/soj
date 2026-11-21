@@ -41,6 +41,8 @@ const (
 	JadeKindAiHint             = "ai_hint"             // AI 分级提示（v0.33-④，ref 编码级别）
 	JadeKindAiDebug            = "ai_debug"            // AI 找 bug（v0.33-④）
 	JadeKindAdminAdjust        = "admin_adjust"        // root 人工加减
+	JadeKindScoreClawback      = "score_clawback"      // 取消成绩追回首 AC 玉（v0.97.29，ref=题目）
+	JadeKindScoreRegrant       = "score_regrant"       // 取消成绩后恢复/重新 AC 补回（v0.97.29，ref=题目）
 )
 
 // ErrInsufficientJade 余额不足（扣减的条件原子更新未命中）。
@@ -131,6 +133,26 @@ func (r *Repo) JadeSpend(ctx context.Context, uid, amount int64, kind, reason st
 	return nil
 }
 
+// JadeClawback 取消成绩追回（v0.97.29 拍板允许负余额）：无条件负 $inc（可透支为负，
+// 后续获得玉自动抵扣）+ 负流水落档；流水写失败补偿回滚余额。与 JadeSpend 的区别仅在
+// 不设余额下限——纪律追账不受学生已消费影响。
+func (r *Repo) JadeClawback(ctx context.Context, uid, amount int64, kind, reason string, ref int64) error {
+	if uid <= 0 || amount <= 0 {
+		return errors.New("追回参数非法")
+	}
+	if _, err := r.jadeBalances.UpdateOne(ctx,
+		bson.M{"_id": uid},
+		bson.M{"$inc": bson.M{"bal": -amount}, "$set": bson.M{"updatedAt": time.Now()}},
+		options.UpdateOne().SetUpsert(true)); err != nil {
+		return err
+	}
+	if err := r.insertJadeLedger(ctx, uid, -amount, kind, reason, ref); err != nil {
+		_, _ = r.jadeBalances.UpdateOne(ctx, bson.M{"_id": uid}, bson.M{"$inc": bson.M{"bal": amount}})
+		return err
+	}
+	return nil
+}
+
 func (r *Repo) insertJadeLedger(ctx context.Context, uid, delta int64, kind, reason string, ref int64) error {
 	id, err := r.nextSeq(ctx, "jadeLedger")
 	if err != nil {
@@ -190,6 +212,9 @@ type JadeAward struct {
 	Daily    bool      `bson:"daily,omitempty"`    // 每日一题（v0.41；v0.45 起并列达标即记）
 	Revenge  bool      `bson:"revenge,omitempty"`  // 一血偿还（v0.41；v0.45 起倍率被采用才记=名额消耗）
 	At       time.Time `bson:"at"`
+	// 取消成绩追赃（v0.97.29）：该题成绩作废期间玉已追回（负流水），恢复/重新 AC 补回后清除。
+	// 保留 awards 记录本身（{uid,pid} 幂等发放记录），追回只动流水，防追回期重复提交二次发玉。
+	ClawedBack bool `bson:"clawedBack,omitempty"`
 }
 
 // GetJadeAward 某用户某题的首 AC 发放记录（无则 nil, nil）。
@@ -203,6 +228,53 @@ func (r *Repo) GetJadeAward(ctx context.Context, uid, pid int64) (*JadeAward, er
 		return nil, err
 	}
 	return &a, nil
+}
+
+// ---- 取消成绩追赃（v0.97.29 拍板：玉随成绩回退；该生该题全部 AC 取消才追，恢复/重新 AC 补回） ----
+
+// hasPublishedAC 该生该题是否存在有效 AC（与全站聚合同口径 status==Accepted ∧ published；
+// 取消成绩态已翻 Cancelled 天然排除）。
+func (r *Repo) hasPublishedAC(ctx context.Context, uid, pid int64) (bool, error) {
+	n, err := r.submissions.CountDocuments(ctx,
+		bson.M{"uid": uid, "pid": pid, "status": StatusAccepted, "published": true})
+	return n > 0, err
+}
+
+// ClawbackOnScoreCancel 取消成绩后的玉追赃（尽力而为，不拖垮取消主操作）：该题已无
+// 有效 AC 且首 AC 玉在账 → 负流水追回（可负余额）+ awards 打 clawedBack 标记。
+// awards 记录本身保留（{uid,pid} 幂等），追回期重复提交不会二次发玉。
+func (r *Repo) ClawbackOnScoreCancel(ctx context.Context, uid, pid int64) {
+	if ac, err := r.hasPublishedAC(ctx, uid, pid); err != nil || ac {
+		return // 还有有效 AC（多次 AC 未全取消）或查询失败：不追
+	}
+	a, err := r.GetJadeAward(ctx, uid, pid)
+	if err != nil || a == nil || a.ClawedBack || a.Total <= 0 {
+		return // 无发放记录 / 已在追回态：无事发生
+	}
+	if err := r.JadeClawback(ctx, uid, a.Total, JadeKindScoreClawback, "成绩取消追回首 AC 玉", pid); err != nil {
+		slog.Warn("取消成绩追玉失败", "component", "jade", "uid", uid, "pid", pid, "error", err)
+		return
+	}
+	_, _ = r.jadeAwards.UpdateOne(ctx, bson.M{"uid": uid, "pid": pid},
+		bson.M{"$set": bson.M{"clawedBack": true}})
+}
+
+// RegrantOnScoreAC 该题重新存在有效 AC 时的玉补回（恢复成绩 / 取消后重新提交 AC /
+// 判题发玉幂等分支共用挂点）：clawedBack 态 → 正流水补回原额 + 清标记。
+func (r *Repo) RegrantOnScoreAC(ctx context.Context, uid, pid int64) {
+	a, err := r.GetJadeAward(ctx, uid, pid)
+	if err != nil || a == nil || !a.ClawedBack {
+		return // 无发放记录 / 不在追回态：无事发生
+	}
+	if ac, err := r.hasPublishedAC(ctx, uid, pid); err != nil || !ac {
+		return
+	}
+	if err := r.JadeCredit(ctx, uid, a.Total, JadeKindScoreRegrant, "成绩恢复补回首 AC 玉", pid); err != nil {
+		slog.Warn("成绩恢复补玉失败", "component", "jade", "uid", uid, "pid", pid, "error", err)
+		return
+	}
+	_, _ = r.jadeAwards.UpdateOne(ctx, bson.M{"uid": uid, "pid": pid},
+		bson.M{"$unset": bson.M{"clawedBack": ""}})
 }
 
 // ClearDiscussBounty 悬赏冻结失败时清掉话题上的悬赏标记（话题保留为普通帖）。
@@ -472,6 +544,9 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64, raceRankPct, 
 		ID int64 `bson:"_id"`
 	}
 	if err := r.jadeAwards.FindOne(ctx, bson.M{"uid": uid, "pid": pid}).Decode(&exist); err == nil {
+		// 已发过（{uid,pid} 幂等不重发）；该题若在取消成绩追回态，重新有效 AC 即补回
+		// （v0.97.29：恢复成绩 / 取消后重新通过都收敛到不变式「有效 AC ⇒ 玉在账」）
+		r.RegrantOnScoreAC(ctx, uid, pid)
 		return false, 0, nil
 	} else if !IsNotFound(err) {
 		return false, 0, err

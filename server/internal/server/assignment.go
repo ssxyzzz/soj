@@ -591,7 +591,7 @@ func (h *Handlers) AssignmentUserSubmissions(c *gin.Context) {
 	}
 	items := make([]gin.H, 0, len(subs))
 	for _, s := range subs {
-		items = append(items, submissionJSON(s, true))
+		items = append(items, submissionJSON(s, true, canSeeCancelReason(c, s)))
 	}
 	ok(c, gin.H{"list": items})
 }

@@ -93,6 +93,19 @@ type Submission struct {
 	JadeMultFrom string `bson:"jadeMultFrom,omitempty"`
 	CreatedAt   time.Time     `bson:"createdAt"`
 	JudgedAt    *time.Time    `bson:"judgedAt,omitempty"`
+	// 取消成绩（v0.97.29）：管理员纪律操作（抄袭等）——状态翻 Cancelled、得分归零，
+	// 原始判题结果整体归档进 origin* 字段，RestoreScore 原样写回；全站聚合按
+	// status==Accepted 过滤，取消即自动剔除、恢复即自动回归。
+	ScoreCancelled       bool          `bson:"scoreCancelled,omitempty"`
+	ScoreCancelledAt     time.Time     `bson:"scoreCancelledAt,omitempty"`
+	ScoreCancelledBy     string        `bson:"scoreCancelledBy,omitempty"`   // 操作人用户名
+	ScoreCancelledReason string        `bson:"scoreCancelledReason,omitempty"` // 可选原因，本人与特权视角可见
+	OriginStatus         string        `bson:"originStatus,omitempty"`
+	OriginScore          int           `bson:"originScore,omitempty"`
+	OriginTimeMS         int           `bson:"originTimeMs,omitempty"`
+	OriginMemKB          int           `bson:"originMemKb,omitempty"`
+	OriginDetail         []*CaseResult `bson:"originDetail,omitempty"`
+	OriginErrorInfo      string        `bson:"originErrorInfo,omitempty"`
 }
 
 // CreateSubmission 创建提交；contest/exam 非 nil 表示比赛或考试提交（隐藏期结束前不计入公开态）。
@@ -358,6 +371,12 @@ func (r *Repo) RequestCancelSubmission(ctx context.Context, sid int64) (string, 
 // ErrJudging 提交正在评测中，不可重测。
 var ErrJudging = errors.New("submission is being judged")
 
+// ErrScoreCancelled 成绩已取消：重测拒绝执行（防变相恢复），恢复须显式 RestoreScore。
+var ErrScoreCancelled = errors.New("submission score is cancelled")
+
+// ErrNoScore 无成绩可取消：队列态（未出结果）或已自取消评测的提交没有成绩可作废。
+var ErrNoScore = errors.New("submission has no score to cancel")
+
 // rejudgeUpdate 重测重置的写入口径：状态回 Pending（按档位给优先级）+ 清空上一次
 // 评测结果（分数/耗时/内存/错误信息/测试点明细——重测中保留旧分会被「Judging + 旧分」
 // 展示误导，v0.7.1 验收反馈）+ 清掉旧租约痕迹。
@@ -372,18 +391,23 @@ func rejudgeUpdate(priority int) bson.M {
 }
 
 // RejudgeSubmission 重测：把一条非评测中的提交重置为 Pending（中优先级），交还判题线程池自动领取重评。
-// 评测中（含已请求取消、正在收尾）的提交返回 ErrJudging；不存在返回 mongo.ErrNoDocuments。
+// 评测中（含已请求取消、正在收尾）的提交返回 ErrJudging；已取消成绩的提交拒绝（防重测变相恢复，
+// 恢复须显式 RestoreScore）；不存在返回 mongo.ErrNoDocuments。
 func (r *Repo) RejudgeSubmission(ctx context.Context, id int64) error {
 	err := r.submissions.FindOneAndUpdate(ctx,
-		bson.M{"_id": id, "status": bson.M{"$nin": bson.A{StatusPending, StatusJudging, StatusCancelRequested}}},
+		bson.M{"_id": id, "status": bson.M{"$nin": bson.A{StatusPending, StatusJudging, StatusCancelRequested}},
+			"scoreCancelled": bson.M{"$ne": true}},
 		rejudgeUpdate(PriorityMid),
 	).Err()
 	if err == nil {
 		return nil
 	}
 	if errors.Is(err, mongo.ErrNoDocuments) {
-		// 区分「不存在」与「评测中」
-		if r.submissions.FindOne(ctx, bson.M{"_id": id}).Err() == nil {
+		// 区分「不存在」与「评测中/成绩已取消」
+		if s, serr := r.GetSubmission(ctx, id); serr == nil {
+			if s.ScoreCancelled {
+				return ErrScoreCancelled
+			}
 			return ErrJudging
 		}
 	}
@@ -394,10 +418,11 @@ func (r *Repo) RejudgeSubmission(ctx context.Context, id int64) error {
 var inFlight = bson.A{StatusPending, StatusJudging, StatusCancelRequested}
 
 // RejudgeProblem 按题批量重测（低优先级）：本题全部已出结果的提交重置 Pending，
-// 只在判题空闲容量里消化，不挤占学生新提交。返回重置条数。
+// 只在判题空闲容量里消化，不挤占学生新提交；已取消成绩的提交跳过（纪律作废不经
+// 批量重测变相恢复，恢复只能显式 RestoreScore）。返回重置条数。
 func (r *Repo) RejudgeProblem(ctx context.Context, pid int64) (int64, error) {
 	res, err := r.submissions.UpdateMany(ctx,
-		bson.M{"pid": pid, "status": bson.M{"$nin": inFlight}},
+		bson.M{"pid": pid, "status": bson.M{"$nin": inFlight}, "scoreCancelled": bson.M{"$ne": true}},
 		rejudgeUpdate(PriorityLow))
 	if err != nil {
 		return 0, err
@@ -409,14 +434,15 @@ func (r *Repo) RejudgeProblem(ctx context.Context, pid int64) (int64, error) {
 }
 
 // RejudgeRound 按赛批量重测（低优先级）：一场比赛/考试的全部提交重置 Pending。
-// kind 取 KindContest / KindExam。返回重置条数。
+// kind 取 KindContest / KindExam；已取消成绩的提交跳过（同 RejudgeProblem 口径）。
+// 返回重置条数。
 func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64, error) {
 	field := "contestId"
 	if kind == KindExam {
 		field = "examId"
 	}
 	res, err := r.submissions.UpdateMany(ctx,
-		bson.M{field: rid, "status": bson.M{"$nin": inFlight}},
+		bson.M{field: rid, "status": bson.M{"$nin": inFlight}, "scoreCancelled": bson.M{"$ne": true}},
 		rejudgeUpdate(PriorityLow))
 	if err != nil {
 		return 0, err
@@ -425,6 +451,99 @@ func (r *Repo) RejudgeRound(ctx context.Context, kind string, rid int64) (int64,
 		invalidateLeaderboard(kind, rid)
 	}
 	return res.ModifiedCount, nil
+}
+
+// CancelScore 取消成绩（v0.97.29 纪律操作）：把一条已出结果的提交整体作废——状态翻
+// Cancelled、得分归零，原始判题结果归档进 origin* 字段供 RestoreScore 原样写回。
+// 全站聚合（榜单/进度/经验/发玉判定等）按 status==Accepted 过滤，取消即自动剔除。
+// 队列态与已自取消评测（本就无成绩）返回 ErrNoScore；已是取消成绩态同样 ErrNoScore。
+func (r *Repo) CancelScore(ctx context.Context, id int64, reason, byName string) error {
+	// 读后写：归档字段取自当前文档；过滤器带终态守卫防并发重测/再取消竞态。
+	s, err := r.GetSubmission(ctx, id)
+	if err != nil {
+		return err
+	}
+	if s.ScoreCancelled || isQueueStatusStr(s.Status) || s.Status == StatusCancelled {
+		return ErrNoScore
+	}
+	upd := bson.M{"$set": bson.M{
+		"scoreCancelled":    true,
+		"scoreCancelledAt":  time.Now(),
+		"scoreCancelledBy":  byName,
+		"scoreCancelledReason": reason,
+		"status":            StatusCancelled,
+		"score":             0,
+		"originStatus":      s.Status,
+		"originScore":       s.Score,
+		"originTimeMs":      s.TimeMS,
+		"originMemKb":       s.MemKB,
+		"originDetail":      s.Detail,
+		"originErrorInfo":   s.ErrorInfo,
+	}}
+	err = r.submissions.FindOneAndUpdate(ctx,
+		bson.M{"_id": id, "status": bson.M{"$nin": inFlight}, "scoreCancelled": bson.M{"$ne": true}},
+		upd,
+	).Err()
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return ErrNoScore // 并发窗口被人抢先（已取消/已在队列）
+	}
+	if err == nil {
+		invalidateAllLeaderboards() // 已结束场次名次变化，全量失效
+		// 追赃（v0.97.29 拍板，尽力而为不拖垮主操作）：该生该题全部 AC 取消 →
+		// 追回首 AC 玉（可负余额）+ 计数型成就与有效解题集对齐
+		r.ClawbackOnScoreCancel(ctx, s.UID, s.ProblemID)
+		if serr := r.SyncCountAchievements(ctx, s.UID); serr != nil {
+			slog.Warn("取消成绩同步成就失败", "component", "submission", "uid", s.UID, "error", serr)
+		}
+	}
+	return err
+}
+
+// RestoreScore 恢复成绩：CancelScore 的逆操作——origin* 归档原样写回判题字段，
+// 取消标记与归档字段一并清除。未处于取消成绩态返回 ErrNoScore。
+func (r *Repo) RestoreScore(ctx context.Context, id int64) error {
+	s, err := r.GetSubmission(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !s.ScoreCancelled {
+		return ErrNoScore
+	}
+	err = r.submissions.FindOneAndUpdate(ctx,
+		bson.M{"_id": id, "scoreCancelled": true},
+		bson.M{
+			"$set": bson.M{
+				"status":    s.OriginStatus,
+				"score":     s.OriginScore,
+				"timeMs":    s.OriginTimeMS,
+				"memKb":     s.OriginMemKB,
+				"detail":    s.OriginDetail,
+				"errorInfo": s.OriginErrorInfo,
+			},
+			"$unset": bson.M{
+				"scoreCancelled": "", "scoreCancelledAt": "", "scoreCancelledBy": "",
+				"scoreCancelledReason": "", "originStatus": "", "originScore": "",
+				"originTimeMs": "", "originMemKb": "", "originDetail": "", "originErrorInfo": "",
+			},
+		},
+	).Err()
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return ErrNoScore
+	}
+	if err == nil {
+		invalidateAllLeaderboards()
+		// 反向补偿（v0.97.29）：该题重新有有效 AC → 玉（若在追回态）补回 + 计数型成就重授
+		r.RegrantOnScoreAC(ctx, s.UID, s.ProblemID)
+		if serr := r.SyncCountAchievements(ctx, s.UID); serr != nil {
+			slog.Warn("恢复成绩同步成就失败", "component", "submission", "uid", s.UID, "error", serr)
+		}
+	}
+	return err
+}
+
+// isQueueStatusStr 队列态判断（字符串口径，repo 内部用；与 server 层 isQueueStatus 无依赖）。
+func isQueueStatusStr(status string) bool {
+	return status == StatusPending || status == StatusJudging || status == StatusCancelRequested
 }
 
 // SetSubmissionJade 首 AC 发玉结果回填提交文档（开箱 payload，尽力而为）：

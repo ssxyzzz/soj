@@ -460,6 +460,9 @@ export const submissionApi = {
     post<{ id: number }>('/submissions', { problem_id: problemId, answers }),
   get: (id: number) => get<Submission>(`/submissions/${id}`),
   rejudge: (id: number) => post<{ id: number }>(`/submissions/${id}/rejudge`, {}),
+  // 取消成绩/恢复成绩（v0.97.29，submission.score.cancel）：纪律作废一条已出结果的提交
+  scoreCancel: (id: number, reason = '') => post<{ id: number }>(`/submissions/${id}/score-cancel`, { reason }),
+  scoreRestore: (id: number) => post<{ id: number }>(`/submissions/${id}/score-restore`, {}),
   list: (params: {
     page: number
     page_size: number

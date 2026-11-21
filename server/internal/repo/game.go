@@ -370,8 +370,15 @@ func (r *Repo) EvaluateAchievements(ctx context.Context, uid, sid, pid int64, sc
 		has[o.Code] = true
 	}
 
-	// 统计（jadeAwards = 去重首 AC 记录，count 即累计解题数）
-	totalAC, _ := r.jadeAwards.CountDocuments(ctx, bson.M{"uid": uid})
+	// 统计：totalAC = 当前有效解题数（v0.97.29 自 jadeAwards 历史口径换出——原口径会
+	// 绕过取消成绩的成就追赃：撤销后再 AC 任意题即被重新授回。有效口径与取消/恢复重评
+	// 同源：SolvedDifficultyCounts 按 (uid,pid) 去重、取消成绩态天然排除，无取消时两口径
+	// 等价）。daily/revenge 为事件型计数，仍走 awards 账本。diffCounts 同时服务 all_diff。
+	diffCounts, _ := r.SolvedDifficultyCounts(ctx, []int64{uid})
+	totalAC := int64(0)
+	for _, c := range diffCounts[uid] {
+		totalAC += c
+	}
 	dailyCnt, _ := r.jadeAwards.CountDocuments(ctx, bson.M{"uid": uid, "daily": true})
 	revengeCnt, _ := r.jadeAwards.CountDocuments(ctx, bson.M{"uid": uid, "revenge": true})
 	stats, _ := r.GetGameStats(ctx, uid)
@@ -418,17 +425,15 @@ func (r *Repo) EvaluateAchievements(ctx context.Context, uid, sid, pid int64, sc
 		cand["challenge_1"] = challengeCnt >= 1
 		cand["challenge_10"] = challengeCnt >= 10
 	}
-	// 全难度通关：SolvedDifficultyCounts 十档全 ≥1（一次聚合，仅 AC 路径）
-	if counts, err := r.SolvedDifficultyCounts(ctx, []int64{uid}); err == nil {
-		all := true
-		for _, c := range counts[uid] {
-			if c == 0 {
-				all = false
-				break
-			}
+	// 全难度通关：diffCounts 十档全 ≥1（上面已聚合，不再重复查）
+	all := true
+	for _, c := range diffCounts[uid] {
+		if c == 0 {
+			all = false
+			break
 		}
-		cand["all_diff"] = all
 	}
+	cand["all_diff"] = all
 
 	unlocked := make([]string, 0, 2)
 	for _, def := range AchievementDefs {
@@ -451,6 +456,91 @@ func (r *Repo) EvaluateAchievements(ctx context.Context, uid, sid, pid int64, sc
 		slog.Info("成就解锁", "component", "game", "uid", uid, "code", def.Code)
 	}
 	return unlocked, nil
+}
+
+// countAchCodes 计数型成就码：判据锚「当前有效解题集」，取消成绩追赃时重评去留
+// （v0.97.29）。事件型（连击/连续天数/时段/复仇/每日/首发满分/挑战）为历史真实达成，
+// 不追溯撤销。
+var countAchCodes = map[string]bool{
+	"first_blood": true, "ac_10": true, "ac_50": true, "ac_100": true, "ac_500": true,
+	"diff_5": true, "diff_8": true, "diff_10": true, "all_diff": true,
+}
+
+// SyncCountAchievements 计数型成就与当前有效解题集对齐（取消/恢复成绩后调用）：
+// 不再成立的撤销、重新成立的补授（{uid,code} 唯一键幂等，撞键静默跳过）。补授来源
+// 提交留空（SID 0，管理操作无单一来源提交）；判题路径的 EvaluateAchievements 兜底。
+func (r *Repo) SyncCountAchievements(ctx context.Context, uid int64) error {
+	counts, err := r.SolvedDifficultyCounts(ctx, []int64{uid})
+	if err != nil {
+		return err
+	}
+	c := counts[uid]
+	total := int64(0)
+	maxDiff, allDiff := 0, true
+	for d := 1; d <= 10; d++ {
+		total += c[d-1]
+		if c[d-1] > 0 {
+			maxDiff = d
+		} else {
+			allDiff = false
+		}
+	}
+	cand := map[string]bool{
+		"first_blood": total >= 1,
+		"ac_10":       total >= 10,
+		"ac_50":       total >= 50,
+		"ac_100":      total >= 100,
+		"ac_500":      total >= 500,
+		"diff_5":      maxDiff >= 5,
+		"diff_8":      maxDiff >= 8,
+		"diff_10":     maxDiff >= 10,
+		"all_diff":    allDiff,
+	}
+	cur, err := r.achievements.Find(ctx, bson.M{"uid": uid},
+		options.Find().SetProjection(bson.M{"code": 1}))
+	if err != nil {
+		return err
+	}
+	var owned []struct {
+		Code string `bson:"code"`
+	}
+	if err := cur.All(ctx, &owned); err != nil {
+		return err
+	}
+	ownedSet := make(map[string]bool, len(owned))
+	retract := bson.A{}
+	for _, o := range owned {
+		ownedSet[o.Code] = true
+		if countAchCodes[o.Code] && !cand[o.Code] {
+			retract = append(retract, o.Code)
+		}
+	}
+	if len(retract) > 0 {
+		if _, err := r.achievements.DeleteMany(ctx,
+			bson.M{"uid": uid, "code": bson.M{"$in": retract}}); err != nil {
+			return err
+		}
+		slog.Info("成绩取消撤销成就", "component", "game", "uid", uid, "codes", retract)
+	}
+	for _, def := range AchievementDefs {
+		if !countAchCodes[def.Code] || !cand[def.Code] || ownedSet[def.Code] {
+			continue
+		}
+		id, err := r.nextSeq(ctx, "achievement")
+		if err != nil {
+			return err
+		}
+		if _, err := r.achievements.InsertOne(ctx, Achievement{
+			ID: id, UID: uid, Code: def.Code, At: time.Now(),
+		}); err != nil {
+			if mongo.IsDuplicateKeyError(err) {
+				continue
+			}
+			return err
+		}
+		slog.Info("成绩恢复重授成就", "component", "game", "uid", uid, "code", def.Code)
+	}
+	return nil
 }
 
 // bumpPerfectCount user.perfectCount +1 并返回新值。

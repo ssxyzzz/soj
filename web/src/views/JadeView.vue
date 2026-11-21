@@ -60,6 +60,8 @@ function kindText(kind: string): string {
     ai_hint: 'AI 提示',
     ai_debug: 'AI 找 bug',
     admin_adjust: '管理员调整',
+    score_clawback: '成绩取消追回',
+    score_regrant: '成绩恢复补回',
   }
   return map[kind] ?? kind
 }

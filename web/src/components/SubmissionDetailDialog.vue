@@ -2,7 +2,8 @@
 // 评测详情弹窗（共享）：状态标签点击后查看该评测记录的代码与测试点明细。
 // 数据来源二选一：submissionId（按需拉取 /submissions/:id，可见性由后端判定）或
 // submission（列表已带代码与明细时直接传入，避免多余请求）。
-// 教师级权限（submission.view.all）可重测：重置 Pending 交还判题池，轮询至终态。
+// 重测（submission.rejudge）与取消成绩/恢复成绩（submission.score.cancel）各自成位
+// （v0.97.29，默认仅 root 手动授予）；取消成绩后重测拒绝，恢复须显式「恢复成绩」。
 // v0.7.1：队列态（排队/评测/取消中）可取消评测——本人 ∨ submission.view.all。
 import { computed, ref, watch } from 'vue'
 import { usePolling } from '@/composables/usePolling'
@@ -13,7 +14,7 @@ import { judgeQueueApi } from '@/api/judgeQueue'
 import CodePane from '@/components/CodePane.vue'
 import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, fmtSec, isQueueStatus, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
 import type { Submission } from '@/types'
 
@@ -35,10 +36,24 @@ const detail = ref<Submission | null>(null)
 const polled = ref<Submission | null>(null) // 重测/取消轮询拿到的最新数据（优先于传入的列表快照）
 const rejudging = ref(false)
 const cancelling = ref(false)
+const cancellingScore = ref(false)
+const restoringScore = ref(false)
 
 const sub = computed<Submission | null>(() => polled.value ?? props.submission ?? detail.value)
 const heading = computed(() => props.title || (sub.value ? `评测详情 #${sub.value.id}` : '评测详情'))
-const canRejudge = computed(() => userStore.can('submission.view.all'))
+// 重测（v0.97.29 自 view.all 拆出独立位）与取消成绩/恢复成绩各自成位，默认仅 root 手动授予
+const canRejudge = computed(() => userStore.can('submission.rejudge'))
+const canScoreCancel = computed(() => userStore.can('submission.score.cancel'))
+// 取消成绩只作用于已出终态且未处于取消成绩态的提交（队列态/自取消无成绩可作废）
+const canCancelScore = computed(
+  () =>
+    canScoreCancel.value &&
+    !!sub.value &&
+    !isQueueStatus(sub.value.status) &&
+    sub.value.status !== 'Cancelled' &&
+    !sub.value.score_cancelled,
+)
+const canRestoreScore = computed(() => canScoreCancel.value && !!sub.value?.score_cancelled)
 
 // AI 找 bug（v0.33-④）：非 AC 提交可分析（本人提交；服务端赛时封锁/计费/审计全把关）。
 // 结果 MdView 渲染在弹窗尾部；失败自动退费（服务端），拦截器 toast。
@@ -134,6 +149,69 @@ async function onRejudge() {
   }
 }
 
+// 取消成绩/恢复成绩（v0.97.29）：终态后原位刷新详情（轮询只管队列态，这里直接拉一次）；
+// 列表态由各页面自身刷新机制跟进（提交记录页 5s 轮询/弹窗内重拉）。
+async function refreshInPlace() {
+  const id = sub.value?.id
+  if (!id) return
+  try {
+    polled.value = await submissionApi.get(id)
+  } catch {
+    /* 拦截器已提示 */
+  }
+}
+
+async function onCancelScore() {
+  const s = sub.value
+  if (!s || cancellingScore.value) return
+  let reason = ''
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `确定取消 #${s.id} 的成绩吗？得分归零、状态「成绩已取消」，榜单/进度/经验同步回退；可随时点「恢复成绩」找回。`,
+      '取消成绩',
+      {
+        confirmButtonText: '取消成绩',
+        cancelButtonText: '再想想',
+        type: 'warning',
+        inputPlaceholder: '取消原因（可选，学生端可见），如：与题解代码雷同',
+      },
+    )
+    reason = (value ?? '').trim()
+  } catch {
+    return
+  }
+  cancellingScore.value = true
+  try {
+    await submissionApi.scoreCancel(s.id, reason)
+    ElMessage.success(`#${s.id} 成绩已取消`)
+    await refreshInPlace()
+  } finally {
+    cancellingScore.value = false
+  }
+}
+
+async function onRestoreScore() {
+  const s = sub.value
+  if (!s || restoringScore.value) return
+  try {
+    await ElMessageBox.confirm(`恢复 #${s.id} 的原始判题结果吗？榜单/进度/经验将同步回归。`, '恢复成绩', {
+      confirmButtonText: '恢复成绩',
+      cancelButtonText: '再想想',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  restoringScore.value = true
+  try {
+    await submissionApi.scoreRestore(s.id)
+    ElMessage.success(`#${s.id} 成绩已恢复`)
+    await refreshInPlace()
+  } finally {
+    restoringScore.value = false
+  }
+}
+
 async function onCancel() {
   const s = sub.value
   if (!s || cancelling.value) return
@@ -214,18 +292,23 @@ watch(
         <div class="desc-grid">
           <div class="dcell">
             状态
-            <b><SubStatus v-if="sub.status" :status="sub.status" :score="sub.score" /></b>
-            <el-tooltip v-if="statusDesc(sub.status)" placement="top" effect="light">
-              <template #content>
-                <div class="status-tip">
-                  <div>{{ statusDesc(sub.status)!.meaning }}</div>
-                  <div v-if="statusDesc(sub.status)!.cause">常见原因：{{ statusDesc(sub.status)!.cause }}</div>
-                </div>
-              </template>
-              <span class="lk">说明</span>
-            </el-tooltip>
+            <b>
+              <!-- 状态说明直接悬停状态徽章触发（与我的提交/全部代码弹窗同口径），不再单设「说明」链接 -->
+              <el-tooltip v-if="sub.status && statusDescFor(sub)" placement="top" effect="light">
+                <template #content>
+                  <div class="status-tip">
+                    <div>{{ statusDescFor(sub)!.meaning }}</div>
+                    <div v-if="!sub.score_cancelled && statusDescFor(sub)!.cause">常见原因：{{ statusDescFor(sub)!.cause }}</div>
+                    <div v-if="sub.score_cancelled && sub.score_cancelled_reason">取消原因：{{ sub.score_cancelled_reason }}</div>
+                  </div>
+                </template>
+                <SubStatus :status="sub.status" :score="sub.score" />
+              </el-tooltip>
+              <SubStatus v-else-if="sub.status" :status="sub.status" :score="sub.score" />
+            </b>
+            <el-tag v-if="sub.score_cancelled" type="danger" size="small" effect="light" class="sc-tag">成绩已取消</el-tag>
             <el-button
-              v-if="canRejudge"
+              v-if="canRejudge && !judging && !sub.score_cancelled"
               link
               type="primary"
               size="small"
@@ -235,6 +318,28 @@ watch(
               @click="onRejudge"
             >
               {{ judging ? '评测中' : '重测' }}
+            </el-button>
+            <el-button
+              v-if="canCancelScore"
+              link
+              type="danger"
+              size="small"
+              class="lk-btn"
+              :loading="cancellingScore"
+              @click="onCancelScore"
+            >
+              取消成绩
+            </el-button>
+            <el-button
+              v-if="canRestoreScore"
+              link
+              type="success"
+              size="small"
+              class="lk-btn"
+              :loading="restoringScore"
+              @click="onRestoreScore"
+            >
+              恢复成绩
             </el-button>
             <el-button
               v-if="canCancel"
@@ -367,12 +472,8 @@ watch(
   margin-left: var(--soj-sp-6);
 }
 
-/* 状态格的「说明 / 重测 / 取消评测」小链接 */
-.lk {
-  color: var(--soj-blue);
-  cursor: help;
-  font-weight: var(--soj-fw-emphasis);
-  font-size: var(--soj-fs-12);
+/* 状态格的「重测 / 取消成绩 / 恢复成绩 / 取消评测」小链接（状态说明已并入状态徽章悬停） */
+.sc-tag {
   margin-left: var(--soj-sp-8);
 }
 

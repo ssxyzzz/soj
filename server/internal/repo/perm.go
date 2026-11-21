@@ -27,6 +27,8 @@ const (
 	PermListDelete           = "list.delete"            // 题单删除：可删除任意题单（创建者删自己的不受此位限，v0.18.3）
 	PermSubmissionViewAll    = "submission.view.all"    // 提交记录总表 + 他人提交详情
 	PermSubmissionViewUser   = "submission.view.user"   // 榜单/进度表中点看指定用户在某题的提交明细（含代码）
+	PermSubmissionRejudge    = "submission.rejudge"     // 重测：单独重测一条提交 + 按题批量重测（v0.97.29 自 view.all / 题目编辑权拆出）
+	PermSubmissionScoreCancel = "submission.score.cancel" // 取消成绩/恢复成绩：作废一条已出结果提交的纪律操作，可逆（v0.97.29）
 	PermSubmissionRateExempt = "submission.rate_exempt" // 提交不受全局限速
 	PermSolutionManage       = "solution.manage"        // 题解管理：置顶/删除他人题解（v0.5.2-1）
 	PermDiscussCreate        = "discussion.create"      // 发讨论贴：三区主楼与回复（v0.48，default 默认关闭）
@@ -95,6 +97,8 @@ var PermCatalog = []PermInfo{
 	{PermAssignmentScoreView, "查看班级作业成绩表", "班级成员可查看本班作业的完整成绩表（全班各题得分与排名）；关闭后只能看到自己的完成进度。点看他人提交代码仍受「查看用户提交明细」或该题满分约束，不随此位放开", "class"},
 	{PermSubmissionViewAll, "查看全部提交", "提交记录总表与他人的提交详情/代码", "submission"},
 	{PermSubmissionViewUser, "查看用户提交明细", "榜单/进度表中点看指定用户在某题的全部提交（含代码与测试点明细）", "submission"},
+	{PermSubmissionRejudge, "重测", "单独重测任意提交 + 题目维护卡的「批量重测本题」；默认不随任何角色开启（含 admin），需 root 在角色矩阵手动授予。比赛/考试的「重测本场」仍限组织者，不受此位约束", "submission"},
+	{PermSubmissionScoreCancel, "取消成绩", "将一条已出结果的提交整体作废（得分归零、状态「成绩已取消」，榜单/进度/经验同步回退），可填写原因供学生查看；可一键恢复原判题结果。默认不随任何角色开启（含 admin），需 root 在角色矩阵手动授予", "submission"},
 	{PermSubmissionRateExempt, "提交不限速", "提交不受全站每分钟限速约束", "submission"},
 	{PermDiscussCreate, "发讨论贴", "在讨论区发主楼与回复（全站/题内/比赛三区通用）；关闭后只能浏览、点赞等，不能发任何内容。default 角色默认关闭", "discussion"},
 	{PermDiscussManage, "讨论管理", "讨论区：删帖/置顶/加精/锁定/处理举报与禁言（三区通用）", "discussion"},

@@ -903,7 +903,7 @@ func (h *Handlers) roundMySubmissions(c *gin.Context, s roundScope) {
 			// 轮询，旧形状每拍全量代码 MB 级 JSON.parse；看代码/明细改走详情接口按需取。
 			// pid 为赛内条目契约字段（前端按题过滤；submissionJSON 通用名是 problem_id，
 			// 此处补 pid 对齐隐藏期分支——两分支字段名曾分叉致已揭榜场过滤恒空，v0.90 修复）
-			h := submissionJSON(s, false)
+			h := submissionJSON(s, false, canSeeCancelReason(c, s))
 			h["pid"] = s.ProblemID
 			items = append(items, h)
 			continue
@@ -964,7 +964,7 @@ func (h *Handlers) roundUserSubmissions(c *gin.Context, s roundScope) {
 	}
 	items := make([]gin.H, 0, len(subs))
 	for _, s := range subs {
-		items = append(items, submissionJSON(s, true))
+		items = append(items, submissionJSON(s, true, canSeeCancelReason(c, s)))
 	}
 	ok(c, gin.H{"list": items})
 }

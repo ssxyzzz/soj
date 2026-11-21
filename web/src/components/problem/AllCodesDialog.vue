@@ -5,11 +5,14 @@
 //   - 全部代码 = 原有列表 + 详情交互（排序三档/语言/提交者筛选，点行进详情）；
 //   - 榜单渲染做不可见字符过滤（TopsCoding 用户名 RTL 控制符伪装翻车教训）。
 import { computed, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
-import { problemApi, userApi } from '@/api'
+import { problemApi, submissionApi, userApi } from '@/api'
 import CodePane from '@/components/CodePane.vue'
 import SubStatus from '@/components/SubStatus.vue'
-import { fmtDate, fmtMem, fmtRel, fmtSec, statusDesc } from '@/utils/format'
+import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
+import { usePolling } from '@/composables/usePolling'
+import { useUserStore } from '@/stores/user'
 import { languageOptions } from '@/utils/code'
 import type { BoardsResult, LookupUser, Submission } from '@/types'
 
@@ -110,6 +113,8 @@ watch(
       othersDetail.value = null
       loadBoards()
       loadOthers()
+    } else {
+      othersPoll.stop() // 关闭弹窗即停止重测轮询
     }
   },
 )
@@ -118,6 +123,121 @@ function openOthersDetail(s: Submission) {
   if (!s.id) return // 补位的空白行不可点
   othersDetail.value = s
   othersView.value = 'detail'
+}
+
+// ---- 重测 / 取消成绩 / 恢复成绩（v0.97.29）----
+// 权限位可见（默认仅 root 手动授予），口径与 SubmissionDetailDialog 一致：
+// 取消成绩只作用于已出终态的提交；取消后重测拒绝，恢复须显式「恢复成绩」。
+const userStore = useUserStore()
+const canRejudge = computed(() => userStore.can('submission.rejudge'))
+const canScoreCancel = computed(() => userStore.can('submission.score.cancel'))
+const rejudging = ref(false)
+const scoreCancelling = ref(false)
+const scoreRestoring = ref(false)
+const canRejudgeDetail = computed(() => {
+  const s = othersDetail.value
+  return canRejudge.value && !!s && !isQueueStatus(s.status) && !s.score_cancelled
+})
+const canCancelScore = computed(() => {
+  const s = othersDetail.value
+  return canScoreCancel.value && !!s && !isQueueStatus(s.status) && s.status !== 'Cancelled' && !s.score_cancelled
+})
+const canRestoreScore = computed(() => canScoreCancel.value && !!othersDetail.value?.score_cancelled)
+
+// 原位刷新详情（详情可能来自列表行快照，操作后按 id 拉最新）+ 列表回拉
+async function refreshOthersDetail() {
+  const id = othersDetail.value?.id
+  if (id) {
+    try {
+      othersDetail.value = await submissionApi.get(id)
+    } catch {
+      /* 拦截器已提示 */
+    }
+  }
+  loadOthers(othersPage.value)
+}
+
+// 重测轮询（复用 usePolling 既有范式，口径同 SubmissionDetailDialog）：至终态停并提示
+let othersPollId = 0
+const othersPoll = usePolling(
+  async () => {
+    const s = await submissionApi.get(othersPollId)
+    if (othersDetail.value?.id === s.id) othersDetail.value = s
+    if (isQueueStatus(s.status)) return // 队列/评测/取消中：续拍
+    ElMessage.success(`#${s.id} 重测完成`)
+    loadOthers(othersPage.value)
+    return false
+  },
+  1200,
+  {
+    maxDurationMs: 600_000,
+    onExpire: () => ElMessage.warning('评测等待时间过长，已停止自动刷新'),
+  },
+)
+
+async function onOthersRejudge() {
+  const s = othersDetail.value
+  if (!s || rejudging.value) return
+  rejudging.value = true
+  try {
+    await submissionApi.rejudge(s.id)
+    ElMessage.success(`#${s.id} 已加入重测队列`)
+    othersPollId = s.id
+    othersPoll.restart()
+  } finally {
+    rejudging.value = false
+  }
+}
+
+async function onOthersCancelScore() {
+  const s = othersDetail.value
+  if (!s || scoreCancelling.value) return
+  let reason = ''
+  try {
+    const { value } = await ElMessageBox.prompt(
+      `确定取消 #${s.id} 的成绩吗？得分归零、状态「成绩已取消」，榜单/进度/经验同步回退；可随时点「恢复成绩」找回。`,
+      '取消成绩',
+      {
+        confirmButtonText: '取消成绩',
+        cancelButtonText: '再想想',
+        type: 'warning',
+        inputPlaceholder: '取消原因（可选，学生端可见），如：与题解代码雷同',
+      },
+    )
+    reason = (value ?? '').trim()
+  } catch {
+    return
+  }
+  scoreCancelling.value = true
+  try {
+    await submissionApi.scoreCancel(s.id, reason)
+    ElMessage.success(`#${s.id} 成绩已取消`)
+    await refreshOthersDetail()
+  } finally {
+    scoreCancelling.value = false
+  }
+}
+
+async function onOthersRestoreScore() {
+  const s = othersDetail.value
+  if (!s || scoreRestoring.value) return
+  try {
+    await ElMessageBox.confirm(`恢复 #${s.id} 的原始判题结果吗？榜单/进度/经验将同步回归。`, '恢复成绩', {
+      confirmButtonText: '恢复成绩',
+      cancelButtonText: '再想想',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  scoreRestoring.value = true
+  try {
+    await submissionApi.scoreRestore(s.id)
+    ElMessage.success(`#${s.id} 成绩已恢复`)
+    await refreshOthersDetail()
+  } finally {
+    scoreRestoring.value = false
+  }
 }
 </script>
 
@@ -275,11 +395,12 @@ function openOthersDetail(s: Submission) {
             <el-table-column label="状态" width="140">
               <template #default="{ row }">
                 <template v-if="row.id">
-                  <el-tooltip v-if="statusDesc(row.status)" placement="top" effect="light">
+                  <el-tooltip v-if="statusDescFor(row)" placement="top" effect="light">
                     <template #content>
                       <div class="status-tip">
-                        <div>{{ statusDesc(row.status)!.meaning }}</div>
-                        <div v-if="statusDesc(row.status)!.cause">常见原因：{{ statusDesc(row.status)!.cause }}</div>
+                        <div>{{ statusDescFor(row)!.meaning }}</div>
+                        <div v-if="!row.score_cancelled && statusDescFor(row)!.cause">常见原因：{{ statusDescFor(row)!.cause }}</div>
+                        <div v-if="row.score_cancelled && row.score_cancelled_reason">取消原因：{{ row.score_cancelled_reason }}</div>
                       </div>
                     </template>
                     <SubStatus :status="row.status" :score="row.score" />
@@ -324,14 +445,30 @@ function openOthersDetail(s: Submission) {
           </div>
         </template>
         <template v-else-if="othersDetail">
-          <el-button class="mb8" @click="othersView = 'list'">← 返回列表</el-button>
+          <!-- 详情头行：返回列表 + 管理操作居左（重测/取消成绩/恢复成绩，v0.97.29 各自权限位可见） -->
+          <div class="detail-top">
+            <div class="detail-top-l">
+              <el-button @click="othersView = 'list'; othersPoll.stop()">← 返回列表</el-button>
+              <el-button v-if="canRejudgeDetail" link type="primary" :loading="rejudging" @click="onOthersRejudge">
+                重测
+              </el-button>
+              <el-tag v-if="othersDetail.score_cancelled" type="danger" size="small" effect="light">成绩已取消</el-tag>
+              <el-button v-if="canCancelScore" link type="danger" :loading="scoreCancelling" @click="onOthersCancelScore">
+                取消成绩
+              </el-button>
+              <el-button v-if="canRestoreScore" link type="success" :loading="scoreRestoring" @click="onOthersRestoreScore">
+                恢复成绩
+              </el-button>
+            </div>
+          </div>
           <el-descriptions :column="3" border class="detail-desc">
             <el-descriptions-item label="状态">
-              <el-tooltip v-if="statusDesc(othersDetail.status)" placement="top" effect="light">
+              <el-tooltip v-if="statusDescFor(othersDetail)" placement="top" effect="light">
                 <template #content>
                   <div class="status-tip">
-                    <div>{{ statusDesc(othersDetail.status)!.meaning }}</div>
-                    <div v-if="statusDesc(othersDetail.status)!.cause">常见原因：{{ statusDesc(othersDetail.status)!.cause }}</div>
+                    <div>{{ statusDescFor(othersDetail)!.meaning }}</div>
+                    <div v-if="!othersDetail.score_cancelled && statusDescFor(othersDetail)!.cause">常见原因：{{ statusDescFor(othersDetail)!.cause }}</div>
+                    <div v-if="othersDetail.score_cancelled && othersDetail.score_cancelled_reason">取消原因：{{ othersDetail.score_cancelled_reason }}</div>
                   </div>
                 </template>
                 <SubStatus :status="othersDetail.status" :score="othersDetail.score" />
@@ -446,5 +583,15 @@ function openOthersDetail(s: Submission) {
 .dim {
   font-size: var(--soj-fs-12);
   color: var(--soj-ink-3);
+}
+
+/* 详情头行左侧操作组：返回列表 + 重测/取消成绩/恢复成绩/成绩已取消标记 */
+.detail-top-l {
+  display: flex;
+  align-items: center;
+}
+
+.detail-top-l .el-tag {
+  margin-left: 12px;
 }
 </style>
