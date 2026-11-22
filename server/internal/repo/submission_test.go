@@ -16,16 +16,26 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
-// openTestRepo 连独立测试库（每次唯一名，结束即删），Mongo 不可达时跳过。
-func openTestRepo(t *testing.T) *Repo {
-	t.Helper()
+// testMongoURI 本地测试 Mongo 连接串。
+func testMongoURI() string {
 	uri := os.Getenv("SOJ_TEST_MONGO_URI")
 	if uri == "" {
 		// compose 的 Mongo 是单节点副本集：成员发现会切到容器内主机名 mongo:27017，
 		// 宿主机跑测试必须直连不走发现
 		uri = "mongodb://127.0.0.1:27017/?directConnection=true"
 	}
-	cli, err := mongo.Connect(options.Client().ApplyURI(uri))
+	return uri
+}
+
+// dialTestMongo 连本地测试 Mongo 并 ping，不可达时跳过；extra 追加客户端选项
+//（如挂带计数的命令探针）。
+func dialTestMongo(t *testing.T, extra ...func(*options.ClientOptions)) *mongo.Client {
+	t.Helper()
+	opts := options.Client().ApplyURI(testMongoURI())
+	for _, f := range extra {
+		f(opts)
+	}
+	cli, err := mongo.Connect(opts)
 	if err != nil {
 		t.Skipf("连接 MongoDB 失败，跳过: %v", err)
 	}
@@ -34,6 +44,13 @@ func openTestRepo(t *testing.T) *Repo {
 	if err := cli.Ping(pingCtx, nil); err != nil {
 		t.Skipf("本地 MongoDB 不可达（docker compose up -d mongo 可启用），跳过: %v", err)
 	}
+	return cli
+}
+
+// openTestRepo 连独立测试库（每次唯一名，结束即删），Mongo 不可达时跳过。
+func openTestRepo(t *testing.T) *Repo {
+	t.Helper()
+	cli := dialTestMongo(t)
 	dbName := fmt.Sprintf("soj_queue_test_%d", time.Now().UnixNano())
 	t.Cleanup(func() {
 		dctx, dcancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -41,7 +58,7 @@ func openTestRepo(t *testing.T) *Repo {
 		_ = cli.Database(dbName).Drop(dctx)
 		_ = cli.Disconnect(dctx)
 	})
-	r, err := Connect(context.Background(), uri, dbName)
+	r, err := Connect(context.Background(), testMongoURI(), dbName)
 	if err != nil {
 		t.Fatalf("Connect: %v", err)
 	}

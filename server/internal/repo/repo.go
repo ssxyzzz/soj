@@ -65,12 +65,6 @@ type Repo struct {
 	setCache *SystemSettings
 	setAt    time.Time
 
-	// 题目 AC 率小缓存（v0.38）：掉落概率输入的 10 分钟缓存——判题回写路径的
-	// MaybeAwardJade 不再每次首 AC 都对全题提交做聚合；概率口径允许陈旧
-	//（掉落额本就按 AC 时点固化进 awards）。
-	acMu    sync.Mutex
-	acRates map[int64]acRateEntry
-
 	// race 榜单微缓存（v0.51）：PK 进行中全班 3s 轮询同一份榜，RaceBoard 聚合
 	// 按命中摊薄；短 TTL + raceMs 回写/取消/结算时主动失效兜底正确性。
 	// 全站榜 solved 微缓存（v0.51）：RankMe 靠前人数的全体 AC 双 $group 共享前段，
@@ -87,12 +81,6 @@ type raceBoardEntry struct {
 	// complete = 查询已取尽榜单（返回行数 < 缓存上限）：小榜任意 limit 都可命中
 	complete bool
 	at       time.Time
-}
-
-type acRateEntry struct {
-	rate      float64
-	attempted bool
-	at        time.Time
 }
 
 // Connect 建立 Mongo 连接（容器编排下依赖可能晚就绪，带重试等待）。
@@ -159,7 +147,6 @@ func Connect(ctx context.Context, uri, dbName string) (*Repo, error) {
 
 		problemFavorites: db.Collection("problemFavorites"),
 		tidyHistory:      db.Collection("tidyHistory"),
-		acRates:       map[int64]acRateEntry{},
 		raceBoardCache: map[int64]raceBoardEntry{},
 	}, nil
 }

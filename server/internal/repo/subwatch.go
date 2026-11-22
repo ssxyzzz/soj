@@ -17,6 +17,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // SubSignal 提交变更信号（推送用轻快照：change stream 命中信号字段后的一次投影读）。
@@ -66,6 +67,12 @@ func isSubSignalUpdate(fields bson.M) bool {
 	return false
 }
 
+// subWatchAwait 变更流空闲等待预算：一次 getMore 最多挂这么久等新数据，有变更立即返回
+//（不影响推送延迟）。必须显式申报：驱动只在显式设置 MaxAwaitTime 时才给 getMore 带
+// maxTimeMS，慢命令探针据此把「预算内的等待」与「真慢」区分开（monitor.go）；不设则
+// 服务端按自身默认等待而请求体不带预算，每次空闲等待都会被报成慢命令。
+const subWatchAwait = time.Second
+
 // WatchSubmissionChanges 阻塞监听 submissions 变更并回调轻快照；ctx 取消时返回。
 // 流断开（副本集主从切换等）自动重开（2s 退避），函数只在 ctx 结束时返回——
 // 由调用方挂在 web 进程生命周期上。
@@ -89,7 +96,8 @@ func (r *Repo) WatchSubmissionChanges(ctx context.Context, fn func(SubSignal)) e
 }
 
 func (r *Repo) watchSubmissionsOnce(ctx context.Context, fn func(SubSignal)) error {
-	cs, err := r.submissions.Watch(ctx, mongo.Pipeline{})
+	cs, err := r.submissions.Watch(ctx, mongo.Pipeline{},
+		options.ChangeStream().SetMaxAwaitTime(subWatchAwait))
 	if err != nil {
 		return err
 	}

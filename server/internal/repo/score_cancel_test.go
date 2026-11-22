@@ -334,3 +334,72 @@ func TestScoreCancelClawbackNegativeBalance(t *testing.T) {
 		t.Fatalf("余额应透支为 -6, got %d", b)
 	}
 }
+
+// TestScoreCancelLedgerReason 追回/补回流水说明带「#题号《题名》」（v0.98.1，与首 AC 发放
+// 流水同款写法）；题目已删除时题名取不到 → 退化为仅题号，账照记。
+func TestScoreCancelLedgerReason(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+	const uid, pid = int64(4305), int64(923)
+	if _, err := r.problems.InsertOne(ctx,
+		bson.M{"_id": pid, "difficulty": 5, "title": "追回测试题"}); err != nil {
+		t.Fatalf("seed problem: %v", err)
+	}
+	sid := seedSub(t, r, bson.M{"_id": int64(4305), "uid": uid, "pid": pid,
+		"status": StatusAccepted, "score": 100, "published": true})
+	seedJade(t, r, uid, pid, 9, 20)
+
+	// lastReason 最近一条该 kind 流水的说明（JadeLedgerPage 新→旧）
+	lastReason := func(kind string) string {
+		t.Helper()
+		entries, _, err := r.JadeLedgerPage(ctx, uid, 1, 50)
+		if err != nil {
+			t.Fatalf("ledger page: %v", err)
+		}
+		for _, e := range entries {
+			if e.Kind == kind {
+				return e.Reason
+			}
+		}
+		t.Fatalf("流水缺少 %s", kind)
+		return ""
+	}
+	expectReason := func(kind, want, stage string) {
+		t.Helper()
+		if got := lastReason(kind); got != want {
+			t.Fatalf("%s流水说明 = %q, want %q", stage, got, want)
+		}
+	}
+	expectBal := func(want int64, stage string) {
+		t.Helper()
+		if b, _ := r.JadeBalance(ctx, uid); b != want {
+			t.Fatalf("%s: 余额 want %d got %d", stage, want, b)
+		}
+	}
+
+	if err := r.CancelScore(ctx, sid, "", "root"); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+	expectReason("score_clawback", "成绩取消追回 #923《追回测试题》首 AC 玉", "取消后追回")
+	expectBal(11, "取消后")
+	if err := r.RestoreScore(ctx, sid); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	expectReason("score_regrant", "成绩恢复补回 #923《追回测试题》首 AC 玉", "恢复后补回")
+	expectBal(20, "恢复后")
+
+	// 题目删除后再取消/恢复：题名取不到 → 仅题号，照常入账
+	if _, err := r.problems.DeleteOne(ctx, bson.M{"_id": pid}); err != nil {
+		t.Fatalf("delete problem: %v", err)
+	}
+	if err := r.CancelScore(ctx, sid, "", "root"); err != nil {
+		t.Fatalf("cancel after delete: %v", err)
+	}
+	expectReason("score_clawback", "成绩取消追回 #923 首 AC 玉", "题目删除后追回")
+	expectBal(11, "题目删除后取消")
+	if err := r.RestoreScore(ctx, sid); err != nil {
+		t.Fatalf("restore after delete: %v", err)
+	}
+	expectReason("score_regrant", "成绩恢复补回 #923 首 AC 玉", "题目删除后补回")
+	expectBal(20, "题目删除后恢复")
+}

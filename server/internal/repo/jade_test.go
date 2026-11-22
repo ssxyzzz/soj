@@ -1,11 +1,12 @@
 package repo
 
-// 玉地基单测（v0.33-①）：账本防双花、首 AC 幂等与客观题半额、奖池结算数学
+// 玉地基单测（v0.33-①）：账本防双花、首 AC 幂等与客观题同额、奖池结算数学
 //（名额比例/线性递减/并列段位均分/参与池滚入/取整零头）、发布链路集成。
 // 依赖本地 MongoDB（openTestRepo 同款，不可达整文件跳过）。
 
 import (
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,37 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
+
+// TestRollJadeDrop 掉落分布契约（2026-11-22 拍板）：掉落概率恰为 40%，掉落额 1~难度值
+// 各档等概率（D5：每档 8%）。x 取 rand.Float64 的值域 [0,1)，按细分网格全区间遍历——
+// 断言与随机源无关。
+func TestRollJadeDrop(t *testing.T) {
+	const steps = 1_000_000
+	for _, d := range []int{1, 2, 3, 5, 10} {
+		counts := make([]int, d+1)
+		for i := 0; i < steps; i++ {
+			counts[rollJadeDrop(d, float64(i)/steps)]++
+		}
+		if got := float64(counts[0]) / steps; math.Abs(got-0.6) > 2e-6 {
+			t.Fatalf("D%d 未掉落占比 = %.6f, want 0.6", d, got)
+		}
+		for n := 1; n <= d; n++ {
+			if got := float64(counts[n]) / steps; math.Abs(got-jadeDropChance/float64(d)) > 2e-6 {
+				t.Fatalf("D%d 掉 %d 玉占比 = %.6f, want %.6f", d, n, got, jadeDropChance/float64(d))
+			}
+		}
+	}
+	// 边界：落在掉落概率上即不掉；难度 1 掉落时恒为 1；非法难度按 1 兜底
+	if rollJadeDrop(5, jadeDropChance) != 0 || rollJadeDrop(5, 0.999999) != 0 {
+		t.Fatalf("x ≥ 掉落概率不应掉落")
+	}
+	if rollJadeDrop(1, 0) != 1 || rollJadeDrop(1, 0.399999) != 1 {
+		t.Fatalf("难度 1 掉落时恒掉 1 玉")
+	}
+	if rollJadeDrop(0, 0.1) != 1 || rollJadeDrop(5, 0.2) < 1 || rollJadeDrop(5, 0.2) > 5 {
+		t.Fatalf("非法难度按 1 兜底、掉落额恒在 [1,难度值]")
+	}
+}
 
 // jadeTestProblem 建一道题并返回 pid。
 func jadeTestProblem(t *testing.T, r *Repo, objective bool, difficulty int) int64 {
@@ -102,16 +134,16 @@ func TestJadeCreditSpend(t *testing.T) {
 func TestMaybeAwardJade(t *testing.T) {
 	r := openTestRepo(t)
 	ctx := context.Background()
-	objPID := jadeTestProblem(t, r, true, 5)  // 客观题 D5：基础 max(1,⌊5/2⌋)=2
-	trdPID := jadeTestProblem(t, r, false, 5) // 传统题 D5：基础 5、掉落 ∈{0,5}
+	objPID := jadeTestProblem(t, r, true, 5)  // 客观题 D5：基础同额 = 5（2026-11-23 拍板取消半额）
+	trdPID := jadeTestProblem(t, r, false, 5) // 传统题 D5：基础 5、掉落 ∈[0,5]
 
 	awarded, _, err := r.MaybeAwardJade(ctx, 7, objPID, 0, 0)
 	if err != nil || !awarded {
 		t.Fatalf("客观题首满分: awarded=%v err=%v", awarded, err)
 	}
 	a, _ := r.GetJadeAward(ctx, 7, objPID)
-	if a.Base != 2 || (a.Drop != 0 && a.Drop != 5) || a.Total != a.Base+a.Drop {
-		t.Fatalf("客观题发放 = base %d drop %d total %d，期望 base2 drop∈{0,5}", a.Base, a.Drop, a.Total)
+	if a.Base != 5 || a.Drop < 0 || a.Drop > 5 || a.Total != a.Base+a.Drop {
+		t.Fatalf("客观题发放 = base %d drop %d total %d，期望 base5 drop∈[0,5]", a.Base, a.Drop, a.Total)
 	}
 	// 幂等：同题第二次（重交/挑战/再比赛）不再发
 	awarded2, total2, err := r.MaybeAwardJade(ctx, 7, objPID, 0, 0)
@@ -126,10 +158,45 @@ func TestMaybeAwardJade(t *testing.T) {
 		t.Fatalf("传统题发放: %v", err)
 	}
 	b, _ := r.GetJadeAward(ctx, 8, trdPID)
-	if b.Base != 5 || (b.Drop != 0 && b.Drop != 5) {
-		t.Fatalf("传统题发放 = base %d drop %d，期望 base5 drop∈{0,5}", b.Base, b.Drop)
+	if b.Base != 5 || b.Drop < 0 || b.Drop > 5 {
+		t.Fatalf("传统题发放 = base %d drop %d，期望 base5 drop∈[0,5]", b.Base, b.Drop)
 	}
-	// D1 客观题：⌊1/2⌋=0 → max(1,0)=1
+	// 流水说明带题目引用「#题号《题名》」（problemRef：与取消成绩追回/恢复补回流水共用写法）
+	entries, _, err := r.JadeLedgerPage(ctx, 8, 1, 5)
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("传统题流水: len=%d err=%v", len(entries), err)
+	}
+	if rs := entries[0].Reason; !strings.HasPrefix(rs, "首次通过 #") || !strings.Contains(rs, "《T》（基础 5 + 掉落 ") {
+		t.Fatalf("发放流水说明 = %q，期望带「#题号《T》」", rs)
+	}
+	// 掉落纯随机（v0.98.1，不看 AC 率）：同一道 D5 题上 40 个新用户各发一次——掉落额恒在
+	// [0,5]，且「掉」与「不掉」都出现（40 次全同的概率 < 1e-9，实际不会抖）。倍率与掉落
+	// 无关，总额按各自倍率折算核对。
+	dropped, none := 0, 0
+	for i := 0; i < 40; i++ {
+		uid := int64(500 + i)
+		if _, _, err := r.MaybeAwardJade(ctx, uid, trdPID, 0, 0); err != nil {
+			t.Fatalf("第 %d 次发放: %v", i, err)
+		}
+		a, err := r.GetJadeAward(ctx, uid, trdPID)
+		if err != nil || a == nil {
+			t.Fatalf("第 %d 次发放记录缺失: %v", i, err)
+		}
+		want := ((a.Base+a.Drop)*int64(a.MultPct) + 99) / 100
+		if a.Base != 5 || a.Drop < 0 || a.Drop > 5 || a.Total != want {
+			t.Fatalf("第 %d 次发放 = base %d drop %d total %d mult %d，期望 base5 drop∈[0,5] total=%d",
+				i, a.Base, a.Drop, a.Total, a.MultPct, want)
+		}
+		if a.Drop > 0 {
+			dropped++
+		} else {
+			none++
+		}
+	}
+	if dropped == 0 || none == 0 {
+		t.Fatalf("40 次发放应同时出现掉落与未掉落, got 掉落 %d / 未掉落 %d", dropped, none)
+	}
+	// D1 客观题：基础同额 = 1
 	d1 := jadeTestProblem(t, r, true, 1)
 	if _, _, err := r.MaybeAwardJade(ctx, 9, d1, 0, 0); err != nil {
 		t.Fatalf("D1 客观题: %v", err)
@@ -186,8 +253,8 @@ func TestMaybeAwardJadeBlessing(t *testing.T) {
 		t.Fatalf("祝福发放: %v", err)
 	}
 	b, _ := r.GetJadeAward(ctx, 22, pid)
-	if b.Base != 4 || (b.Drop != 0 && b.Drop != 4) {
-		t.Fatalf("祝福发放 = base %d drop %d，期望 base4 drop∈{0,4}（记录不放大）", b.Base, b.Drop)
+	if b.Base != 4 || b.Drop < 0 || b.Drop > 4 {
+		t.Fatalf("祝福发放 = base %d drop %d，期望 base4 drop∈[0,4]（记录不放大）", b.Base, b.Drop)
 	}
 	if b.MultPct != 200 || b.MultFrom == "" {
 		t.Fatalf("祝福 multPct = %d from = %q，期望 200/升维祝福", b.MultPct, b.MultFrom)
@@ -329,8 +396,8 @@ func TestPublishDueRoundsJadeIntegration(t *testing.T) {
 	if err != nil || a == nil {
 		t.Fatalf("赛内首 AC 未补发: %v %v", a, err)
 	}
-	if a.Base != 5 || (a.Drop != 0 && a.Drop != 5) {
-		t.Fatalf("补发金额 = base %d drop %d，期望 base5", a.Base, a.Drop)
+	if a.Base != 5 || a.Drop < 0 || a.Drop > 5 {
+		t.Fatalf("补发金额 = base %d drop %d，期望 base5 drop∈[0,5]", a.Base, a.Drop)
 	}
 	// N=2（u1/u2 score>0），K=1：u1 名次奖 100 + 首AC(base+drop)；u2 参与奖 30；u3 零
 	if bal := jadeBal(t, r, 1); bal != a.Total+100 {

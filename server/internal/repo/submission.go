@@ -190,7 +190,7 @@ func (r *Repo) CreateObjectiveSubmission(ctx context.Context, uid int64, uname s
 	if _, err := r.submissions.InsertOne(ctx, doc); err != nil {
 		return 0, err
 	}
-	// 玉经济体（v0.33-①）：已公开客观题首满分发玉（客观题半额口径在 MaybeAwardJade 内）；
+	// 玉经济体（v0.33-①）：已公开客观题首满分发玉（与代码题同额，口径在 MaybeAwardJade 内）；
 	// 赛内提交 published=false，由成绩发布补发。尽力而为异步，不阻塞提交响应。
 	if score >= 100 && doc["published"] == true {
 		go func() {

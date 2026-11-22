@@ -9,10 +9,11 @@ package repo
 // shop_order / ai_*）随第二三步启用，本文件只提供通用 credit/spend。
 //
 // 防刷口径（2026-10-29/30 拍板）：同题重复 AC 不重发——jadeAwards {uid,pid} 唯一索引
-// 幂等（普通重交/挑战/多场同题天然防）；客观题首满分半额 max(1,⌊D/2⌋)；掉落
-// p = 1−AC率（无人做过按 0.3，去重用户口径、AC 时点固化）；比赛奖池双池仅教师/admin/root
-// 可设（权限闸在 server 侧 round 编辑入口），结算 N = score>0、名额 K=⌈N×比例⌉、
-// 线性递减权重、并列按名次段均分、参与奖发给 score>0 未获奖者。
+// 幂等（普通重交/挑战/多场同题天然防）；基础玉 = 难度值，客观题同额（2026-11-23 拍板：
+// 首满分半额取消）；掉落纯随机（2026-11-22 拍板：40% 概率掉 1~难度值的玉，各档等概率，
+// 金额按 AC 时点固化）；比赛奖池双池仅教师/admin/root 可设（权限闸在 server 侧 round
+// 编辑入口），结算 N = score>0、名额 K=⌈N×比例⌉、线性递减权重、并列按名次段均分、
+// 参与奖发给 score>0 未获奖者。
 
 import (
 	"context"
@@ -240,6 +241,30 @@ func (r *Repo) hasPublishedAC(ctx context.Context, uid, pid int64) (bool, error)
 	return n > 0, err
 }
 
+// problemRef 流水说明里的题目引用「#题号《题名》」：首 AC 发放 / 成绩取消追回 / 成绩恢复
+// 补回三条流水共用同一写法（v0.98.1，此前后两条不带题目，学生看流水对不上是哪题）；
+// 题名空缺退化为仅题号。
+func problemRef(pid int64, title string) string {
+	if title == "" {
+		return fmt.Sprintf("#%d", pid)
+	}
+	return fmt.Sprintf("#%d《%s》", pid, title)
+}
+
+// scoreJadeReason 取消成绩追回/恢复成绩补回的流水说明：「动作 #题号《题名》首 AC 玉」
+//（v0.98.1，此前两条不带题目，学生看流水对不上是哪题）。题名空缺（题目已删除/读取失败）
+// 退化为「动作 #题号 首 AC 玉」——文案尽力而为，不拖累追回/补回入账。
+func (r *Repo) scoreJadeReason(ctx context.Context, verb string, pid int64) string {
+	title := ""
+	if p, err := r.GetProblemMeta(ctx, pid); err == nil {
+		title = p.Title
+	}
+	if title == "" {
+		return fmt.Sprintf("%s #%d 首 AC 玉", verb, pid)
+	}
+	return fmt.Sprintf("%s %s首 AC 玉", verb, problemRef(pid, title))
+}
+
 // ClawbackOnScoreCancel 取消成绩后的玉追赃（尽力而为，不拖垮取消主操作）：该题已无
 // 有效 AC 且首 AC 玉在账 → 负流水追回（可负余额）+ awards 打 clawedBack 标记。
 // awards 记录本身保留（{uid,pid} 幂等），追回期重复提交不会二次发玉。
@@ -251,7 +276,8 @@ func (r *Repo) ClawbackOnScoreCancel(ctx context.Context, uid, pid int64) {
 	if err != nil || a == nil || a.ClawedBack || a.Total <= 0 {
 		return // 无发放记录 / 已在追回态：无事发生
 	}
-	if err := r.JadeClawback(ctx, uid, a.Total, JadeKindScoreClawback, "成绩取消追回首 AC 玉", pid); err != nil {
+	reason := r.scoreJadeReason(ctx, "成绩取消追回", pid)
+	if err := r.JadeClawback(ctx, uid, a.Total, JadeKindScoreClawback, reason, pid); err != nil {
 		slog.Warn("取消成绩追玉失败", "component", "jade", "uid", uid, "pid", pid, "error", err)
 		return
 	}
@@ -261,6 +287,7 @@ func (r *Repo) ClawbackOnScoreCancel(ctx context.Context, uid, pid int64) {
 
 // RegrantOnScoreAC 该题重新存在有效 AC 时的玉补回（恢复成绩 / 取消后重新提交 AC /
 // 判题发玉幂等分支共用挂点）：clawedBack 态 → 正流水补回原额 + 清标记。
+// 题名读取放在早退判定之后——判题热路径的重复 AC 不付这一次查询。
 func (r *Repo) RegrantOnScoreAC(ctx context.Context, uid, pid int64) {
 	a, err := r.GetJadeAward(ctx, uid, pid)
 	if err != nil || a == nil || !a.ClawedBack {
@@ -269,7 +296,8 @@ func (r *Repo) RegrantOnScoreAC(ctx context.Context, uid, pid int64) {
 	if ac, err := r.hasPublishedAC(ctx, uid, pid); err != nil || !ac {
 		return
 	}
-	if err := r.JadeCredit(ctx, uid, a.Total, JadeKindScoreRegrant, "成绩恢复补回首 AC 玉", pid); err != nil {
+	reason := r.scoreJadeReason(ctx, "成绩恢复补回", pid)
+	if err := r.JadeCredit(ctx, uid, a.Total, JadeKindScoreRegrant, reason, pid); err != nil {
 		slog.Warn("成绩恢复补玉失败", "component", "jade", "uid", uid, "pid", pid, "error", err)
 		return
 	}
@@ -394,60 +422,36 @@ func (r *Repo) UnlockSolutionWithJade(ctx context.Context, uid, pid int64, amoun
 	return false, nil
 }
 
-// problemACRate 该题 AC 率（去重用户口径，与难度迁移启发式同源）：
-// 做过 = 有非取消提交的不同用户，满分 = 其中该题最高分 ≥ 100 的用户。
-// v0.38 加 10 分钟缓存：聚合挂在判题回写路径（MaybeAwardJade），掉落概率是
-// 唯一消费面——陈旧无害（掉落额本就按 AC 时点固化进 awards）。
-func (r *Repo) problemACRate(ctx context.Context, pid int64) (rate float64, attempted bool, err error) {
-	r.acMu.Lock()
-	if e, ok := r.acRates[pid]; ok && time.Since(e.at) < 10*time.Minute {
-		r.acMu.Unlock()
-		return e.rate, e.attempted, nil
-	}
-	r.acMu.Unlock()
-	rate, attempted, err = r.problemACRateDB(ctx, pid)
-	if err == nil {
-		r.acMu.Lock()
-		r.acRates[pid] = acRateEntry{rate: rate, attempted: attempted, at: time.Now()}
-		r.acMu.Unlock()
-	}
-	return rate, attempted, err
-}
+// jadeDropChance 首通掉落概率（2026-11-22 拍板 40%）：掉落额在 1~难度值之间等概率。
+// 纯随机、不看 AC 率——原口径「掉率 = 1−AC率」自带操纵口：先交错解把通过率拉低再 AC，
+// 掉率随之抬高（且算 AC 率时本次 AC 已入库，全新题首个通过者掉率恒为 0）。
+const jadeDropChance = 0.4
 
-func (r *Repo) problemACRateDB(ctx context.Context, pid int64) (rate float64, attempted bool, err error) {
-	cursor, err := r.submissions.Aggregate(ctx, []bson.M{
-		{"$match": bson.M{"pid": pid, "status": bson.M{"$ne": StatusCancelled}}},
-		{"$group": bson.M{"_id": "$uid", "best": bson.M{"$max": "$score"}}},
-		{"$group": bson.M{
-			"_id": nil,
-			"n":   bson.M{"$sum": 1},
-			"ac":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$gte": bson.A{"$best", 100}}, 1, 0}}},
-		}},
-	})
-	if err != nil {
-		return 0, false, err
+// rollJadeDrop 掉落抽取：x 为 [0,1) 均匀随机数（调用方传 rand.Float64()），返回掉落玉数
+//（0 = 未掉落）。前 jadeDropChance 段掉落，段内再按难度等分——同一个随机数同时定
+//「掉不掉」与「掉多少」，各档等概率（D5：掉 1~5 各 8%，合计 40%）。纯函数，单测按 x
+// 全区间钉死分布，不依赖随机源。
+func rollJadeDrop(d int, x float64) int {
+	if d < 1 {
+		d = 1
 	}
-	defer cursor.Close(ctx)
-	var row struct {
-		N  int64 `bson:"n"`
-		AC int64 `bson:"ac"`
+	if x >= jadeDropChance {
+		return 0
 	}
-	if !cursor.Next(ctx) {
-		return 0, false, nil // 无人做过
+	n := 1 + int(x/jadeDropChance*float64(d))
+	if n < 1 {
+		n = 1
 	}
-	if err := cursor.Decode(&row); err != nil {
-		return 0, false, err
+	if n > d {
+		n = d // 浮点边界保护（x 严格小于掉落概率时商必 < 1）
 	}
-	if row.N == 0 {
-		return 0, false, nil
-	}
-	return float64(row.AC) / float64(row.N), true, nil
+	return n
 }
 
 // MaybeAwardJade 首次 AC 发玉（全局幂等）：已发过直接返回；并发窗口由 {uid,pid}
-// 唯一索引兜底（InsertOne 撞键 = 输了竞态，静默 no-op）。客观题首满分减半；掉落
-// p=1−AC率、成功额外掉难度值玉（AC 率无人做过按 0.3；金额按 AC 时点固化进 awards）。
-// 挂点：判题回写（published 提交，racePct/combo 由 judge 管道先行解析回传）、
+// 唯一索引兜底（InsertOne 撞键 = 输了竞态，静默 no-op）。基础玉 = 难度值（客观题同额）；
+// 掉落 40% 概率掉 1~难度值的玉（rollJadeDrop）；金额按 AC 时点固化进 awards。
+// 挂点：判题回写（published 提交，racePct/combo 由 judge 管线先行解析回传）、
 // 客观题创建/重判（满分且 published，racePct/combo 传 0）、比赛发布补发（传 0）。
 // ---- 倍率总则（v0.45）：最终玉 = (基础+掉落) × max(祝福/连击/每日/复仇/PK名次) ----
 
@@ -535,7 +539,7 @@ func (r *Repo) EnsureLevelBlessingForUser(ctx context.Context, uid int64) error 
 // MaybeAwardJade 首次 AC 发玉（同题幂等）。倍率总则（v0.45，2026-10-31 拍板）：
 // 最终玉 = (基础 + 掉落) × max(全部倍率)——升维祝福 ×2 / 连击加成（每满 step +pct%，
 // 封顶 capPct）/ 每日一题 ×2 / 一血偿还 ×1.5 / 课堂 PK 名次（raceRankPct，0=无）
-// 全部平级取最高不连乘，峰值 ×2；客观题半额已先于本段作用于 base。
+// 全部平级取最高不连乘，峰值 ×2。
 // combo = 本次 AC 生效后的连击数（judge 路径由 TrackJudgeOutcome 先行回传；
 // 客观题/比赛补发路径传 0 = 无连击加成）。每日复仇名额仅在倍率被采用时消耗
 //（被更高倍率压制 → 顺延不扣）。
@@ -555,22 +559,9 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64, raceRankPct, 
 	if err != nil {
 		return false, 0, err
 	}
-	d := p.EffDifficulty()
-	base := d
-	if p.IsObjective() {
-		base = d / 2
-		if base < 1 {
-			base = 1
-		}
-	}
-	drop := 0
-	rate := 0.3
-	if acRate, attempted, rerr := r.problemACRate(ctx, pid); rerr == nil && attempted {
-		rate = acRate
-	}
-	if rand.Float64() < 1-rate {
-		drop = d
-	}
+	// 基础玉 = 难度值，客观题同额（2026-11-23 拍板：首满分半额取消）
+	base := p.EffDifficulty()
+	drop := rollJadeDrop(base, rand.Float64())
 	// 倍率候选收集（百分比整数，100 = 无加成；取最高不叠乘）。
 	set := &SystemSettings{}
 	if ss, serr := r.GetSystemSettings(ctx); serr == nil && ss != nil {
@@ -626,9 +617,9 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64, raceRankPct, 
 	}
 	// 流水说明：有加成才带倍率段（取 max 语义：单一来源 × 单一倍率，不连乘）；
 	// 无加成与旧版口径一致不显示倍率段
-	reason := fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d）", pid, p.Title, base, drop)
+	reason := fmt.Sprintf("首次通过 %s（基础 %d + 掉落 %d）", problemRef(pid, p.Title), base, drop)
 	if multPct > 100 {
-		reason = fmt.Sprintf("首次通过 #%d《%s》（基础 %d + 掉落 %d × %s）", pid, p.Title, base, drop, multText(multPct, multFrom))
+		reason = fmt.Sprintf("首次通过 %s（基础 %d + 掉落 %d × %s）", problemRef(pid, p.Title), base, drop, multText(multPct, multFrom))
 	}
 	if err := r.JadeCredit(ctx, uid, total, JadeKindAward, reason, pid); err != nil {
 		return false, 0, err
