@@ -18,6 +18,7 @@ declare module 'vue' {
     AmbientGrid: typeof import('./components/AmbientGrid.vue')['default']
     AnswerAnalysisCard: typeof import('./components/problem/AnswerAnalysisCard.vue')['default']
     BackupPanel: typeof import('./components/admin/BackupPanel.vue')['default']
+    CaseLiveBar: typeof import('./components/CaseLiveBar.vue')['default']
     CodeEditor: typeof import('./components/CodeEditor.vue')['default']
     CodePane: typeof import('./components/CodePane.vue')['default']
     CodeWorkbench: typeof import('./components/CodeWorkbench.vue')['default']

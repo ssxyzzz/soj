@@ -25,6 +25,7 @@ import (
 	"soj/internal/ai"
 	"soj/internal/auth"
 	"soj/internal/config"
+	"soj/internal/push"
 	"soj/internal/repo"
 )
 
@@ -307,6 +308,7 @@ func newTestHandlers(f *fakeRepo) *Handlers {
 	return &Handlers{
 		cfg:           &config.Config{Addr: ":0", JWTSecret: testJWTSecret},
 		repo:          f,
+		hub:           push.Init(), // SSE 扇出（v0.98）：全局 std 一并就位，广播无订阅者时零负担
 		limiter:       newRateLimiter(),
 		runLimit:      newRateLimiter(),
 		renderLimit:   newRateLimiter(),

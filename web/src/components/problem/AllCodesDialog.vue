@@ -8,13 +8,15 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { problemApi, submissionApi, userApi } from '@/api'
+import CaseLiveBar from '@/components/CaseLiveBar.vue'
 import CodePane from '@/components/CodePane.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { useUserStore } from '@/stores/user'
 import { languageOptions } from '@/utils/code'
-import type { BoardsResult, LookupUser, Submission } from '@/types'
+import type { BoardsResult, LookupUser, Submission, SubPushEvent } from '@/types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -157,16 +159,30 @@ async function refreshOthersDetail() {
   loadOthers(othersPage.value)
 }
 
-// 重测轮询（复用 usePolling 既有范式，口径同 SubmissionDetailDialog）：至终态停并提示
+// 重测等待（v0.98 双通道，口径同 SubmissionDetailDialog）：SSE sub 事件为主、
+// 1.2s 轮询兜底（pushActive 时空转，断连自动恢复）；progress 信号 300ms 节流拉
+// 详情喂逐点进度，终态停并提示
 let othersPollId = 0
-const othersPoll = usePolling(
-  async () => {
-    const s = await submissionApi.get(othersPollId)
+let othersProgressTimer: ReturnType<typeof setTimeout> | null = null
+
+async function othersFetch(id: number) {
+  try {
+    const s = await submissionApi.get(id)
     if (othersDetail.value?.id === s.id) othersDetail.value = s
-    if (isQueueStatus(s.status)) return // 队列/评测/取消中：续拍
+    if (isQueueStatus(s.status)) return
+    othersPollId = 0
     ElMessage.success(`#${s.id} 重测完成`)
     loadOthers(othersPage.value)
-    return false
+  } catch {
+    /* 拦截器已提示；轮询续拍自愈 */
+  }
+}
+
+const othersPoll = usePolling(
+  async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位
+    if (!othersPollId) return false
+    await othersFetch(othersPollId)
   },
   1200,
   {
@@ -174,6 +190,24 @@ const othersPoll = usePolling(
     onExpire: () => ElMessage.warning('评测等待时间过长，已停止自动刷新'),
   },
 )
+
+useTopic('sub', (raw) => {
+  const ev = raw as unknown as SubPushEvent
+  if (ev.sid !== othersPollId) return
+  if (ev.kind === 'progress') {
+    if (othersProgressTimer != null) return
+    othersProgressTimer = setTimeout(() => {
+      othersProgressTimer = null
+      if (othersPollId) void othersFetch(othersPollId)
+    }, 300)
+  } else {
+    void othersFetch(ev.sid)
+  }
+})
+
+watch(pushActive, (on) => {
+  if (!on && othersPollId) othersPoll.restart()
+})
 
 async function onOthersRejudge() {
   const s = othersDetail.value
@@ -183,7 +217,8 @@ async function onOthersRejudge() {
     await submissionApi.rejudge(s.id)
     ElMessage.success(`#${s.id} 已加入重测队列`)
     othersPollId = s.id
-    othersPoll.restart()
+    if (!pushActive.value) othersPoll.restart()
+    else void othersFetch(s.id)
   } finally {
     rejudging.value = false
   }
@@ -488,7 +523,13 @@ async function onOthersRestoreScore() {
           </template>
           <div class="detail-sub">代码</div>
           <CodePane :code="othersDetail.code" :language="othersDetail.language" />
-          <template v-if="othersDetail.detail?.length">
+          <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮，终态回落下方明细表 -->
+          <template v-if="isQueueStatus(othersDetail.status) && othersDetail.case_total">
+            <div class="detail-sub">评测进度</div>
+            <CaseLiveBar :sub="othersDetail" />
+          </template>
+          <!-- 明细表终态回落（v0.98）：判题中展示归色块条独占，表格只在终态出现 -->
+          <template v-if="!isQueueStatus(othersDetail.status) && othersDetail.detail?.length">
             <div class="detail-sub">测试点明细</div>
             <el-table stripe :data="sortedDetail" border>
               <el-table-column prop="index" label="测试点" width="90" />

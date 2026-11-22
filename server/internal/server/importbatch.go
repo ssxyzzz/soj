@@ -84,6 +84,7 @@ func (j *batchImportJob) setTotal(n int) {
 	j.Total = n
 	j.Phase = "importing" // total 落定，进入逐题导入阶段
 	j.mu.Unlock()
+	pushTask("import", "running", repo.PermProblemImport, 0, n) // SSE 进度信号（v0.98）
 }
 
 // setExtract 解压实时进度（每写完一个 zip 条目回调一次；写多读少，直接锁内赋值）
@@ -98,7 +99,9 @@ func (j *batchImportJob) addResult(r batchResult) {
 	j.mu.Lock()
 	j.Results = append(j.Results, r)
 	j.Done++
+	total, done := j.Total, j.Done
 	j.mu.Unlock()
+	pushTask("import", "running", repo.PermProblemImport, done, total) // SSE 进度信号（v0.98）
 }
 
 func (j *batchImportJob) finish(state, errMsg string) {
@@ -108,7 +111,9 @@ func (j *batchImportJob) finish(state, errMsg string) {
 		j.Err = errMsg
 		j.EndedAt = time.Now()
 	}
+	done := j.Done
 	j.mu.Unlock()
+	pushTask("import", state, repo.PermProblemImport, done, 0) // SSE 任务终态信号（v0.98）
 }
 
 func (j *batchImportJob) snapshot() gin.H {

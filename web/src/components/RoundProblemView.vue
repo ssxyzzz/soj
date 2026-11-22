@@ -8,6 +8,7 @@ import { ElMessage } from 'element-plus'
 
 import { contestApi, examApi, problemApi, type RoundKind } from '@/api'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { useImmersiveMode } from '@/composables/useImmersiveMode'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -18,6 +19,7 @@ import ProblemHeadCard from '@/components/problem/cards/ProblemHeadCard.vue'
 import ProblemMaintainCard from '@/components/problem/cards/ProblemMaintainCard.vue'
 import ProblemVideoDialog from '@/components/problem/cards/ProblemVideoDialog.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
+import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import MySubmissionsMiniCard from '@/components/problem/cards/MySubmissionsMiniCard.vue'
 import SolutionsDialog from '@/components/problem/SolutionsDialog.vue'
 import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
@@ -26,7 +28,7 @@ import SubmitDialog from '@/components/SubmitDialog.vue'
 import { fmtDate, isQueueStatus } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
 import type {
-  ContestDetail, ContestMySubmission, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission,
+  ContestDetail, ContestMySubmission, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission, SubPushEvent,
 } from '@/types'
 
 const props = defineProps<{ kind: RoundKind }>()
@@ -60,6 +62,10 @@ const revealed = ref(false)
 
 const showSubmit = ref(false)
 const showWorkbench = ref(false)
+// 递交即弹窗（v0.98）：非隐藏场次跟随本次提交状态全程（Pending → 编译中… →
+// 判题中 k/N 逐点 → 终态回落明细表）
+const showSubmitDetail = ref(false)
+const submitDetailId = ref<number | null>(null)
 const showOthers = ref(false)
 const showMine = ref(false)
 const submitting = ref(false)
@@ -189,19 +195,26 @@ async function handleSubmit(lang: string, code: string) {
     await loadMine()
     // 赛时不轮询结果（不出分）；已公开时轮询刷新
     if (revealed.value) pollRevealed(r.id)
+    // 递交即弹窗（v0.98）：非隐藏场次跟随本次提交全程（隐藏场次状态本就遮蔽，
+    // 服务端也不发事件——不弹）
+    if (revealed.value) {
+      submitDetailId.value = r.id
+      showSubmitDetail.value = true
+    }
   } finally {
     submitting.value = false
   }
 }
 
-// 赛后已揭榜提交轮询（v0.37 迁 usePolling）：原手写 setInterval 只在「找到该 sid
-// 且终态」才停——loadMine 失败或 sid 出页窗时 1.5s 死循环 + 拦截器每拍 toast 刷屏。
-// 现在：拉取失败或连续 5 拍未找到该 sid 即停（列表里已经看不到它，无需再刷）；
-// 后台标签自动暂停；10 分钟硬上限兜底。
+// 赛后已揭榜提交等待（v0.37 迁 usePolling；v0.98 双通道）：SSE sub 事件为主
+//（揭榜翻 published 与终态都出事件，隐藏期服务端已抑制——前端零泄露）、1.5s 轮询
+// 兜底（pushActive 时空转，断连自动恢复）；拉取失败或连续 5 拍未找到该 sid 即停
+// （列表里已经看不到它，无需再刷）；10 分钟硬上限兜底。
 let revealedSid = 0
 let pollMisses = 0
 const revealedPoll = usePolling(
   async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位
     if (!revealedSid) return false
     let loaded = false
     try {
@@ -223,10 +236,22 @@ const revealedPoll = usePolling(
   { maxDurationMs: 10 * 60_000 },
 )
 
+// SSE sub 订阅：自己的提交信号即拉一拍 mine（sid 可能不在事件里匹配上——场次
+// 提交的 status 事件即可触发揭榜重拉，进度类高频忽略）
+useTopic('sub', (raw) => {
+  const ev = raw as unknown as SubPushEvent
+  if (ev.kind !== 'status') return
+  if (revealedSid) void loadMine().catch(() => {})
+})
+
+watch(pushActive, (on) => {
+  if (!on && revealedSid) revealedPoll.restart()
+})
+
 function pollRevealed(sid: number) {
   revealedSid = sid
   pollMisses = 0
-  revealedPoll.restart()
+  if (!pushActive.value) revealedPoll.restart()
 }
 
 onMounted(load)
@@ -387,6 +412,9 @@ watch(
       <!-- 我的提交（v0.90 收敛进 MySubmissionsDialog 赛时模式）：外部注入场内提交列表，
            隐藏期不出分（状态列「已记录」/耗时内存横杠/详情裁测试点与 AI），点行看自己代码 -->
       <MySubmissionsDialog v-model="showMine" :problem-id="pid" :rows="mine" :revealed="revealed" />
+
+    <!-- 递交即弹窗（v0.98）：非隐藏场次本次提交状态全程跟随 -->
+    <SubmissionDetailDialog v-model="showSubmitDetail" :submission-id="submitDetailId" />
     </template>
   </div>
 </template>

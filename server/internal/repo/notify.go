@@ -14,6 +14,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	"soj/internal/push"
 )
 
 // 通知类型（前端图标/文案同源）。
@@ -77,6 +79,9 @@ func (r *Repo) UpsertNotification(ctx context.Context, uid int64, in NotifyInput
 				"createdAt": time.Now(), "purgeAt": purge,
 			}},
 			options.UpdateOne().SetUpsert(true))
+		if err == nil {
+			push.ToUser(uid, push.TopicNotify, map[string]string{"typ": in.Typ}) // SSE 徽标信号（v0.98）
+		}
 		return err
 	}
 	id, err := r.nextSeq(ctx, "notify")
@@ -84,6 +89,9 @@ func (r *Repo) UpsertNotification(ctx context.Context, uid int64, in NotifyInput
 		return err
 	}
 	_, err = r.notifications.InsertOne(ctx, newNotification(id, uid, in, purge))
+	if err == nil {
+		push.ToUser(uid, push.TopicNotify, map[string]string{"typ": in.Typ}) // SSE 徽标信号（v0.98）
+	}
 	return err
 }
 
@@ -117,7 +125,15 @@ func (r *Repo) NotifyUsers(ctx context.Context, uids []int64, in NotifyInput, re
 		})
 	}
 	_, err = r.notifications.InsertMany(ctx, docs)
-	return err
+	if err != nil {
+		return err
+	}
+	// SSE 通知到达信号（v0.98）：web 进程在线连接即时亮徽标；judge-only 未
+	// Init 自动 no-op（通知落库不依赖推送，推送只是加速器）
+	for _, uid := range uids {
+		push.ToUser(uid, push.TopicNotify, map[string]string{"typ": in.Typ})
+	}
+	return nil
 }
 
 // ListNotifications 收件箱分页（最新在前；可筛未读/类型）。

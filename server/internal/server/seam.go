@@ -82,6 +82,7 @@ type RepoAPI interface {
 	RawAchievements(ctx context.Context, uid int64) ([]repo.Achievement, error)
 	TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted, cancelled bool) (*repo.GameStats, error)
 	Wrongbook(ctx context.Context, uid int64, limit int, minAge time.Duration) ([]repo.RevengeRow, error)
+	WatchSubmissionChanges(ctx context.Context, fn func(repo.SubSignal)) error
 	RevengeSlotUsed(ctx context.Context, uid int64) bool
 	EnsureGradePromotion(ctx context.Context) (int64, error)
 	GradePromotionInfo(ctx context.Context) (*repo.GradePromoInfo, error)

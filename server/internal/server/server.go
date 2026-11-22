@@ -17,6 +17,7 @@ import (
 
 	"soj/internal/config"
 	"soj/internal/judge"
+	"soj/internal/push"
 	"soj/internal/repo"
 	"soj/internal/sandbox"
 )
@@ -99,6 +100,7 @@ func Run(ctx context.Context, deps *Deps) {
 		sandbox:       deps.Sandbox,
 		waker:         deps.Waker,
 		judger:        deps.Judge,
+		hub:           push.Init(), // SSE 扇出（v0.98）：web 进程持有；repo 层钩子走包级全局
 		rank:          newRankCache(deps.Repo),
 		limiter:       newRateLimiter(),
 		runLimit:      newRateLimiter(),
@@ -189,6 +191,9 @@ func Run(ctx context.Context, deps *Deps) {
 		api.GET("/levels", AuthOptional(h), h.GetLevels)
 
 		api.POST("/submissions", AuthRequired(h), h.CreateSubmission)
+		// SSE 事件流（v0.98 全站推送）：登录态长连接，fetch 流式读取过 Bearer 鉴权；
+		// gzip/apitimeout/slowlog 三闸按路径放行（见各中间件），Caddy 侧配置排除压缩
+		api.GET("/events", AuthRequired(h), h.Events)
 		// 提交记录总表需「查看全部提交」权限位（学生查自己的历史走题目页「我的提交」）
 		api.GET("/submissions", AuthRequired(h), RequirePerm(repo.PermSubmissionViewAll), h.ListSubmissions)
 		// 选人筛选（提交记录/所有代码的「选手」下拉）：登录即可按用户名/昵称模糊找账号
@@ -496,7 +501,8 @@ func Run(ctx context.Context, deps *Deps) {
 
 	// 开赛/开考提醒扫描（v0.24）：Web 进程内每分钟一扫，判题进程（--judge-only）不启
 	go h.notifyStartLoop(ctx)
-	go h.bountyRefundLoop(ctx) // 悬赏到期退款（v0.33-②）：10 分钟巡检
+	go h.bountyRefundLoop(ctx)  // 悬赏到期退款（v0.33-②）：10 分钟巡检
+	go h.watchSubmissions(ctx)  // 提交变更流消费（v0.98）：judge 容器逐点/终态信号经此扇出 SSE
 
 	slog.Info("SOJ 启动", "component", "web", "addr", cfg.Addr, "workers", cfg.JudgeWorkers, "sandbox", cfg.SandboxAddr)
 

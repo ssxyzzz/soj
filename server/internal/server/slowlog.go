@@ -16,8 +16,14 @@ const slowReqWarnThreshold = time.Second
 func slowLog() gin.HandlerFunc { return slowLogWith(slowReqWarnThreshold) }
 
 // slowLogWith 阈值可注入（单测用毫秒级阈值，避免真等 1 秒）。
+// SSE 事件流（v0.98）按寿命上限主动轮转（8min 一关一开），若不豁免每条连接
+// 断开都会打一条 Warn——频次 = 在线标签页数 × 每小时 7.5 次重连，纯噪音，跳过。
 func slowLogWith(threshold time.Duration) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if c.Request.URL.Path == "/api/events" {
+			c.Next()
+			return
+		}
 		start := time.Now()
 		c.Next()
 		if d := time.Since(start); d >= threshold {

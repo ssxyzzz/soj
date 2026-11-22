@@ -71,7 +71,7 @@ func (ir *interactorRunner) recompile(ctx context.Context) (string, error) {
 }
 
 // evaluateInteractive 交互题主判：逐测试点双进程管道执行。
-func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, l *lang.Language, fileID string, p *repo.Problem) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, l *lang.Language, fileID string, p *repo.Problem, prog *progressReporter) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	ir := j.interactorRunnerFor(p)
 	if ir == nil {
 		return repo.StatusSystemError, 0, 0, 0, "交互题缺少交互器（interactor.cpp），请联系老师补配", nil
@@ -171,6 +171,7 @@ func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, 
 		// 选手随后再写会收到 SIGPIPE（退出状态 13），那是正常收尾而非选手错误
 		if irRes.Status == "Accepted" && irRes.ExitStatus == 0 {
 			detail = append(detail, &repo.CaseResult{Index: tc.Index, Status: "AC", TimeMS: t, MemKB: m})
+			prog.Add(detail[len(detail)-1])
 			passed++
 			continue
 		}
@@ -178,6 +179,7 @@ func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, 
 		if userRes.Status == "Time Limit Exceeded" || userRes.Status == "Memory Limit Exceeded" {
 			cs, fs, reason := caseVerdict(userRes, "", "", outputComparer{})
 			detail = append(detail, &repo.CaseResult{Index: tc.Index, Status: cs, TimeMS: t, MemKB: m, Msg: reason})
+			prog.Add(detail[len(detail)-1])
 			if failStatus == "" {
 				failStatus, failInfo = fs, fmt.Sprintf("第 %d 个测试点: %s", i+1, reason)
 			}
@@ -200,6 +202,7 @@ func (j *Judger) evaluateInteractive(ctx context.Context, sub *repo.Submission, 
 				fmt.Sprintf("第 %d 个测试点: %s", i+1, reason), detail
 		}
 		detail = append(detail, &repo.CaseResult{Index: tc.Index, Status: "WA", TimeMS: t, MemKB: m, Msg: reason})
+		prog.Add(detail[len(detail)-1])
 		if failStatus == "" {
 			failStatus, failInfo = repo.StatusWrongAnswer, fmt.Sprintf("第 %d 个测试点: %s", i+1, reason)
 		}

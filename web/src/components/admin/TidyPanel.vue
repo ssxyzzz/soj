@@ -18,9 +18,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import LazySelectCell from '@/components/LazySelectCell.vue'
 import ManualTidyPanel from './ManualTidyPanel.vue'
-import type { TidyApplyItem, TidyHistoryBatch, TidyHistoryDetail, TidyKind, TidySuggestion, TidyStatus } from '@/types'
+import type { TaskPushEvent, TidyApplyItem, TidyHistoryBatch, TidyHistoryDetail, TidyKind, TidySuggestion, TidyStatus } from '@/types'
 
 // 模式卡（v0.49 双模式 + v0.92 历史第三卡）：AI整理（建议流）/ 手动整理（直改流）/ 整理历史（回看）
 const MODE_META = {
@@ -306,7 +307,8 @@ const selectedCount = computed(() => selected.value.size)
 const pollFails = ref(0)
 // v0.65 轮询归一（usePolling 全站唯一轮询基建）：2s 拍 + 失败 5 连停 + 终态停，
 // 后台标签自动暂停、作用域卸载自清（原裸 setInterval 后台空转）
-const poll = usePolling(async () => {
+// v0.98 双通道：SSE task 事件为主（进度/终态即拉一拍）、轮询兜底（pushActive 空转）
+async function pollTick() {
   const ok = await fetchStatus(true)
   if (!ok) {
     if (++pollFails.value >= 5) {
@@ -335,13 +337,27 @@ const poll = usePolling(async () => {
     }
     syncSelection(suggestions.value)
   }
+}
+
+const poll = usePolling(async () => {
+  if (pushActive.value) return // 推送在线：轮询拍空转让位
+  await pollTick()
   // background: true——worker 定时器驱动，切走标签页不受后台节流钳速（v0.71 生产实锤：
   // 后台标签 setTimeout 被钳到约 1 次/分钟，进度条看似卡死而服务端批次 0-10s/批）
 }, 2000, { background: true })
 
+useTopic('task', (raw) => {
+  const ev = raw as unknown as TaskPushEvent
+  if (ev.job === 'tidy') void pollTick()
+})
+
+watch(pushActive, (on) => {
+  if (!on && running.value) poll.restart()
+})
+
 function startPoll() {
   pollFails.value = 0
-  poll.restart()
+  if (!pushActive.value) poll.restart()
 }
 
 // 翻页/换每页条数：终态下按新条件拉取对应切片（轮询进行中由轮询自然带新页），

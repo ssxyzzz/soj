@@ -329,8 +329,11 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 		return repo.StatusCancelled, 0, 0, 0, "已取消评测", nil
 	}
 
+	// 逐点进度回写器（v0.98）：全题目默认开启；回写失败自停用不影响判题
+	prog := j.newProgressReporter(sub, caseTotalOf(problem))
 	var fileID string
 	if language.NeedCompile {
+		prog.stage("compile") // 编译可能耗时数十秒，前端先见「编译中…」
 		id, compileStatus, compileInfo, err := j.compile(ctx, language, code)
 		if err != nil {
 			return repo.StatusSystemError, 0, 0, 0, "沙箱调用失败: " + err.Error(), nil
@@ -353,7 +356,7 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 
 	// 交互题（v0.9.2）：interactor 与选手双进程管道判分（逐点等分，不走比对/子任务管道）
 	if problem.IsInteractive() {
-		return j.evaluateInteractive(ctx, sub, language, fileID, problem)
+		return j.evaluateInteractive(ctx, sub, language, fileID, problem, prog)
 	}
 
 	// 文件 IO 模式（v0.5.2-3）：仅比赛/考试「本场启用文件 IO」时生效；
@@ -373,9 +376,9 @@ func (j *Judger) evaluate(ctx context.Context, sub *repo.Submission) (status str
 	}
 
 	if len(problem.Subtasks) > 0 {
-		return j.evaluateSubtasks(ctx, sub, language, fileID, code, problem, cmp, chk, fio)
+		return j.evaluateSubtasks(ctx, sub, language, fileID, code, problem, cmp, chk, fio, prog)
 	}
-	return j.evaluatePoints(ctx, sub, language, fileID, code, problem, cmp, chk, fio)
+	return j.evaluatePoints(ctx, sub, language, fileID, code, problem, cmp, chk, fio, prog)
 }
 
 // evalState 评测过程中的累计状态。提交级耗时/内存为各测试点之**和**（总耗时/总内存）。
@@ -383,6 +386,13 @@ type evalState struct {
 	sumTimeMS int
 	sumMemKB  int
 	detail    []*repo.CaseResult
+	prog      *progressReporter // 逐点进度回写（v0.98）：nil = 不回写（单测/自测路径）
+}
+
+// appendCase 追加测试点结果：本地累计 + 进度回写投递（200ms 合批落库）。
+func (s *evalState) appendCase(cr *repo.CaseResult) {
+	s.detail = append(s.detail, cr)
+	s.prog.Add(cr)
 }
 
 func (s *evalState) observe(res *sandbox.Result) (timeMS, memKB int) {
@@ -594,8 +604,8 @@ func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.R
 
 // evaluatePoints 单点等分模式：每点 100/n 分，按通过点数给分。全量评测——任何测试点
 // 失败（WA/RE/MLE/TLE/OLE）都不终止，跑完全部点；整卷状态与提示取首个失败点。
-func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
-	st := &evalState{}
+func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams, prog *progressReporter) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+	st := &evalState{prog: prog}
 	n := len(problem.Cases)
 	// 点间检查 2s 节流（快赢批⑤）：心跳 goroutine 已独立保租约，点间查询只是取消与
 	// 回收的尽力检测——原每点一次 SubmissionLease，60 点题一份提交 60+ 次 Mongo 往返；
@@ -633,7 +643,7 @@ func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, langu
 			reason += waFileIOHint(code, fio)
 		}
 		if caseStatus != "" {
-			st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
+			st.appendCase(&repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
 		}
 		if finalStatus == "" {
 			passed++
@@ -654,7 +664,7 @@ func (j *Judger) evaluatePoints(ctx context.Context, sub *repo.Submission, langu
 // evaluateSubtasks 子任务模式：组内测试点全过才得该组分。全量评测——失败点不终止、
 // 不跳过组内剩余点，全部测试点跑完。
 // 总分 100 判 Accepted；否则以第一个失败点的状态作为整份提交状态（保留部分分）。
-func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
+func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, language *lang.Language, fileID, code string, problem *repo.Problem, cmp outputComparer, chk *checkerRunner, fio fileIOParams, prog *progressReporter) (status string, timeMS, memKB, score int, info string, detail []*repo.CaseResult) {
 	// 点间检查 2s 节流（同 evaluatePoints，快赢批⑤）
 	lastCheck := time.Time{}
 	checkGate := func() (cancelRequested, leaseLost bool) {
@@ -668,7 +678,7 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, lan
 	for _, tc := range problem.Cases {
 		byIndex[tc.Index] = tc
 	}
-	st := &evalState{}
+	st := &evalState{prog: prog}
 	total := 0
 	firstFailStatus, firstFailReason := "", ""
 
@@ -701,7 +711,7 @@ func (j *Judger) evaluateSubtasks(ctx context.Context, sub *repo.Submission, lan
 				reason += waFileIOHint(code, fio)
 			}
 			if caseStatus != "" {
-				st.detail = append(st.detail, &repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
+				st.appendCase(&repo.CaseResult{Index: tc.Index, Status: caseStatus, TimeMS: t, MemKB: m, Msg: reason})
 			}
 			if finalStatus != "" {
 				passed = false

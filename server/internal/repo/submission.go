@@ -84,6 +84,12 @@ type Submission struct {
 	// 补写 raceMs（挑战终判用时，上榜与名次加成依据）
 	RaceID int64 `bson:"raceId,omitempty"`
 	RaceMS int64 `bson:"raceMs,omitempty"`
+	// 逐点进度（v0.98）：判题期瞬态字段——judge 逐测试点增量回写（200ms 合批），
+	// 终态/取消/重测/回收统一清除，API 与 status 同级下发（轻量信号，非明细）；
+	// stage 标记编译/运行阶段（compile/run），前端「编译中…/判题中 12/20」
+	CaseDone  int    `bson:"caseDone,omitempty"`
+	CaseTotal int    `bson:"caseTotal,omitempty"`
+	Stage     string `bson:"stage,omitempty"`
 	// 游戏感批（v0.41）：首 AC 发玉回填（开箱 payload——判题路径写，本人提交详情下发）
 	JadeTotal   int64         `bson:"jadeTotal,omitempty"`
 	JadeDaily   bool          `bson:"jadeDaily,omitempty"`
@@ -236,7 +242,10 @@ func (r *Repo) ClaimSubmission(ctx context.Context, judgeName string) (*Submissi
 	var s Submission
 	err := r.submissions.FindOneAndUpdate(ctx,
 		bson.M{"status": StatusPending},
-		bson.M{"$set": bson.M{"status": StatusJudging, "judge": judgeName, "claimedAt": now, "heartbeatAt": now}},
+		bson.M{"$set": bson.M{"status": StatusJudging, "judge": judgeName, "claimedAt": now, "heartbeatAt": now,
+			// 领取即清场（v0.98 逐点回写）：上一判题器失联被回收重排队时，可能残留
+			// 部分推送的 detail/caseDone——新判题器从零开始，不清场会与新推送叠加成重复点
+			"detail": bson.A{}, "caseDone": 0, "caseTotal": 0, "stage": ""}},
 		options.FindOneAndUpdate().
 			// bson.D 保序：多键排序必须显式有序（bson.M 键序随机）
 			SetSort(bson.D{{Key: "priority", Value: -1}, {Key: "_id", Value: 1}}).
@@ -271,7 +280,44 @@ func (r *Repo) FinishSubmission(ctx context.Context, sid int64, judgeName, statu
 		set["detail"] = detail
 	}
 	res, err := r.submissions.UpdateOne(ctx,
-		bson.M{"_id": sid, "judge": judgeName}, bson.M{"$set": set})
+		bson.M{"_id": sid, "judge": judgeName}, bson.M{
+			"$set":   set,
+			"$unset": bson.M{"caseDone": "", "caseTotal": "", "stage": ""}, // 终态清逐点瞬态字段（v0.98）
+		})
+	if err == nil && res.MatchedCount == 0 {
+		return ErrLeaseLost
+	}
+	return err
+}
+
+// PushCaseResults 逐测试点增量回写（v0.98 全题目开启）：judge 每完成一批测试点
+// （200ms 合批）调用，$push 进 detail 并刷新进度计数。租约护栏与 FinishSubmission
+// 同款（judge 必须仍是持有者且在判题中）——失联重排队后旧判题器的迟到推送直接失效，
+// 配合领取清场保证不产生重复点。回写失败由 judge 侧停用本份提交的 reporter 兜底。
+func (r *Repo) PushCaseResults(ctx context.Context, sid int64, judgeName string, batch []*CaseResult, done, total int) error {
+	if len(batch) == 0 {
+		return nil
+	}
+	docs := make(bson.A, len(batch))
+	for i, cr := range batch {
+		docs[i] = cr
+	}
+	res, err := r.submissions.UpdateOne(ctx,
+		bson.M{"_id": sid, "status": StatusJudging, "judge": judgeName},
+		bson.M{"$push": bson.M{"detail": bson.M{"$each": docs}},
+			"$set": bson.M{"caseDone": done, "caseTotal": total, "stage": "run"}})
+	if err == nil && res.MatchedCount == 0 {
+		return ErrLeaseLost
+	}
+	return err
+}
+
+// SetCaseStage 判题阶段信号（v0.98）：编译期先标记（前端「编译中…」），进入逐点
+// 回写后由 PushCaseResults 覆写为 run。objective/函数题等无测试点路径不出信号。
+func (r *Repo) SetCaseStage(ctx context.Context, sid int64, judgeName, stage string, total int) error {
+	res, err := r.submissions.UpdateOne(ctx,
+		bson.M{"_id": sid, "status": StatusJudging, "judge": judgeName},
+		bson.M{"$set": bson.M{"stage": stage, "caseTotal": total, "caseDone": 0}})
 	if err == nil && res.MatchedCount == 0 {
 		return ErrLeaseLost
 	}
@@ -308,7 +354,9 @@ func (r *Repo) ReclaimExpiredLeases(ctx context.Context, staleBefore time.Time) 
 		bson.M{"heartbeatAt": bson.M{"$lt": staleBefore}},
 		bson.M{"heartbeatAt": bson.M{"$exists": false}}, // 升级前的存量 Judging（Bootstrap 已兜底重排队）
 	}}
-	unset := bson.M{"judge": "", "claimedAt": "", "heartbeatAt": ""}
+	// 回收清场：租约字段 + 逐点瞬态字段一并清（v0.98——失联判题器的部分进度是
+	// 垃圾数据，重排队后由新判题器从零回写；detail 残留同 Pending 取消路径清掉）
+	unset := bson.M{"judge": "", "claimedAt": "", "heartbeatAt": "", "caseDone": "", "caseTotal": "", "stage": ""}
 	res, err := r.submissions.UpdateMany(ctx,
 		bson.M{"status": StatusCancelRequested, "$or": stale["$or"]},
 		bson.M{"$set": bson.M{
@@ -343,7 +391,8 @@ func (r *Repo) RequestCancelSubmission(ctx context.Context, sid int64) (string, 
 		bson.M{"$set": bson.M{
 			"status": StatusCancelled, "score": 0, "timeMs": 0, "memKb": 0,
 			"errorInfo": "已取消评测", "judgedAt": time.Now(),
-		}, "$unset": bson.M{"detail": "", "judge": "", "claimedAt": "", "heartbeatAt": ""}},
+		}, "$unset": bson.M{"detail": "", "judge": "", "claimedAt": "", "heartbeatAt": "",
+			"caseDone": "", "caseTotal": "", "stage": ""}},
 	).Err()
 	if err == nil {
 		return StatusCancelled, nil
@@ -386,7 +435,8 @@ func rejudgeUpdate(priority int) bson.M {
 			"status": StatusPending, "priority": priority,
 			"score": 0, "timeMs": 0, "memKb": 0, "errorInfo": "", "detail": bson.A{},
 		},
-		"$unset": bson.M{"judge": "", "claimedAt": "", "heartbeatAt": ""},
+		"$unset": bson.M{"judge": "", "claimedAt": "", "heartbeatAt": "",
+			"caseDone": "", "caseTotal": "", "stage": ""},
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"soj/internal/config"
 	"soj/internal/judge"
+	"soj/internal/push"
 	"soj/internal/repo"
 	"soj/internal/sandbox"
 	"soj/internal/testdata"
@@ -33,6 +34,7 @@ type Handlers struct {
 	store    testdata.Provider // 测试数据读取（题目样例展示用）
 	waker    *judge.Waker      // 提交即时唤醒（v0.7.1）：判题同进程时空闲 worker 近零延迟领取
 	judger   *judge.Judger     // 自测直跑（v0.23）：复用判题器的编译串行闸与沙箱客户端
+	hub      *push.Hub         // SSE 事件扇出（v0.98）：/api/events 订阅 + change stream 消费
 	rank     *rankCache
 	limiter  *rateLimiter
 	runLimit *rateLimiter // 自测每 人限流（v0.23，独立于提交限流窗口）

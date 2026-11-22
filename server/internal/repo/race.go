@@ -20,6 +20,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"soj/internal/push"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
@@ -418,6 +420,7 @@ func (r *Repo) sweepRaces(ctx context.Context, classID int64) {
 			continue // 并发双结算落败方
 		}
 		r.invalidateRaceBoard(rc.ID) // 结算固化，微缓存失效（v0.51）
+		push.ToAll(push.TopicRace, push.RaceEvent{RaceID: rc.ID, Kind: "settle"}, "") // SSE 对局结算信号（v0.98）
 		if winner.UID == 0 {
 			continue // 空榜不广播
 		}

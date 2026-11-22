@@ -93,6 +93,13 @@ func (w *gzipWriter) close() {
 // Gzip 对支持 gzip 的客户端启用响应压缩。
 func Gzip() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// SSE 事件流（v0.98）禁压缩：text/event-stream 虽可分块 Flush，但压缩缓冲
+		// 会推迟首帧与逐帧到达（客户端到帧延迟 = 压缩窗口），且 event-stream 语义上
+		// 不应有 Content-Encoding——直接透传
+		if c.Request.URL.Path == "/api/events" {
+			c.Next()
+			return
+		}
 		// Range 断点续传与压缩互斥，直接透传
 		if !clientAcceptsGzip(c.Request.Header.Get("Accept-Encoding")) ||
 			c.Request.Header.Get("Range") != "" {

@@ -422,6 +422,15 @@ func submissionJSON(s *repo.Submission, withCode bool, revealCancelReason bool) 
 	if s.ExamTitle != "" {
 		m["exam_title"] = s.ExamTitle
 	}
+	// 逐点进度（v0.98）：判题期瞬态信号与 status 同级公开（轻量计数，非明细——
+	// detail 仍与代码同门槛）；终态字段已清，下发省略
+	if s.CaseTotal > 0 {
+		m["case_done"] = s.CaseDone
+		m["case_total"] = s.CaseTotal
+	}
+	if s.Stage != "" {
+		m["stage"] = s.Stage
+	}
 	if withCode {
 		m["code"] = s.Code
 		m["detail"] = s.Detail // 测试点明细与代码同门槛（本人/总表/满分解锁）

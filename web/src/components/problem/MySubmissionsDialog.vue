@@ -7,13 +7,15 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { aiTutorApi, problemApi, submissionApi } from '@/api'
+import CaseLiveBar from '@/components/CaseLiveBar.vue'
 import CodePane from '@/components/CodePane.vue'
 import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { useUserStore } from '@/stores/user'
-import type { ContestMySubmission, Submission } from '@/types'
+import type { ContestMySubmission, Submission, SubPushEvent } from '@/types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -158,16 +160,30 @@ async function refreshMineDetail() {
   loadMine(myPage.value)
 }
 
-// 重测轮询（复用 usePolling 既有范式，口径同 SubmissionDetailDialog）：至终态停并提示
+// 重测等待（v0.98 双通道，口径同 SubmissionDetailDialog）：SSE sub 事件为主、
+// 1.2s 轮询兜底（pushActive 时空转，断连自动恢复）；progress 信号 300ms 节流拉
+// 详情喂弹窗逐点进度，终态停并提示
 let minePollId = 0
-const minePoll = usePolling(
-  async () => {
-    const s = await submissionApi.get(minePollId)
+let mineProgressTimer: ReturnType<typeof setTimeout> | null = null
+
+async function mineFetch(id: number) {
+  try {
+    const s = await submissionApi.get(id)
     if (mineDetail.value?.id === s.id) mineDetail.value = s
-    if (isQueueStatus(s.status)) return // 队列/评测/取消中：续拍
+    if (isQueueStatus(s.status)) return
+    minePollId = 0
     ElMessage.success(`#${s.id} 重测完成`)
     loadMine(myPage.value)
-    return false
+  } catch {
+    /* 拦截器已提示；轮询续拍自愈 */
+  }
+}
+
+const minePoll = usePolling(
+  async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位
+    if (!minePollId) return false
+    await mineFetch(minePollId)
   },
   1200,
   {
@@ -175,6 +191,24 @@ const minePoll = usePolling(
     onExpire: () => ElMessage.warning('评测等待时间过长，已停止自动刷新'),
   },
 )
+
+useTopic('sub', (raw) => {
+  const ev = raw as unknown as SubPushEvent
+  if (ev.sid !== minePollId) return
+  if (ev.kind === 'progress') {
+    if (mineProgressTimer != null) return
+    mineProgressTimer = setTimeout(() => {
+      mineProgressTimer = null
+      if (minePollId) void mineFetch(minePollId)
+    }, 300)
+  } else {
+    void mineFetch(ev.sid)
+  }
+})
+
+watch(pushActive, (on) => {
+  if (!on && minePollId) minePoll.restart()
+})
 
 async function onMineRejudge() {
   const s = mineDetail.value
@@ -184,7 +218,8 @@ async function onMineRejudge() {
     await submissionApi.rejudge(s.id)
     ElMessage.success(`#${s.id} 已加入重测队列`)
     minePollId = s.id
-    minePoll.restart()
+    if (!pushActive.value) minePoll.restart()
+    else void mineFetch(s.id)
   } finally {
     rejudging.value = false
   }
@@ -460,7 +495,13 @@ defineExpose({ refresh: loadMine })
       </template>
       <div class="detail-sub">代码</div>
       <CodePane :code="mineDetail.code" :language="mineDetail.language" />
-      <template v-if="isRevealed && mineDetail.detail?.length">
+      <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮（SSE progress 信号驱动），终态回落下方明细表 -->
+      <template v-if="isRevealed && isQueueStatus(mineDetail.status) && mineDetail.case_total">
+        <div class="detail-sub">评测进度</div>
+        <CaseLiveBar :sub="mineDetail" />
+      </template>
+      <!-- 明细表终态回落（v0.98）：判题中展示归色块条独占，表格只在终态出现 -->
+      <template v-if="isRevealed && !isQueueStatus(mineDetail.status) && mineDetail.detail?.length">
         <div class="detail-sub">测试点明细</div>
         <el-table stripe :data="sortedDetail" border>
           <el-table-column prop="index" label="测试点" width="90" />

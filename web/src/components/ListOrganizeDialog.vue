@@ -16,8 +16,9 @@ import TagFilter from '@/components/problem/TagFilter.vue'
 import TierBadge from '@/components/TierBadge.vue'
 import { listApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { draftToChapters } from '@/utils/listDraft'
-import type { ListEntryDraft, ListOrganizeSuggest, ListOrganizeStatus } from '@/types'
+import type { ListEntryDraft, ListOrganizeSuggest, ListOrganizeStatus, TaskPushEvent } from '@/types'
 
 const props = defineProps<{
   modelValue: boolean
@@ -116,7 +117,7 @@ watch(
         status.value = st
         if (st.state === 'running') {
           step.value = 'running'
-          poll.restart()
+          if (!pushActive.value) poll.restart()
         } else if (st.state === 'done' || st.state === 'cancelled') {
           hasLast.value = true
         }
@@ -144,25 +145,36 @@ function close() {
 
 const failMsg = ref('')
 
-const poll = usePolling(
-  async () => {
-    const st = await listApi.organizeStatus(props.listId)
-    status.value = st
-    if (st.state === 'running') return true
-    // 终态必停轮：预览装载失败也要落到 failed 面板可见报错，不得抛给轮询吞掉续转
-    try {
-      if (st.state === 'done' || st.state === 'cancelled') {
-        await loadPreview()
-      } else {
-        failMsg.value = st.error || '任务异常终止'
-        step.value = 'failed'
-      }
-    } catch (e) {
-      console.error('[list-organize] 预览装载失败', e)
-      failMsg.value = '读取整理结果失败：' + (e instanceof Error ? e.message : '')
+// v0.98 双通道：SSE task 事件为主（进度/终态即拉一拍）、轮询兜底（pushActive
+// 空转，断连自动恢复）；pollTick 是共用拍体
+async function pollTick(): Promise<boolean> {
+  const st = await listApi.organizeStatus(props.listId)
+  status.value = st
+  if (st.state === 'running') return true
+  // 终态必停轮：预览装载失败也要落到 failed 面板可见报错，不得抛给轮询吞掉续转
+  try {
+    if (st.state === 'done' || st.state === 'cancelled') {
+      await loadPreview()
+    } else {
+      failMsg.value = st.error || '任务异常终止'
       step.value = 'failed'
     }
-    return false
+  } catch (e) {
+    console.error('[list-organize] 预览装载失败', e)
+    failMsg.value = '读取整理结果失败：' + (e instanceof Error ? e.message : '')
+    step.value = 'failed'
+  }
+  return false
+}
+
+const poll = usePolling(
+  async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位
+    try {
+      return await pollTick()
+    } catch {
+      return true // 暂态失败续拍（拦截器已提示）
+    }
   },
   2000,
   {
@@ -175,6 +187,16 @@ const poll = usePolling(
     },
   },
 )
+
+useTopic('task', (raw) => {
+  const ev = raw as unknown as TaskPushEvent
+  if (ev.job !== 'organize') return
+  void pollTick().catch(() => {})
+})
+
+watch(pushActive, (on) => {
+  if (!on && status.value?.state === 'running') poll.restart()
+})
 
 // ---- 发起 ----
 
@@ -191,7 +213,7 @@ async function run() {
   })
   hasLast.value = false
   step.value = 'running'
-  poll.restart()
+  if (!pushActive.value) poll.restart()
 }
 
 async function cancelTask() {

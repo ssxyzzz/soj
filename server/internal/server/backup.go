@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"soj/internal/backup"
+	"soj/internal/repo"
 )
 
 // backupJob 备份任务（全站单任务；job 在锁下创建/替换）。
@@ -61,6 +62,7 @@ func (j *backupJob) finish(state, errMsg, file string, size int64) {
 		return
 	}
 	j.state, j.errMsg, j.file, j.fileSize, j.endedAt = state, errMsg, file, size, time.Now()
+	pushTask("backup", state, repo.PermBackupRun, 0, 0) // SSE 任务终态信号（v0.98）
 }
 
 func (h *Handlers) backupOptions() backup.Options {
@@ -131,6 +133,7 @@ func (h *Handlers) BackupRun(c *gin.Context) {
 	job := &backupJob{state: "running", tier: tier, startedAt: time.Now(), cancel: cancel}
 	h.backupTask = job
 	h.backupMu.Unlock()
+	pushTask("backup", "running", repo.PermBackupRun, 0, 0) // SSE 任务开播信号（v0.98）
 
 	go func() {
 		defer func() {

@@ -4,17 +4,18 @@
 // v0.26 任务化：备份改后台任务（万题数据打包 GB 级不再占住请求）——run 启动即返、
 // 2s 轮询状态、可取消，完成后按文件名走下载接口流式取包。
 // 文案全部写死（2026-10-26 拍板）：不再提供站点自定义版本，原系统设置 backupGuide 字段退役。
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { adminApi, mdApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import { copyText } from '@/utils/clipboard'
 import { BACKUP_DOWNLOAD_LIMIT_BYTES, BACKUP_DOWNLOAD_URL } from '@/types'
-import type { BackupStatus } from '@/types'
+import type { BackupStatus, TaskPushEvent } from '@/types'
 
 const userStore = useUserStore()
 
@@ -82,10 +83,29 @@ const keySaved = ref(false)
 
 // 备份任务（v0.26）：running 期 2s 轮询；终态提示一次后停表
 // v0.65 轮询归一（usePolling 全站唯一轮询基建）：后台标签自动暂停、作用域卸载自清
+// v0.98 双通道：SSE task 事件为主（终态即拉一拍走提示分支）、轮询兜底（pushActive 空转）
 const jobState = computed(() => backupStatus.value?.job ?? null)
 const jobRunning = computed(() => jobState.value?.state === 'running')
 let pollFails = 0
+
+// 终态提示一次（轮询拍与 SSE 事件共用的唯一出口）
+function announceTerminal() {
+  const st = jobState.value?.state
+  if (!st || st === 'running') return false
+  poll.stop()
+  if (st === 'done') {
+    ElMessage.success('备份完成，服务器已留存；小档点文件名下载，大档用「服务器取包」命令')
+  } else if (st === 'cancelled') {
+    ElMessage.info('备份已取消')
+  } else {
+    ElMessage.error(`备份失败：${jobState.value?.error || '未知错误'}`)
+  }
+  backingUp.value = false
+  return true
+}
+
 const poll = usePolling(async () => {
+  if (pushActive.value) return // 推送在线：轮询拍空转让位
   try {
     await loadBackup()
     pollFails = 0
@@ -99,23 +119,22 @@ const poll = usePolling(async () => {
     }
     return
   }
-  const st = jobState.value?.state
-  if (st && st !== 'running') {
-    poll.stop()
-    if (st === 'done') {
-      ElMessage.success('备份完成，服务器已留存；小档点文件名下载，大档用「服务器取包」命令')
-    } else if (st === 'cancelled') {
-      ElMessage.info('备份已取消')
-    } else {
-      ElMessage.error(`备份失败：${jobState.value?.error || '未知错误'}`)
-    }
-    backingUp.value = false
-  }
+  announceTerminal()
 }, 2000)
+
+useTopic('task', (raw) => {
+  const ev = raw as unknown as TaskPushEvent
+  if (ev.job !== 'backup') return
+  void loadBackup().then(() => announceTerminal())
+})
+
+watch(pushActive, (on) => {
+  if (!on && jobRunning.value) poll.restart()
+})
 
 function startPoll() {
   pollFails = 0
-  poll.restart()
+  if (!pushActive.value) poll.restart()
 }
 
 async function runBackup() {

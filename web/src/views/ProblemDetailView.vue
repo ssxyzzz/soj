@@ -9,6 +9,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { assignmentApi, problemApi, submissionApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { useImmersiveMode } from '@/composables/useImmersiveMode'
 import CodeWorkbench from '@/components/CodeWorkbench.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -18,6 +19,7 @@ import AiTutorPanel from '@/components/AiTutorPanel.vue'
 import ObjectiveAnswer from '@/components/ObjectiveAnswer.vue'
 import ObjectiveSolutionCard from '@/components/ObjectiveSolutionCard.vue'
 import MySubmissionsDialog from '@/components/problem/MySubmissionsDialog.vue'
+import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import AllCodesDialog from '@/components/problem/AllCodesDialog.vue'
 import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import ProblemHeadCard from '@/components/problem/cards/ProblemHeadCard.vue'
@@ -33,7 +35,7 @@ import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { useGameFeastStore } from '@/stores/gameFeast'
 import { isQueueStatus, statusStyle } from '@/utils/format'
-import type { AssignmentDetail, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission } from '@/types'
+import type { AssignmentDetail, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission, SubPushEvent } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -55,6 +57,10 @@ const showSolutions = ref(false)
 const showVideo = ref(false)
 const showDiscuss = ref(false)
 const mineDialogRef = ref<InstanceType<typeof MySubmissionsDialog>>()
+// 递交即弹窗（v0.98）：本次提交的状态全程跟随（Pending → 编译中… → 判题中
+// k/N 逐点 → 终态回落明细表）
+const showSubmitDetail = ref(false)
+const submitDetailId = ref<number | null>(null)
 
 // 赛事隐藏期自动重定向（v0.7.3 优先级模型）：比赛收录的题一律进比赛做题页，
 // 其次考试——覆盖赛前/赛中/赛后未发布全程，admin/root 同规则（编辑入口在赛事做题页）。
@@ -273,6 +279,10 @@ async function handleSubmit(lang: string, code: string) {
     mineDialogRef.value?.refresh(1)
     loadRecentMine()
     startPolling(r.id)
+    // 递交即弹窗（v0.98）：跟随本次提交全程——Pending → Judging → 编译中… →
+    // 判题中 k/N 逐点亮起 → 终态回落明细表（弹窗自动接管跟踪，见 SubmissionDetailDialog）
+    submitDetailId.value = r.id
+    showSubmitDetail.value = true
   } catch {
     // 错误提示已由 axios 拦截器统一弹出
   } finally {
@@ -313,34 +323,42 @@ async function loadRecentMine() {
   }
 }
 
-// 判题结果轮询（v0.37 迁 usePolling）：后台标签页自动暂停（原手写 setInterval 在
-// 切走标签后继续空转）、5 分钟上限——判题队列僵死时不再无限轮询，到限提示后由
-// 学生手动刷新兜底。拉取失败即停（拦截器已提示），终态走完成提示与副列刷新。
+// 判题结果等待（v0.37 迁 usePolling；v0.98 双通道）：SSE sub 终态事件为主、
+// 1.2s 轮询为兜底（pushActive 时轮询拍零网络空转，断连自动恢复真实轮询）；5 分钟
+// 上限——判题队列僵死时不再无限轮询，到限提示后由学生手动刷新兜底。拉取失败即停
+// （拦截器已提示），终态走完成提示与副列刷新（逐点进度展示在提交详情弹窗）。
 let pollingSid = 0
-const judgePoll = usePolling(
-  async () => {
-    const id = pollingSid
-    if (!id) return false
-    try {
-      const s = await submissionApi.get(id)
-      if (!isQueueStatus(s.status)) {
-        pollingSid = 0
-        mineDialogRef.value?.refresh()
-        loadRecentMine()
-        const st = statusStyle(s.status)
-        // 游戏感批（v0.41）：AC 开箱（首 AC 带发玉数据）。错误状态只报客观结果
-        // （下方状态+分数提示），不加吐槽文案（v0.97.11 用户拍板）
-        if (s.status === 'Accepted' && s.game && (s.game.jade_total || s.game.combo_cur)) {
-          feast.feast(s.game, s.score ?? 0, problem.value?.title ?? '')
-        }
-        ElMessage.success(`#${id} 判题完成：${st.label}${s.score != null ? ` · ${s.score} 分` : ''}`)
-        return false
-      }
-      return true
-    } catch {
+
+async function checkSubmission(id: number): Promise<boolean> {
+  // 返回 false = 停（终态/失败），true = 继续
+  try {
+    const s = await submissionApi.get(id)
+    if (!isQueueStatus(s.status)) {
       pollingSid = 0
+      mineDialogRef.value?.refresh()
+      loadRecentMine()
+      const st = statusStyle(s.status)
+      // 游戏感批（v0.41）：AC 开箱（首 AC 带发玉数据）。错误状态只报客观结果
+      // （下方状态+分数提示），不加吐槽文案（v0.97.11 用户拍板）
+      if (s.status === 'Accepted' && s.game && (s.game.jade_total || s.game.combo_cur)) {
+        feast.feast(s.game, s.score ?? 0, problem.value?.title ?? '')
+      }
+      ElMessage.success(`#${id} 判题完成：${st.label}${s.score != null ? ` · ${s.score} 分` : ''}`)
       return false
     }
+    return true
+  } catch {
+    pollingSid = 0
+    return false
+  }
+}
+
+const judgePoll = usePolling(
+  async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位（断连自动恢复）
+    const id = pollingSid
+    if (!id) return false
+    return checkSubmission(id)
   },
   1200,
   {
@@ -355,8 +373,20 @@ const judgePoll = usePolling(
 
 function startPolling(id: number) {
   pollingSid = id
-  judgePoll.restart()
+  if (!pushActive.value) judgePoll.restart()
 }
+
+// SSE sub 订阅：终态信号走完成分支（队列态信号忽略——终态必有一拍）
+useTopic('sub', (raw) => {
+  const ev = raw as unknown as SubPushEvent
+  if (ev.sid !== pollingSid) return
+  if (ev.kind === 'status' && ev.status && !isQueueStatus(ev.status)) void checkSubmission(ev.sid)
+})
+
+// 推送断连兜底：仍在等待 → 恢复真实轮询
+watch(pushActive, (on) => {
+  if (!on && pollingSid) judgePoll.restart()
+})
 
 function stopPolling() {
   pollingSid = 0
@@ -548,6 +578,9 @@ onUnmounted(stopPolling)
     <ProblemVideoDialog v-model="showVideo" :url="problem.solution_video_url" />
 
     <MySubmissionsDialog ref="mineDialogRef" v-model="showMine" :problem-id="problem.id" />
+
+    <!-- 递交即弹窗（v0.98）：本次提交状态全程跟随 -->
+    <SubmissionDetailDialog v-model="showSubmitDetail" :submission-id="submitDetailId" />
 
     <AllCodesDialog v-model="showOthers" :problem-id="problem.id" :problem-title="problem.title" />
 

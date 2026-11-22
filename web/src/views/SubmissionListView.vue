@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 
@@ -7,11 +7,12 @@ import { submissionApi, userApi } from '@/api'
 import { usePagedList } from '@/composables/usePagedList'
 import { useListQuery } from '@/composables/useListQuery'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import PageShell from '@/components/PageShell.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtMem, fmtRel, fmtSec, isQueueStatus, statusDescFor, statusMap } from '@/utils/format'
-import type { LookupUser, Submission } from '@/types'
+import type { LookupUser, Submission, SubPushEvent } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -159,10 +160,39 @@ function onPageChange(p: number) {
   load()
 }
 
-// 页面打开期间每 5 秒自动刷新一次判题状态（usePolling：后台标签页暂停、卸载自清）。
-// v0.37 静默刷新：走 load(true) 不置 loading——原每拍整表 v-loading 遮罩闪一次，
-// 是「列表老在转圈」体感的直接来源；首载与翻页仍带遮罩。
-const poll = usePolling(() => load(true), 5000)
+// 页面打开期间自动刷新判题状态（v0.98 双通道）：SSE 提交事件为主（sub 终态 +
+// suball 全站流，1s 节流静默 load(true)）、5 秒轮询兜底（pushActive 时空转，断连
+// 自动恢复）。v0.37 静默刷新口径不变：不置 loading——原每拍整表 v-loading 遮罩
+// 闪一次是「列表老在转圈」体感的直接来源；首载与翻页仍带遮罩。
+const poll = usePolling(
+  () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位
+    load(true)
+  },
+  5000,
+)
+
+let listRefreshTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleListRefresh() {
+  if (listRefreshTimer != null) return
+  listRefreshTimer = setTimeout(() => {
+    listRefreshTimer = null
+    load(true)
+  }, 1000)
+}
+
+useTopic('sub', (raw) => {
+  const ev = raw as unknown as SubPushEvent
+  // 自己的提交终态/入队都值得刷一拍（队列态行内状态变化）；progress 高频忽略
+  if (ev.kind === 'status') scheduleListRefresh()
+})
+useTopic('suball', () => scheduleListRefresh()) // 特权者：全站提交流（服务端按权限过滤下发）
+
+watch(pushActive, (on) => {
+  if (!on) poll.start() // 推送断连：恢复真实轮询
+  else poll.stop()
+})
+
 onMounted(() => {
   page.value = lq.num('page')
   kw.value = lq.str('kw')
@@ -171,7 +201,7 @@ onMounted(() => {
   userFilter.value = lq.ids('uid')[0]
   mineOnly.value = route.query.mine === '1'
   load()
-  poll.start()
+  if (!pushActive.value) poll.start()
 })
 </script>
 

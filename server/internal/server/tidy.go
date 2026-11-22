@@ -109,6 +109,7 @@ func (j *tidyJob) finish(state, errMsg string) {
 		j.EndedAt = time.Now()
 	}
 	j.mu.Unlock()
+	pushTask("tidy", state, "*", j.Done, 0) // SSE 任务终态信号（v0.98；tidy 面板 root 准入）
 }
 
 // addSuggestion 收一条建议 + 进度 +1（worker 并发回填，锁内追加；终态前统一定序）。
@@ -116,7 +117,12 @@ func (j *tidyJob) addSuggestion(s TidySuggestion) {
 	j.mu.Lock()
 	j.Suggestions = append(j.Suggestions, s)
 	j.Done++
+	done, total := j.Done, j.Total
 	j.mu.Unlock()
+	// SSE 进度信号（v0.98）：每 8 条一推（tidy 并发回填密，全部推送噪音大于价值）
+	if done%8 == 0 || done == total {
+		pushTask("tidy", "running", "*", done, total)
+	}
 }
 
 func (j *tidyJob) snapshot(page, pageSize int) gin.H {

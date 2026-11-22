@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"soj/internal/push"
 	"soj/internal/repo"
 )
 
@@ -83,6 +84,7 @@ func (h *Handlers) CreateRace(c *gin.Context) {
 	slog.Info("发起课堂 PK", "component", "web", "rid", rc.ID, "classId", classID,
 		"pid", p.ID, "host", uname, "sec", p.EffChallengeSec(), "bonus", req.Bonus)
 	go h.notifyRaceStarted(rc)
+	push.ToAll(push.TopicRace, push.RaceEvent{RaceID: rc.ID, Kind: "start"}, "") // SSE 对局开播信号（v0.98）
 	ok(c, raceJSON(ctx, h, rc, uid))
 }
 
@@ -120,6 +122,7 @@ func (h *Handlers) CancelRace(c *gin.Context) {
 		return
 	}
 	slog.Info("取消课堂 PK", "component", "web", "rid", rc.ID, "classId", classID)
+	push.ToAll(push.TopicRace, push.RaceEvent{RaceID: rc.ID, Kind: "cancel"}, "") // SSE 对局取消信号（v0.98）
 	ok(c, gin.H{"cancelled": true})
 }
 

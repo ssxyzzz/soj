@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AmbientGrid from '@/components/AmbientGrid.vue'
@@ -19,7 +20,7 @@ import { pickWelcome } from '@/utils/gameText'
 import { applySWUpdate, swUpdateReady } from '@/utils/swClient'
 import { fmtRel } from '@/utils/format'
 import SiteFooterLine from '@/components/SiteFooterLine.vue'
-import type { NotificationItem } from '@/types'
+import type { NotificationItem, SubPushEvent } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -157,8 +158,36 @@ async function loadRecent() {
   }
 }
 
-const badgePoll = usePolling(() => refreshBadge(), 60_000)
-const heraldPoll = usePolling(() => pollHeralds(), 60_000) // 降临横幅轮询（v0.65 归一）
+// 通知/降临双通道（v0.98）：SSE notify 事件即时亮徽标（60s 轮询降级兜底，
+// pushActive 时空转——推送断连自动恢复）；herald 产生在 judge 进程无法直发，
+// 用「自己 AC 事件触发一次 pollHeralds」启发式 + 60s 轮询看门狗双保险。
+const badgePoll = usePolling(
+  () => {
+    if (pushActive.value) return
+    void refreshBadge()
+  },
+  60_000,
+)
+const heraldPoll = usePolling(
+  () => {
+    if (pushActive.value) return
+    void pollHeralds()
+  },
+  60_000,
+) // 降临横幅轮询（v0.65 归一）
+
+useTopic('notify', () => void refreshBadge())
+useTopic('sub', (raw) => {
+  const ev = raw as unknown as SubPushEvent
+  if (ev.kind === 'status' && ev.status === 'Accepted') void pollHeralds()
+})
+
+watch(pushActive, (on) => {
+  if (!on) {
+    badgePoll.start()
+    heraldPoll.start()
+  }
+})
 
 function onBellVisible() {
   loadRecent()
@@ -221,10 +250,10 @@ onMounted(() => {
     })
     .catch(() => {})
   refreshBadge() // 通知角标首刷（v0.24）
-  badgePoll.start() // 60s 轮询（usePolling：后台标签暂停、卸载自清）
+  if (!pushActive.value) badgePoll.start() // 60s 轮询兜底（v0.98：推送在线时空转不启）
   refreshJade() // 玉余额首刷（v0.33-①）
   pollHeralds()
-  heraldPoll.start()
+  if (!pushActive.value) heraldPoll.start()
   welcomeOnce()
 })
 

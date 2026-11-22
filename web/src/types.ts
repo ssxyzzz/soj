@@ -293,6 +293,39 @@ export interface Submission {
   game?: SubmissionGame // 开箱数据（v0.41，本人终态可见）
   score_cancelled?: boolean // 取消成绩（v0.97.29）：纪律作废，状态翻 Cancelled、原始结果归档可恢复
   score_cancelled_reason?: string // 取消原因（可选）：本人 ∨ 提交管理特权视角下发
+  // 逐点进度（v0.98）：判题期瞬态信号与 status 同级（终态字段已清，省略）
+  case_done?: number
+  case_total?: number
+  stage?: string // compile | run
+}
+
+// ---- SSE 推送事件载荷（v0.98 全站后端推送；与后端 server/events.go 逐字对齐） ----
+
+// sub / suball 主题：提交生命周期信号（notify-then-fetch——载荷只是信号，取数走既有 GET）
+export interface SubPushEvent {
+  sid: number
+  kind: 'status' | 'progress'
+  status?: string
+  race_id?: number
+  challenge?: number
+  case_done?: number
+  case_total?: number
+  stage?: string // compile | run（判题中阶段）
+}
+
+// race 主题：课堂 PK / 挑战对局信号
+export interface RacePushEvent {
+  race_id: number
+  kind: 'start' | 'settle' | 'cancel' | 'update'
+  sid?: number
+}
+
+// task 主题：后台任务进度（import/backup/tidy/organize）
+export interface TaskPushEvent {
+  job: 'import' | 'backup' | 'tidy' | 'organize'
+  state: string // running | done | failed | cancelled
+  done?: number
+  total?: number
 }
 
 // 单个测试点结果（与后端 CaseResult 对应）

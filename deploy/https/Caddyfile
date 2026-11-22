@@ -25,8 +25,12 @@
 soj.example.com {
 	# 压缩必开（2026-11-02 实锤教训：漏配 encode 时大静态文件裸传，叠加 VPS 带宽顶
 	# 即 35s 级事故）。zstd 优先，回退 gzip；应用已压缩的响应（带 Content-Encoding）
-	# 自动跳过，与应用层 gzip 中间件双保险不冲突
-	encode zstd gzip
+	# 自动跳过，与应用层 gzip 中间件双保险不冲突。
+	# SSE 事件流（v0.97.32 /api/events）例外直通：压缩缓冲会推迟逐帧到达（到帧延迟
+	# = 压缩窗口），且 event-stream 语义上不应有 Content-Encoding
+	encode zstd gzip {
+		except text/event-stream
+	}
 
 	# 可选加固（生产暂未启用，确认稳定后放开）：
 	# header Strict-Transport-Security "max-age=31536000"
@@ -42,7 +46,11 @@ soj.example.com {
 	# 反代到本机 frps 的 remotePort（frp 配置不动）。
 	# Caddy 在此注入 X-Forwarded-For（学生真实 IP），经 frp 纯 TCP 隧道原样到达 SOJ，
 	# SOJ 侧由 SOJ_TRUSTED_PROXIES 决定信任（docker-compose 已配好私网段）。
-	reverse_proxy 127.0.0.1:8080
+	# flush_interval -1（v0.97.32）：SSE 逐帧即刷不等缓冲（服务端 25s 心跳 / 8min 寿命
+	# 轮转均短于全局 idle/write 超时，长连接不会被掐）
+	reverse_proxy 127.0.0.1:8080 {
+		flush_interval -1
+	}
 }
 
 # 同机托管的其他站点：按需复制同款站点块（reverse_proxy 到各自端口）即可，

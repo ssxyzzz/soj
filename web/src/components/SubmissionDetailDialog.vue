@@ -7,16 +7,18 @@
 // v0.7.1：队列态（排队/评测/取消中）可取消评测——本人 ∨ submission.view.all。
 import { computed, ref, watch } from 'vue'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { submissionApi, aiTutorApi } from '@/api'
 import { judgeQueueApi } from '@/api/judgeQueue'
+import CaseLiveBar from '@/components/CaseLiveBar.vue'
 import CodePane from '@/components/CodePane.vue'
 import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
 import { useUserStore } from '@/stores/user'
-import type { Submission } from '@/types'
+import type { Submission, SubPushEvent } from '@/types'
 
 const props = withDefaults(
   defineProps<{
@@ -239,25 +241,42 @@ async function onCancel() {
   }
 }
 
-// 轮询：1.2s 一次拉详情，到终态停并提示（重测/取消共用）。v0.64 轮询归一后全站仅
-// usePolling 一套：终态口径统一 isQueueStatus、拉取失败续拍自愈、隐藏标签页自动
-// 暂停、作用域卸载自停、10min 上限防判题队列僵死时无限转圈。
+// 判题等待（v0.98 双通道）：SSE sub 事件为主（progress 逐点信号 300ms 节流拉
+// 详情、status 终态信号即拉），1.2s 轮询为兜底——pushActive 时轮询拍零网络空转
+// （推送断连自动恢复真实轮询），终态口径统一 isQueueStatus、10min 上限防队列僵死。
 let pollId = 0
 let pollDoneMsg: string | null = null
-const judgePoll = usePolling(
-  async () => {
-    const s = await submissionApi.get(pollId)
-    polled.value = s
-    if (isQueueStatus(s.status)) return // 队列/评测/取消中：续拍
+
+function applyPolled(s: Submission) {
+  polled.value = s
+  if (isQueueStatus(s.status)) return // 队列/评测/取消中：继续等
+  if (pollId === s.id) {
     if (pollDoneMsg) ElMessage.success(pollDoneMsg)
     pollDoneMsg = null
-    return false // 终态停
+    pollId = 0 // 终态：轮询 fn 见 0 即停
+  }
+}
+
+async function fetchPolled(id: number) {
+  try {
+    applyPolled(await submissionApi.get(id))
+  } catch {
+    /* 拦截器已提示；轮询续拍自愈，事件等下一拍 */
+  }
+}
+
+const judgePoll = usePolling(
+  async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位（断连自动恢复）
+    if (!pollId) return false
+    await fetchPolled(pollId)
   },
   1200,
   {
     maxDurationMs: 600_000,
     onExpire: () => {
       pollDoneMsg = null
+      pollId = 0
       ElMessage.warning('评测等待时间过长，已停止自动刷新')
     },
   },
@@ -266,13 +285,39 @@ const judgePoll = usePolling(
 function pollUntilDone(id: number, doneMsg: string) {
   pollId = id
   pollDoneMsg = doneMsg
-  judgePoll.restart()
+  if (!pushActive.value) judgePoll.restart()
+  else void fetchPolled(id) // 推送在线先拉一拍拿队列态（事件随后接管）
 }
+
+// 推送断连兜底：等待中（pollId 未清）且弹窗仍开 → 恢复真实轮询
+watch(pushActive, (on) => {
+  if (!on && pollId && props.modelValue) judgePoll.restart()
+})
+
+// SSE sub 订阅：等待中的 pollId 或弹窗打开着的队列态提交都跟随（后者是纯增益——
+// 原实现开弹窗看不轮询，现在逐点进度也实时点亮）
+let progressTimer: ReturnType<typeof setTimeout> | null = null
+useTopic('sub', (raw) => {
+  const ev = raw as unknown as SubPushEvent
+  const watching = pollId || (props.modelValue && judging.value ? sub.value?.id : 0)
+  if (ev.sid !== watching) return
+  if (ev.kind === 'progress') {
+    // 逐点信号 300ms 节流（含尾拍）：点速快于节流窗时合并拉取
+    if (progressTimer != null) return
+    progressTimer = setTimeout(() => {
+      progressTimer = null
+      void fetchPolled(ev.sid)
+    }, 300)
+    return
+  }
+  void fetchPolled(ev.sid)
+})
 
 watch(
   () => props.modelValue,
   (open) => {
     judgePoll.stop() // 关闭弹窗即停止重测轮询
+    pollId = 0
     if (open) {
       detail.value = null
       polled.value = null
@@ -280,6 +325,20 @@ watch(
     } else {
       detail.value = null
     }
+  },
+)
+
+// 打开即跟随（v0.98）：递交后直接打开本弹窗的场景——弹窗里的提交仍在队列态
+//（Pending/Judging/取消中）时自动接管跟踪（adopt pollId，SSE 事件与兜底轮询随
+// 即驱动 Pending → 编译中… → 判题中 k/N → 终态回落全程）；终态不提示 toast
+//（页面级完成提示由各提交入口自己负责，弹窗只如实展示状态）。
+watch(
+  () => [props.modelValue, sub.value?.id, sub.value?.status] as const,
+  ([open, sid, status]) => {
+    if (!open || !sid || pollId === sid) return
+    if (!isQueueStatus(status ?? '')) return
+    pollId = sid
+    if (!pushActive.value) judgePoll.restart()
   },
 )
 </script>
@@ -389,7 +448,15 @@ watch(
           <div class="detail-sub">代码</div>
           <CodePane :code="sub.code" :language="sub.language" />
         </template>
-        <template v-if="sub.detail?.length">
+        <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮（SSE progress 信号驱动），
+             终态后回落下方明细表；case_total 由 judge 逐点回写下发 -->
+        <template v-if="judging && sub.case_total">
+          <div class="detail-sub">评测进度</div>
+          <CaseLiveBar :sub="sub" />
+        </template>
+        <!-- 明细表终态回落（v0.98）：判题中部分 detail 随逐点回写流式可见，但展示
+             归色块条独占（上方 case-live）——表格只在终态出现，避免双视图叠映 -->
+        <template v-if="!judging && sub.detail?.length">
           <div class="detail-sub">测试点明细<TipLabel tip="悬停状态徽章可查看该结果说明与常见原因（溢出、数组越界、未处理多组数据等）" /></div>
           <el-table stripe :data="sortedDetail" size="small" border>
             <el-table-column prop="index" label="测试点" width="90" />

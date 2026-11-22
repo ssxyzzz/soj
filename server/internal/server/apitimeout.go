@@ -32,6 +32,9 @@ var longRouteRe = []*regexp.Regexp{
 	regexp.MustCompile(`^/api/admin/users/import-template$`),
 	// 批量建号 commit：千行 bcrypt 同步跑可至分钟级（A4，批④ job 化后移出白名单）
 	regexp.MustCompile(`^/api/admin/users/import-commit$`),
+	// SSE 事件流（v0.98）：长连接自带 25s 心跳与 8min 寿命上限（events.go），
+	// 挂 30s deadline 会在首分钟后掐断
+	regexp.MustCompile(`^/api/events$`),
 }
 
 func isLongRoute(path string) bool {

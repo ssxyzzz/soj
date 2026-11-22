@@ -15,10 +15,11 @@ import ProblemStatement from '@/components/problem/ProblemStatement.vue'
 import SelfTestPanel from '@/components/SelfTestPanel.vue'
 import { challengeApi, problemApi, raceApi, submissionApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { isQueueStatus } from '@/utils/format'
 import { autocompleteOn } from '@/utils/code'
 import { parseIOSamples } from '@/utils/md'
-import type { ClassRaceView, ProblemDetail } from '@/types'
+import type { ClassRaceView, ProblemDetail, RacePushEvent, SubPushEvent } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,9 +57,11 @@ const ioSamples = computed(() => parseIOSamples(problem.value?.description ?? ''
 // 剩余时间锚在服务端下发的 remaining_ms 上（与主倒计时的时钟偏移处理同款）。
 const raceInfo = ref<ClassRaceView | null>(null)
 let raceAnchorAt = 0
-// v0.65 轮询归一：usePolling（后台标签暂停、作用域卸载自清——原裸 setInterval 后台空转）
+// v0.65 轮询归一：usePolling（后台标签暂停、作用域卸载自清——原裸 setInterval 后台空转）；
+// v0.98 双通道：SSE race 事件为主（本场次更新/结算即拉），5s 轮询兜底（pushActive 空转）
 const racePoll = usePolling(
   async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位
     if (!raceInfo.value || raceInfo.value.status !== 'running') return false
     try {
       raceInfo.value = await raceApi.byID(raceInfo.value.id)
@@ -69,6 +72,25 @@ const racePoll = usePolling(
   },
   5000,
 )
+
+async function refreshRace() {
+  if (!raceInfo.value) return
+  try {
+    raceInfo.value = await raceApi.byID(raceInfo.value.id)
+    raceAnchorAt = Date.now()
+  } catch {
+    /* 网络抖动保旧值 */
+  }
+}
+
+useTopic('race', (raw) => {
+  const ev = raw as unknown as RacePushEvent
+  if (raceInfo.value && ev.race_id === raceInfo.value.id) void refreshRace()
+})
+
+watch(pushActive, (on) => {
+  if (!on && raceInfo.value?.status === 'running') racePoll.restart()
+})
 
 function startRacePoll() {
   racePoll.restart()
@@ -324,39 +346,46 @@ let judgeStartedAt = 0
 const JUDGE_UNLOCK_MS = 60_000
 const JUDGE_GIVEUP_MS = 5 * 60_000
 let pollingSid = 0
-const judgePoll = usePolling(
-  async () => {
-    const sid = pollingSid
-    if (!sid) return false
-    try {
-      const s = await submissionApi.get(sid)
-      // 终态统一 isQueueStatus 口径（含 CancelRequested——自写 ['Pending','Judging']
-      // 会把取消收尾期当终态，v0.29 根修分叉）
-      if (!isQueueStatus(s.status)) {
-        pollingSid = 0
-        judging.value = false
-        verdict.value = s.status
-        if (s.status === 'Accepted') {
-          // 挑战成功：服务端已在 AC 回写时终判（duration 以提交创建时刻起算）
-          phase.value = 'success'
-          stopSnapshots()
-          clearDraft()
-          void loadGhostAndRating()
-        } else {
-          ElMessage.error(`评测结果：${s.status}，倒计时继续，加油！`)
-        }
-        return false
-      }
-      if (Date.now() - judgeStartedAt > JUDGE_UNLOCK_MS && judging.value) {
-        judging.value = false
-        ElMessage.warning('评测等待异常偏长——已解锁重新递交；原提交出分后仍会展示')
-      }
-      return true
-    } catch {
+
+async function checkChallengeVerdict(sid: number): Promise<boolean> {
+  // 返回 false = 停（终态/失败），true = 继续
+  try {
+    const s = await submissionApi.get(sid)
+    // 终态统一 isQueueStatus 口径（含 CancelRequested——自写 ['Pending','Judging']
+    // 会把取消收尾期当终态，v0.29 根修分叉）
+    if (!isQueueStatus(s.status)) {
       pollingSid = 0
       judging.value = false
+      verdict.value = s.status
+      if (s.status === 'Accepted') {
+        // 挑战成功：服务端已在 AC 回写时终判（duration 以提交创建时刻起算）
+        phase.value = 'success'
+        stopSnapshots()
+        clearDraft()
+        void loadGhostAndRating()
+      } else {
+        ElMessage.error(`评测结果：${s.status}，倒计时继续，加油！`)
+      }
       return false
     }
+    if (Date.now() - judgeStartedAt > JUDGE_UNLOCK_MS && judging.value) {
+      judging.value = false
+      ElMessage.warning('评测等待异常偏长——已解锁重新递交；原提交出分后仍会展示')
+    }
+    return true
+  } catch {
+    pollingSid = 0
+    judging.value = false
+    return false
+  }
+}
+
+const judgePoll = usePolling(
+  async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位（v0.98 双通道）
+    const sid = pollingSid
+    if (!sid) return false
+    return checkChallengeVerdict(sid)
   },
   1200,
   {
@@ -368,6 +397,17 @@ const judgePoll = usePolling(
     },
   },
 )
+
+// SSE sub 订阅（v0.98）：终态信号走 verdict 分支；推送断连恢复真实轮询
+useTopic('sub', (raw) => {
+  const ev = raw as unknown as SubPushEvent
+  if (ev.sid !== pollingSid) return
+  if (ev.kind === 'status' && ev.status && !isQueueStatus(ev.status)) void checkChallengeVerdict(ev.sid)
+})
+
+watch(pushActive, (on) => {
+  if (!on && pollingSid) judgePoll.restart()
+})
 
 async function doSubmit() {
   if (phase.value !== 'running' || submitting.value || judging.value) return
@@ -385,7 +425,7 @@ async function doSubmit() {
     judging.value = true
     judgeStartedAt = Date.now()
     pollingSid = id
-    judgePoll.restart()
+    if (!pushActive.value) judgePoll.restart()
   } catch {
     /* 拦截器已 toast */
   } finally {

@@ -156,6 +156,7 @@ func (j *listOrganizeJob) finish(state, errMsg string) {
 		j.EndedAt = time.Now()
 	}
 	j.mu.Unlock()
+	pushTask("organize", state, "", j.Done, 0) // SSE 任务终态信号（v0.98）
 }
 
 func (j *listOrganizeJob) statusSnapshot() gin.H {
@@ -473,7 +474,9 @@ func (h *Handlers) runListOrganize(ctx context.Context, job *listOrganizeJob, ui
 					firstBatchErr = truncateTail(err.Error(), 120)
 				}
 			}
+			done, total := job.Done, job.Total
 			job.mu.Unlock()
+			pushTask("organize", "running", "", done, total) // SSE 进度信号（v0.98）
 		}(bi)
 	}
 	wg.Wait()

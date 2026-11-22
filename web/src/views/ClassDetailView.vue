@@ -20,7 +20,8 @@ import { playAchievement, playSSR } from '@/utils/gameSounds'
 import { MAX_CONTENT_BYTES, contentBytes } from '@/utils/md'
 import { useUserStore } from '@/stores/user'
 import { usePolling } from '@/composables/usePolling'
-import type { AssignmentListItem, ClassDetail, ClassMember, ClassRaceView, PickedProblem } from '@/types'
+import { pushActive, useTopic } from '@/composables/useEventStream'
+import type { AssignmentListItem, ClassDetail, ClassMember, ClassRaceView, PickedProblem, RacePushEvent } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -320,17 +321,31 @@ async function loadRace() {
   }
 }
 
-// 实时榜 3s 轮询：race 消失（结算/取消）即自动停轮；秒针随 race 存在起停
+// 实时榜 3s 轮询：race 消失（结算/取消）即自动停轮；秒针随 race 存在起停。
+// v0.98 双通道：SSE race 事件为主（本场次开播/更新/结算即拉），轮询兜底
+// （pushActive 时空转，断连自动恢复）。
 const racePoller = usePolling(async () => {
+  if (pushActive.value) return // 推送在线：轮询拍空转让位
   await loadRace()
   return !!raceState.value.race
 }, 3000)
+
+useTopic('race', (raw) => {
+  const ev = raw as unknown as RacePushEvent
+  if (raceState.value.race && ev.race_id === raceState.value.race.id) void loadRace()
+  else if (ev.kind === 'start') void loadRace() // 新一场开播：班级页无 race 时也拉一拍
+})
+
+watch(pushActive, (on) => {
+  if (!on && raceState.value.race) racePoller.restart()
+})
+
 watch(
   () => !!raceState.value.race,
   (on) => {
     if (on) {
       ensureTick()
-      racePoller.restart()
+      if (!pushActive.value) racePoller.restart()
     } else {
       stopTick()
     }

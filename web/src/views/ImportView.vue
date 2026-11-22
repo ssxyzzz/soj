@@ -11,9 +11,10 @@ import type { UploadUserFile } from 'element-plus'
 
 import { importApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
+import { pushActive, useTopic } from '@/composables/useEventStream'
 import { useListener } from '@/composables/useWindowListener'
 import PageShell from '@/components/PageShell.vue'
-import type { BatchImportStatus } from '@/types'
+import type { BatchImportStatus, TaskPushEvent } from '@/types'
 
 type Source = 'soj' | 'hydro'
 
@@ -70,12 +71,29 @@ async function refreshStatus() {
   return !finished.value
 }
 
-// 任务状态轮询（v0.37 迁 usePolling）：后台标签自动暂停 + 防重入 + 30 分钟硬上限
+// 任务状态双通道（v0.37 迁 usePolling；v0.98）：SSE task 事件为主（每题进度即
+// 拉一拍）、1s 轮询兜底（pushActive 时空转，断连自动恢复）+ 30 分钟硬上限
 //（原手写 setInterval 无上限——任务卡 running 时页面停留期间无限轮询）
-const statusPoll = usePolling(refreshStatus, 1000, { maxDurationMs: 30 * 60_000 })
+const statusPoll = usePolling(
+  async () => {
+    if (pushActive.value) return // 推送在线：轮询拍空转让位
+    return refreshStatus()
+  },
+  1000,
+  { maxDurationMs: 30 * 60_000 },
+)
+
+useTopic('task', (raw) => {
+  const ev = raw as unknown as TaskPushEvent
+  if (ev.job === 'import') void refreshStatus()
+})
+
+watch(pushActive, (on) => {
+  if (!on && running.value) statusPoll.restart()
+})
 
 function ensurePolling() {
-  statusPoll.restart()
+  if (!pushActive.value) statusPoll.restart()
 }
 
 function stopPolling() {
