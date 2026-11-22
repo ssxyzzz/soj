@@ -45,7 +45,6 @@ const acOn = computed(() => autocompleteOn())
 // ---------- 递交与轮询 ----------
 const submitting = ref(false)
 const judging = ref(false)
-let pollTimer: number | null = null
 
 // ---------- 自测（共用 SelfTestPanel；挑战中可用且计时照走） ----------
 const selfTestOpen = ref(false)
@@ -240,7 +239,6 @@ onBeforeUnmount(() => {
   stopTick()
   stopSnapshots()
   stopRacePoll()
-  if (pollTimer != null) window.clearTimeout(pollTimer)
   if (saveTimer != null) window.clearTimeout(saveTimer)
   if (cdTimer != null) {
     window.clearInterval(cdTimer)
@@ -319,9 +317,58 @@ const verdict = ref('')
 // 评测等待看护（v0.37）：judging 锁住「递交评测」按钮——判题卡 Judging 时学生被
 // 锁死到时限耗尽。60s 仍未出分即解锁重交（原提交结果出来照常展示，重交会换跟踪
 // 目标）；5 分钟硬停轮询，防队列僵死型无限等待。
+// v0.97.31 轮询归一：迁 usePolling（同文件 racePoll v0.65 已归一，此处漏网）——
+// 60s 解锁与失败即停留在拍内表达，5 分钟硬停走 maxDurationMs + onExpire；后台
+// 标签自动暂停回前台补拍（切走时打不了字、倒计时权威在服务端 deadline，无回归）。
 let judgeStartedAt = 0
 const JUDGE_UNLOCK_MS = 60_000
 const JUDGE_GIVEUP_MS = 5 * 60_000
+let pollingSid = 0
+const judgePoll = usePolling(
+  async () => {
+    const sid = pollingSid
+    if (!sid) return false
+    try {
+      const s = await submissionApi.get(sid)
+      // 终态统一 isQueueStatus 口径（含 CancelRequested——自写 ['Pending','Judging']
+      // 会把取消收尾期当终态，v0.29 根修分叉）
+      if (!isQueueStatus(s.status)) {
+        pollingSid = 0
+        judging.value = false
+        verdict.value = s.status
+        if (s.status === 'Accepted') {
+          // 挑战成功：服务端已在 AC 回写时终判（duration 以提交创建时刻起算）
+          phase.value = 'success'
+          stopSnapshots()
+          clearDraft()
+          void loadGhostAndRating()
+        } else {
+          ElMessage.error(`评测结果：${s.status}，倒计时继续，加油！`)
+        }
+        return false
+      }
+      if (Date.now() - judgeStartedAt > JUDGE_UNLOCK_MS && judging.value) {
+        judging.value = false
+        ElMessage.warning('评测等待异常偏长——已解锁重新递交；原提交出分后仍会展示')
+      }
+      return true
+    } catch {
+      pollingSid = 0
+      judging.value = false
+      return false
+    }
+  },
+  1200,
+  {
+    maxDurationMs: JUDGE_GIVEUP_MS,
+    onExpire: () => {
+      pollingSid = 0
+      judging.value = false
+      ElMessage.error('评测等待超时（5 分钟）——请刷新查看结果或联系老师')
+    },
+  },
+)
+
 async function doSubmit() {
   if (phase.value !== 'running' || submitting.value || judging.value) return
   if (!code.value.trim()) {
@@ -337,51 +384,13 @@ async function doSubmit() {
     })
     judging.value = true
     judgeStartedAt = Date.now()
-    pollVerdict(id)
+    pollingSid = id
+    judgePoll.restart()
   } catch {
     /* 拦截器已 toast */
   } finally {
     submitting.value = false
   }
-}
-
-function pollVerdict(sid: number) {
-  if (pollTimer != null) window.clearTimeout(pollTimer)
-  pollTimer = window.setTimeout(async () => {
-    try {
-      const s = await submissionApi.get(sid)
-      // 终态统一 isQueueStatus 口径（含 CancelRequested——自写 ['Pending','Judging']
-      // 会把取消收尾期当终态，v0.29 根修分叉）
-      const terminal = !isQueueStatus(s.status)
-      if (!terminal) {
-        const waited = Date.now() - judgeStartedAt
-        if (waited > JUDGE_UNLOCK_MS && judging.value) {
-          judging.value = false
-          ElMessage.warning('评测等待异常偏长——已解锁重新递交；原提交出分后仍会展示')
-        }
-        if (waited > JUDGE_GIVEUP_MS) {
-          judging.value = false
-          ElMessage.error('评测等待超时（5 分钟）——请刷新查看结果或联系老师')
-          return
-        }
-        pollVerdict(sid)
-        return
-      }
-      judging.value = false
-      verdict.value = s.status
-      if (s.status === 'Accepted') {
-        // 挑战成功：服务端已在 AC 回写时终判（duration 以提交创建时刻起算）
-        phase.value = 'success'
-        stopSnapshots()
-        clearDraft()
-        void loadGhostAndRating()
-      } else {
-        ElMessage.error(`评测结果：${s.status}，倒计时继续，加油！`)
-      }
-    } catch {
-      judging.value = false
-    }
-  }, 1200)
 }
 
 // 用时 = 总时长 - 剩余（结果横幅展示口径）
