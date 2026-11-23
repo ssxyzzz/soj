@@ -35,6 +35,7 @@ import { useSiteStore } from '@/stores/site'
 import { useUserStore } from '@/stores/user'
 import { useGameFeastStore } from '@/stores/gameFeast'
 import { isQueueStatus, statusStyle } from '@/utils/format'
+import { settleCasePlayback } from '@/utils/casePlayback'
 import type { AssignmentDetail, ObjectiveAnswer as ObjAnswer, ProblemDetail, Submission, SubPushEvent } from '@/types'
 
 const route = useRoute()
@@ -326,7 +327,8 @@ async function loadRecentMine() {
 // 判题结果等待（v0.37 迁 usePolling；v0.98 双通道）：SSE sub 终态事件为主、
 // 1.2s 轮询为兜底（pushActive 时轮询拍零网络空转，断连自动恢复真实轮询）；5 分钟
 // 上限——判题队列僵死时不再无限轮询，到限提示后由学生手动刷新兜底。拉取失败即停
-// （拦截器已提示），终态走完成提示与副列刷新（逐点进度展示在提交详情弹窗）。
+// （拦截器已提示），终态走完成提示与副列刷新（逐点进度展示在提交详情弹窗，其色块
+// 回放走完才出完成提示，v0.99.1）。
 let pollingSid = 0
 
 async function checkSubmission(id: number): Promise<boolean> {
@@ -337,6 +339,9 @@ async function checkSubmission(id: number): Promise<boolean> {
       pollingSid = 0
       mineDialogRef.value?.refresh()
       loadRecentMine()
+      // 提交详情弹窗在跟这份提交时，等色块回放走完再揭晓（v0.99.1）——快题逐个点亮
+      // 要 1 秒，提示与开箱特效不抢在色块亮完前剧透结果；弹窗没开立即放行
+      await settleCasePlayback(id)
       const st = statusStyle(s.status)
       // 游戏感批（v0.41）：AC 开箱（首 AC 带发玉数据）。错误状态只报客观结果
       // （下方状态+分数提示），不加吐槽文案（v0.97.11 用户拍板）

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// 判题中逐点实时进度条（v0.98 全站推送 P3）：SSE progress 信号驱动的数据流
-// 由消费方负责（拉详情更新 sub），本组件纯展示——已出结果的点按 index 点亮
-// （复用 .dot 语义色类），未跑的画虚线占位块；编译期显示「编译中…」。
+// 判题中逐点实时进度条（v0.98 全站推送 P3）：已出结果的点按 index 点亮（复用 .dot
+// 语义色类），未跑的画虚线占位块；编译期显示「编译中…」。
+// 本组件纯展示：拿到的 sub 是 useCasePlayback 的回放展示快照（v0.99.1）——快题的色块
+// 由回放按 ≥100ms/点 逐个喂进来（detail 只含已点亮的点、case_done 同步），节奏不在这里。
 import { computed } from 'vue'
 
 import { statusStyle } from '@/utils/format'

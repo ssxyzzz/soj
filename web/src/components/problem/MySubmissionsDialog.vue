@@ -12,8 +12,10 @@ import CodePane from '@/components/CodePane.vue'
 import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
+import { settleCasePlayback } from '@/utils/casePlayback'
 import { usePolling } from '@/composables/usePolling'
 import { pushActive, useTopic } from '@/composables/useEventStream'
+import { useCasePlayback } from '@/composables/useCasePlayback'
 import { useUserStore } from '@/stores/user'
 import type { ContestMySubmission, Submission, SubPushEvent } from '@/types'
 
@@ -39,7 +41,13 @@ const mySubs = ref<Submission[]>([])
 const myTotal = ref(0)
 const myPage = ref(1)
 const mineView = ref<'list' | 'detail'>('list')
-const mineDetail = ref<Submission | null>(null)
+// mineSnap = 最新真实快照（取数/动作准入看它）；mineDetail = 详情视图渲染用的展示快照
+// （v0.99.1 逐点回放：判题中色块 ≥100ms/点 逐个点亮，回放走完前仍是判题中）
+const mineSnap = ref<Submission | null>(null)
+const mineDetail = useCasePlayback(
+  mineSnap,
+  () => props.modelValue && mineView.value === 'detail' && isRevealed.value,
+)
 // 测试点按题目数据顺序展示（防后端返回顺序波动）；系统级错误（沙箱失败等）并入表尾明细行
 const sortedDetail = computed(() => {
   const rows = [...(mineDetail.value?.detail ?? [])].sort((a, b) => a.index - b.index)
@@ -77,7 +85,7 @@ watch(
   (open) => {
     if (open) {
       mineView.value = 'list'
-      mineDetail.value = null
+      mineSnap.value = null
       loadMine(1)
     } else {
       minePoll.stop() // 关闭弹窗即停止重测轮询
@@ -91,12 +99,12 @@ async function openMineDetail(s: Submission) {
   // 隐藏期行自带 code（考时回看唯一通道）直接展示
   if (props.rows && props.revealed && !s.code) {
     try {
-      mineDetail.value = await submissionApi.get(s.id)
+      mineSnap.value = await submissionApi.get(s.id)
     } catch {
       return // 拦截器已提示
     }
   } else {
-    mineDetail.value = s
+    mineSnap.value = s
   }
   mineView.value = 'detail'
   loadAiPrice()
@@ -152,7 +160,7 @@ async function refreshMineDetail() {
   const id = mineDetail.value?.id
   if (id) {
     try {
-      mineDetail.value = await submissionApi.get(id)
+      mineSnap.value = await submissionApi.get(id)
     } catch {
       /* 拦截器已提示 */
     }
@@ -169,9 +177,11 @@ let mineProgressTimer: ReturnType<typeof setTimeout> | null = null
 async function mineFetch(id: number) {
   try {
     const s = await submissionApi.get(id)
-    if (mineDetail.value?.id === s.id) mineDetail.value = s
+    if (mineSnap.value?.id === s.id) mineSnap.value = s
     if (isQueueStatus(s.status)) return
     minePollId = 0
+    // 完成提示等色块回放走完（与详情视图同步揭晓）；详情不在屏时立即放行
+    await settleCasePlayback(s.id)
     ElMessage.success(`#${s.id} 重测完成`)
     loadMine(myPage.value)
   } catch {
@@ -495,7 +505,8 @@ defineExpose({ refresh: loadMine })
       </template>
       <div class="detail-sub">代码</div>
       <CodePane :code="mineDetail.code" :language="mineDetail.language" />
-      <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮（SSE progress 信号驱动），终态回落下方明细表 -->
+      <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮（SSE progress 信号驱动），终态回落下方明细表；
+           mineDetail 是回放展示快照（v0.99.1），快题按 ≥100ms/点 逐个点亮 -->
       <template v-if="isRevealed && isQueueStatus(mineDetail.status) && mineDetail.case_total">
         <div class="detail-sub">评测进度</div>
         <CaseLiveBar :sub="mineDetail" />

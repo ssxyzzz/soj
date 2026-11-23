@@ -12,8 +12,10 @@ import CaseLiveBar from '@/components/CaseLiveBar.vue'
 import CodePane from '@/components/CodePane.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtRel, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
+import { settleCasePlayback } from '@/utils/casePlayback'
 import { usePolling } from '@/composables/usePolling'
 import { pushActive, useTopic } from '@/composables/useEventStream'
+import { useCasePlayback } from '@/composables/useCasePlayback'
 import { useUserStore } from '@/stores/user'
 import { languageOptions } from '@/utils/code'
 import type { BoardsResult, LookupUser, Submission, SubPushEvent } from '@/types'
@@ -42,7 +44,13 @@ const othersUser = ref<number | undefined>()
 const userOptions = ref<LookupUser[]>([])
 const userSearching = ref(false)
 const othersView = ref<'list' | 'detail'>('list')
-const othersDetail = ref<Submission | null>(null)
+// othersSnap = 最新真实快照（取数/动作准入看它）；othersDetail = 详情视图渲染用的展示快照
+// （v0.99.1 逐点回放：判题中色块 ≥100ms/点 逐个点亮，回放走完前仍是判题中）
+const othersSnap = ref<Submission | null>(null)
+const othersDetail = useCasePlayback(
+  othersSnap,
+  () => props.modelValue && tab.value === 'codes' && othersView.value === 'detail',
+)
 // 测试点按题目数据顺序展示（防后端返回顺序波动）；系统级错误（沙箱失败等）并入表尾明细行
 const sortedDetail = computed(() => {
   const rows = [...(othersDetail.value?.detail ?? [])].sort((a, b) => a.index - b.index)
@@ -112,7 +120,7 @@ watch(
       tab.value = 'challenge' // 默认挑战榜：低门槛即参与钩子
       othersUser.value = undefined // 换题打开重置提交者筛选
       othersView.value = 'list'
-      othersDetail.value = null
+      othersSnap.value = null
       loadBoards()
       loadOthers()
     } else {
@@ -123,7 +131,7 @@ watch(
 
 function openOthersDetail(s: Submission) {
   if (!s.id) return // 补位的空白行不可点
-  othersDetail.value = s
+  othersSnap.value = s
   othersView.value = 'detail'
 }
 
@@ -151,7 +159,7 @@ async function refreshOthersDetail() {
   const id = othersDetail.value?.id
   if (id) {
     try {
-      othersDetail.value = await submissionApi.get(id)
+      othersSnap.value = await submissionApi.get(id)
     } catch {
       /* 拦截器已提示 */
     }
@@ -168,9 +176,11 @@ let othersProgressTimer: ReturnType<typeof setTimeout> | null = null
 async function othersFetch(id: number) {
   try {
     const s = await submissionApi.get(id)
-    if (othersDetail.value?.id === s.id) othersDetail.value = s
+    if (othersSnap.value?.id === s.id) othersSnap.value = s
     if (isQueueStatus(s.status)) return
     othersPollId = 0
+    // 完成提示等色块回放走完（与详情视图同步揭晓）；详情不在屏时立即放行
+    await settleCasePlayback(s.id)
     ElMessage.success(`#${s.id} 重测完成`)
     loadOthers(othersPage.value)
   } catch {
@@ -523,7 +533,8 @@ async function onOthersRestoreScore() {
           </template>
           <div class="detail-sub">代码</div>
           <CodePane :code="othersDetail.code" :language="othersDetail.language" />
-          <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮，终态回落下方明细表 -->
+          <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮，终态回落下方明细表；
+               othersDetail 是回放展示快照（v0.99.1），快题按 ≥100ms/点 逐个点亮 -->
           <template v-if="isQueueStatus(othersDetail.status) && othersDetail.case_total">
             <div class="detail-sub">评测进度</div>
             <CaseLiveBar :sub="othersDetail" />

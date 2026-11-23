@@ -5,9 +5,12 @@
 // 重测（submission.rejudge）与取消成绩/恢复成绩（submission.score.cancel）各自成位
 // （v0.97.29，默认仅 root 手动授予）；取消成绩后重测拒绝，恢复须显式「恢复成绩」。
 // v0.7.1：队列态（排队/评测/取消中）可取消评测——本人 ∨ submission.view.all。
+// 逐点回放（v0.99.1）：sub 是展示快照（色块 ≥100ms/点 逐个点亮、终态回落排在最后
+// 一枚之后），live 才是最新真实快照——动作准入一律看 live，展示一律看 sub。
 import { computed, ref, watch } from 'vue'
 import { usePolling } from '@/composables/usePolling'
 import { pushActive, useTopic } from '@/composables/useEventStream'
+import { useCasePlayback } from '@/composables/useCasePlayback'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 import { submissionApi, aiTutorApi } from '@/api'
@@ -17,6 +20,7 @@ import CodePane from '@/components/CodePane.vue'
 import MdView from '@/components/MdView.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import { fmtDate, fmtMem, fmtSec, isQueueStatus, statusDescFor } from '@/utils/format'
+import { settleCasePlayback } from '@/utils/casePlayback'
 import { useUserStore } from '@/stores/user'
 import type { Submission, SubPushEvent } from '@/types'
 
@@ -41,7 +45,9 @@ const cancelling = ref(false)
 const cancellingScore = ref(false)
 const restoringScore = ref(false)
 
-const sub = computed<Submission | null>(() => polled.value ?? props.submission ?? detail.value)
+// live = 最新真实快照；sub = 渲染用展示快照（弹窗关着不回放，如实直出）
+const live = computed<Submission | null>(() => polled.value ?? props.submission ?? detail.value)
+const sub = useCasePlayback(live, () => props.modelValue)
 const heading = computed(() => props.title || (sub.value ? `评测详情 #${sub.value.id}` : '评测详情'))
 // 重测（v0.97.29 自 view.all 拆出独立位）与取消成绩/恢复成绩各自成位，默认仅 root 手动授予
 const canRejudge = computed(() => userStore.can('submission.rejudge'))
@@ -107,7 +113,9 @@ watch(
   },
   { immediate: true },
 )
-const judging = computed(() => isQueueStatus(sub.value?.status))
+const judging = computed(() => isQueueStatus(sub.value?.status)) // 展示口径：回放收尾前仍算判题中
+// 取消评测只认真实队列态：回放收尾的瞬间真实可能已终态（服务端会拒），按钮置灰
+const liveJudging = computed(() => isQueueStatus(live.value?.status))
 // 取消评测：仅队列态（排队/评测/取消中）且 本人 ∨ 查看全部提交
 const canCancel = computed(
   () =>
@@ -216,7 +224,7 @@ async function onRestoreScore() {
 
 async function onCancel() {
   const s = sub.value
-  if (!s || cancelling.value) return
+  if (!s || cancelling.value || !liveJudging.value) return
   try {
     await ElMessageBox.confirm(
       `确定取消评测 #${s.id} 吗？取消后本次评测作废（得分 0），不可恢复。`,
@@ -251,9 +259,11 @@ function applyPolled(s: Submission) {
   polled.value = s
   if (isQueueStatus(s.status)) return // 队列/评测/取消中：继续等
   if (pollId === s.id) {
-    if (pollDoneMsg) ElMessage.success(pollDoneMsg)
-    pollDoneMsg = null
     pollId = 0 // 终态：轮询 fn 见 0 即停
+    const msg = pollDoneMsg
+    pollDoneMsg = null
+    // 重测完成提示等色块回放走完（与弹窗同步揭晓）；回放收尾前弹窗仍展示判题中
+    if (msg) void settleCasePlayback(s.id).then(() => ElMessage.success(msg))
   }
 }
 
@@ -299,7 +309,7 @@ watch(pushActive, (on) => {
 let progressTimer: ReturnType<typeof setTimeout> | null = null
 useTopic('sub', (raw) => {
   const ev = raw as unknown as SubPushEvent
-  const watching = pollId || (props.modelValue && judging.value ? sub.value?.id : 0)
+  const watching = pollId || (props.modelValue && liveJudging.value ? live.value?.id : 0)
   if (ev.sid !== watching) return
   if (ev.kind === 'progress') {
     // 逐点信号 300ms 节流（含尾拍）：点速快于节流窗时合并拉取
@@ -330,10 +340,12 @@ watch(
 
 // 打开即跟随（v0.98）：递交后直接打开本弹窗的场景——弹窗里的提交仍在队列态
 //（Pending/Judging/取消中）时自动接管跟踪（adopt pollId，SSE 事件与兜底轮询随
-// 即驱动 Pending → 编译中… → 判题中 k/N → 终态回落全程）；终态不提示 toast
-//（页面级完成提示由各提交入口自己负责，弹窗只如实展示状态）。
+// 即驱动 Pending → 编译中… → 判题中 k/N 逐个点亮 → 终态回落全程；逐个点亮经
+// useCasePlayback 按 ≥100ms/点 回放，v0.99.1）；终态不提示 toast（页面级完成提示
+// 由各提交入口自己负责，弹窗只如实展示状态）。认的是真实快照：回放收尾期间真实
+// 已终态，不得把 pollId 重新认领回去。
 watch(
-  () => [props.modelValue, sub.value?.id, sub.value?.status] as const,
+  () => [props.modelValue, live.value?.id, live.value?.status] as const,
   ([open, sid, status]) => {
     if (!open || !sid || pollId === sid) return
     if (!isQueueStatus(status ?? '')) return
@@ -406,6 +418,7 @@ watch(
               size="small"
               class="lk-btn lk-danger"
               :loading="cancelling"
+              :disabled="!liveJudging"
               @click="onCancel"
             >
               取消评测
@@ -448,8 +461,9 @@ watch(
           <div class="detail-sub">代码</div>
           <CodePane :code="sub.code" :language="sub.language" />
         </template>
-        <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮（SSE progress 信号驱动），
-             终态后回落下方明细表；case_total 由 judge 逐点回写下发 -->
+        <!-- 逐点实时进度（v0.98）：判题中色块逐个点亮（SSE progress 信号驱动），终态后
+             回落下方明细表；case_total 由 judge 逐点回写下发。sub 是回放展示快照
+             （v0.99.1）：快题按 ≥100ms/点 逐个点亮，回放走完前这里仍是判题中 -->
         <template v-if="judging && sub.case_total">
           <div class="detail-sub">评测进度</div>
           <CaseLiveBar :sub="sub" />
