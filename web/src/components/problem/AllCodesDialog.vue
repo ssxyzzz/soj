@@ -201,7 +201,9 @@ const othersPoll = usePolling(
   },
 )
 
-useTopic('sub', (raw) => {
+// 同一个处理器两条流都订：全部代码列表里都是别人的提交，重测的进度与终态事件只走
+// 全站流 suball（sub 只发给提交者本人）；服务端按权限过滤 suball，普通用户收不到
+function onSubEvent(raw: Record<string, unknown>) {
   const ev = raw as unknown as SubPushEvent
   if (ev.sid !== othersPollId) return
   if (ev.kind === 'progress') {
@@ -213,7 +215,9 @@ useTopic('sub', (raw) => {
   } else {
     void othersFetch(ev.sid)
   }
-})
+}
+useTopic('sub', onSubEvent)
+useTopic('suball', onSubEvent)
 
 watch(pushActive, (on) => {
   if (!on && othersPollId) othersPoll.restart()

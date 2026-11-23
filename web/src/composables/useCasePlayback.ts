@@ -31,11 +31,14 @@ export function useCasePlayback(
     ([s, on, show]) => playback.feed(s, on && show),
     { immediate: true, flush: 'sync' },
   )
-  // SSE progress 信号带 case_total：终态快照不带该字段，信号先到先把点数总数记下
-  useTopic('sub', (raw) => {
+  // SSE progress 信号带 case_total：终态快照不带该字段，信号先到先把点数总数记下。
+  // 两条流都订：sub 只到提交者本人，特权者看别人的提交走 suball（服务端按权限过滤）
+  const onSignal = (raw: Record<string, unknown>) => {
     const ev = raw as unknown as SubPushEvent
     playback.noteTotal(ev.sid, ev.case_total ?? 0)
-  })
+  }
+  useTopic('sub', onSignal)
+  useTopic('suball', onSignal)
   onScopeDispose(() => playback.dispose())
   return view
 }

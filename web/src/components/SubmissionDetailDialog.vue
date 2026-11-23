@@ -97,10 +97,13 @@ async function onAiDebug() {
   }
 }
 
-// 打开弹窗时拉找 bug 单价（题目难度计价；AI 未配置静默隐藏按钮）
+// 打开弹窗时拉找 bug 单价（题目难度计价；AI 未配置静默隐藏按钮）。
+// 两个 getter 分开侦听：sub 是回放展示快照，判题中每点亮一枚就换一个对象——合成一个
+// 数组当侦听源会让本监听每拍重拉一次（v0.99.1 上线后生产日志实锤：一份提交多出
+// 十余次 /ai 请求）；分开写则只在弹窗开合或换题时触发
 const aiReady = ref(false)
 watch(
-  () => [props.modelValue, sub.value?.problem_id] as const,
+  [() => props.modelValue, () => sub.value?.problem_id],
   async ([open, pid]) => {
     if (!open || !pid || !userStore.token) return
     try {
@@ -304,10 +307,13 @@ watch(pushActive, (on) => {
   if (!on && pollId && props.modelValue) judgePoll.restart()
 })
 
-// SSE sub 订阅：等待中的 pollId 或弹窗打开着的队列态提交都跟随（后者是纯增益——
-// 原实现开弹窗看不轮询，现在逐点进度也实时点亮）
+// SSE 订阅：等待中的 pollId 或弹窗打开着的队列态提交都跟随（后者是纯增益——
+// 原实现开弹窗看不轮询，现在逐点进度也实时点亮）。
+// sub 只发给提交者本人：特权者在弹窗里重测/查看别人的提交，事件走全站流 suball——
+// 同一个处理器两条流都订（服务端按权限过滤 suball，普通用户收不到，零开销）。只订 sub
+// 时老师重测学生提交，弹窗收到不到终态事件、永远停在「判题中」（v0.98 起的既有缺口）
 let progressTimer: ReturnType<typeof setTimeout> | null = null
-useTopic('sub', (raw) => {
+function onSubEvent(raw: Record<string, unknown>) {
   const ev = raw as unknown as SubPushEvent
   const watching = pollId || (props.modelValue && liveJudging.value ? live.value?.id : 0)
   if (ev.sid !== watching) return
@@ -321,7 +327,9 @@ useTopic('sub', (raw) => {
     return
   }
   void fetchPolled(ev.sid)
-})
+}
+useTopic('sub', onSubEvent)
+useTopic('suball', onSubEvent)
 
 watch(
   () => props.modelValue,

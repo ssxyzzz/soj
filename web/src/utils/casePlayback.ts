@@ -58,7 +58,7 @@ export function createCasePlayback(
   let id = 0 // 跟踪中的提交；0 = 无
   let cur: Submission | null = null // 最新真实快照
   let watching = false // 本轮是否回放：本轮从队列态跟起才回放；首帧就是终态（直接打开
-  // 已判完的提交）不回放
+  // 已判完的提交）不回放，直到它被重测回到队列态
   let active = true // 色块条在屏
   let shown = 0 // 已点亮点数
   let total = 0 // 点数总数（取见过的最大值）
@@ -156,8 +156,10 @@ export function createCasePlayback(
         id = 0
       }
     } else {
-      if (sub.status === 'Pending') {
-        // 重测入队 / 失联回收重排：新一轮判题从零点亮（新一轮同样跟到底）
+      // 新一轮判题（重测入队 / 批量重测 / 失联回收重排）= 回到队列态：从零点亮并跟到底。
+      // 不能只认 Pending——点重测后判题器往往几十毫秒内就领走，前端第一帧拉到的常是
+      // Judging（v0.99.1 上线后生产日志实锤：重测 12 点题回放零拍、瞬间回落）
+      if (sub.status === 'Pending' || (isQueueStatus(sub.status) && cur && !isQueueStatus(cur.status))) {
         clearTimer()
         watching = true
         shown = 0
