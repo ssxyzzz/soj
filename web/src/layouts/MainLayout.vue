@@ -17,7 +17,6 @@ import { gameApi } from '@/api'
 import { isMuted, setMuted, playLevelUp } from '@/utils/gameSounds'
 import { useImmersiveMode } from '@/composables/useImmersiveMode'
 import { pickWelcome } from '@/utils/gameText'
-import { applySWUpdate, swUpdateReady } from '@/utils/swClient'
 import { fmtRel } from '@/utils/format'
 import SiteFooterLine from '@/components/SiteFooterLine.vue'
 import type { NotificationItem, SubPushEvent } from '@/types'
@@ -284,15 +283,6 @@ function onCommand(command: string) {
       </div>
     </Transition>
     <FeastOverlay />
-    <!-- 换版横幅（v0.46 SW 预缓存）：新版本已后台预热就绪，用户确认才切换（skipWaiting
-         确认制）；× 可暂缓（本次会话内不再打扰），下次探测到 waiting 仍会提示 -->
-    <Transition name="herald-slide">
-      <div v-if="swUpdateReady" class="sw-update-banner" role="status">
-        <span>新版本已就绪</span>
-        <button type="button" class="sw-refresh-btn" @click="applySWUpdate">点此刷新</button>
-        <button type="button" class="sw-dismiss" aria-label="暂不刷新" @click="swUpdateReady = false">×</button>
-      </div>
-    </Transition>
     <!-- 沉浸模式：导航栏隐藏（题面专注限制条钮 / 画板「全屏画布」钮切换，Esc 退出） -->
     <el-header v-show="!immersive" class="header">
       <div class="header-inner">
@@ -933,52 +923,5 @@ function onCommand(command: string) {
   .herald-slide-leave-active {
     transition: opacity 0.3s;
   }
-}
-
-/* 换版横幅（v0.46）：与降临横幅同一套顶部胶囊视觉，蓝底白字、错开降临横幅的 12px 层位 */
-.sw-update-banner {
-  position: fixed;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2600;
-  display: flex;
-  align-items: center;
-  gap: var(--soj-sp-12);
-  padding: var(--soj-sp-6) var(--soj-sp-8) var(--soj-sp-6) var(--soj-sp-16);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--soj-blue) 92%, transparent);
-  color: var(--soj-white);
-  font-size: var(--soj-fs-14);
-  box-shadow: 0 8px 28px color-mix(in srgb, var(--soj-blue) 40%, transparent);
-}
-
-.sw-refresh-btn {
-  border: none;
-  border-radius: 999px;
-  padding: var(--soj-sp-4) var(--soj-sp-14);
-  background: var(--soj-white);
-  color: var(--soj-blue);
-  font-size: var(--soj-fs-13);
-  font-weight: var(--soj-fw-emphasis);
-  cursor: pointer;
-}
-
-.sw-refresh-btn:hover {
-  background: var(--soj-blue-soft);
-}
-
-.sw-dismiss {
-  border: none;
-  background: transparent;
-  color: color-mix(in srgb, var(--soj-white) 75%, transparent);
-  font-size: var(--soj-fs-16);
-  line-height: 1;
-  padding: var(--soj-sp-2) var(--soj-sp-8);
-  cursor: pointer;
-}
-
-.sw-dismiss:hover {
-  color: var(--soj-white);
 }
 </style>

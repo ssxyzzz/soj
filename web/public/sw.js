@@ -15,12 +15,14 @@
  * 管辖面刻意收窄：只接管导航、/assets/ 哈希件与 favicon.svg；/uploads/（用户图
  * 片，量不可控）与一切其他路径原样放行走网络——SW 坏也坏不到主流程。
  *
- * 换版流（skipWaiting 用户确认制）：新 SW install 时按清单后台预热（并发 2 错峰；
- * v0.67 增量：上一版缓存里的同名哈希件直接跨缓存复制，仅新哈希件走网络）
- * → waiting → 页面横幅「新版本已就绪」→ 用户点击 postMessage SKIP_WAITING →
- * activate 清旧缓存 → 页面 reload 后全部命中本地缓存，零网络冷载。
+ * 换版流（v0.98.2 静默交接，横幅确认制退役）：新 SW install 时按清单后台预热（并发
+ * 2 错峰；v0.67 增量：上一版缓存里的同名哈希件直接跨缓存复制，仅新哈希件走网络）
+ * → waiting，使用中的会话跑旧版不受打扰（编辑器无草稿持久化，会话内刷新丢代码）
+ * → 各标签页**下次整页加载**时 swClient 发 postMessage SKIP_WAITING → activate 清
+ * 旧缓存 → 页面 reload 后全部命中本地缓存，零网络冷载；未整页加载的旧标签由
+ * router.onError 404 自愈链（整页导航拿新版）接管。
  * 缓存封顶（v0.60 补丁）：install 预热完即回收历史预热缓存——旧逻辑清理只挂
- * activate，未确认的更新被更新的等待者顶掉时 activate 永远不跑，缓存按版本无上限
+ * activate，未激活的更新被更新的等待者顶掉时 activate 永远不跑，缓存按版本无上限
  * 堆叠（生产实测单 origin 数百 MB）；现 install 预热完保留「当前 + 激活中（IDB 记名）」
  * 至多两份，其余即删，全链 fetch 均有网络回源故删除无损在线行为。
  */
@@ -32,8 +34,8 @@ const MANIFEST_URL = '/asset-manifest.json'
 // base64url 字母表含 - 与 _——漏 - 约一成文件不吃 cache-first，冷载通道重新打开）
 const HASHED = /-[0-9A-Za-z_$-]{8}\.[0-9A-Za-z]+$/
 
-// —— 旧版本预热缓存回收（v0.60 补丁）——清理原本只挂在 activate：用户确认制换版下，
-// 未确认的更新各自预热一份 ~4MB 缓存后无人清理（等待中的 SW 被更新的等待者顶掉时
+// —— 旧版本预热缓存回收（v0.60 补丁）——清理原本只挂在 activate：静默交接下，
+// 未交接的更新各自预热一份 ~4MB 缓存后无人清理（等待中的 SW 被更新的等待者顶掉时
 // activate 永远不会跑），发版频繁时按版本无上限堆叠（生产实测单 origin 数百 MB）。
 // install 预热完即回收：保留当前 warming 缓存与激活中 SW 的缓存（activate 用 IDB
 // 记名；历史版本无记录按「无激活」处理，其缓存回收后各 fetch 路径有网络回源兜底），
@@ -236,7 +238,7 @@ async function networkFirst(req, pathname) {
 
 self.addEventListener('message', (event) => {
   const data = event.data || {}
-  if (data.type === 'SKIP_WAITING') self.skipWaiting() // 仅用户点击横幅确认后由页面发来
+  if (data.type === 'SKIP_WAITING') self.skipWaiting() // 页面整页加载时静默交接发来（swClient）
   else if (data.type === 'PING') event.source && event.source.postMessage({ type: 'PONG', build: BUILD })
 })
 
