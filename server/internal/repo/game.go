@@ -1,9 +1,9 @@
 package repo
 
-// 游戏感批数据地基（v0.41）：连击/坚持计数器（判题回写维护）、今日挑战（v0.97.12
-// 起登录专属 + 按账号等级个性化确定性选题，首 AC 掉落 ×2）、每日复仇（错题重战
-// 掉落 ×1.5）、成就判定、知识星图、降临横幅、连击/坚持双榜。总原则「钩住不施压」：
-// 只记正向数据，无任何惩罚状态。
+// 游戏感批数据地基（v0.41）：连击/坚持计数器（判题回写维护，v0.100 起随排行榜快照
+// 下发）、今日挑战（v0.97.12 起登录专属 + 按账号等级个性化确定性选题，首 AC 掉落 ×2）、
+// 每日复仇（错题重战掉落 ×1.5）、成就判定、知识星图、降临横幅。
+// 总原则「钩住不施压」：只记正向数据，无任何惩罚状态。
 
 import (
 	"context"
@@ -29,7 +29,8 @@ func beijingDay(t time.Time) string {
 
 // ---- 连击 / 坚持（判题回写路径维护，user 文档字段） ----
 
-// GameStats 连击与坚持现状（个人主页 / 提交结果 payload 消费）。
+// GameStats 连击与坚持现状（个人主页 / 提交结果 payload / 排行榜快照消费）。
+// StreakDays 为读时折算后的当前有效天数（见 EffectiveStreakDays）。
 type GameStats struct {
 	ComboCur   int    `bson:"comboCur"`
 	ComboBest  int    `bson:"comboBest"`
@@ -40,10 +41,11 @@ type GameStats struct {
 }
 
 // TrackJudgeOutcome 判题回写后的连击/坚持维护（仅 published 提交调用——比赛期
-// 提交不动计数，与玉/XP 口径一致）。连击（v0.45 跨日口径）：连续异题 AC 累计，
-// 同题重复 AC 不涨（防重交刷连击）；WA 等未 AC 正式提交清零（Cancelled 主动放弃
-// 不清——手滑保护）；断更日（上次 AC 在前天或更早）清零——与火焰/坚持榜「连续」
-// 语义统一。坚持按北京时间自然日：当天已有 AC 不变，跨一天 +1，断更重置为 1。
+// 提交不动计数，与玉/XP 口径一致）。
+// 连击：连续异题 AC 累计，同题重复 AC 不涨（防重交刷连击）；未 AC 的正式提交清零
+//（Cancelled 主动放弃不清——手滑保护）；与时间无关——隔多久再 AC 都从上次连击续接
+//（v0.100：连击只在判错时断）。
+// 坚持按北京时间自然日：当天已有 AC 不变，跨一天 +1，断更（上次 AC 在前天或更早）重置为 1。
 func (r *Repo) TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted, cancelled bool) (*GameStats, error) {
 	var u struct {
 		ComboCur   int    `bson:"comboCur"`
@@ -66,23 +68,14 @@ func (r *Repo) TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted, 
 	}
 	today := beijingDay(time.Now())
 	yesterday := beijingDay(time.Now().AddDate(0, 0, -1))
-	// 断更判定：上次 AC 在前天或更早（今天/昨天有 AC 均算连续）——首提交（空串）不算断
-	broke := u.LastAcDay != "" && u.LastAcDay != today && u.LastAcDay != yesterday
 	set := bson.M{}
 	if accepted {
 		if pid != u.LastAcPID {
-			combo := u.ComboCur
-			if broke {
-				combo = 0 // 断更：连击从本次重新起算
-			}
-			set["comboCur"] = combo + 1
-			if combo+1 > u.ComboBest {
-				set["comboBest"] = combo + 1
+			set["comboCur"] = u.ComboCur + 1
+			if u.ComboCur+1 > u.ComboBest {
+				set["comboBest"] = u.ComboCur + 1
 			}
 			set["lastAcPid"] = pid
-		} else if broke {
-			// 同题重交不涨连击，但断更本身要清——连续性度量不残留旧值
-			set["comboCur"] = 0
 		}
 		if today != u.LastAcDay {
 			streak := 1
@@ -109,17 +102,18 @@ func (r *Repo) TrackJudgeOutcome(ctx context.Context, uid, pid int64, accepted, 
 	return r.GetGameStats(ctx, uid)
 }
 
-// GetGameStats 连击/坚持现状（无文档全零）。
+// GetGameStats 连击/坚持现状（无文档全零）；坚持天数为读时折算值。
 func (r *Repo) GetGameStats(ctx context.Context, uid int64) (*GameStats, error) {
 	var u struct {
 		ComboCur   int    `bson:"comboCur"`
 		ComboBest  int    `bson:"comboBest"`
 		StreakDays int    `bson:"streakDays"`
 		StreakBest int    `bson:"streakBest"`
+		LastAcDay  string `bson:"lastAcDay"`
 	}
 	err := r.users.FindOne(ctx, bson.M{"_id": uid},
 		options.FindOne().SetProjection(bson.M{
-			"comboCur": 1, "comboBest": 1, "streakDays": 1, "streakBest": 1,
+			"comboCur": 1, "comboBest": 1, "streakDays": 1, "streakBest": 1, "lastAcDay": 1,
 		})).Decode(&u)
 	if IsNotFound(err) {
 		return &GameStats{}, nil
@@ -128,7 +122,21 @@ func (r *Repo) GetGameStats(ctx context.Context, uid int64) (*GameStats, error) 
 		return nil, err
 	}
 	return &GameStats{ComboCur: u.ComboCur, ComboBest: u.ComboBest,
-		StreakDays: u.StreakDays, StreakBest: u.StreakBest}, nil
+		StreakDays: EffectiveStreakDays(u.StreakDays, u.LastAcDay, time.Now()),
+		StreakBest: u.StreakBest, LastAcDay: u.LastAcDay}, nil
+}
+
+// EffectiveStreakDays 当前有效的坚持天数（v0.100 读时折算）：断更判定与判题回写
+// 同一条规则——上次 AC 不在今天或昨天（北京时间）即已断更，按 0；从未 AC（lastAcDay
+// 为空）按 0。写入侧要到下一次 AC 才重置 streakDays，读时折算让断更的人立刻归零。
+func EffectiveStreakDays(streakDays int, lastAcDay string, now time.Time) int {
+	if streakDays <= 0 {
+		return 0
+	}
+	if lastAcDay != beijingDay(now) && lastAcDay != beijingDay(now.AddDate(0, 0, -1)) {
+		return 0
+	}
+	return streakDays
 }
 
 // ---- 今日挑战（v0.97.12 起登录专属 + 按账号等级个性化；v0.41 全站同题落库
@@ -700,98 +708,6 @@ func (r *Repo) RecentHeralds(ctx context.Context, limit int) ([]HeraldRow, error
 		rows = append(rows, HeraldRow{UID: row.UID, Level: row.Level, Nickname: nickname, At: row.At})
 	}
 	return rows, nil
-}
-
-// ---- 连击 / 坚持双榜 ----
-
-// GameRankRow 连击/坚持榜单行。
-type GameRankRow struct {
-	Rank      int    `json:"rank"`
-	UID       int64  `json:"user_id"`
-	Username  string `json:"username"`
-	Nickname  string `json:"nickname"`
-	Value     int    `json:"value"`
-	Best      int    `json:"best"`
-}
-
-// GameBoard 连击榜按历史 comboBest 倒序——退坑玩家的历史成绩仍在榜 /
-// 坚持榜 streakDays 倒序；users 集合字段直查。
-// 行 Value = 排序维度值，Best = 另一维度（连击榜两维互为对照）。
-func (r *Repo) GameBoard(ctx context.Context, kind string, limit int) ([]GameRankRow, error) {
-	sortField, curF, bestF := "comboBest", "comboCur", "comboBest"
-	if kind == "streak" {
-		sortField, curF, bestF = "streakDays", "streakDays", "streakBest"
-	}
-	filter := bson.M{sortField: bson.M{"$gt": 0}}
-	total, err := r.users.CountDocuments(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	cur, err := r.users.Find(ctx, filter,
-		options.Find().SetProjection(bson.M{"uname": 1, "nickname": 1, curF: 1, bestF: 1}).
-			SetSort(bson.D{{Key: sortField, Value: -1}, {Key: "_id", Value: 1}}).
-			SetLimit(int64(limit)))
-	if err != nil {
-		return nil, err
-	}
-	defer cur.Close(ctx)
-	rows := make([]GameRankRow, 0, limit)
-	i := 0
-	for cur.Next(ctx) {
-		var row struct {
-			ID       int64  `bson:"_id"`
-			Uname    string `bson:"uname"`
-			Nickname string `bson:"nickname"`
-			Val      int    `bson:"comboCur"`
-			Streak   int    `bson:"streakDays"`
-			Best     int    `bson:"comboBest"`
-			SBest    int    `bson:"streakBest"`
-		}
-		if err := cur.Decode(&row); err != nil {
-			return nil, err
-		}
-		i++
-		gr := GameRankRow{Rank: i, UID: row.ID, Username: row.Uname, Nickname: row.Nickname}
-		if kind == "streak" {
-			gr.Value, gr.Best = row.Streak, row.SBest
-		} else {
-			gr.Value, gr.Best = row.Best, row.Val
-		}
-		if gr.Nickname == "" {
-			gr.Nickname = gr.Username
-		}
-		rows = append(rows, gr)
-	}
-	_ = total
-	return rows, cur.Err()
-}
-
-// GameBoardRank 榜外观察者名次（比我高的人数 +1）；0 = 不在榜。口径同 GameBoard。
-func (r *Repo) GameBoardRank(ctx context.Context, kind string, uid int64) (int, int) {
-	field := "comboBest"
-	if kind == "streak" {
-		field = "streakDays"
-	}
-	var u struct {
-		St  int `bson:"streakDays"`
-		Bst int `bson:"comboBest"`
-	}
-	if err := r.users.FindOne(ctx, bson.M{"_id": uid},
-		options.FindOne().SetProjection(bson.M{"streakDays": 1, "comboBest": 1})).Decode(&u); err != nil {
-		return 0, 0
-	}
-	val := u.Bst
-	if kind == "streak" {
-		val = u.St
-	}
-	if val <= 0 {
-		return 0, val
-	}
-	n, err := r.users.CountDocuments(ctx, bson.M{field: bson.M{"$gt": val}})
-	if err != nil {
-		return 0, val
-	}
-	return int(n) + 1, val
 }
 
 // RawAchievements 个人成就解锁记录（端点层与定义表 join）。

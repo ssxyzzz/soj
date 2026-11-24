@@ -129,7 +129,7 @@ func run(ctx context.Context, c cfg) error {
 	if err := loginAll(hc, base, us, m); err != nil {
 		return err
 	}
-	log.Printf("[2/4] 预热浏览：me / site/stats / problems / contest detail")
+	log.Printf("[2/4] 预热浏览：me / site/stats / problems / contest detail / rank / 用户主页")
 	runBrowse(hc, base, us, cid, m)
 	log.Printf("[3/4] 赛中负载：提交 + 轮询提交状态 + 榜单轮询（重叠）")
 	examRes, board := runExam(hc, base, us, cid, pid, m)

@@ -67,13 +67,9 @@ type Repo struct {
 
 	// race 榜单微缓存（v0.51）：PK 进行中全班 3s 轮询同一份榜，RaceBoard 聚合
 	// 按命中摊薄；短 TTL + raceMs 回写/取消/结算时主动失效兜底正确性。
-	// 全站榜 solved 微缓存（v0.51）：RankMe 靠前人数的全体 AC 双 $group 共享前段，
-	// 个人主页/榜单页每请求一次收敛为每 TTL 一次。两者均为单副本进程内态（工程备忘口径）。
+	// 单副本进程内态（工程备忘口径）。
 	raceBoardMu    sync.Mutex
 	raceBoardCache map[int64]raceBoardEntry
-	rankMu         sync.Mutex
-	rankSolved     map[int64]int64
-	rankSolvedAt   time.Time
 }
 
 type raceBoardEntry struct {

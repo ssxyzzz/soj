@@ -10,12 +10,12 @@ package repo
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // 等级配置默认值（root 后台可调；名字 2026-10-22 两字段位版定稿：取自王者荣耀段位体系）。
@@ -208,59 +208,141 @@ func (r *Repo) UserTier(ctx context.Context, uid int64) int {
 	return lv
 }
 
+// ---- 「各难度 AC 题数」两步法（v0.100）----
+//
+// 先聚合出每人的去重 AC 题集，再只对涉及的题号取难度，计数在 Go 内存里做。原实现是
+// 单管道里逐行 $lookup 题目表——每行一次子查询游标（约 70µs/行），耗时随历史 AC 线性
+// 上涨（2000 人 / 约 6 万条 AC 对的量级一次 4.8s，两步法 122ms）。全站「题集 → 难度计数」
+// 只有这一份实现：等级徽章、成绩表、等级闸、判题回写链的成就判定与排行榜快照共用。
+
+// rankInChunk $in 批量取数的单批上限（题号/用户号分批，单条命令体积有界）。
+const rankInChunk = 10000
+
+// solvedSets 用户的去重 AC 题集（uid → pid 列表）：status=Accepted ∧ published 的提交按
+// (uid,pid) 去重，口径与总榜一致。uids 为空取全站；limit > 0 时按题集大小降序只取前
+// limit 人（防病态规模的上限）。前段只走覆盖索引 {status,published,uid,pid}，不读文档。
+func (r *Repo) solvedSets(ctx context.Context, uids []int64, limit int) (map[int64][]int64, error) {
+	match := bson.M{"status": StatusAccepted, "published": true}
+	if len(uids) > 0 {
+		match["uid"] = bson.M{"$in": uids}
+	}
+	pipeline := []bson.M{
+		{"$match": match},
+		{"$group": bson.M{"_id": "$uid", "pids": bson.M{"$addToSet": "$pid"}}},
+	}
+	if limit > 0 {
+		pipeline = append(pipeline,
+			bson.M{"$project": bson.M{"pids": 1, "n": bson.M{"$size": "$pids"}}},
+			bson.M{"$sort": bson.D{{Key: "n", Value: -1}, {Key: "_id", Value: 1}}},
+			bson.M{"$limit": limit},
+		)
+	}
+	cursor, err := r.submissions.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	out := map[int64][]int64{}
+	for cursor.Next(ctx) {
+		var row struct {
+			ID   int64   `bson:"_id"`
+			Pids []int64 `bson:"pids"`
+		}
+		if err := cursor.Decode(&row); err != nil {
+			return nil, err
+		}
+		out[row.ID] = row.Pids
+	}
+	return out, cursor.Err()
+}
+
+// allPIDs 一组题集涉及的全部题号（去重；顺序无关，仅作 $in 取难度用）。
+func allPIDs(sets map[int64][]int64) []int64 {
+	seen := map[int64]struct{}{}
+	out := make([]int64, 0, len(sets))
+	for _, pids := range sets {
+		for _, pid := range pids {
+			if _, ok := seen[pid]; ok {
+				continue
+			}
+			seen[pid] = struct{}{}
+			out = append(out, pid)
+		}
+	}
+	return out
+}
+
+// problemDifficulties 取一批题目的难度（pid → 生效难度：未设置/越界按 D3，
+// EffectiveDifficulty 同规则）。题号查不到 = 题目已删除，不入返回表——调用方据此把
+// 已删题排除出解题数与等级。入参重复无妨。
+func (r *Repo) problemDifficulties(ctx context.Context, pids []int64) (map[int64]int, error) {
+	out := make(map[int64]int, len(pids))
+	for start := 0; start < len(pids); start += rankInChunk {
+		end := start + rankInChunk
+		if end > len(pids) {
+			end = len(pids)
+		}
+		cursor, err := r.problems.Find(ctx, bson.M{"_id": bson.M{"$in": pids[start:end]}},
+			options.Find().SetProjection(bson.M{"difficulty": 1}))
+		if err != nil {
+			return nil, err
+		}
+		var rows []struct {
+			ID         int64 `bson:"_id"`
+			Difficulty int   `bson:"difficulty"`
+		}
+		if err := cursor.All(ctx, &rows); err != nil {
+			cursor.Close(ctx)
+			return nil, err
+		}
+		cursor.Close(ctx)
+		for _, row := range rows {
+			d := row.Difficulty
+			if !ValidDifficulty(d) {
+				d = 3
+			}
+			out[row.ID] = d
+		}
+	}
+	return out, nil
+}
+
+// countDifficulties 题集按难度计数：只数难度表里查得到的题（已删题目不计），
+// 返回 counts[难度-1] 与其中现存题数（即解题数）。
+func countDifficulties(pids []int64, diff map[int64]int) (counts [10]int64, solved int64) {
+	for _, pid := range pids {
+		d, ok := diff[pid]
+		if !ok {
+			continue
+		}
+		counts[d-1]++
+		solved++
+	}
+	return counts, solved
+}
+
 // SolvedDifficultyCounts 批量统计用户「各难度 AC 题数」（uid → counts[难度-1]）。
 // 口径与总榜一致（status=Accepted ∧ published）；题目已删除的不计。
-// 难度缺省按 3（EffectiveDifficulty 同规则）。
+// 难度缺省按 3（EffectiveDifficulty 同规则）。没有任何有效 AC 的用户不入返回表。
 func (r *Repo) SolvedDifficultyCounts(ctx context.Context, uids []int64) (map[int64][10]int64, error) {
 	out := make(map[int64][10]int64, len(uids))
 	if len(uids) == 0 {
 		return out, nil
 	}
-	sum := func(d int) bson.M {
-		return bson.M{"$sum": bson.M{"$cond": bson.A{
-			bson.M{"$eq": bson.A{bson.M{"$ifNull": bson.A{"$p.difficulty", 3}}, d}}, 1, 0}}}
-	}
-	group := bson.M{"_id": "$_id.uid"}
-	for d := 1; d <= 10; d++ {
-		group[fmt.Sprintf("c%d", d)] = sum(d)
-	}
-	cursor, err := r.submissions.Aggregate(ctx, []bson.M{
-		{"$match": bson.M{"uid": bson.M{"$in": uids}, "status": StatusAccepted, "published": true}},
-		{"$group": bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}},
-		{"$lookup": bson.M{
-			"from":         "problems",
-			"localField":   "_id.pid",
-			"foreignField": "_id",
-			"pipeline":     bson.A{bson.M{"$project": bson.M{"difficulty": 1}}},
-			"as":           "p",
-		}},
-		{"$unwind": "$p"},
-		{"$group": group},
-	})
+	sets, err := r.solvedSets(ctx, uids, 0)
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
-	for cursor.Next(ctx) {
-		var row struct {
-			ID  int64 `bson:"_id"`
-			C1  int64 `bson:"c1"`
-			C2  int64 `bson:"c2"`
-			C3  int64 `bson:"c3"`
-			C4  int64 `bson:"c4"`
-			C5  int64 `bson:"c5"`
-			C6  int64 `bson:"c6"`
-			C7  int64 `bson:"c7"`
-			C8  int64 `bson:"c8"`
-			C9  int64 `bson:"c9"`
-			C10 int64 `bson:"c10"`
-		}
-		if err := cursor.Decode(&row); err != nil {
-			return nil, err
-		}
-		out[row.ID] = [10]int64{row.C1, row.C2, row.C3, row.C4, row.C5, row.C6, row.C7, row.C8, row.C9, row.C10}
+	diff, err := r.problemDifficulties(ctx, allPIDs(sets))
+	if err != nil {
+		return nil, err
 	}
-	return out, cursor.Err()
+	for uid, pids := range sets {
+		if counts, solved := countDifficulties(pids, diff); solved > 0 {
+			out[uid] = counts
+		}
+	}
+	return out, nil
 }
 
 // ---- 存量难度迁移（difficultyV1，v0.11 一次性） ----

@@ -342,14 +342,19 @@ export interface SubmissionListResult {
   total: number
 }
 
+/** 排行榜行（v0.100 四榜合一）：服务端整表下发，行不带名次——名次由前端按当前排序列在内存算。 */
 export interface RankItem {
-  rank: number
+  rank?: number // 前端计算：当前视图里的位置（从 1 起）；未上榜为空
   user_id: number
   username: string
   nickname: string
-  solved: number
-  level?: number // 学生等级 1–10（v0.11；聚合失败省略）
-  xp?: number // 经验累计（等级榜同级排序副键，随接口下发但不展示；有 AC 历史才有）
+  solved: number // 解题数（已删题目的 AC 不计）
+  level?: number // 学生等级 1–10
+  xp?: number // 经验累计（排序副键，随接口下发但不展示）
+  combo_cur: number // 当前连击（只在判错时断）
+  combo_best: number // 历史连击
+  streak_days: number // 坚持天数（断更读出为 0）
+  streak_best: number // 历史坚持
 }
 
 // 选人筛选用账号条目（GET /users/lookup；提交记录/所有代码的「选手」下拉）

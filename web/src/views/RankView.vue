@@ -1,137 +1,127 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import type { TableInstance } from 'element-plus'
 
 import { rankApi } from '@/api'
 import TierBadge from '@/components/TierBadge.vue'
-import { usePagedList } from '@/composables/usePagedList'
 import { useListQuery } from '@/composables/useListQuery'
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
 import type { RankItem } from '@/types'
+import {
+  DEFAULT_RANK_SORT,
+  RANK_SORT_LABELS,
+  buildRankView,
+  isRankSortKey,
+  rankEmptyText,
+  rankPageRows,
+  type RankSortKey,
+} from '@/utils/rankSort'
 
 const levels = useLevelsStore()
 levels.ensure()
 const userStore = useUserStore()
 const router = useRouter()
 
-// me = 观察者条目（含榜外名次），随每页请求一并返回，置顶展示用
-const me = ref<RankItem | null>(null)
-const board = ref<'level' | 'solve' | 'combo' | 'streak'>('level')
-const { list, total, page, pageSize, loading, load } = usePagedList<RankItem>(async (p) => {
-  // 等级榜服务端排序（名次号与排序严格一致）；刷题榜走缺省解题数排序
-  const res = await rankApi.top(p, board.value === 'level' ? 'level' : undefined)
-  me.value = res.me
-  return { list: res.items, total: res.total }
-}, { pageSize: 100 })
+/**
+ * 排行榜（v0.100 四榜合一）：一张表，六列可点表头排序。
+ * 打开页面拉一次整表，之后不监听、不轮询、不自动换表——排序、过滤、名次全在内存算，
+ * 换列不请求。
+ */
+const pageSize = 100 // 每页人数（前端切片）
+const all = ref<RankItem[]>([]) // 服务端整表（只读，不随排序改动）
+const loading = ref(false)
+const sortKey = ref<RankSortKey>(DEFAULT_RANK_SORT)
+const page = ref(1)
+const tableRef = ref<TableInstance>()
 
-// URL 即状态（v0.39）：页码进 query，返回不丢页（仅页码，榜单无筛选）
+// 列上只留降序：点表头即按该列排名，同列再点不翻转（榜单场景无升序需求）
+const DESC_ONLY: Array<'ascending' | 'descending' | null> = ['descending']
+
+// URL 即状态（v0.39）：排序列与页码进 query，返回不丢现场
 const lq = useListQuery()
-
-// v3-full 排名页：前三名领奖台卡（渐变大数字 + 首字头像）；仅第一页展示；
-// 连击/坚持榜用 gameRows 前三（行形状对齐 rank/solved 字段供模板复用）
-const podium = computed<Record<string, unknown>[]>(() => {
-  if (board.value === 'combo' || board.value === 'streak') {
-    return gameRows.value.slice(0, 3).map((r) => ({
-      rank: r.rank, user_id: r.user_id, username: r.username,
-      nickname: r.nickname, value: r.value, solved: r.value, best: r.best,
-    })) as unknown as Record<string, unknown>[]
-  }
-  return page.value === 1 ? (list.value as unknown as Record<string, unknown>[]).slice(0, 3) : []
-})
-// 领奖台展示顺序：2 - 1 - 3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
-// 领奖台顺序 2-1-3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
-type PodiumRow = {
-  rank: number
-  user_id: number
-  username: string
-  nickname: string
-  solved: number
-  level?: number
-  value?: number
-  best?: number
+function syncQuery() {
+  lq.sync({
+    sort: sortKey.value === DEFAULT_RANK_SORT ? undefined : sortKey.value,
+    page: page.value > 1 ? page.value : undefined,
+  })
 }
-const podiumOrder = computed<PodiumRow[]>(() => {
-  const rows = podium.value as unknown as PodiumRow[]
-  return [rows[1], rows[0], rows[2]].filter(Boolean)
-})
-// 表格：观察者置顶行——仅当不在本页榜内（在榜内时榜单行自带「· 我」标记，
-// 置顶会重复出现两行同一人，v0.41 验收修正）
-const meOnBoard = computed(() => !!me.value && list.value.some((x) => x.user_id === me.value!.user_id))
-const tableRows = computed(() => (me.value && !meOnBoard.value ? [me.value, ...list.value] : list.value))
 
-// 页头标题/副标题随榜切换（v0.41 多榜）
-const pageTitle = computed(() =>
-  ({ level: '等级排名', solve: '解题排名', combo: '连击排名', streak: '坚持排名' })[board.value],
-)
-const pageSub = computed(() =>
-  ({
-    level: '按等级与经验排序 · 每页 100 名 · 等级实时聚合，调整难度全员等级自动跟随',
-    solve: '按通过题数排序 · 每页 100 名',
-    combo: '跨日累计连续 AC，WA/断更清零 · 同题重交不涨 · 按历史连击排序',
-    streak: '每天至少 AC 一题，断更清零 · 当前天数',
-  })[board.value],
-)
-
-// ---- 多榜制（v0.41）：等级/刷题共用 /api/rank 数据（客户端重排），连击/坚持走 game-rank ----
-const gameRows = ref<{ rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]>([])
-const gameMeRank = ref(0)
-const gameMeValue = ref(0)
-const gameLoading = ref(false)
-
-async function loadGameBoard() {
-  gameLoading.value = true
+async function load() {
+  loading.value = true
   try {
-    const kind: 'combo' | 'streak' = board.value === 'streak' ? 'streak' : 'combo'
-    const r = await import('@/api').then((m) => m.gameApi.gameRank(kind))
-    gameRows.value = r.list
-    gameMeRank.value = r.my_rank ?? 0
-    gameMeValue.value = r.my_value ?? 0
+    const res = await rankApi.top()
+    all.value = res.items
+    const maxPage = Math.max(1, Math.ceil(res.items.length / pageSize))
+    if (page.value > maxPage) page.value = maxPage
   } finally {
-    gameLoading.value = false
+    loading.value = false
   }
 }
 
-function switchBoard(b: 'level' | 'solve' | 'combo' | 'streak') {
-  if (board.value === b) return
-  board.value = b
-  if (b === 'combo' || b === 'streak') {
-    void loadGameBoard()
-  } else {
-    // 等级/刷题换榜：重置回第一页并按新类型重拉（服务端排序口径不同）
-    page.value = 1
-    lq.sync({})
-    load()
-  }
-}
-
-// 等级榜名次号已由服务端重排（type=level），客户端不再二次排序
-const displayRows = computed<Record<string, unknown>[]>(() => {
-  if (board.value === 'combo' || board.value === 'streak') return gameRows.value as unknown as Record<string, unknown>[]
-  return tableRows.value as unknown as Record<string, unknown>[]
-})
-const boardTitle = computed(() =>
-  ({ level: '等级榜', solve: '刷题榜', combo: '连击榜', streak: '坚持榜' })[board.value],
+// 当前视图：按排序列过滤 → 排序 → 编名次
+const view = computed(() => buildRankView(all.value, sortKey.value))
+const total = computed(() => view.value.length)
+// 表格行：本页 + 「我」不在本页时置顶的一行
+const tableRows = computed(() =>
+  rankPageRows(view.value, all.value, userStore.uid, page.value, pageSize),
 )
+
+const isMe = (row: RankItem) => row.user_id === userStore.uid
+// 「我」未上榜的原因：排连击/坚持列时本列为 0 被滤掉；或还没有通过题目、整表里没有我
+const meNote = computed(() => {
+  if (!userStore.uid || loading.value || !all.value.length) return ''
+  if (view.value.some(isMe)) return ''
+  return all.value.some(isMe)
+    ? `我未上榜——「${RANK_SORT_LABELS[sortKey.value]}」只列大于 0 的人`
+    : '我暂未上榜——通过题目后进入排行榜'
+})
+
+// 前三名领奖台：跟随当前排序列，只在第一页出现
+const podium = computed(() => (page.value === 1 ? view.value.slice(0, 3) : []))
+// 领奖台顺序 2-1-3（冠军居中）；人数自适应——单人独占中列、两人 2 左 1 中
+const podiumOrder = computed<RankItem[]>(() =>
+  [podium.value[1], podium.value[0], podium.value[2]].filter((p): p is RankItem => !!p),
+)
+// 领奖台数值行：等级列展示解题数（等级徽章已在上方），其余列展示本列值
+const podiumLabel = computed(() =>
+  sortKey.value === 'level' ? RANK_SORT_LABELS.solved : RANK_SORT_LABELS[sortKey.value],
+)
+const podiumUnit = computed(() => (sortKey.value.startsWith('streak') ? ' 天' : ''))
+function podiumValue(p: RankItem): number {
+  return sortKey.value === 'level' ? p.solved : (p[sortKey.value] ?? 0)
+}
+
+// 点表头切换排序列。点已排序列的箭头仍可能把表头排序清空，此时把指示钉回降序
+function onSortChange({ prop, order }: { prop: string | null; order: string | null }) {
+  if (!isRankSortKey(prop)) return
+  sortKey.value = prop
+  page.value = 1
+  syncQuery()
+  if (!order) void nextTick(() => tableRef.value?.sort(prop, 'descending'))
+}
 
 function onPageChange(p: number) {
   page.value = p
-  lq.sync({ page: p > 1 ? p : undefined })
-  load()
+  syncQuery()
 }
 
 const avColors = ['#5a6b4f', '#8a5a33', '#3358b8', '#237e6b', '#7c3aed']
-function avColor(i: number): string {
-  return avColors[i % avColors.length]
+function avColor(rank: number): string {
+  // 第 2、3 名头像底色（冠军用渐变）；领奖台只有前三，下标取 rank 即可
+  return avColors[rank % avColors.length]
 }
 
 function rowClass({ row }: { row: RankItem }): { 'me-row': boolean } {
-  return { 'me-row': row.user_id === userStore.uid }
+  return { 'me-row': isMe(row) }
 }
 
 onMounted(() => {
+  const sort = lq.str('sort')
+  if (isRankSortKey(sort)) sortKey.value = sort
   page.value = lq.num('page')
-  load()
+  void load()
 })
 </script>
 
@@ -140,24 +130,13 @@ onMounted(() => {
   <div class="page">
     <div class="page-head">
       <div class="kicker">LEADERBOARD</div>
-      <h1 class="page-title">{{ pageTitle }}<small>{{ pageSub }}</small></h1>
+      <h1 class="page-title">
+        排行榜<small>点表头切换排序 · 严格序：当前列 → 等级 → 经验 → 解题数 · 连击与坚持只列大于 0 的人</small>
+      </h1>
     </div>
 
-    <!-- 榜单切换（v0.57 起移至领奖台之上）：切换 → 前三领奖台 → 排名表 -->
-    <div class="board-tabs">
-      <button
-        v-for="b in (['level', 'solve', 'combo', 'streak'] as const)"
-        :key="b"
-        class="board-tab"
-        :class="{ on: board === b }"
-        @click="switchBoard(b)"
-      >
-        {{ { level: '🏆 等级榜', solve: '⚔️ 刷题榜', combo: '🔥 连击榜', streak: '📅 坚持榜' }[b] }}
-      </button>
-    </div>
-
-    <!-- 领奖台（前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3）；整卡可点进公开主页 -->
-    <div v-if="podium.length" class="podium" v-loading="loading || gameLoading">
+    <!-- 领奖台（当前排序列前三；人数自适应：单人居中、两人 2 左 1 中、三人 2-1-3）；整卡可点进公开主页 -->
+    <div v-if="podium.length" class="podium" v-loading="loading">
       <div
         v-for="p in podiumOrder"
         :key="p.rank"
@@ -167,30 +146,30 @@ onMounted(() => {
         @click="router.push(`/users/${p.user_id}`)"
       >
         <div class="rank-no">{{ p.rank }}</div>
-        <div class="pav" :style="p.rank === 1 ? undefined : { background: avColor(p.rank) }">
+        <div class="pav" :style="p.rank === 1 ? undefined : { background: avColor(p.rank ?? 0) }">
           {{ (p.nickname || p.username).slice(0, 1) }}
         </div>
         <div class="pname">{{ p.nickname || p.username }}</div>
         <TierBadge v-if="p.level" :tier="p.level" kind="level" size="md" />
-        <div v-if="board === 'combo'" class="psolved">历史连击 <b>{{ p.value ?? p.solved }}</b></div>
-        <div v-else-if="board === 'streak'" class="psolved">坚持 <b>{{ p.value ?? p.solved }}</b> 天</div>
-        <div v-else class="psolved">解题 <b>{{ p.solved }}</b></div>
+        <div class="psolved">{{ podiumLabel }} <b>{{ podiumValue(p) }}</b>{{ podiumUnit }}</div>
       </div>
     </div>
 
     <el-card class="tbl-card">
-      <div v-if="(board === 'combo' || board === 'streak') && gameMeRank" class="my-game-rank">
-        我的{{ boardTitle }}名次：<b>#{{ gameMeRank }}</b>（{{ board === 'combo' ? '历史' : '当前' }} {{ gameMeValue }}）
-      </div>
+      <div v-if="meNote" class="my-note">{{ meNote }}</div>
       <el-table
-        v-loading="gameLoading"
+        v-if="total"
+        ref="tableRef"
+        v-loading="loading"
         stripe
-        :data="displayRows"
+        :data="tableRows"
         :row-class-name="rowClass as never"
+        :default-sort="{ prop: sortKey, order: 'descending' }"
+        @sort-change="onSortChange"
       >
         <el-table-column label="排名" width="88">
           <template #default="{ row }">
-            <span class="mono">{{ row.rank }}</span>
+            <span class="mono">{{ row.rank ?? '—' }}</span>
           </template>
         </el-table-column>
         <el-table-column label="选手" min-width="220">
@@ -201,34 +180,25 @@ onMounted(() => {
             </router-link>
           </template>
         </el-table-column>
-        <template v-if="board === 'combo' || board === 'streak'">
-          <el-table-column :label="board === 'streak' ? '连续天数' : '历史连击'" width="130">
-            <template #default="{ row }">
-              <span class="mono game-val">{{ row.value }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column :label="board === 'streak' ? '历史最佳' : '当前连击'" width="110">
-            <template #default="{ row }">
-              <span class="mono dim">{{ row.best }}</span>
-            </template>
-          </el-table-column>
-        </template>
-        <template v-else>
-          <el-table-column label="等级" width="150">
-            <template #default="{ row }">
-              <!-- v0.63 表内静态化（fx=false）：百行 × Lv≥3 特效链是常驻重绘源；
-                   领奖台前三（:186）保留特效 -->
-              <TierBadge v-if="row.level" :tier="row.level" kind="level" :fx="false" />
-              <span v-else class="dim">—</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="解题数" width="100">
-            <template #default="{ row }">
-              <span class="mono">{{ row.solved }}</span>
-            </template>
-          </el-table-column>
-        </template>
+        <el-table-column
+          v-for="key in (['level', 'solved', 'combo_cur', 'combo_best', 'streak_days', 'streak_best'] as const)"
+          :key="key"
+          :prop="key"
+          :label="RANK_SORT_LABELS[key]"
+          :width="key === 'level' ? 150 : 110"
+          sortable="custom"
+          :sort-orders="DESC_ONLY"
+        >
+          <template #default="{ row }">
+            <!-- 表内静态化（v0.63）：百行 × Lv≥3 特效链是常驻重绘源；领奖台保留特效 -->
+            <TierBadge v-if="key === 'level' && row.level" :tier="row.level" kind="level" :fx="false" />
+            <span v-else-if="key === 'level'" class="dim">—</span>
+            <span v-else-if="row[key]" class="mono">{{ row[key] }}</span>
+            <span v-else class="dim">—</span>
+          </template>
+        </el-table-column>
       </el-table>
+      <el-empty v-else-if="!loading" :description="rankEmptyText(sortKey)" />
       <!-- 超过一页才出翻页器；翻页换的是表格内容，领奖台只在第一页出现 -->
       <div v-if="total > pageSize" class="pager">
         <el-pagination
@@ -240,10 +210,6 @@ onMounted(() => {
           @current-change="onPageChange"
         />
       </div>
-      <el-empty
-        v-if="!loading && (board === 'combo' || board === 'streak' ? !displayRows.length : !tableRows.length)"
-        :description="board === 'combo' ? '还没有连击记录——连续 AC 不失误就能上榜' : board === 'streak' ? '还没有坚持记录——每天至少 AC 一题开始积累' : '还没有人通过题目，快去抢占第一！'"
-      />
     </el-card>
 
     <div class="rank-footer">
@@ -290,34 +256,6 @@ onMounted(() => {
   border-color: rgb(var(--soj-blue-rgb) / 0.22);
 }
 
-/* 尺寸层级 1>2>3（v0.41 验收调整）：冠军头像/名次号放大，二三名收敛 */
-.pcard.p1 .pav {
-  width: 66px;
-  height: 66px;
-  font-size: var(--soj-fs-22);
-}
-
-.pcard.p1 .rank-no {
-  font-size: 52px;
-}
-
-.pcard.p2 .rank-no,
-.pcard.p3 .rank-no {
-  font-size: var(--soj-fs-32);
-}
-
-.pcard.p2 .pav,
-.pcard.p3 .pav {
-  width: 48px;
-  height: 48px;
-  font-size: var(--soj-fs-18);
-}
-
-.pcard.p2 .pname,
-.pcard.p3 .pname {
-  font-size: var(--soj-fs-14);
-}
-
 .rank-no {
   font-size: 40px;
   font-weight: var(--soj-fw-heavy);
@@ -334,6 +272,7 @@ onMounted(() => {
   color: transparent;
 }
 
+/* 尺寸层级 1>2>3：冠军头像放大，二三名收敛 */
 .pav {
   width: 54px;
   height: 54px;
@@ -356,10 +295,22 @@ onMounted(() => {
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
 }
 
+.p2 .pav,
+.p3 .pav {
+  width: 48px;
+  height: 48px;
+  font-size: var(--soj-fs-18);
+}
+
 .pname {
   font-size: var(--soj-fs-16);
   font-weight: var(--soj-fw-heavy);
   color: var(--soj-navy);
+}
+
+.p2 .pname,
+.p3 .pname {
+  font-size: var(--soj-fs-14);
 }
 
 .psolved {
@@ -397,6 +348,31 @@ onMounted(() => {
   text-overflow: ellipsis;
 }
 
+/* 表头只降序：EP 表头默认上/下两个三角，榜单没有升序——藏掉上三角；下三角落到文字行中线。
+   三角容器撑到表头单元格行高、顶对齐行框（容器中线 = 文字行中线，不随字体 x 高度漂移）；
+   三角墨迹只在盒子上半（EP 用上边框画），减去半个墨迹高才是墨迹居中；再补半像素——
+   中文字面中线比行框中线低约半像素 */
+.tbl-card :deep(.caret-wrapper) {
+  height: 23px; /* EP 表头单元格行高（.el-table .cell line-height） */
+  vertical-align: top;
+}
+
+.tbl-card :deep(.sort-caret.ascending) {
+  display: none;
+}
+
+.tbl-card :deep(.sort-caret.descending) {
+  top: calc(50% - 2px);
+  bottom: auto;
+}
+
+/* 「我未上榜」提示行：置顶行承担名次展示，这里只说原因 */
+.my-note {
+  margin-bottom: var(--soj-sp-10);
+  font-size: var(--soj-fs-14);
+  color: var(--el-text-color-secondary);
+}
+
 .rank-footer {
   display: flex;
   justify-content: center;
@@ -422,44 +398,5 @@ onMounted(() => {
     grid-template-columns: 1fr;
     gap: var(--soj-sp-12);
   }
-}
-</style>
-
-<style scoped>
-/* 多榜制（v0.41）：四榜切换胶囊（v0.57 起移至领奖台上方，脱离表格卡） */
-.board-tabs {
-  display: flex;
-  gap: var(--soj-sp-8);
-  flex-wrap: wrap;
-  margin-bottom: var(--soj-sp-20);
-}
-
-.board-tab {
-  border: 1px solid var(--el-border-color);
-  background: transparent;
-  border-radius: 999px;
-  padding: var(--soj-sp-6) var(--soj-sp-16);
-  font-size: var(--soj-fs-14);
-  cursor: pointer;
-  color: var(--el-text-color-regular);
-}
-
-.board-tab.on {
-  background: var(--soj-blue);
-  border-color: var(--soj-blue);
-  color: var(--soj-white);
-  font-weight: var(--soj-fw-bold);
-}
-
-.my-game-rank {
-  margin-bottom: var(--soj-sp-10);
-  font-size: var(--soj-fs-14);
-  color: var(--el-text-color-secondary);
-}
-
-.game-val {
-  font-weight: var(--soj-fw-heavy);
-  color: var(--soj-blue);
-  font-size: var(--soj-fs-16);
 }
 </style>

@@ -190,7 +190,7 @@ async function save() {
       </el-form-item>
       <el-form-item>
         <template #label>
-          <TipLabel label="连击玉加成" tip="连续 AC 跨日累计（WA/断更清零、同题重交不涨）；默认每 10 连击 +10%、100 连击 ×2.0 封顶。与升维祝福/每日一题/复仇/PK 名次同为倍率，发放时只取最高一项，不连乘（峰值 ×2）" />
+          <TipLabel label="连击玉加成" tip="连续 AC 累计，与时间无关——未 AC 的提交清零、主动取消不清、同题重交不涨；默认每 10 连击 +10%、100 连击 ×2.0 封顶。与升维祝福/每日一题/复仇/PK 名次同为倍率，发放时只取最高一项，不连乘（峰值 ×2）" />
         </template>
         <div class="combo-row">
           每满

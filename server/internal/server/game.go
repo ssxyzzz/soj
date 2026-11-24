@@ -240,23 +240,3 @@ func (h *Handlers) GetHeralds(c *gin.Context) {
 	}
 	ok(c, gin.H{"list": rows})
 }
-
-// GameRank GET /api/game-rank?type=combo|streak —— 连击/坚持双榜
-//（等级/刷题榜走 /api/rank）；连击榜按历史连击排序（退坑玩家的历史成绩仍在榜）。
-func (h *Handlers) GameRank(c *gin.Context) {
-	kind := c.Query("type")
-	if kind != "combo" && kind != "streak" {
-		fail(c, http.StatusBadRequest, "榜单类型仅支持 combo / streak")
-		return
-	}
-	rows, err := h.repo.GameBoard(c.Request.Context(), kind, 20)
-	if err != nil {
-		fail(c, http.StatusInternalServerError, "读取榜单失败")
-		return
-	}
-	resp := gin.H{"list": rows}
-	if uid, _, _, logged := currentUser(c); logged {
-		resp["my_rank"], resp["my_value"] = h.repo.GameBoardRank(c.Request.Context(), kind, uid)
-	}
-	ok(c, resp)
-}

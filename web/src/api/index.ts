@@ -212,11 +212,6 @@ export const gameApi = {
     get<{ list: { id: number; title: string; difficulty: number; at: string }[] }>(`/users/${uid}/favorites`),
   heralds: () =>
     get<{ list: { uid: number; level: number; nickname: string; at: string }[] }>('/heralds'),
-  gameRank: (type: 'combo' | 'streak') =>
-    get<{ list: { rank: number; user_id: number; username: string; nickname: string; value: number; best: number }[]; my_rank?: number; my_value?: number }>(
-      '/game-rank',
-      { type },
-    ),
 }
 
 export const authApi = {
@@ -483,10 +478,11 @@ export const userApi = {
 }
 
 export const rankApi = {
-  // items = 当前页榜单（每页 100 名，rank 为全榜绝对名次）；me = 观察者条目（含榜外
-  // 名次，未登录为 null）；total = 榜上总人数（翻页器用）
-  top: (page = 1, type?: 'level') =>
-    get<{ items: RankItem[]; me: RankItem | null; total: number }>('/rank', { page, ...(type ? { type } : {}) }),
+  // 排行榜整表（v0.100 四榜合一）：items 按默认序（等级 → 经验 → 解题数 → uid）下发、
+  // 行不带名次（名次由前端按当前排序列算）；total = 榜上总人数；me = 观察者在默认序上
+  // 的名次与解题数（不在表内 = 榜人数 + 1），供只要一个数字的消费方（题库页头卡）使用
+  top: () =>
+    get<{ items: RankItem[]; total: number; me: { rank: number; solved: number } | null }>('/rank'),
 }
 
 // 等级体系（v0.11）：公开读配置（排行榜/顶栏徽章渲染）

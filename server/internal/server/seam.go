@@ -68,11 +68,11 @@ type RepoAPI interface {
 	// v0.40 升维祝福：读路径兜底检测（判题路径走具体 repo 不经此缝）
 	EnsureLevelBlessing(ctx context.Context, uid int64, level int) error
 	UserBlessUntil(ctx context.Context, uid int64) (time.Time, error)
-	// v0.41 游戏感批：开箱 payload / 每日钩子 / 成就星图 / 降临 / 双榜
+	// v0.41 游戏感批：开箱 payload / 每日钩子 / 成就星图 / 降临
 	AchievementsForSubmit(ctx context.Context, uid, sid int64) ([]string, error)
 	EvaluateAchievements(ctx context.Context, uid, sid, pid int64, score int, judgedAt time.Time, perfectOneShot, isChallenge bool) ([]string, error)
-	GameBoard(ctx context.Context, kind string, limit int) ([]repo.GameRankRow, error)
-	GameBoardRank(ctx context.Context, kind string, uid int64) (int, int)
+	// 排行榜快照原始行（v0.100 四榜合一；rankCache 的取数面）
+	RankBoard(ctx context.Context, limit int) ([]repo.RankRow, error)
 	// 今日挑战（v0.97.12 登录专属 + 按等级个性化，与判题发玉 isMyDaily 同源）
 	PickDailyProblem(ctx context.Context, uid int64) (*repo.Problem, error)
 	GetGameStats(ctx context.Context, uid int64) (*repo.GameStats, error)
@@ -231,7 +231,6 @@ type RepoAPI interface {
 	ProblemTitleExists(ctx context.Context, title string) (bool, error)
 	QueryVerifyCodeRate(ctx context.Context, purpose, target, ip string) (*repo.VerifyCodeRateQuery, error)
 	QuitChallenge(ctx context.Context, uid, pid int64) (bool, error)
-	RankMe(ctx context.Context, uid int64) (rank, solved int64, err error)
 	ReconcileTagTreeDoc(ctx context.Context, docID, counterKey string, newNodes []repo.TagNode) ([]repo.TagNode, []int64, error)
 	RecordLoginFailure(ctx context.Context, uid int64, maxFail int, lockDur time.Duration) (failedCount int, locked bool, err error)
 	RecordTestDataDownload(ctx context.Context, uid, pid int64) error

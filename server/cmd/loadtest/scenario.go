@@ -71,15 +71,23 @@ func loginAll(hc *http.Client, base string, us []user, m *metrics) error {
 	return firstErr
 }
 
-// runBrowse 预热浏览：登录用户高频只读面（me / 首页统计 / 题库列表 / 比赛详情）。
+// runBrowse 预热浏览：登录用户高频只读面（me / 首页统计 / 题库列表 / 比赛详情 /
+// 排行榜整表 / 个人主页）。
 // 两拍口径（v0.66 批④）：第一拍紧跟登录（ident/personal 缓存全 miss），隔 1s 第二拍
 // 应全命中——两拍分列即缓存效应的实测证据（A5 精准失效 / A11 个性化缓存的收益面）。
+// 排行榜两端点（v0.100）：整表拉取与个人主页名次共用同一份快照——同一拍内全员并发
+// 打开，量的就是「同时打开排名页/主页」时快照重算的单飞合并效果。
 func runBrowse(hc *http.Client, base string, us []user, cid int64, m *metrics) {
-	eps := []struct{ name, path string }{
-		{"GET /api/me", "/api/me"},
-		{"GET /api/site/stats", "/api/site/stats"},
-		{"GET /api/problems", "/api/problems?page=1&page_size=20"},
-		{"GET /api/contests/:id", fmt.Sprintf("/api/contests/%d", cid)},
+	eps := []struct {
+		name string
+		path func(u *user) string
+	}{
+		{"GET /api/me", func(*user) string { return "/api/me" }},
+		{"GET /api/site/stats", func(*user) string { return "/api/site/stats" }},
+		{"GET /api/problems", func(*user) string { return "/api/problems?page=1&page_size=20" }},
+		{"GET /api/contests/:id", func(*user) string { return fmt.Sprintf("/api/contests/%d", cid) }},
+		{"GET /api/rank", func(*user) string { return "/api/rank" }},
+		{"GET /api/users/:id/profile", func(u *user) string { return fmt.Sprintf("/api/users/%d/profile", u.uid) }},
 	}
 	for pass := 1; pass <= 2; pass++ {
 		suffix := ""
@@ -93,7 +101,7 @@ func runBrowse(hc *http.Client, base string, us []user, cid int64, m *metrics) {
 			go func(u *user) {
 				defer wg.Done()
 				for _, ep := range eps {
-					r, ms, err := callJSON(hc, http.MethodGet, base, ep.path, u.token, nil)
+					r, ms, err := callJSON(hc, http.MethodGet, base, ep.path(u), u.token, nil)
 					m.observe(ep.name+suffix, r, ms, err)
 				}
 			}(&us[i])

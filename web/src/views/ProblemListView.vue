@@ -207,7 +207,8 @@ async function loadMyStats() {
   try {
     const [st, rank] = await Promise.all([authApi.myProblemStats(), rankApi.top()])
     myStats.value = st
-    // 后端已按榜单同序算好观察者名次（含榜外），不必前端 find
+    // 后端已按排行榜默认序（等级 → 经验 → 解题数 → uid，与个人主页「全站排名」同口径）
+    // 算好观察者名次（含榜外），这里只要一个数字，不必拉整表 find
     myRank.value = rank.me?.rank ?? null
   } catch {
     myStats.value = null

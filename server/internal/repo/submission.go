@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 
@@ -895,126 +896,100 @@ func (r *Repo) ListProblemStats(ctx context.Context, pids []int64) (map[int64]Pr
 	return out, cursor.Err()
 }
 
-// RankRow 排行榜一行。
+// RankRow 排行榜快照原始行（v0.100 四榜合一）：解题数与各难度 AC 题数由提交聚合而来，
+// 连击/坚持取 users 文档（判题回写维护）；LastAcDay 供服务层读时折算当前坚持天数。
 type RankRow struct {
-	UID      int64  `bson:"_id"`
-	Solved   int64  `bson:"solved"`
-	Username string `bson:"username"`
-	Nickname string `bson:"nickname"`
+	UID        int64
+	Solved     int64
+	Counts     [10]int64
+	Username   string
+	Nickname   string
+	ComboCur   int
+	ComboBest  int
+	StreakDays int
+	StreakBest int
+	LastAcDay  string
 }
 
-// RankBoard 解题排行榜全榜（limit 为防病态规模的上限，实际部署远小于此）：先按
-// (uid,pid) 去重 Accepted，再统计聚合；分页由服务层对全榜切片。比赛提交在隐藏期
-// 结束（published）后才计入总榜，防赛中推测成绩。
-func (r *Repo) RankBoard(ctx context.Context, limit int) ([]RankRow, error) {
-	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"status": StatusAccepted, "published": true}}},
-		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
-		{{Key: "$group", Value: bson.M{"_id": "$_id.uid", "solved": bson.M{"$sum": 1}}}},
-		// bson.D 保序：bson.M 键序随机会让榜单偶尔按 uid 而非解题数排序。
-		{{Key: "$sort", Value: bson.D{{Key: "solved", Value: -1}, {Key: "_id", Value: 1}}}},
-		{{Key: "$limit", Value: limit}},
-		{{Key: "$lookup", Value: bson.M{
-			"from": "users", "localField": "_id", "foreignField": "_id", "as": "u",
-		}}},
-		{{Key: "$unwind", Value: bson.M{"path": "$u", "preserveNullAndEmptyArrays": true}}},
-		{{Key: "$project", Value: bson.M{
-			"solved":   1,
-			"username": "$u.uname",
-			"nickname": "$u.nickname",
-		}}},
-	}
-	cursor, err := r.submissions.Aggregate(ctx, pipeline)
-	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-	rows := make([]RankRow, 0)
-	if err := cursor.All(ctx, &rows); err != nil {
-		return nil, err
-	}
-	return rows, nil
+// rankUserFields 快照要用的 users 字段（扁平结构体：带 bson 标签的解码必须一次到位）。
+type rankUserFields struct {
+	ID         int64  `bson:"_id"`
+	Uname      string `bson:"uname"`
+	Nickname   string `bson:"nickname"`
+	ComboCur   int    `bson:"comboCur"`
+	ComboBest  int    `bson:"comboBest"`
+	StreakDays int    `bson:"streakDays"`
+	StreakBest int    `bson:"streakBest"`
+	LastAcDay  string `bson:"lastAcDay"`
 }
 
-// rankSolvedTTL 全站榜 solved 微缓存窗口：个人主页/榜单页的 RankMe 每请求跑一遍
-// 全体 AC 双 $group（读路径最重的非 COLLSCAN 查询），共享前段按窗口摊薄（v0.51）。
-const rankSolvedTTL = 2 * time.Second
-
-// rankSolvedMap 全站 (uid → 去重解题数)，RankBoard 同口径（status=accepted &&
-// published，按 (uid,pid) 去重）。进程内短 TTL 缓存，map 对调用方只读共享。
-func (r *Repo) rankSolvedMap(ctx context.Context) (map[int64]int64, error) {
-	r.rankMu.Lock()
-	m, at := r.rankSolved, r.rankSolvedAt
-	r.rankMu.Unlock()
-	if m != nil && time.Since(at) < rankSolvedTTL {
-		return m, nil
-	}
-	pipe := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"status": StatusAccepted, "published": true}}},
-		{{Key: "$group", Value: bson.M{"_id": bson.M{"uid": "$uid", "pid": "$pid"}}}},
-		{{Key: "$group", Value: bson.M{"_id": "$_id.uid", "solved": bson.M{"$sum": 1}}}},
-	}
-	cur, err := r.submissions.Aggregate(ctx, pipe)
-	if err != nil {
-		return nil, err
-	}
-	defer cur.Close(ctx)
-	nm := map[int64]int64{}
-	for cur.Next(ctx) {
-		var row struct {
-			ID     int64 `bson:"_id"`
-			Solved int64 `bson:"solved"`
+// rankUsers 批量取快照要用的 users 字段（uid → 字段；账号已不存在则缺席）。
+func (r *Repo) rankUsers(ctx context.Context, uids []int64) (map[int64]rankUserFields, error) {
+	out := make(map[int64]rankUserFields, len(uids))
+	for start := 0; start < len(uids); start += rankInChunk {
+		end := start + rankInChunk
+		if end > len(uids) {
+			end = len(uids)
 		}
-		if err := cur.Decode(&row); err != nil {
+		cursor, err := r.users.Find(ctx, bson.M{"_id": bson.M{"$in": uids[start:end]}},
+			options.Find().SetProjection(bson.M{
+				"uname": 1, "nickname": 1, "comboCur": 1, "comboBest": 1,
+				"streakDays": 1, "streakBest": 1, "lastAcDay": 1,
+			}))
+		if err != nil {
 			return nil, err
 		}
-		nm[row.ID] = row.Solved
-	}
-	if err := cur.Err(); err != nil {
-		return nil, err
-	}
-	r.rankMu.Lock()
-	r.rankSolved, r.rankSolvedAt = nm, time.Now()
-	r.rankMu.Unlock()
-	return nm, nil
-}
-
-// RankMe 观察者位次：与榜单完全同序（solved desc、uid asc 决胜）——
-// rank = 比我靠前的人数 + 1，solved = 我的去重解题数。无任何 AC 时 solved=0、
-// rank = 全榜人数 + 1（所有有 AC 的用户都排前面）。与 RankBoard 同一聚合口径。
-// v0.51：靠前人数改在 rankSolvedMap 微缓存上内存决胜，替代原每请求全体 AC 双 $group。
-func (r *Repo) RankMe(ctx context.Context, uid int64) (rank, solved int64, err error) {
-	// 我的解题数：AC 且已发布的提交按 pid 去重
-	myPipe := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"uid": uid, "status": StatusAccepted, "published": true}}},
-		{{Key: "$group", Value: bson.M{"_id": "$pid"}}},
-		{{Key: "$count", Value: "n"}},
-	}
-	cur, err := r.submissions.Aggregate(ctx, myPipe)
-	if err != nil {
-		return 0, 0, err
-	}
-	var mine []struct {
-		N int64 `bson:"n"`
-	}
-	if err := cur.All(ctx, &mine); err != nil {
-		return 0, 0, err
-	}
-	if len(mine) > 0 {
-		solved = mine[0].N
-	}
-	// 靠前人数：解题更多，或同分但 uid 更小（与榜单排序键一致，同分不用并列名次）
-	board, err := r.rankSolvedMap(ctx)
-	if err != nil {
-		return 0, 0, err
-	}
-	ahead := int64(0)
-	for u, s := range board {
-		if s > solved || (s == solved && u < uid) {
-			ahead++
+		var rows []rankUserFields
+		if err := cursor.All(ctx, &rows); err != nil {
+			cursor.Close(ctx)
+			return nil, err
+		}
+		cursor.Close(ctx)
+		for _, row := range rows {
+			out[row.ID] = row
 		}
 	}
-	return ahead + 1, solved, nil
+	return out, nil
+}
+
+// RankBoard 全站排行榜原始行（limit 为防病态规模的上限，≤0 不设限；实际部署远小于
+// 上限）：有 AC 提交（Accepted ∧ published）的用户逐人取「去重 AC 题集 ∩ 现存题目」——
+// 已删题目的 AC 不计入解题数与等级，现存题为零的用户不出榜。比赛提交在隐藏期结束
+//（published）后才计入，防赛中推测成绩。行按 uid 升序，排序由服务层快照负责。
+func (r *Repo) RankBoard(ctx context.Context, limit int) ([]RankRow, error) {
+	sets, err := r.solvedSets(ctx, nil, limit)
+	if err != nil {
+		return nil, err
+	}
+	diff, err := r.problemDifficulties(ctx, allPIDs(sets))
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]int64, 0, len(sets))
+	for uid := range sets {
+		uids = append(uids, uid)
+	}
+	sort.Slice(uids, func(i, j int) bool { return uids[i] < uids[j] })
+	users, err := r.rankUsers(ctx, uids)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]RankRow, 0, len(sets))
+	for _, uid := range uids {
+		var row RankRow
+		row.UID = uid
+		row.Counts, row.Solved = countDifficulties(sets[uid], diff)
+		if row.Solved == 0 {
+			continue
+		}
+		if u, ok := users[uid]; ok {
+			row.Username, row.Nickname = u.Uname, u.Nickname
+			row.ComboCur, row.ComboBest = u.ComboCur, u.ComboBest
+			row.StreakDays, row.StreakBest, row.LastAcDay = u.StreakDays, u.StreakBest, u.LastAcDay
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
 }
 
 // BoardRow 题内效率榜行（v0.23）：Value = timeMs（用时榜）或 memKb（内存榜）。

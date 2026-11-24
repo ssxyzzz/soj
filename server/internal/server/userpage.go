@@ -62,14 +62,16 @@ func (h *Handlers) UserProfile(c *gin.Context) {
 		out["avatar_url"] = qqAvatarURL(u.QQ)
 	}
 
-	// 等级（徽章 + 距下一级进度）与全站排名：聚合失败降级省略，不阻塞主页
+	// 等级（徽章 + 距下一级进度）：聚合失败降级省略，不阻塞主页
 	if lv := h.levelBadgeInfo(c, id); lv != nil {
 		out["level"] = lv
 	}
-	if rank, solved, err := h.repo.RankMe(ctx, id); err == nil {
-		out["rank"] = gin.H{"rank": rank, "solved": solved}
+	// 全站排名（v0.100）：与排行榜同一份快照——默认序（等级 → 经验 → 解题数 → uid）上的
+	// 位置，主页名次与榜单等级列名次一致；快照不可用降级省略，不阻塞主页
+	if rk, ok := h.rankOf(ctx, id); ok {
+		out["rank"] = rk
 	} else {
-		slog.Warn("用户主页：排名聚合失败，省略 rank 字段", "component", "web", "uid", id, "error", err)
+		slog.Warn("用户主页：排行榜快照不可用，省略 rank 字段", "component", "web", "uid", id)
 	}
 
 	// 统计卡：提交总数（排除 Cancelled 作废件）/ AC 条数 / AC 率 / 讨论被采纳解答数（v0.24）
