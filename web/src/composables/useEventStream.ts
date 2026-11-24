@@ -10,6 +10,14 @@ import { useUserStore } from '@/stores/user'
  * 与 visibility 回前台立即重连；401 停止（登出流程接管，不抢戏）。
  * X-Renewed-Token 换存守卫与 axios 拦截器同款（仅当连接时 token 仍是当前会话票）。
  *
+ * 连接边界（v0.100.1）：
+ * - 往返缓存：带流的页面整页跳走时被浏览器冻结而非销毁，连接会原样保留约 60 秒
+ *   （HTTP/1.x 下占住同站点连接额度之一）——进入缓存（pagehide 持久）主动断流，
+ *   恢复（pageshow 持久）重连。站内点击是单页路由不换文档，不经此路径。
+ * - HTTP/1.x 不建流：没有多路复用，浏览器对同站点最多 6 条并发连接，每个标签页的
+ *   长连接永久占 1 条（6 个标签页即额度用光、全站请求挂起）。这类页面 pushActive
+ *   恒为 false，消费方自动走轮询兜底。HTTP/2 及以上一条连接多路复用，不受此限。
+ *
  * 轮询降级契约：pushActive=false 时消费方回退 usePolling 原间隔——最坏情况
  * 等价推送前行为，轮询代码不删。
  */
@@ -25,6 +33,72 @@ let abort: AbortController | null = null
 let retryTimer: ReturnType<typeof setTimeout> | null = null
 let backoff = 1000
 let closedByUs = false
+// 401：停止重连（登出流程接管，不抢戏）——与「退避重连」互斥，见 connect 收尾
+let authRejected = false
+// 页面在往返缓存里：连接已主动断开，不排重连（页面冻结期间定时器不跑），恢复时 pageshow 重连
+let inBfcache = false
+
+// ---- HTTP/1.x 判定（v0.100.1）----
+// null = 未知（HTTPS 下尚无同源网络请求可读协议）
+let slowHttp: boolean | null = null
+
+/** ?sse=force：开发联调在 HTTP/1.x 页面强制开流（仿 ?nosw 调试开关；只对本次加载生效）。 */
+const forcePush =
+  typeof location !== 'undefined' && new URLSearchParams(location.search).get('sse') === 'force'
+
+function isHTTP1(proto: string): boolean {
+  return proto === 'http/1.0' || proto === 'http/1.1'
+}
+
+/** 同源网络请求的协商协议是否只有 HTTP/1.x；读不到返回 null。 */
+function readSlowHttp(): boolean | null {
+  if (typeof location === 'undefined' || typeof performance === 'undefined') return null
+  // 明文 HTTP：浏览器不在明文上协商 HTTP/2
+  if (location.protocol !== 'https:') return true
+  // 读本页已完成的同源请求的协商协议：接口与带鉴权请求不过 Service Worker，读数可靠；
+  // 经 Service Worker 提供的导航与静态资源读不到协议（空串），跳过。取最近完成的一条
+  const entries = [
+    ...(performance.getEntriesByType('resource') as PerformanceResourceTiming[]),
+    ...(performance.getEntriesByType('navigation') as PerformanceResourceTiming[]),
+  ].sort((a, b) => b.responseEnd - a.responseEnd)
+  for (const e of entries) {
+    if (!e.name.startsWith(location.origin + '/') || !e.nextHopProtocol) continue
+    return isHTTP1(e.nextHopProtocol)
+  }
+  return null
+}
+
+/** 当前页面是否不该建流：只有 HTTP/1.x 可用且未强制开启（协议在生命周期挂载时已读，见 watchProtocol）。 */
+function pushBlocked(): boolean {
+  return !forcePush && slowHttp === true
+}
+
+/**
+ * 协议判定在启动时读一次（首个同源网络请求已完成的，直接定论）；读不到（HTTPS 下请求
+ * 还没回来）就挂观察器，等第一个同源请求完成：实测是 HTTP/1.x 立即断流并停用（结论
+ * 粘性，此后不再建流）。读不到协议的环境维持按可用处理。
+ */
+function watchProtocol() {
+  if (typeof location === 'undefined') return
+  if (slowHttp === null) slowHttp = readSlowHttp()
+  if (slowHttp !== null || typeof PerformanceObserver === 'undefined') {
+    return
+  }
+  try {
+    const po = new PerformanceObserver((list) => {
+      for (const e of list.getEntries() as PerformanceResourceTiming[]) {
+        if (!e.name.startsWith(location.origin + '/') || !e.nextHopProtocol) continue
+        slowHttp = isHTTP1(e.nextHopProtocol)
+        po.disconnect()
+        if (slowHttp) stop()
+        return
+      }
+    })
+    po.observe({ type: 'resource', buffered: true })
+  } catch {
+    // 环境不支持：维持按可用处理
+  }
+}
 
 function dispatch(topic: string, data: Record<string, unknown>) {
   handlers.get(topic)?.forEach((h) => {
@@ -62,8 +136,10 @@ export function parseSSEChunk(
 async function connect() {
   const token = useUserStore().token
   if (!token || connecting) return
+  if (pushBlocked()) return // HTTP/1.x：不建流，消费方走轮询兜底
   connecting = true
   closedByUs = false
+  authRejected = false
   abort = new AbortController()
   try {
     const resp = await fetch('/api/events', {
@@ -74,6 +150,7 @@ async function connect() {
     })
     if (resp.status === 401) {
       stop() // 登录态失效：停止重连，登出流程接管
+      authRejected = true
       return
     }
     if (!resp.ok || !resp.body) throw new Error(`SSE ${resp.status}`)
@@ -115,8 +192,13 @@ async function connect() {
   } finally {
     connecting = false
     pushActive.value = false
-    if (!closedByUs && useUserStore().token) scheduleRetry()
-    else if (closedByUs && useUserStore().token) connect()
+    if (useUserStore().token) {
+      // 进了往返缓存：恢复时 pageshow 重连；401：停止重连，登出流程接管
+      if (!inBfcache && !authRejected) {
+        if (closedByUs) connect() // 服务端寿命轮转：正常关流，立即重连
+        else scheduleRetry()
+      }
+    }
   }
 }
 
@@ -167,6 +249,21 @@ function ensureLifecycle() {
       void connect()
     }
   })
+  // 往返缓存（v0.100.1）：进入缓存主动断流（非持久的 pagehide 是真卸载，连接随文档回收，
+  // 不用管）；恢复时重连。pagehide / pageshow 必须挂在 window 上——事件的 target 虽是
+  // document，但 document 上的监听器收不到（真实浏览器实测，手工派发到 document 能收到，
+  // 容易被误导）
+  window.addEventListener('pagehide', (e) => {
+    if (!e.persisted) return
+    inBfcache = true
+    stop()
+  })
+  window.addEventListener('pageshow', (e) => {
+    if (!e.persisted) return
+    inBfcache = false
+    if (useUserStore().token) void connect()
+  })
+  watchProtocol()
 }
 
 /**
