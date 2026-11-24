@@ -70,6 +70,12 @@
    富文本：h1 21.6 / h2 19.2 / h3 17.28 / h4-h6 16、行内 code 15.2、块级 code 15.2、KaTeX 19.36
    组件：tag 14 / 表格 tag 13 / tag close 13.3333 / tooltip 12 / popover 14 /
          alert 14·16·14 / dialog 18 / result 20 / progress 16.8·16 / CM6 默认 14
+
+   ── 覆盖 EP 的规则怎么写（2026-11-24）──────────────────────
+   v0.28 起 EP 组件样式按需引入，随路由懒加载排在本文件之后，同选择器同优先级时
+   EP 后到者胜——「main.css 最后加载恒胜」只对入口包里的组件成立。与 EP 同选择器
+   的覆盖一律提级：根组件类名叠写（.el-card.el-card），子元素前置组件根类
+   （.el-card .el-card__body）。与 EP 同阶却没提级的规则会在页面上被静默压回默认
    ============================================================ */
 html,
 body,
@@ -231,10 +237,12 @@ html {
   --soj-sp-32: 32px;
   --soj-sp-48: 48px;
 
-  /* 圆角：卡片 16 / 弹窗 20 / 胶囊 999（控件 12、小控件 5 仍以 --el-border-radius-base/small 为准） */
+  /* 圆角：卡片 16 / 弹窗 20 / 胶囊 999（控件 12、小控件 5 仍以 --el-border-radius-base/small 为准）；
+     表格 12（2026-11-24，small 表收一档 8px 写在规则处） */
   --soj-radius-card: 16px;
   --soj-radius-dialog: 20px;
   --soj-radius-pill: 999px;
+  --soj-radius-table: 12px;
 
   /* 卡片双层柔影：el-card / .card / RailCard / .aside-card 四处同源（v0.57 卡片收口） */
   --soj-shadow-card:
@@ -496,21 +504,24 @@ body.ambient-on::after {
 }
 
 /* v0.19 卡片：细 hairline 边 + 两层柔影（替换 Ant 扁平无边，卡片从画布浮出）；
-   影走 --soj-shadow-card token（v0.57 卡片收口，与 .card 同源） */
-.el-card,
-.el-card.is-always-shadow {
+   影走 --soj-shadow-card token（v0.57 卡片收口，与 .card 同源）。
+   双类提级（见文件头「覆盖 EP 的规则」）：单类时被后加载的 EP 卡片样式压成单层
+   浅影，与自绘 .card 的两层影不一致（v0.28 起失效至 2026-11-24 复位） */
+.el-card.el-card.is-always-shadow {
   box-shadow: var(--soj-shadow-card);
 }
 
-.el-card.is-hover-shadow:hover,
-.el-card.is-hover-shadow:focus {
+.el-card.el-card.is-hover-shadow:hover,
+.el-card.el-card.is-hover-shadow:focus {
   box-shadow: var(--soj-shadow-card-hover);
 }
 
 /* ---- 表格 v0.19：表头浅蓝灰底 + 藏蓝 700；表体斑马纹走模板 stripe 属性
    （底色即 --el-fill-color-lighter 冷白，展开行/合并行计数正确）----
-   表格显式钉 14（body 15 后表格跟 v3 表格口径不动）；行高 v3 口径 12px 纵向 */
-.el-table {
+   表格显式钉 14（body 15 后表格跟 v3 表格口径不动）；行高 v3 口径 12px 纵向。
+   双类提级（见文件头「覆盖 EP 的规则」）：单类时这些变量被后加载的 EP 表格样式
+   压回默认——表头白底、悬停浅灰，v0.28 起失效至 2026-11-24 复位 */
+.el-table.el-table {
   --el-table-header-bg-color: var(--soj-surface-3);
   --el-table-border-color: var(--el-border-color-light);
   /* 悬停行 7% 品牌蓝（2026-10-25 验收反馈：原 surface-2 ≈2% 蓝，与行底基本不可分）；
@@ -527,9 +538,9 @@ body.ambient-on::after {
   font-size: var(--soj-fs-tag-table);
 }
 
-/* 卡片/弹窗/messagebox 圆角（v0.19：卡 16 / 弹窗 20 / 确认框 16；
-   EP 自声明在组件类上，须在此覆盖） */
-.el-card {
+/* 卡片/弹窗/messagebox 圆角（v0.19：卡 16 / 弹窗 20 / 确认框 16；EP 自声明在组件类上，
+   须在此覆盖）。卡片双类提级（见文件头「覆盖 EP 的规则」），否则圆角被压回 EP 的 4px */
+.el-card.el-card {
   --el-card-border-radius: var(--soj-radius-card);
   --el-card-border-color: var(--soj-line);
 }
@@ -591,9 +602,9 @@ body.ambient-on::after {
   box-shadow: var(--soj-shadow-card);
 }
 
-/* ---- v0.19 二期：v3 结构性视觉全局件（页头 / 卡片头 / 表格贴边 / 状态胶囊）----
+/* ---- v0.19 二期：v3 结构性视觉全局件（页头 / 卡片头 / 状态胶囊）----
    与 web-design-v3.md §2 对应：列表页页头（kicker + 藏蓝大标题）、卡片头提级、
-   纯表格卡贴边、表格行留白加大、提交状态胶囊化、副列按钮体量。 */
+   表格行留白加大、提交状态胶囊化、副列按钮体量。 */
 
 /* 页头：kicker 渐变小标 + 藏蓝大标题（各列表页顶部） */
 .page-head {
@@ -639,8 +650,10 @@ body.ambient-on::after {
 }
 
 /* 卡片头（v3-full card-h/panel-h 口径）：藏蓝 700·15px、无竖条无底边线，
-   头部只给上/左右内边距（下间距由卡体承接）；复杂头（左标题右动作 .head）同样适用 */
-.el-card__header {
+   头部只给上/左右内边距（下间距由卡体承接）；复杂头（左标题右动作 .head）同样适用。
+   前置组件根类提级（见文件头「覆盖 EP 的规则」）：单类时内边距与底边线被后加载的
+   EP 卡片样式压回默认（下内边距 18px + 1px 底线），v0.28 起失效至 2026-11-24 复位 */
+.el-card .el-card__header {
   padding: 16px 20px 0;
   font-size: var(--soj-fs-body);
   font-weight: var(--soj-fw-bold);
@@ -648,34 +661,26 @@ body.ambient-on::after {
   border-bottom: 0;
 }
 
-/* 卡体（v3-full card-b：14px 20px 18px；纯表格卡贴边规则见下方 :has 覆盖） */
-.el-card__body {
+/* 卡体（v3-full card-b：14px 20px 18px）。卡体里有表格也照常留白，表格不贴边
+   （2026-11-24 用户拍板：原「卡体唯一子元素是表格才去内边距」的贴边规则退役——
+   分页器/提示行时有时无的卡会在贴边与留白之间跳；现在所有表格一律保留内边距）。
+   前置组件根类提级（见文件头「覆盖 EP 的规则」）：单类时被后加载的 EP 卡片样式
+   压回默认 20px，v0.28 起失效至 2026-11-24 复位 */
+.el-card .el-card__body {
   padding: 14px 20px 18px;
 }
 
-/* 表格贴边：卡体唯一子元素是表格时去内边距、随卡片圆角裁切
-   （带筛选/分页等混合内容的卡不匹配，维持内边距） */
-.el-card__body:has(> .el-table:only-child) {
-  padding: 0;
-}
-
-.el-card:has(.el-card__body > .el-table:only-child) {
-  overflow: hidden;
-}
-
-/* 头 + 贴边表格组合：头部补回下间距（对齐 v3 panel-h 16px 20px 口径） */
-.el-card__header:has(+ .el-card__body > .el-table:only-child) {
-  padding-bottom: 14px;
-}
-
-/* 表格留白加大（v3 行高口径 12–13px 级），行更透气；small 表（测试点明细）收半档 */
+/* 表格留白加大（v3 行高口径 12–13px 级），行更透气；small 表（测试点明细）收半档。
+   单元格左右内边距不放大：维持 EP 默认档（普通表 12px / small 表 8px）——2026-11-24
+   用户拍板，复位 v3 设计口径时这一项不动（原 16 / 12 不恢复）；显式钉值并提级
+   （见文件头「覆盖 EP 的规则」），与 EP 同值也不靠加载顺序 */
 .el-table th.el-table__cell,
 .el-table td.el-table__cell {
   padding: 12px 0;
 }
 
-.el-table .cell {
-  padding: 0 16px;
+.el-table .el-table__cell > .cell {
+  padding: 0 12px;
 }
 
 .el-table--small th.el-table__cell,
@@ -683,8 +688,45 @@ body.ambient-on::after {
   padding: 7px 0;
 }
 
-.el-table--small .cell {
-  padding: 0 12px;
+.el-table--small .el-table__cell > .cell {
+  padding: 0 8px;
+}
+
+/* 表格圆角（2026-11-24 用户选型「圆角无描边」）：16px 圆角的卡片里嵌直角表格，表头色带与
+   表尾收口显得生硬——表格自带圆角、不加边框，表头底色、斑马纹、表尾细线随圆角裁切
+   （EP 表格根节点自带 overflow hidden，圆角即裁切）。普通表 12px，small 表收一档 8px。
+   带 border 的网格表（测试点明细、权限矩阵等）：EP 用四条直线伪元素画外框，圆角处会
+   断开——四条直线退场，外框改由真边框画（必然跟随圆角）；末列右边线、末行底边线随
+   之去掉，免得与外框叠成双线 */
+.el-table.el-table {
+  border-radius: var(--soj-radius-table);
+}
+
+.el-table.el-table--small {
+  border-radius: 8px;
+  /* small 表字号对齐正文档。原是「EP 默认字号 token 覆盖」区的单类写法，.el-table 提级后
+     会被它的 14px 压住，2026-11-24 一并提级并挪到这里 */
+  font-size: var(--soj-fs-body);
+}
+
+.el-table.el-table--border {
+  border: 1px solid var(--el-table-border-color);
+}
+
+.el-table.el-table--border::before,
+.el-table.el-table--border::after,
+.el-table.el-table--border > .el-table__inner-wrapper::before,
+.el-table.el-table--border > .el-table__inner-wrapper::after {
+  content: none;
+}
+
+.el-table.el-table--border th.el-table__cell:last-child,
+.el-table.el-table--border td.el-table__cell:last-child {
+  border-right: none;
+}
+
+.el-table.el-table--border tbody tr:last-child > td.el-table__cell {
+  border-bottom: none;
 }
 
 /* 按钮字重 600（v3 胶囊按钮默认档；EP 默认 500） */
@@ -1059,11 +1101,8 @@ strong {
   color: var(--soj-blue);
 }
 
-/* 表格与描述列表：small 尺寸 EP 硬编码 12-14px，对齐 14 */
-.el-table--small {
-  font-size: var(--soj-fs-body);
-}
-
+/* 描述列表：small 尺寸 EP 硬编码 12-14px，对齐全站正文档
+   （表格的同类规则已挪到表格区，见 .el-table.el-table--small） */
 .el-descriptions--small .el-descriptions__body .el-descriptions__table .el-descriptions__cell {
   font-size: var(--soj-fs-body);
 }
@@ -1660,12 +1699,10 @@ samp {
   min-height: 40px;
 }
 
-.el-select--small .el-select__wrapper {
+/* 小号下拉选择器（管理后台角色选择等）：保持紧凑表格档 24px，字号对齐全站正文档
+   （EP small 为 12px）。前置组件根类提级（见文件头「覆盖 EP 的规则」） */
+.el-select.el-select--small .el-select__wrapper {
   min-height: 24px;
-}
-
-/* 小号下拉选择器（管理后台角色选择等）：字号对齐全站 14px（EP small 为 12px） */
-.el-select--small .el-select__wrapper {
   font-size: var(--soj-fs-body);
 }
 
@@ -1683,7 +1720,8 @@ samp {
   font-size: var(--soj-fs-popover);
 }
 
-.el-alert {
+/* alert 字号变量双类提级（见文件头「覆盖 EP 的规则」）：与 EP 当前同值，显式钉住 */
+.el-alert.el-alert {
   --el-alert-title-font-size: var(--soj-fs-alert-title);
   --el-alert-title-with-description-font-size: var(--soj-fs-alert-title-desc);
   --el-alert-description-font-size: var(--soj-fs-alert-desc);
@@ -1713,7 +1751,7 @@ samp {
   font-size: var(--soj-fs-input-small);
 }
 
-.el-pager li.is-active {
+.el-pagination .el-pager li.is-active {
   font-weight: var(--soj-fw-bold);
 }
 
