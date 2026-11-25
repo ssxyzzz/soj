@@ -136,7 +136,7 @@ onMounted(() => {
     <div class="page-head">
       <div class="kicker">LEADERBOARD</div>
       <h1 class="page-title">
-        排行榜<small>点表头切换排序 · 严格序：当前列 → 等级 → 经验 → 解题数 · 连击与坚持只列大于 0 的人</small>
+        排行榜<small>点表头切换排序 · 严格序：当前列 → 等级 → 经验 → 解题数</small>
       </h1>
     </div>
 
