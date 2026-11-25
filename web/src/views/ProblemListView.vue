@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowDown, CircleClose, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
+import { ArrowDown, CircleClose } from '@element-plus/icons-vue'
 
 import { authApi, problemApi, rankApi } from '@/api'
 import { downloadFile } from '@/api/download'
@@ -33,8 +33,6 @@ const list = ref<ProblemListItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 50
-// 底部完整翻页的末页页码（EP pagination 无 first/last，首页/末页按钮自拼）
-const lastPage = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const loading = ref(false)
 const keyword = ref('')
 const tagSel = ref<number[]>([])
@@ -240,6 +238,35 @@ function onPageChange(p: number) {
   load()
 }
 
+// ---- 翻页栏粘性吸底（2026-11-25）：只判「吸没吸」，吸附本身是 CSS（.table-pager） ----
+// 吸附时翻页栏盖在表格行上，透明底会和行文字叠在一起，吸附态要换成浮起的胶囊底。
+// 吸附 = 翻页栏自然位置的下沿落到视口下沿之外。sticky 元素自身量出来的是吸附后的位置，
+// 读不到自然位置，所以紧跟在它后面放一个零高的哨兵：哨兵不吸附，它的 top 就是自然位置的下沿。
+const pagerEl = ref<HTMLElement>()
+const pagerEnd = ref<HTMLElement>()
+const pagerStuck = ref(false)
+let pagerEndIO: IntersectionObserver | null = null
+
+function watchPagerEnd() {
+  const pager = pagerEl.value
+  const end = pagerEnd.value
+  if (!pager || !end || typeof IntersectionObserver === 'undefined') return
+  // 吸附时翻页栏下沿离屏幕底还隔着 bottom 那一段（不贴边），界线取「视口下沿 - bottom」，
+  // 哨兵的进出时刻才与吸附的起止对齐
+  const off = parseFloat(getComputedStyle(pager).bottom) || 0
+  pagerEndIO = new IntersectionObserver(
+    (entries) => {
+      // 哨兵在线下方 = 吸附；线上方（含已滚出屏幕顶）= 自然位置
+      pagerStuck.value = !entries[entries.length - 1].isIntersecting
+    },
+    // 观察范围 = 界线上方那一整段（上沿拉到足够远，盖过任何页高）：哨兵只在跨过界线时
+    // 进出观察范围。只观察视口本身的话，哨兵一步从视口下方跳到视口上方（End 键 / 拖滚动条
+    // 到底 / 窗口骤改大小）两头都在视口外，不产生回调，吸附态会滞留
+    { rootMargin: `100000px 0px -${off}px 0px` },
+  )
+  pagerEndIO.observe(end)
+}
+
 // ---- URL 即状态（v0.39）：挂载从 query 复原现场，变更 qsync 回写（不 watch 回读） ----
 const lq = useListQuery()
 
@@ -265,7 +292,10 @@ onMounted(() => {
   load()
   loadMyStats()
   tagStore.ensure() // 标签树异步就绪后筛选区自动出现（v-if 响应 store）
+  watchPagerEnd()
 })
+
+onBeforeUnmount(() => pagerEndIO?.disconnect())
 </script>
 
 <template>
@@ -374,7 +404,7 @@ onMounted(() => {
 
       <el-card class="tbl-card">
         <!-- 题目表（v0.89 统一 ProblemTable 超集蓝本回归自身）：打包导出勾选 + 收藏星 +
-             知识点/标签双树切换列头 + 整行点击（锁题行引导进赛事）+ 底部完整翻页留在页面 -->
+             知识点/标签双树切换列头 + 整行点击（锁题行引导进赛事）+ 底部翻页留在页面 -->
         <ProblemTable
           v-loading="loading"
           :rows="list"
@@ -389,35 +419,23 @@ onMounted(() => {
           @toggle-favorite="onToggleFavorite"
           @toggle-tag-tree="toggleTagCol"
         />
-        <!-- 主列底部翻页（v3 pager）：居中、控件齐全——首页/末页按钮自拼
-             （EP pagination 的 layout 不支持 first/last，写上会被静默忽略） -->
-        <div class="table-pager">
-          <el-button
-            class="pg-edge"
-            :disabled="page === 1"
-            title="第一页"
-            @click="onPageChange(1)"
-          >
-            <el-icon><DArrowLeft /></el-icon>
-          </el-button>
-          <el-pagination
-            background
-            layout="prev, pager, next"
-            :total="total"
-            :page-size="pageSize"
-            :current-page="page"
-            @current-change="onPageChange"
-          />
-          <el-button
-            class="pg-edge"
-            :disabled="page === lastPage"
-            title="最后一页"
-            @click="onPageChange(lastPage)"
-          >
-            <el-icon><DArrowRight /></el-icon>
-          </el-button>
+        <!-- 主列底部翻页（2026-11-25）：只留 EP 分页器本体（首页/末页按钮与页码计数行退役）；
+             粘性吸底——自然位置在视口内照常显示，被长表格推到屏幕以下时钉在屏幕底部，
+             吸附态（pagerStuck）换浮起的胶囊底 -->
+        <div ref="pagerEl" class="table-pager" :class="{ 'is-stuck': pagerStuck }">
+          <div class="table-pager-pill">
+            <el-pagination
+              background
+              layout="prev, pager, next"
+              :total="total"
+              :page-size="pageSize"
+              :current-page="page"
+              @current-change="onPageChange"
+            />
+          </div>
         </div>
-        <div class="pager-meta dim">第 {{ page }} / {{ lastPage }} 页 · 共 {{ total }} 题</div>
+        <!-- 哨兵：翻页栏自然位置的下沿（吸附判定用，见 watchPagerEnd） -->
+        <div ref="pagerEnd" aria-hidden="true"></div>
       </el-card>
 
     <template #aside>
@@ -633,40 +651,98 @@ onMounted(() => {
   margin-left: auto;
 }
 
+/* 表格卡放开裁切（只题库页）：EP 的 .el-card 是 overflow:hidden、.el-card__body 是
+   overflow:auto，两者都是 sticky 的滚动基准祖先——翻页栏的 sticky 会被劫持到卡内
+   （卡自己不滚动 = 永不吸附），同 MainLayout 里 el-main 的 overflow:auto 同病。
+   放开后基准回到视口；表头/斑马纹的圆角裁切是表格根节点自己做的，不靠卡片裁。
+   全站只有题库翻页要吸底，属页面私有特例，不上收 main.css */
+.tbl-card {
+  overflow: visible;
+}
+
+.tbl-card :deep(.el-card__body) {
+  overflow: visible;
+}
+
+/* 表格根节点隔离成独立堆叠上下文：v-loading 遮罩（z-index 2000）只在表内比，
+   吸附的翻页栏浮在表格下沿之上时不被遮罩盖住——加载中照样看得见、点得中
+   （同页面私有特例，不上收 main.css） */
+.tbl-card :deep(.el-table) {
+  isolation: isolate;
+}
+
+/* 翻页栏粘性吸底：自然位置在视口内照常显示；被长表格推到屏幕以下时钉在离屏幕底
+   12px 处（不贴边）。外层只管吸附与居中（占满卡体一行宽），胶囊本体在内层。
+   外层自己不接鼠标：吸附时它横跨表格下沿，放行后胶囊以外的部分照常点得到表格行 */
 .table-pager {
+  position: sticky;
+  bottom: 12px;
+  /* 高于表格（含其内 v-loading 遮罩）、低于顶栏（50）与 EP 弹层（~2000） */
+  z-index: 30;
   display: flex;
   justify-content: center;
-  align-items: center;
-  gap: var(--soj-sp-8);
-  margin-top: var(--soj-sp-16);
-  padding-bottom: var(--soj-sp-2);
+  pointer-events: none;
 }
 
-/* 自拼的首页/末页按钮：对齐 EP 分页按钮的盒子——32px 圆角方块（radius 10px 同
-   main.css 分页口径）、无边框同底色；默认 el-button 的边框 + 4px 圆角 + 8px 内距
-   会撑成椭圆，与中间页钮形状不一致（2026-10-26 拍板） */
-.pg-edge {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  background: var(--el-fill-color-light);
-  border-radius: 10px;
+/* 胶囊两态同尺寸（内边距常驻、描边常驻透明色），吸附切换只换底色/描边色/阴影，
+   不跳版；宽度随分页器，最宽到卡体内容区 */
+.table-pager-pill {
+  box-sizing: border-box;
+  max-width: 100%;
+  margin-top: var(--soj-sp-12);
+  padding: var(--soj-sp-4) var(--soj-sp-8);
+  border: 1px solid transparent;
+  border-radius: var(--soj-radius-pill);
+  pointer-events: auto;
+  transition:
+    background-color 0.18s,
+    border-color 0.18s,
+    box-shadow 0.18s;
 }
 
-.pg-edge:hover {
-  background: var(--el-fill-color);
-  color: var(--soj-blue);
+/* 吸附态：浮起的白胶囊（同 MdMarkBar 悬浮工具条：白底 + hairline + 柔影），
+   盖在表格行上也读得清 */
+.table-pager.is-stuck .table-pager-pill {
+  background: var(--soj-white);
+  border-color: var(--soj-line-2);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--soj-navy) 14%, transparent);
 }
 
-.pg-edge:disabled {
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-placeholder);
+/* 手机宽：页钮收一档（24px 方钮、外边距收窄），十个页钮一行装进胶囊；胶囊两头各借
+   16px 卡体内边距——一行要 276px，360 宽的卡体内容区只有 263px。负外边距抵掉借来的
+   两头，外层照常居中
+   （页面私有特例，不上收 main.css：全站只有这一处分页器装在胶囊里） */
+@media (max-width: 520px) {
+  .table-pager-pill {
+    max-width: calc(100% + var(--soj-sp-32));
+    margin-inline: calc(-1 * var(--soj-sp-16));
+    padding: var(--soj-sp-4);
+  }
+
+  .table-pager :deep(.el-pagination) {
+    --el-pagination-button-width: 24px;
+    --el-pagination-button-height: 24px;
+    --el-pagination-item-gap: var(--soj-sp-4);
+    --el-pagination-font-size: var(--soj-fs-12);
+  }
+
+  .table-pager :deep(.el-pagination.is-background .btn-prev),
+  .table-pager :deep(.el-pagination.is-background .btn-next),
+  .table-pager :deep(.el-pagination.is-background .el-pager li) {
+    margin: 0 var(--soj-sp-2);
+  }
 }
 
-.pager-meta {
-  text-align: center;
-  margin-top: var(--soj-sp-6);
+/* 仍装不进一行时（更窄 / 三位数页码）在胶囊内折行兜底：EP 默认不换行，会溢出到胶囊外 */
+.table-pager :deep(.el-pagination) {
+  flex-wrap: wrap;
+  justify-content: center;
+  row-gap: var(--soj-sp-4);
+}
+
+.table-pager :deep(.el-pager) {
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 /* v3 .hint：副列卡说明文字 */
