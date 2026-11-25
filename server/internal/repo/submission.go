@@ -898,6 +898,7 @@ func (r *Repo) ListProblemStats(ctx context.Context, pids []int64) (map[int64]Pr
 
 // RankRow 排行榜快照原始行（v0.100 四榜合一）：解题数与各难度 AC 题数由提交聚合而来，
 // 连击/坚持取 users 文档（判题回写维护）；LastAcDay 供服务层读时折算当前坚持天数。
+// QQ / QQAvatar 供服务层拼头像直链（v0.100.2 排行榜 QQ 头像），原始字段只到服务层为止。
 type RankRow struct {
 	UID        int64
 	Solved     int64
@@ -909,6 +910,8 @@ type RankRow struct {
 	StreakDays int
 	StreakBest int
 	LastAcDay  string
+	QQ         string
+	QQAvatar   bool
 }
 
 // rankUserFields 快照要用的 users 字段（扁平结构体：带 bson 标签的解码必须一次到位）。
@@ -921,6 +924,8 @@ type rankUserFields struct {
 	StreakDays int    `bson:"streakDays"`
 	StreakBest int    `bson:"streakBest"`
 	LastAcDay  string `bson:"lastAcDay"`
+	QQ         string `bson:"qq"`
+	QQAvatar   bool   `bson:"qqAvatar"`
 }
 
 // rankUsers 批量取快照要用的 users 字段（uid → 字段；账号已不存在则缺席）。
@@ -935,6 +940,7 @@ func (r *Repo) rankUsers(ctx context.Context, uids []int64) (map[int64]rankUserF
 			options.Find().SetProjection(bson.M{
 				"uname": 1, "nickname": 1, "comboCur": 1, "comboBest": 1,
 				"streakDays": 1, "streakBest": 1, "lastAcDay": 1,
+				"qq": 1, "qqAvatar": 1,
 			}))
 		if err != nil {
 			return nil, err
@@ -986,6 +992,7 @@ func (r *Repo) RankBoard(ctx context.Context, limit int) ([]RankRow, error) {
 			row.Username, row.Nickname = u.Uname, u.Nickname
 			row.ComboCur, row.ComboBest = u.ComboCur, u.ComboBest
 			row.StreakDays, row.StreakBest, row.LastAcDay = u.StreakDays, u.StreakBest, u.LastAcDay
+			row.QQ, row.QQAvatar = u.QQ, u.QQAvatar
 		}
 		rows = append(rows, row)
 	}

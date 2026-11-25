@@ -109,9 +109,9 @@ func rankRowsForOrder() []repo.RankRow {
 			LastAcDay: beijingDayStr(time.Now().AddDate(0, 0, -3))},
 		{UID: 5, Solved: 5, Counts: counts(2, 5)},
 		{UID: 2, Solved: 600, Counts: counts(0, 600),
-			Username: "b", Nickname: "乙"},
+			Username: "b", Nickname: "乙", QQ: "12345", QQAvatar: true},
 		{UID: 3, Solved: 51, Counts: eCounts,
-			Username: "e", Nickname: "丁", ComboBest: 2},
+			Username: "e", Nickname: "丁", ComboBest: 2, QQ: "23456"},
 		{UID: 9, Solved: 5, Counts: counts(2, 5), Username: "i", Nickname: "戊"},
 		{UID: 8, Solved: 400, Counts: counts(0, 400), Username: "j", Nickname: "己"},
 		{UID: 6, Solved: 200, Counts: counts(1, 200), Username: "k", Nickname: "庚"},
@@ -196,6 +196,50 @@ func equalInt64(a, b []int64) bool {
 		}
 	}
 	return true
+}
+
+// 榜单行 QQ 头像直链（v0.100.2）：设置页「QQ头像」开关开且填了 QQ 号才有，值与顶栏 /
+// 公开主页同一直链单点；只填号没开开关、只开开关没填号、两者皆无都不带这个键（omitempty，
+// 不给没开的人白搭字节）；QQ 号与开关的原始字段不随榜单行出仓。
+func TestRankSnapshotAvatarURL(t *testing.T) {
+	src := &fakeRankSource{}
+	rows := []repo.RankRow{
+		{UID: 1, Solved: 3, Username: "on", Nickname: "开且填号", QQ: "12345", QQAvatar: true},
+		{UID: 2, Solved: 3, Username: "qqonly", Nickname: "只填号", QQ: "23456"},
+		{UID: 3, Solved: 3, Username: "swonly", Nickname: "只开开关", QQAvatar: true},
+		{UID: 4, Solved: 3, Username: "none", Nickname: "都没有"},
+	}
+	src.mu.Lock()
+	src.rows = rows
+	src.mu.Unlock()
+	snap, err := newRankCache(src).get(context.Background())
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(snap.items) != len(rows) {
+		t.Fatalf("快照 %d 行，期望 %d", len(snap.items), len(rows))
+	}
+	for _, row := range rows {
+		it := snap.items[snap.index[row.UID]]
+		raw, _ := json.Marshal(it)
+		var m map[string]any
+		_ = json.Unmarshal(raw, &m)
+		want := row.QQAvatar && row.QQ != ""
+		if (it.AvatarURL != "") != want {
+			t.Errorf("uid %d 带头像 = %v，期望 %v：%s", row.UID, it.AvatarURL != "", want, raw)
+		}
+		if _, ok := m["avatar_url"]; ok != want {
+			t.Errorf("uid %d JSON 带 avatar_url 键 = %v，期望 %v：%s", row.UID, ok, want, raw)
+		}
+		if want && it.AvatarURL != "https://q1.qlogo.cn/g?b=qq&nk=12345&s=100" {
+			t.Errorf("uid %d 头像直链 = %q，期望与顶栏/公开主页同一条：%s", row.UID, it.AvatarURL, raw)
+		}
+		for _, k := range []string{"qq", "qq_avatar", "qqAvatar", "QQ", "QQAvatar"} {
+			if _, ok := m[k]; ok {
+				t.Errorf("uid %d 行 JSON 外泄原始字段 %q：%s", row.UID, k, raw)
+			}
+		}
+	}
 }
 
 // 微缓存：窗口内不重算且同一份；窗口外重算换新。
@@ -435,6 +479,21 @@ func TestRankHandlerContract(t *testing.T) {
 	if first["user_id"] != float64(2) || first["level"] != float64(3) {
 		t.Fatalf("首行 = %v，期望默认序第一 uid 2（Lv3）", first)
 	}
+	// 头像直链（v0.100.2）：开了「QQ头像」的 uid 2 带，没开的 uid 3 不带键；原始字段不出仓
+	if first["avatar_url"] != "https://q1.qlogo.cn/g?b=qq&nk=12345&s=100" {
+		t.Fatalf("uid 2 行应带 QQ 头像直链：%v", first)
+	}
+	for _, it := range items {
+		m, _ := it.(map[string]any)
+		if _, has := m["avatar_url"]; has != (m["user_id"] == float64(2)) {
+			t.Errorf("行 avatar_url 有无 = %v，期望只有 uid 2 带：%v", has, m)
+		}
+		for _, k := range []string{"qq", "qq_avatar", "qqAvatar"} {
+			if _, ok := m[k]; ok {
+				t.Errorf("榜单行不应外泄原始字段 %q：%v", k, m)
+			}
+		}
+	}
 	me, _ := data["me"].(map[string]any)
 	if me["rank"] != float64(6) || me["solved"] != float64(100) {
 		t.Fatalf("me = %v，期望名次 6 解题 100", me)
@@ -444,6 +503,43 @@ func TestRankHandlerContract(t *testing.T) {
 	me, _ = data["me"].(map[string]any)
 	if me["rank"] != float64(9) || me["solved"] != float64(0) {
 		t.Fatalf("榜外 me = %v，期望名次 9 解题 0", me)
+	}
+}
+
+// 同一个人的头像直链在榜单行与公开主页完全一致（同一个直链单点）：浏览器按同一条 URL
+// 命中缓存，顶栏 / 主页 / 榜单看到的是同一张图；没开的人两边都不带键。
+func TestRankAvatarSameAsProfile(t *testing.T) {
+	f := baseFake()
+	f.roles[repo.RoleDefault] = &repo.Role{ID: repo.RoleDefault}
+	h := newTestHandlers(f)
+	src := &fakeRankSource{}
+	src.mu.Lock()
+	src.rows = []repo.RankRow{
+		{UID: 1, Solved: 3, Username: "on", QQ: "12345", QQAvatar: true},
+		{UID: 2, Solved: 3, Username: "qqonly", QQ: "23456"},
+	}
+	src.mu.Unlock()
+	h.rank = newRankCache(src)
+	r := rankTestEngine(h)
+	f.addUser(h, 1, "on", repo.RoleDefault, 0)
+	f.addUser(h, 2, "qqonly", repo.RoleDefault, 0)
+	f.users[1].QQ, f.users[1].QQAvatar = "12345", true
+	f.users[2].QQ = "23456"
+	tok := f.addUser(h, 9, "viewer", repo.RoleDefault, 0)
+	_, body := doJSON(r, "GET", "/api/rank", tok, "")
+	data, _ := body["data"].(map[string]any)
+	items, _ := data["items"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("榜单 %d 行，期望 2：%v", len(items), body)
+	}
+	for _, it := range items {
+		m, _ := it.(map[string]any)
+		uid := int64(m["user_id"].(float64))
+		_, pbody := doJSON(r, "GET", "/api/users/"+strconv.FormatInt(uid, 10)+"/profile", tok, "")
+		pdata, _ := pbody["data"].(map[string]any)
+		if m["avatar_url"] != pdata["avatar_url"] {
+			t.Fatalf("uid %d 头像直链榜单 %v ≠ 主页 %v", uid, m["avatar_url"], pdata["avatar_url"])
+		}
 	}
 }
 

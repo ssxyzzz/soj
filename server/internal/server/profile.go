@@ -21,8 +21,8 @@ import (
 
 var qqDigits = regexp.MustCompile(`^\d{5,16}$`)
 
-// qqAvatarURL QQ 头像直链（v0.23）：/me/profile（顶栏/设置页）与公开主页共用一源
-//——曾两处手抄漂移致顶栏裂图（v0.34 回归，2026-10-30 修复），收口单点。
+// qqAvatarURL QQ 头像直链（v0.23）：/me/profile（顶栏/设置页）、公开主页与排行榜快照行
+//（v0.100.2）共用一源——曾两处手抄漂移致顶栏裂图（v0.34 回归，2026-10-30 修复），收口单点。
 func qqAvatarURL(qq string) string {
 	return "https://q1.qlogo.cn/g?b=qq&nk=" + qq + "&s=100"
 }

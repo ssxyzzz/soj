@@ -7,6 +7,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import AmbientGrid from '@/components/AmbientGrid.vue'
 import TierBadge from '@/components/TierBadge.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import { authApi, jadeApi, notifyApi } from '@/api'
 import { notifyTypeMeta } from '@/components/discuss/discussMeta'
 import { useLevelsStore } from '@/stores/levels'
@@ -215,23 +216,8 @@ async function readAllRecent() {
   }
 }
 
-// 头像首字（v3 .avatar：渐变圆 + 昵称首字；昵称为空兜底「我」）
-const avatarChar = computed(() => {
-  const n = userStore.nickname || '我'
-  return n.slice(0, 1).toUpperCase()
-})
-// QQ 头像外域失败兜底（v0.37）：校园网墙掉 qlogo 时顶栏裂图——@error 回退首字头像
-//（内存态标记，不落库；换新头像 URL 由 profile 刷新重置）
-const avatarBroken = ref(false)
-watch(
-  () => userStore.avatarUrl,
-  () => {
-    avatarBroken.value = false
-  },
-)
-function onAvatarError() {
-  avatarBroken.value = true
-}
+// 顶栏头像：首字圆或 QQ 头像，首字原样取用（全站统一为昵称本身的大小写）；昵称为空兜底「我」。
+// QQ 头像的加载与失败兜底（v0.37 校园网墙掉 qlogo 回退首字）在 UserAvatar 里
 
 // 登录态下拉取用户偏好（默认语言/模板）与等级（顶栏徽章），供提交弹窗/在线编程消费；
 // 设置页保存后同步更新 store。失败静默（未登录/过期由拦截器统一处理）。
@@ -361,8 +347,7 @@ function onCommand(command: string) {
                点击进独立流水页 /jade；货币名后台可配 -->
           <el-dropdown class="user-dropdown" @command="onCommand">
             <span class="user-chip">
-              <img v-if="userStore.avatarUrl && !avatarBroken" :src="userStore.avatarUrl" alt="" class="avatar avatar-img" decoding="async" @error="onAvatarError" />
-              <span v-else class="avatar">{{ avatarChar }}</span>
+              <UserAvatar class="avatar" :src="userStore.avatarUrl" :name="userStore.nickname || '我'" />
               <span class="uname">{{ userStore.nickname || '已登录' }}</span>
               <TierBadge
                 v-if="userStore.level?.level"
@@ -755,24 +740,12 @@ function onCommand(command: string) {
   box-shadow: 0 2px 8px var(--soj-line-2);
 }
 
+/* 顶栏头像（v3）：这里只定尺寸与字号；圆形 / 居中 / 首字渐变底 / QQ 头像盖层
+   （同径圆 + 细描边，v0.23）全在 UserAvatar，与公开主页、排行榜共用一份实现 */
 .avatar {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
-  color: var(--soj-white);
-  font-weight: var(--soj-fw-bold);
   font-size: var(--soj-fs-14);
-}
-
-/* QQ 头像版顶栏头像（v0.23）：同径圆 + 细描边 */
-.avatar-img {
-  object-fit: cover;
-  border: 1px solid var(--soj-line);
-  background: var(--soj-white);
 }
 
 .uname {

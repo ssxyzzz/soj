@@ -692,6 +692,22 @@ body.ambient-on::after {
   padding: 0 8px;
 }
 
+/* 带等级徽章的单元格（v0.100.2）：.cell 的 overflow hidden（省略号用）把徽章向外的心跳环 / 光晕
+   上下裁平——盒子只有一条 23px 的行框高，徽章自己就占满了；左右方向单元格很宽，所以只剩
+   上下被裁（用户截图报「心跳显示不全」）。把裁切框上下各撑到单元格纵向内边距那么大，负外边距
+   抵消、行高不变：徽章的裁切框 = 所在行的行框，心跳在一行之内完整显示，也不压相邻行。
+   :has 只命中带徽章的格子，其余单元格盒模型不动。上下撑开的数值与上方单元格纵向内边距同值
+   （普通表 12 / small 表 7），改一处要同步另一处 */
+.el-table .el-table__cell > .cell:has(.ulv-tag) {
+  padding: 12px;
+  margin: -12px 0;
+}
+
+.el-table.el-table--small .el-table__cell > .cell:has(.ulv-tag) {
+  padding: 7px 8px;
+  margin: -7px 0;
+}
+
 /* 表格圆角（2026-11-24 用户选型「圆角无描边」）：16px 圆角的卡片里嵌直角表格，表头色带与
    表尾收口显得生硬——表格自带圆角、不加边框，表头底色、斑马纹、表尾细线随圆角裁切
    （EP 表格根节点自带 overflow hidden，圆角即裁切）。普通表 12px，small 表收一档 8px。
@@ -1933,7 +1949,10 @@ samp {
 
 /* Lv.10 极境：六彩渐变流动 + 金色外框（极境身份，与传奇金环呼应）
    + 彩色心跳（beat10 外扩 11px 压轴；脉冲色 --ulv-rb 由 rbcycle 驱动，22.8s = 6 拍每拍一色）
-   + 白流光 + 白星 + 六彩粒子（双类特异度压过 fx 链；flow 动背景、beat10 动阴影、rbcycle 动变量，三者并行） */
+   + 白流光 + 白星 + 六彩粒子（双类特异度压过 fx 链）。
+   本体规则只管静态外观；三个动画（flow 动背景、beat10 动阴影、rbcycle 动变量）挂在
+   .ulv-fx10 下，与其余档位的特效链同走 TierBadge 的可视区门控（v0.100.2）——此前写在
+   本体规则上不受门控，一页里视口外的 Lv.10 也在逐帧重绘 */
 .ulv-10.ulv-tag {
   --ulv-rb: #e63946;
   /* 六彩单向流彩 · 斜向观感（2026-10-27 终版二）：直接对元素做 120° 渐变时 tile 接缝
@@ -1959,9 +1978,6 @@ samp {
     inset 0 1px 0 rgba(255, 255, 255, 0.4),
     0 0 0 1.5px rgba(212, 175, 55, 0.6),
     0 0 13px color-mix(in srgb, var(--ulv-rb) 45%, transparent);
-  animation:
-    ulv-beat10 3.8s ease-in-out infinite,
-    ulv-rbcycle 22.8s linear infinite;
 }
 
 /* 斜向流彩层：放大 260%×260% 再旋转 30°（等价原 120° 渐变的条纹倾角），
@@ -1984,6 +2000,17 @@ samp {
   background-size: 200% 100%;
   transform: rotate(30deg);
   pointer-events: none;
+}
+
+/* 极境三动画：可视区内（TierBadge 挂了 .ulv-fx10）才跑；三级类名特异度压过本体规则，
+   reduced-motion 段同步提级 */
+.ulv-10.ulv-tag.ulv-fx10 {
+  animation:
+    ulv-beat10 3.8s ease-in-out infinite,
+    ulv-rbcycle 22.8s linear infinite;
+}
+
+.ulv-10.ulv-tag.ulv-fx10::after {
   animation: ulv-flow 10s linear infinite;
 }
 
@@ -2162,7 +2189,8 @@ samp {
   .ulv-fx8,
   .ulv-fx9,
   .ulv-fx10,
-  .ulv-10.ulv-tag,
+  .ulv-10.ulv-tag.ulv-fx10,
+  .ulv-10.ulv-tag.ulv-fx10::after,
   .lv-star,
   .lv-pt,
   .ulv-fx7::before,

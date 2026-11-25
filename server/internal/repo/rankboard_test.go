@@ -164,7 +164,8 @@ func TestSolvedDifficultyCountsZeroDifficulty(t *testing.T) {
 	}
 }
 
-// 合榜快照取数：解题数 = 题集 ∩ 现存题、各难度计数、连击/坚持/上次 AC 日随行、账号不存在
+// 合榜快照取数：解题数 = 题集 ∩ 现存题、各难度计数、连击/坚持/上次 AC 日随行、QQ 号与
+//「QQ头像」开关随行（v0.100.2，填了 QQ 没开开关的原样带出、由服务层判）、账号不存在
 // 的行用户名为空、现存题为零的用户不出榜、行按 uid 升序；limit 取题集最大的前 N 人。
 func TestRankBoard(t *testing.T) {
 	r := openTestRepo(t)
@@ -175,8 +176,8 @@ func TestRankBoard(t *testing.T) {
 	// pid 9：已删题（无文档）
 	today := beijingDay(time.Now())
 	gameSeedUser(t, r, 21, bson.M{"nickname": "n", "comboCur": 3, "comboBest": 7,
-		"streakDays": 4, "streakBest": 9, "lastAcDay": today})
-	gameSeedUser(t, r, 22, bson.M{"nickname": ""})
+		"streakDays": 4, "streakBest": 9, "lastAcDay": today, "qq": "12345", "qqAvatar": true})
+	gameSeedUser(t, r, 22, bson.M{"nickname": "", "qq": "23456"}) // 填了 QQ 但没开「QQ头像」
 	// uid 23：有 AC 但账号文档不存在；uid 24：只 AC 过已删题
 	seedRankSubs(t, r, []rankSeedSub{
 		{21, 1, StatusAccepted, true},
@@ -195,8 +196,9 @@ func TestRankBoard(t *testing.T) {
 	}
 	want := []RankRow{
 		{UID: 21, Solved: 2, Counts: [10]int64{1, 0, 0, 0, 1}, Username: "u", Nickname: "n",
-			ComboCur: 3, ComboBest: 7, StreakDays: 4, StreakBest: 9, LastAcDay: today},
-		{UID: 22, Solved: 1, Counts: [10]int64{0, 0, 1}, Username: "u"},
+			ComboCur: 3, ComboBest: 7, StreakDays: 4, StreakBest: 9, LastAcDay: today,
+			QQ: "12345", QQAvatar: true},
+		{UID: 22, Solved: 1, Counts: [10]int64{0, 0, 1}, Username: "u", QQ: "23456"},
 		{UID: 23, Solved: 1, Counts: [10]int64{0, 0, 0, 0, 1}},
 	}
 	if !reflect.DeepEqual(rows, want) {

@@ -133,7 +133,8 @@ async function create() {
           <div class="lmain">
             <div class="lhead">
               <span v-if="canReorder" class="lhandle" title="拖动调整顺序">⠿</span>
-              <span class="lav" :style="{ background: avColor(l.id) }">{{ (l.title || '?').slice(0, 1).toUpperCase() }}</span>
+              <!-- 首字原样取用、不转大小写（全站首字圆统一，2026-11-25 用户拍板） -->
+              <span class="lav" :style="{ background: avColor(l.id) }">{{ (l.title || '?').slice(0, 1) }}</span>
               <div class="grow">
                 <div class="ltitle-row">
                   <h3><RouterLink :to="`/lists/${l.id}`" class="clink" @click.stop>{{ l.title }}</RouterLink></h3>

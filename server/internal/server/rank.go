@@ -60,10 +60,13 @@ type rankFlight struct {
 func newRankCache(src rankSource) *rankCache { return &rankCache{src: src} }
 
 // rankItem 快照行：排序链要用的全部列。xp 仅作排序副键随行下发、前端不展示。
+// avatar_url = QQ 头像直链（v0.100.2）：设置页「QQ头像」开关开且填了 QQ 号才带，
+// 与顶栏、公开主页同一条规则、同一个直链单点；没开的人不带这个键，前端回退首字头像。
 type rankItem struct {
 	UserID     int64  `json:"user_id"`
 	Username   string `json:"username"`
 	Nickname   string `json:"nickname"`
+	AvatarURL  string `json:"avatar_url,omitempty"`
 	Level      int    `json:"level"`
 	Xp         int64  `json:"xp"`
 	Solved     int64  `json:"solved"`
@@ -196,6 +199,9 @@ func (rc *rankCache) load() (*rankSnapshot, error) {
 			ComboCur: r.ComboCur, ComboBest: r.ComboBest,
 			StreakDays: repo.EffectiveStreakDays(r.StreakDays, r.LastAcDay, now),
 			StreakBest: r.StreakBest,
+		}
+		if r.QQAvatar && r.QQ != "" {
+			it.AvatarURL = qqAvatarURL(r.QQ)
 		}
 		if it.Username == "" {
 			it.Username, it.Nickname = "-", "-" // 账号已不存在

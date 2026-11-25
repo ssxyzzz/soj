@@ -5,6 +5,7 @@ import type { TableInstance } from 'element-plus'
 
 import { rankApi } from '@/api'
 import TierBadge from '@/components/TierBadge.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import { useListQuery } from '@/composables/useListQuery'
 import { useLevelsStore } from '@/stores/levels'
 import { useUserStore } from '@/stores/user'
@@ -28,8 +29,12 @@ const router = useRouter()
  * 排行榜（v0.100 四榜合一）：一张表，六列可点表头排序。
  * 打开页面拉一次整表，之后不监听、不轮询、不自动换表——排序、过滤、名次全在内存算，
  * 换列不请求。
+ *
+ * 头像（v0.100.2）：领奖台与选手列昵称前显示 QQ 头像——服务端只给设置页开了「QQ头像」
+ * 的人下发直链，其余显示首字圆；加载失败同样停在首字圆（见 UserAvatar）。
+ * 表格常驻：当前列无人上榜也留着表头（空提示进表格空槽），换列只改内存里的视图。
  */
-const pageSize = 100 // 每页人数（前端切片）
+const pageSize = 50 // 每页人数（前端切片）；2026-11-25 用户拍板由 100 改 50——每页最多 50 颗徽章
 const all = ref<RankItem[]>([]) // 服务端整表（只读，不随排序改动）
 const loading = ref(false)
 const sortKey = ref<RankSortKey>(DEFAULT_RANK_SORT)
@@ -146,9 +151,13 @@ onMounted(() => {
         @click="router.push(`/users/${p.user_id}`)"
       >
         <div class="rank-no">{{ p.rank }}</div>
-        <div class="pav" :style="p.rank === 1 ? undefined : { background: avColor(p.rank ?? 0) }">
-          {{ (p.nickname || p.username).slice(0, 1) }}
-        </div>
+        <!-- 头像位同位同径：有 QQ 头像盖图，否则首字圆（冠军品牌渐变、二三名纯色） -->
+        <UserAvatar
+          class="pav"
+          :src="p.avatar_url"
+          :name="p.nickname || p.username"
+          :style="p.rank === 1 ? undefined : { background: avColor(p.rank ?? 0) }"
+        />
         <div class="pname">{{ p.nickname || p.username }}</div>
         <TierBadge v-if="p.level" :tier="p.level" kind="level" size="md" />
         <div class="psolved">{{ podiumLabel }} <b>{{ podiumValue(p) }}</b>{{ podiumUnit }}</div>
@@ -157,8 +166,10 @@ onMounted(() => {
 
     <el-card class="tbl-card">
       <div v-if="meNote" class="my-note">{{ meNote }}</div>
+      <!-- 表格常驻（v0.100.2）：当前列无人上榜时只换空提示、表头不撤——原先整表被空状态顶替，
+           点不了别的列切不回来。空提示等首屏拉完再出（拉完才知道有没有人）；
+           「我」有 AC 但被「只列大于 0」滤掉时，置顶行照常显示（名次「—」+ 上方提示） -->
       <el-table
-        v-if="total"
         ref="tableRef"
         v-loading="loading"
         stripe
@@ -167,6 +178,9 @@ onMounted(() => {
         :default-sort="{ prop: sortKey, order: 'descending' }"
         @sort-change="onSortChange"
       >
+        <template #empty>
+          <el-empty v-if="!loading" :description="rankEmptyText(sortKey)" />
+        </template>
         <el-table-column label="排名" width="88">
           <template #default="{ row }">
             <span class="mono">{{ row.rank ?? '—' }}</span>
@@ -175,6 +189,7 @@ onMounted(() => {
         <el-table-column label="选手" min-width="220">
           <template #default="{ row }">
             <router-link class="player" :to="`/users/${row.user_id}`">
+              <UserAvatar class="row-av" :src="row.avatar_url" :name="row.nickname || row.username" lazy />
               <b>{{ row.nickname || row.username }}</b>
               <span class="dim">@{{ row.username }}<template v-if="row.user_id === userStore.uid"> · 我</template></span>
             </router-link>
@@ -190,15 +205,17 @@ onMounted(() => {
           :sort-orders="DESC_ONLY"
         >
           <template #default="{ row }">
-            <!-- 表内静态化（v0.63）：百行 × Lv≥3 特效链是常驻重绘源；领奖台保留特效 -->
-            <TierBadge v-if="key === 'level' && row.level" :tier="row.level" kind="level" :fx="false" />
+            <!-- 表内徽章带完整特效（v0.100.2；v0.63 表内静态化退役）：与领奖台、顶栏同一条特效链，
+                 含呼吸星 / 心跳粒子，走 TierBadge 的可视区激活——进视口才开、滚出就停，只有滚进
+                 视口的徽章在动（2026-11-25 用户拍板；同日试过「完整特效常开」，看过实测后改回。
+                 星星粒子暂不做「滚动停下后再补挂」优化，代价与实测见 plan.md） -->
+            <TierBadge v-if="key === 'level' && row.level" :tier="row.level" kind="level" />
             <span v-else-if="key === 'level'" class="dim">—</span>
             <span v-else-if="row[key]" class="mono">{{ row[key] }}</span>
             <span v-else class="dim">—</span>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-else-if="!loading" :description="rankEmptyText(sortKey)" />
       <!-- 超过一页才出翻页器；翻页换的是表格内容，领奖台只在第一页出现 -->
       <div v-if="total > pageSize" class="pager">
         <el-pagination
@@ -272,19 +289,15 @@ onMounted(() => {
   color: transparent;
 }
 
-/* 尺寸层级 1>2>3：冠军头像放大，二三名收敛 */
-.pav {
+/* 尺寸层级 1>2>3：冠军头像放大，二三名收敛。圆形 / 居中 / 首字底色在 UserAvatar：
+   冠军用它的默认品牌渐变，二三名纯色由模板内联；这里只定尺寸、字号与投影。
+   字重写在 .pcard 前置选择器下：与组件根上同优先级的规则不靠加载顺序分胜负 */
+.pcard .pav {
   width: 54px;
   height: 54px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   font-size: var(--soj-fs-20);
   font-weight: var(--soj-fw-heavy);
   margin-top: var(--soj-sp-6);
-  background: var(--soj-surface-3);
-  color: var(--soj-white);
   box-shadow: 0 8px 18px color-mix(in srgb, var(--soj-navy) 16%, transparent);
 }
 
@@ -292,7 +305,6 @@ onMounted(() => {
   width: 66px;
   height: 66px;
   font-size: var(--soj-fs-22);
-  background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-teal));
 }
 
 .p2 .pav,
@@ -323,7 +335,8 @@ onMounted(() => {
   font-weight: var(--soj-fw-bold);
 }
 
-/* 选手列：粗昵称 + @handle 弱化（v0.17 起整格为链接，可点进公开主页） */
+/* 选手列：头像 + 粗昵称 + @handle 弱化（v0.17 起整格为链接，可点进公开主页）。
+   昵称与 @handle 仍按基线对齐；头像 align-self 自行居中，不参与基线 */
 .player {
   display: inline-flex;
   align-items: baseline;
@@ -331,6 +344,16 @@ onMounted(() => {
   min-width: 0;
   text-decoration: none;
   max-width: 100%;
+}
+
+/* 行内头像（v0.100.2）：24px 比单元格行高（23px 档）略大，上下各让 0.5px 负外边距——
+   占位收回行高以内，表格行高不变；单元格 .cell 带 overflow hidden，超出行高的部分会被裁 */
+.row-av {
+  width: 24px;
+  height: 24px;
+  font-size: var(--soj-fs-12);
+  align-self: center;
+  margin: -0.5px 0;
 }
 
 .player:hover b {

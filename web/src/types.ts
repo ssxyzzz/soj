@@ -348,6 +348,7 @@ export interface RankItem {
   user_id: number
   username: string
   nickname: string
+  avatar_url?: string // QQ 头像直链（v0.100.2）：设置页「QQ头像」开关开且填了 QQ 时下发；缺省回退首字头像
   solved: number // 解题数（已删题目的 AC 不计）
   level?: number // 学生等级 1–10
   xp?: number // 经验累计（排序副键，随接口下发但不展示）

@@ -10,8 +10,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useLevelsStore } from '@/stores/levels'
 
 // 可视区激活（v0.65 常驻动画降载）：fx 无限动画（box-shadow/背景位不可合成 = 每帧
-// 重绘）只在徽章进入视口时挂类，滚出即停——榜单/列表百颗里视口外那批零开销；
+// 重绘）只在徽章进入视口时挂类，滚出即停——榜单/列表里视口外那批零开销；
 // 多实例共享单个 IntersectionObserver（v0.62 fitMeasure 全局单波同款模式）。
+// 等级徽章一律走这条门控（含 Lv.10 本体的三个动画，规则在 main.css 的 .ulv-fx10 下）。
+// v0.63 曾给榜单表格单独关特效，v0.100.2 退役；同日试过「排行榜表格完整特效常开」，
+// 用户看过实测后改回门控（星 / 粒子随进视口建、滚出拆，暂不做「滚动停下后再补挂」优化）。
 let tierIO: IntersectionObserver | null = null
 const tierWatchers = new Map<Element, (v: boolean) => void>()
 function watchTierVisible(el: Element, cb: (v: boolean) => void): () => void {
@@ -37,11 +40,8 @@ const props = withDefaults(
     kind?: 'level' | 'difficulty'
     label?: string // 覆盖默认文案（等级名 / 难度名）
     size?: 'sm' | 'md' | 'lg'
-    fx?: boolean // 特效链开关（v0.63）：默认开；百行榜单表格内传 false 静态化——
-    // ulv-fx* 无限动画 + Lv.9/10 粒子在一页百颗时是常驻重绘源，视觉主体色阶胶囊保留。
-    // v0.65：开启时再叠加可视区激活（fx 类与星/粒子 DOM 只在进视口后出现）
   }>(),
-  { kind: 'difficulty', size: 'sm', label: undefined, fx: true },
+  { kind: 'difficulty', size: 'sm', label: undefined },
 )
 
 const levels = useLevelsStore()
@@ -50,8 +50,10 @@ const fxOn = ref(false) // 可视才真开（v0.65）
 const rootEl = ref<HTMLElement>()
 let unwatch: (() => void) | null = null
 
+// 等级徽章一律登记可视区监听，不按挂载时的档位挑：表格换排序时行是原地复用的，
+// 挂载时 Lv.1–2 的实例之后会换成高档——按挂载档位挑的话它永远挂不上特效
 onMounted(() => {
-  if (props.kind === 'level' && props.fx && clamped.value >= 3 && rootEl.value) {
+  if (props.kind === 'level' && rootEl.value) {
     unwatch = watchTierVisible(rootEl.value, (v) => {
       fxOn.value = v
     })
@@ -111,7 +113,7 @@ const STARS: Record<number, Array<{ t?: number; l?: number; r?: number; b?: numb
   ],
 }
 
-// 星的定位/错拍内联样式（仅等级 5+ 渲染；fx 关闭或视口外不渲染——v0.65 连 DOM 一并省）
+// 星的定位/错拍内联样式（仅等级 5+ 渲染；门控且视口外不渲染——v0.65 连 DOM 一并省）
 const stars = computed(() => {
   if (props.kind !== 'level' || !fxOn.value) return []
   return (STARS[clamped.value] ?? []).map((st) => {
@@ -147,7 +149,7 @@ const PARTICLES: Record<
   ],
 }
 
-// 粒子内联样式（颜色/定位/外飞向量；仅 Lv.9+ 渲染；fx 关闭或视口外不渲染——v0.65）
+// 粒子内联样式（颜色/定位/外飞向量；仅 Lv.9+ 渲染；门控且视口外不渲染——v0.65）
 const particles = computed(() => {
   if (props.kind !== 'level' || !fxOn.value) return []
   return (PARTICLES[clamped.value] ?? []).map((pt) => {

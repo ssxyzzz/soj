@@ -11,6 +11,7 @@ import RailCard from '@/components/RailCard.vue'
 import SubStatus from '@/components/SubStatus.vue'
 import SubmissionDetailDialog from '@/components/SubmissionDetailDialog.vue'
 import TierBadge from '@/components/TierBadge.vue'
+import UserAvatar from '@/components/UserAvatar.vue'
 import PageShell from '@/components/PageShell.vue'
 import { gameApi, userApi } from '@/api'
 import { useLevelsStore } from '@/stores/levels'
@@ -84,15 +85,8 @@ watch(() => route.params.id, () => {
   void loadGame()
 })
 
-const avatarChar = computed(() => (page.value?.nickname || page.value?.username || '?').slice(0, 1).toUpperCase())
-// QQ 头像外域失败兜底（v0.37）：qlogo 被墙时裂图——@error 回退首字头像（换人访问随 load 重置）
-const avatarBroken = ref(false)
-watch(() => route.params.id, () => {
-  avatarBroken.value = false
-})
-function onAvatarError() {
-  avatarBroken.value = true
-}
+// 头像：首字圆或 QQ 头像，首字原样取用（全站统一为昵称本身的大小写）。QQ 头像的加载与失败
+// 兜底（v0.37 qlogo 被墙回退首字）在 UserAvatar 里，换直链即换状态——同路由换人访问不用另行重置
 
 // ---- 等级进度（距下一级）：xp 相对当前级阈值；Lv.10 满格 ----
 const lvPct = computed(() => {
@@ -198,8 +192,7 @@ function openDetail(id: number) {
 
           <!-- 头部资料卡：昵称 + 等级 + 进度条 + 资料 + 统计 -->
           <div class="card hero">
-            <img v-if="page.avatar_url && !avatarBroken" :src="page.avatar_url" alt="" class="avatar avatar-img" loading="lazy" decoding="async" @error="onAvatarError" />
-            <div v-else class="avatar">{{ avatarChar }}</div>
+            <UserAvatar class="avatar" :src="page.avatar_url" :name="page.nickname || page.username || '?'" lazy />
             <div class="who">
               <div class="name-row">
                 <h2>{{ page.nickname || page.username }}</h2>
@@ -455,24 +448,16 @@ function openDetail(id: number) {
   padding: var(--soj-sp-20) var(--soj-sp-24);
 }
 
-.avatar {
+/* 头像（v3）：主页款 = 蓝系渐变底 + 重字重；圆形 / 居中 / QQ 头像盖层（同位同径，v0.23）
+   在 UserAvatar。底色与字重要盖过组件根上的默认值，选择器前置 .hero 抬一级——
+   与同优先级的规则不靠加载顺序分胜负 */
+.hero .avatar {
   flex: none;
   width: 64px;
   height: 64px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
   font-size: var(--soj-fs-28);
   font-weight: var(--soj-fw-heavy);
-  color: var(--soj-white);
   background: linear-gradient(135deg, var(--soj-blue-hi), var(--soj-blue-lo));
-}
-
-/* QQ 头像（v0.23 绑定开关开启时）：图片版首字头像同位同径 */
-.avatar-img {
-  object-fit: cover;
-  border: 1px solid var(--soj-line);
-  background: var(--soj-white);
 }
 
 .who {
