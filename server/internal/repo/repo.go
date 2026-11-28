@@ -402,6 +402,7 @@ var freshSkipFlags = []string{
 	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
 	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2", "listManageV1",
 	"gradeNoV1", "discussCreatePermV1", "problemImportPermV1", "classEditPermV1",
+	"shopRefundKindV1",
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
@@ -681,6 +682,18 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		slog.Info("default/admin 角色已补发修改自己的班级权限位（class.edit.own）", "component", "boot")
+	}
+	if !flagDone("shopRefundKindV1") {
+		// v0.101.3：兑换被拒退玉的流水此前误记 bounty_refund（类型显示「悬赏退回」），源头已
+		// 改记 shop_refund；存量误记行按说明前缀订正（见 migrateShopRefundKind）
+		n, err := r.migrateShopRefundKind(ctx)
+		if err != nil {
+			return err
+		}
+		if err := setFlag("shopRefundKindV1"); err != nil {
+			return err
+		}
+		slog.Info("兑换被拒退玉的流水已订正为 shop_refund", "component", "boot", "count", n)
 	}
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次

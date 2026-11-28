@@ -283,7 +283,7 @@ func (f *fakeRepo) ResolveShopOrder(_ context.Context, orderID int64, status str
 	o.DoneAt = time.Now()
 	f.resolvedStatus[orderID] = status
 	if status == repo.ShopOrderRejected { // 拒绝全额退玉（真库同款语义）
-		return f.JadeCredit(context.Background(), o.UID, o.Price, repo.JadeKindBountyRefund, "退玉", o.ID)
+		return f.JadeCredit(context.Background(), o.UID, o.Price, repo.JadeKindShopRefund, "退玉", o.ID)
 	}
 	return nil
 }

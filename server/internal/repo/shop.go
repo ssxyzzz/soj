@@ -47,6 +47,24 @@ const (
 	ShopOrderRejected  = "rejected"
 )
 
+// shopRefundReasonPrefix 兑换被拒退玉的流水说明前缀「兑换被拒退回（订单 #N「物品」）」。
+// 存量订正 shopRefundKindV1 靠它认出误记成 bounty_refund 的行——改文案须同步那边。
+const shopRefundReasonPrefix = "兑换被拒退回"
+
+// migrateShopRefundKind 存量订正（shopRefundKindV1，v0.101.3）：v0.33-② 起兑换被拒退玉误记
+// bounty_refund（流水类型随之显示「悬赏退回」），按说明前缀认出改记 shop_refund，返回改写
+// 行数。真悬赏退款两条说明各有固定前缀（「悬赏到期退回」「话题删除退回悬赏」），不会误伤；
+// 无命中天然幂等。kind 等值走 {kind,ref} 索引，扫描量 = 悬赏退回行数。
+func (r *Repo) migrateShopRefundKind(ctx context.Context) (int64, error) {
+	res, err := r.jadeLedger.UpdateMany(ctx,
+		bson.M{"kind": JadeKindBountyRefund, "reason": bson.M{"$regex": "^" + shopRefundReasonPrefix}},
+		bson.M{"$set": bson.M{"kind": JadeKindShopRefund}})
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}
+
 // ErrShopClosed / ErrShopOutOfStock / ErrShopLimitReached 下单三类可预期失败。
 var (
 	ErrShopClosed       = errors.New("兑换未开放")
@@ -235,8 +253,8 @@ func (r *Repo) ResolveShopOrder(ctx context.Context, orderID int64, status strin
 		return errors.New("订单不存在或已处理")
 	}
 	if status == ShopOrderRejected {
-		if err := r.JadeCredit(ctx, o.UID, o.Price, JadeKindBountyRefund,
-			fmt.Sprintf("兑换被拒退回（订单 #%d「%s」）", o.ID, o.ItemName), o.ID); err != nil {
+		if err := r.JadeCredit(ctx, o.UID, o.Price, JadeKindShopRefund,
+			fmt.Sprintf("%s（订单 #%d「%s」）", shopRefundReasonPrefix, o.ID, o.ItemName), o.ID); err != nil {
 			return err
 		}
 	}

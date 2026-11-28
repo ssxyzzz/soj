@@ -39,6 +39,7 @@ const (
 	JadeKindBountyPay          = "bounty_pay"          // 悬赏打赏（v0.33-②）
 	JadeKindBountyRefund       = "bounty_refund"       // 悬赏退回（v0.33-②）
 	JadeKindShopOrder          = "shop_order"          // 实物兑换（v0.33-②）
+	JadeKindShopRefund         = "shop_refund"         // 兑换被拒退玉（v0.101.3，此前误记 bounty_refund）
 	JadeKindAiHint             = "ai_hint"             // AI 分级提示（v0.33-④，ref 编码级别）
 	JadeKindAiDebug            = "ai_debug"            // AI 找 bug（v0.33-④）
 	JadeKindAdminAdjust        = "admin_adjust"        // root 人工加减

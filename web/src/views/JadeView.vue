@@ -57,6 +57,7 @@ function kindText(kind: string): string {
     bounty_pay: '悬赏收入',
     bounty_refund: '悬赏退回',
     shop_order: '实物兑换',
+    shop_refund: '兑换退回',
     ai_hint: 'AI 提示',
     ai_debug: 'AI 找 bug',
     admin_adjust: '管理员调整',
