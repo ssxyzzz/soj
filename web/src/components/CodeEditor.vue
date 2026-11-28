@@ -31,7 +31,10 @@ const props = withDefaults(
   },
 )
 
-const emit = defineEmits<{ (e: 'update:modelValue', v: string): void }>()
+const emit = defineEmits<{
+  (e: 'update:modelValue', v: string): void
+  (e: 'ready', scrollDOM: HTMLElement): void // CM 异步挂载完成，带出滚动容器（悬浮件量滚动条占位用）
+}>()
 
 const el = ref<HTMLDivElement>()
 let view: any = null // EditorView（CM6 经动态 import，类型取不到静态声明，统一 any）
@@ -149,6 +152,7 @@ onMounted(async () => {
   )
   if (!el.value) return // 等待 chunk 加载期间组件已卸载
   view = new cm.EditorView({ doc: props.modelValue, extensions: exts, parent: el.value })
+  emit('ready', view.scrollDOM)
 })
 
 watch(

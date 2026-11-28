@@ -22,6 +22,7 @@ declare module 'vue' {
     CodeEditor: typeof import('./components/CodeEditor.vue')['default']
     CodePane: typeof import('./components/CodePane.vue')['default']
     CodeWorkbench: typeof import('./components/CodeWorkbench.vue')['default']
+    CopyButton: typeof import('./components/CopyButton.vue')['default']
     CopyFromListButton: typeof import('./components/CopyFromListButton.vue')['default']
     DiffChart: typeof import('./components/DiffChart.vue')['default']
     DiscussDialog: typeof import('./components/discuss/DiscussDialog.vue')['default']

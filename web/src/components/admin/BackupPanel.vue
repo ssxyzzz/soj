@@ -11,6 +11,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminApi, mdApi } from '@/api'
 import { usePolling } from '@/composables/usePolling'
 import { pushActive, useTopic } from '@/composables/useEventStream'
+import CopyButton from '@/components/CopyButton.vue'
 import MdView from '@/components/MdView.vue'
 import { useUserStore } from '@/stores/user'
 import { copyText } from '@/utils/clipboard'
@@ -352,25 +353,11 @@ onMounted(loadBackup)
       <div class="tips">
         <div class="cmd-line">
           <code>./scripts/restore.sh soj-backup-xxxx.v1.tar.age --pull-key</code>
-          <el-button
-            size="small"
-            link
-            type="primary"
-            @click="copyText('./scripts/restore.sh soj-backup-xxxx.v1.tar.age --pull-key')"
-          >
-            复制
-          </el-button>
+          <CopyButton text="./scripts/restore.sh soj-backup-xxxx.v1.tar.age --pull-key" />
         </div>
         <div class="cmd-line">
           <code>./scripts/restore.sh soj-backup-xxxx.v1.tar.age 恢复钥匙.txt</code>
-          <el-button
-            size="small"
-            link
-            type="primary"
-            @click="copyText('./scripts/restore.sh soj-backup-xxxx.v1.tar.age 恢复钥匙.txt')"
-          >
-            复制
-          </el-button>
+          <CopyButton text="./scripts/restore.sh soj-backup-xxxx.v1.tar.age 恢复钥匙.txt" />
         </div>
         <p class="cmd-note">第一条 = 普通模式（钥匙在服务器自动取）；第二条 = 高安全模式（用保存的「恢复钥匙.txt」）。把 xxxx 换成实际备份文件名；恢复会覆盖现有数据，脚本会二次确认。</p>
       </div>
@@ -395,7 +382,7 @@ onMounted(loadBackup)
       />
       <div class="cmd-line" style="margin-top: var(--soj-sp-10)">
         <code>{{ fetchCmd }}</code>
-        <el-button size="small" link type="primary" @click="copyText(fetchCmd)">复制</el-button>
+        <CopyButton :text="fetchCmd" />
       </div>
       <p class="cmd-note">
         在服务器（docker 宿主机）上执行；取回后再从服务器下载或用
@@ -480,6 +467,12 @@ onMounted(loadBackup)
 .cmd-line code {
   flex: 1;
   word-break: break-all;
+}
+
+/* 复制钮按最宽态「已复制」占位并靠右：窄屏命令折行时，翻牌变宽不会挤压命令重新折行 */
+.cmd-line :deep(.el-button) {
+  min-width: 45px;
+  justify-content: flex-end;
 }
 
 .cmd-note {

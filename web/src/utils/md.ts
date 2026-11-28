@@ -12,27 +12,28 @@ export function contentBytes(s: string): number {
 }
 
 // ---- 代码块复制按钮（站内自建 md-copy-btn） ----
-// 在 pre 上挂自建按钮：淡蓝胶囊（图标+「复制」），点击复制后换「已复制」、变淡绿
-// 并弹站内 toast（ElMessage 顶部提示），3 秒恢复。代码块由查看端/预览动态渲染，
-// MutationObserver（rAF 去抖）补挂新 pre；图示/公式类代码块不挂按钮。
+// 在 pre 上挂自建按钮：主蓝文字「复制」（无图标无描边，全站统一的复制入口观感，
+// 样式落 main.css .md-copy-btn，与 CopyButton 同款），点击后换「已复制」、变绿并弹
+// toast，COPIED_RESET_MS 后恢复。复制走 utils/clipboard 的统一入口（与 CopyButton 同一份）。
+// 代码块由查看端/预览动态渲染，MutationObserver（rAF 去抖）补挂新 pre；
+// 图示/公式类代码块不挂按钮。
 
-import { ElMessage } from 'element-plus'
+import { COPIED_RESET_MS, copyText } from '@/utils/clipboard'
 
 const copyTimers = new WeakMap<Element, number>()
 
 /** 不挂复制按钮的代码块（图示/公式渲染容器，复制无意义） */
 const noCopyLangs = /language-(mermaid|flowchart|echarts|mindmap|plantuml|markmap|abc|graphviz|math|smiles)/
 
-const COPY_BTN_HTML =
-  '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>' +
-  '<span class="md-copy-text">复制</span>'
+/** 按钮内容：普通代码块（pre 内）与样例格头同一份 */
+const COPY_BTN_HTML = '<span class="md-copy-text">复制</span>'
 
 function injectCopyButtons(root: HTMLElement) {
   root.querySelectorAll('pre > code').forEach((code) => {
     const pre = code.parentElement
     if (!pre || pre.querySelector(':scope > .md-copy-btn')) return
     if (noCopyLangs.test(code.className)) return
-    // 样例格（.md-io）的 pre 不挂胶囊按钮：复制入口在格头「复制」文字按钮（pairIOSamples 创建）
+    // 样例格（.md-io）的 pre 不挂按钮：复制入口在格头「复制」文字按钮（pairIOSamples 创建）
     if (pre.closest('.md-io')) return
     const btn = document.createElement('button')
     btn.type = 'button'
@@ -40,29 +41,6 @@ function injectCopyButtons(root: HTMLElement) {
     btn.innerHTML = COPY_BTN_HTML
     pre.appendChild(btn)
   })
-}
-
-async function copyText(text: string): Promise<boolean> {
-  const t = text.replace(/\u00a0/g, ' ').trimEnd()
-  try {
-    await navigator.clipboard.writeText(t)
-    return true
-  } catch {
-    // 非 secure context（http 部署）回退 execCommand
-    const ta = document.createElement('textarea')
-    ta.value = t
-    ta.style.cssText = 'position:fixed;opacity:0'
-    document.body.appendChild(ta)
-    ta.select()
-    let ok = false
-    try {
-      ok = document.execCommand('copy')
-    } catch {
-      ok = false
-    }
-    ta.remove()
-    return ok
-  }
 }
 
 // ---- 样例卡片（```input1/```output1 围栏 → .md-io 网格） ----
@@ -81,7 +59,7 @@ function ioFenceInfo(code: Element): { dir: 'input' | 'output'; n: string } | nu
 }
 
 function makeIOCell(label: string, pre: HTMLElement): HTMLElement {
-  // pre 在配对前可能已被 injectCopyButtons 挂上胶囊按钮，移动进卡前摘除
+  // pre 在配对前可能已被 injectCopyButtons 挂上按钮，移动进卡前摘除
   //（复制入口统一为格头「复制」；配对后 .md-io 内的 pre 不会再被注入）
   pre.querySelector(':scope > .md-copy-btn')?.remove()
   const cell = document.createElement('div')
@@ -92,7 +70,7 @@ function makeIOCell(label: string, pre: HTMLElement): HTMLElement {
   const btn = document.createElement('button')
   btn.type = 'button'
   btn.className = 'md-copy-btn'
-  btn.innerHTML = '<span class="md-copy-text">复制</span>'
+  btn.innerHTML = COPY_BTN_HTML
   head.append(document.createTextNode(label), btn)
   cell.append(head, pre) // append 移动 pre 节点，不复制
   return cell
@@ -145,14 +123,12 @@ export function bindCopyFeedback(root: HTMLElement): () => void {
     const pre = btn.closest('pre') ?? btn.closest('.md-io-cell')?.querySelector('pre')
     const code = pre?.querySelector('code')
     if (!code) return
-    if (!(await copyText(code.textContent ?? ''))) {
-      ElMessage.error('复制失败，请手动选择代码复制')
-      return
-    }
+    // 代码文本里的不换行空格归一成普通空格、去掉围栏尾换行再复制
+    const text = (code.textContent ?? '').replace(/\u00a0/g, ' ').trimEnd()
+    if (!(await copyText(text, '已复制'))) return // 失败提示由 copyText 统一弹
     btn.classList.add('md-copied')
     const label = btn.querySelector('.md-copy-text')
     if (label) label.textContent = '已复制'
-    ElMessage.success('已复制')
     window.clearTimeout(copyTimers.get(btn))
     copyTimers.set(
       btn,
@@ -160,7 +136,7 @@ export function bindCopyFeedback(root: HTMLElement): () => void {
         btn.classList.remove('md-copied')
         const l = btn.querySelector('.md-copy-text')
         if (l) l.textContent = '复制'
-      }, 3000),
+      }, COPIED_RESET_MS),
     )
   }
   root.addEventListener('click', handler)

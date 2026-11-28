@@ -1443,7 +1443,8 @@ strong {
   overflow: hidden;
 }
 
-/* 格头：标签 12/700 墨青 + 「复制」主蓝文字按钮居右（v3-full .codeblk-h 定值） */
+/* 格头：标签 12/700 墨青 + 「复制」主蓝文字按钮居右（v3-full .codeblk-h 定值）；
+   按钮观感见下方「复制按钮」一节（与普通代码块同一套基础规则） */
 .soj-md .vditor-reset .md-io .md-io-head {
   display: flex;
   align-items: center;
@@ -1453,34 +1454,6 @@ strong {
   color: var(--soj-ink-2);
   border-bottom: 1px solid var(--soj-line);
   background: rgba(255, 255, 255, 0.6);
-}
-
-.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  font-family: inherit;
-  font-size: var(--soj-fs-12);
-  font-weight: var(--soj-fw-emphasis);
-  line-height: 18px;
-  color: var(--soj-blue);
-  background: transparent;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s;
-}
-
-.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn:hover {
-  background: var(--soj-blue-soft);
-}
-
-.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn.md-copied,
-.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn.md-copied:hover {
-  color: var(--el-color-success);
-  background: transparent;
 }
 
 /* 数据区：卡体即底色，pre 只留内距（压通用代码块淡蓝底/边/圆角与行号缩进）；
@@ -1540,63 +1513,84 @@ strong {
   background: var(--el-fill-color-lighter);
 }
 
-/* ---- 代码块复制按钮（站内自建 md-copy-btn）----
-   utils/md.ts bindCopyFeedback 在 pre 上挂自建按钮（v0.53 渲染收口后唯一实现，
-   服务端渲染产物无其他按钮来源）。常态淡蓝胶囊（图标+「复制」），点击复制后变
-   淡绿「已复制」+ 站内 toast，3 秒恢复。code 右侧预留 64px，长代码行不钻到按钮
-   下面 */
-.soj-md .vditor-reset pre {
-  position: relative; /* 自建按钮的定位基准 */
+/* ---- 复制按钮（站内自建 md-copy-btn）----
+   utils/md.ts bindCopyFeedback 直插的两处：普通代码块（pre 内）与样例格头（.md-io-head）。
+   v0.53 渲染收口后唯一实现（服务端渲染产物无其他按钮来源）。观感 = 主蓝文字「复制」，
+   无图标无描边，对齐 EP link / primary / small 文字按钮（CopyButton：备份面板命令行、
+   CodePane）：13/600、内距 2px、悬停文字变浅、点击后变绿「已复制」+ toast，
+   COPIED_RESET_MS 后恢复。2026-11-28 全站复制入口统一为文字按钮，原淡蓝胶囊
+   （图标 + 描边）退役 */
+.soj-md .vditor-reset .md-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  font-family: var(--el-font-family);
+  font-size: var(--soj-fs-13);
+  font-weight: var(--soj-fw-emphasis);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--el-color-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  user-select: none;
 }
 
+.soj-md .vditor-reset .md-copy-btn:hover {
+  color: var(--el-color-primary-light-5);
+}
+
+.soj-md .vditor-reset .md-copy-btn:active {
+  color: var(--el-color-primary-dark-2);
+}
+
+.soj-md .vditor-reset .md-copy-btn.md-copied,
+.soj-md .vditor-reset .md-copy-btn.md-copied:active {
+  color: var(--el-color-success);
+}
+
+.soj-md .vditor-reset .md-copy-btn.md-copied:hover {
+  color: var(--el-color-success-light-5);
+}
+
+.soj-md .vditor-reset .md-copy-btn:focus-visible {
+  outline: 2px solid var(--el-color-primary-light-5);
+  outline-offset: 1px;
+}
+
+/* 普通代码块：浮在首行右端。pre 是按钮的定位基准 */
+.soj-md .vditor-reset pre {
+  position: relative;
+}
+
+/* code 右侧预留 64px：代码块内的行是折行的（全局 pre 为 pre-wrap），折行折不到按钮
+   下面；64 ≥ 按钮最宽态（「已复制」约 43px）+ 右距 9px */
 .soj-md .vditor-reset pre > code {
   padding-right: 64px;
 }
 
+/* 按钮盒与首行代码的行盒重合——top = code 上内距 0.5em（绝对定位以 pre 内边距边为
+   起点，上边框不用算），高 = 一行（code 行高 1.6）；两项都挂在 --soj-fs-code 上，随上方
+   pre > code 的内距 / 行高同步。文字与首行代码同一条中线：单行命令块看上去就是
+   「命令居左、复制居右」的一行。right：文字右缘落在 code 左内距 0.75em 附近，左右对称。
+   底色取 pre 的（inherit）：纯文字没有底色，万一有内容滚到按钮下面（折行规则日后若改），
+   也有底色遮着不与代码叠字，观感仍是纯文字 */
 .soj-md .vditor-reset pre .md-copy-btn {
   position: absolute;
-  top: 5px;
-  right: 7px; /* 内距紧凑化（0.5em≈7.6px）后同步内收，贴角不压首行文字 */
+  top: calc(0.5 * var(--soj-fs-code));
+  right: 9px;
   z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 1px 8px;
-  font-family: inherit;
-  font-size: var(--soj-fs-tooltip);
+  box-sizing: border-box;
+  height: calc(var(--soj-fs-code) * 1.6);
+  background: inherit;
+}
+
+/* 样例格头：居右；字号随格头 12、行高 18 撑住格头高度（v3-full .codeblk-h 定值） */
+.soj-md .vditor-reset .md-io .md-io-head .md-copy-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: var(--soj-fs-12);
   line-height: 18px;
-  border-radius: var(--el-border-radius-small);
-  cursor: pointer;
-  user-select: none;
-  /* 中性兜底（编辑器暗色内容主题下可读）；亮色主题在下方覆写为淡蓝/淡绿 */
-  color: var(--el-text-color-secondary);
-  background: rgba(127, 127, 127, 0.1);
-  border: 1px solid rgba(127, 127, 127, 0.28);
-}
-
-.soj-md .vditor-reset pre .md-copy-btn svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-}
-
-.soj-md.md-light .vditor-reset pre .md-copy-btn {
-  color: var(--el-color-primary);
-  background: var(--el-color-primary-light-9);
-  border-color: var(--el-color-primary-light-7);
-}
-
-.soj-md.md-light .vditor-reset pre .md-copy-btn:hover {
-  background: var(--el-color-primary-light-8);
-}
-
-.soj-md.md-light .vditor-reset pre .md-copy-btn.md-copied,
-.soj-md.md-light .vditor-reset pre .md-copy-btn.md-copied:hover {
-  color: var(--el-color-success);
-  background: var(--el-color-success-light-9);
-  border-color: var(--el-color-success-light-7);
 }
 
 /* KaTeX 隐藏 MathML 副本不参与划选（v0.84 随题面选中标注暴露的既有渲染瑕疵）：
