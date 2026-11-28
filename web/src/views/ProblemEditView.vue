@@ -320,7 +320,7 @@ function onCancel() {
           <template v-if="problem.has_checker || showCheckerUpload">
             <el-upload
               drag
-              accept=".cpp"
+              accept=".cpp,.cc,.cxx"
               :limit="1"
               :auto-upload="false"
               :on-change="onCheckerChange"
@@ -328,8 +328,11 @@ function onCancel() {
               class="checker-upload"
             >
               <div class="checker-hint">
-                <p>{{ problem.has_checker ? '已有校验器，拖入新文件可替换' : '拖入 C++ 校验器源文件或点击选择（.cpp，≤256KB）' }}</p>
-                <p class="dim">调用约定：checker 输入 期望 考生输出，退出码 0 = 通过</p>
+                <p>{{ problem.has_checker ? '已有校验器，拖入新文件可替换' : '拖入 C++ 校验器源文件或点击选择（.cpp / .cc，≤256KB）' }}</p>
+                <p class="dim">
+                  调用约定：checker 输入 考生输出 答案（与 testlib 一致，可直接 #include「testlib.h」）；退出码 0 = 通过，3 =
+                  校验器自身故障，其余 = 不通过
+                </p>
               </div>
             </el-upload>
             <div class="checker-actions">

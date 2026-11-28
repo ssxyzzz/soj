@@ -258,6 +258,34 @@ func (r *Repo) GetProblemMetas(ctx context.Context, ids []int64) (map[int64]*Pro
 	return out, nil
 }
 
+// CheckerMeta 配了自定义校验器的题目的清单项（校验器约定变更时的盘点与迁移用）。
+type CheckerMeta struct {
+	ID    int64  `bson:"_id"`
+	Title string `bson:"title"`
+	File  string `bson:"checkerFile"`
+}
+
+// MaxCheckerInventory 校验器清单一次至多列出的题目数（调用方按 truncated 判断是否触顶）。
+const MaxCheckerInventory = 5000
+
+// ListCheckerProblems 列出全部配了自定义校验器的题目（题号升序，至多 MaxCheckerInventory 条，
+// 触顶时 truncated = true）。
+func (r *Repo) ListCheckerProblems(ctx context.Context) ([]CheckerMeta, bool, error) {
+	cursor, err := r.problems.Find(ctx,
+		bson.M{"checkerFile": bson.M{"$exists": true, "$nin": []any{nil, ""}}},
+		options.Find().SetProjection(bson.M{"_id": 1, "title": 1, "checkerFile": 1}).
+			SetSort(bson.D{{Key: "_id", Value: 1}}).SetLimit(MaxCheckerInventory))
+	if err != nil {
+		return nil, false, err
+	}
+	defer cursor.Close(ctx)
+	list := make([]CheckerMeta, 0)
+	if err := cursor.All(ctx, &list); err != nil {
+		return nil, false, err
+	}
+	return list, len(list) == MaxCheckerInventory, nil
+}
+
 // ProblemListFilter 题库列表下推查询（v0.26）：搜索过滤 + 可见性反向排除，
 // 过滤与分页都在 DB 侧完成——原「全量 cursor.All 后内存过滤切片」在万题规模
 // 每请求传输几十 MB；下推后每请求只回当前页（≤100 条）。

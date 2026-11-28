@@ -468,6 +468,15 @@ var signalHints = map[int]string{
 	31: "非法系统调用（SIGSYS）",
 }
 
+// signalName 信号编号翻成成因提示（Signalled 状态下 ExitStatus 即信号编号），
+// 未收录的信号回退「异常信号 N」。选手程序与校验器的信号终止共用。
+func signalName(sig int) string {
+	if name, ok := signalHints[sig]; ok {
+		return name
+	}
+	return fmt.Sprintf("异常信号 %d", sig)
+}
+
 // caseVerdict 把沙箱单点结果归一为 (点位状态缩写, 终止状态, 原因)。
 // 终止状态非空表示该点导致整份提交按此状态失败（单点模式用）。
 func caseVerdict(res *sandbox.Result, progOut, ans string, cmp outputComparer) (caseStatus, finalStatus, reason string) {
@@ -485,11 +494,7 @@ func caseVerdict(res *sandbox.Result, progOut, ans string, cmp outputComparer) (
 		var msg string
 		if res.Status == "Signalled" {
 			// 被信号终止：ExitStatus 即信号编号，翻成成因提示
-			name, ok := signalHints[res.ExitStatus]
-			if !ok {
-				name = fmt.Sprintf("异常信号 %d", res.ExitStatus)
-			}
-			msg = "运行时错误：" + name
+			msg = "运行时错误：" + signalName(res.ExitStatus)
 		} else {
 			// 自行退出：ExitStatus 为非零退出码（如 return -1、exit(1)）
 			msg = fmt.Sprintf("程序以非零退出码 %d 结束", res.ExitStatus)
@@ -591,7 +596,8 @@ func (j *Judger) judgeCase(ctx context.Context, tc repo.CaseMeta, res *sandbox.R
 	if chk != nil {
 		ok, msg, serr := chk.run(ctx, tc, input, string(ans), progOut)
 		if serr != nil {
-			return "", "", "", fmt.Errorf("校验器异常: %w", serr)
+			// 带测试点序号：校验器故障 / 崩溃时定位坏在哪个点上
+			return "", "", "", fmt.Errorf("测试点 %d 校验器异常: %w", tc.Index, serr)
 		}
 		if ok {
 			return "AC", "", "", nil

@@ -279,6 +279,7 @@ func Run(ctx context.Context, deps *Deps) {
 			// 多题打包导出（v0.18.1）：权限位与单题下载同源；与 /problems/:id 参数路由
 			// 同级静态段，gin 树静态优先匹配
 			api.GET("/problems/export", h.dlAuth(repo.PermProblemDataDownload), h.ExportProblems)
+			authed.GET("/problems/checkers", RequirePerm(repo.PermProblemEditAll), h.ListProblemCheckers) // 全站校验器清单（盘点 / 迁移用）
 			authed.POST("/problems/:id/checker", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateChecker)
 			authed.POST("/problems/:id/function/:file", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.UpdateFunctionFile) // driver|template（v0.9.1）
 			authed.DELETE("/problems/:id/function/:file", RequirePermAny(repo.PermProblemEditAll, repo.PermProblemEditOwn), h.RemoveFunctionFile)

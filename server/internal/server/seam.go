@@ -204,6 +204,7 @@ type RepoAPI interface {
 	ListPidSubmissions(ctx context.Context, pid int64, uid int64, page, pageSize int, sort, lang string) ([]*repo.Submission, int64, error)
 	ListProblemLists(ctx context.Context) ([]*repo.ProblemList, error)
 	ListProblemStats(ctx context.Context, pids []int64) (map[int64]repo.ProblemStat, error)
+	ListCheckerProblems(ctx context.Context) ([]repo.CheckerMeta, bool, error)
 	ListProblemsPage(ctx context.Context, f repo.ProblemListFilter, page, pageSize int) ([]*repo.Problem, int64, error)
 	ListRankRows(ctx context.Context, pids []int64) ([]repo.ListRankRow, error)
 	ListRoles(ctx context.Context) ([]*repo.Role, error)

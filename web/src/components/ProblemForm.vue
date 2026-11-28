@@ -699,13 +699,13 @@ function onSubmitClick() {
             </template>
             <el-upload
               v-model:file-list="checkerList"
-              accept=".cpp"
+              accept=".cpp,.cc,.cxx"
               :limit="1"
               :auto-upload="false"
               :on-change="onCheckerChange"
               :on-remove="onCheckerRemove"
             >
-              <el-button>选择 checker.cpp</el-button>
+              <el-button>选择 checker（.cpp / .cc）</el-button>
             </el-upload>
           </el-form-item>
 

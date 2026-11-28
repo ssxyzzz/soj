@@ -13,3 +13,12 @@ RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc g++ python3 \
     && rm -rf /var/lib/apt/lists/*
+
+# testlib.h 内置（与 Codeforces / 洛谷等主流 OJ 一致）：自定义校验器可以直接
+# #include "testlib.h"，不必自包含。装进 /usr/include——go-judge 把镜像自身的 /usr
+# 挂进判题容器，g++ 默认搜索路径就能找到，校验器的编译参数不用加 -I。
+# 文件随仓库入库（上游 MikeMirzayanov/testlib，VERSION 0.9.52），升级时整份替换，
+# 文件头的许可声明保留。
+# 改动本文件后沙箱镜像要单独重建：docker compose build sandbox && docker compose up -d sandbox
+# （例行 make up 只重建 soj / judge 两个镜像）。
+COPY testlib.h /usr/include/testlib.h

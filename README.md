@@ -26,7 +26,7 @@
 | 模块 | 能力一览 |
 | --- | --- |
 | 教学闭环 | 班级作业（即时出分、逐人完成情况）· 考试（OI 赛制 + 赛后隐藏期）· 主题库比赛 · 成绩表 · 班内/全站排名 · 个人主页（难度完成图 + 首 AC 足迹） |
-| 判题 | go-judge 沙箱 + 优先级判题池（学生提交优先、批量重测不插队）；比对模式按题可配（全文 / 宽容 token / SPJ）、子任务、文件 IO；比赛锁题、赛时可隐藏难度与知识点 |
+| 判题 | go-judge 沙箱 + 优先级判题池（学生提交优先、批量重测不插队）；比对模式按题可配（全文 / 宽容 token / SPJ——内置 testlib.h，调用约定同 Codeforces / 洛谷，校验器自身故障判 System Error 不算选手错）、子任务、文件 IO；比赛锁题、赛时可隐藏难度与知识点 |
 | 题型 | 传统题 · 客观题族（单选/多选/判断/填空，提交即判、整卷满分解锁解析）· 函数题（驱动器合编 + 模板预填）· 交互题（双进程管道） |
 | 建题与题包 | 网页建题（Markdown + KaTeX + 粘贴传图）· SOJ 统一题包 · Hydro 包导入适配 · 批量导入实时进度 · 整包下载 · 学生版试卷打印 · 种子题开箱部署（启动自动播种 + 后台对账/一键重部署/清除）· 题面图片随题走（assets 资产空间 + 外链图自动转存 + 导出自包含） |
 | 知识与激励 | 知识树 + 标签树（五级层级色）· 十档难度（锚定 NOI/CSP 教学进度）· 经验等级 + 炫彩徽章 · 难度完成图 · 挑战模式（限时手速 PK + 题内三榜）· 题解 + 视频答案解析 · 题目收藏（题库星标一键 toggle） |
@@ -94,6 +94,8 @@ make lint     # ESLint + go vet（+ staticcheck 如已安装）
 
 产物 `server/bin/soj` 是静态单文件（前端已嵌入），可直接拷到任何 Linux 服务器运行。
 
+**沙箱镜像要单独重建**：`deploy/sandbox/Dockerfile`（编译器、`testlib.h` 等判题环境）不随 `make up` / `make bin` 重建——例行发版只重建 soj / judge 两个镜像。改了它，在目标机执行 `docker compose build sandbox && docker compose up -d sandbox`。
+
 ## 出题
 
 三种方式：**网页建题**（表单写题面，zip 认 `data/` 目录或根平铺数据对；建题/编辑页选入 zip 即自动上传暂存并显示实时进度、页面保持可操作，点确认才正式生效）；**「导入题目」页批量导题包**（题库页入口，按来源选 SOJ / Hydro 适配器，单题包与多题包混装均可）；或目录式题包 `make import DIR=路径`（或放进 `data/seed/`——仅首次部署播种一次，之后启动不再播种，加题用导入或网页建题）。
@@ -111,12 +113,14 @@ make lint     # ESLint + go vet（+ staticcheck 如已安装）
     ├── config.yaml   # time / memory / filename(文件 IO) / subtasks / checker
     ├── test1.in / test1.ans、test2.in / test2.out   # 数据对（.ans 或 .out 均可）
     ├── gen.py / std.cpp        # 〔可选〕造数据脚本等附属文件，与数据对同目录
-    ├── checker.cpp             # 〔可选〕SPJ（config.yaml 的 checker 声明）
+    ├── checker.cpp             # 〔可选〕SPJ：checker <输入> <考生输出> <答案>，可 include testlib.h
     ├── driver.cpp / template.cpp   # 〔函数题〕驱动器与学生模板
     └── interactor.cpp          # 〔交互题〕交互器
 ```
 
 `type` 缺省为传统题，可设 `objective` / `function` / `interactive`；`hidden: true` 设为主题库隐藏（适合考试题）。Hydro 官方「题库导出」zip 在导入页选「从 Hydro 导入」原样上传即可（题面 problem_zh.md、testdata/、config.yaml 自动识别，目录名数字 ID 不采用）。旧版格式（statement.md + cases/）不再支持，站内任意题「下载数据」导出的包即格式模板。
+
+**自定义校验器（SPJ）**：`config.yaml` 的 `checker:` 声明数据目录里的校验器源文件，编辑页也可直接上传（`.cpp` / `.cc`）。调用约定与 Codeforces / 洛谷 / UOJ / Hydro 一致——`checker <输入> <考生输出> <答案>`，即 testlib `registerTestlibCmd` 的读序；沙箱镜像内置 `testlib.h`，主流 checker 原样可用。退出码：**0** 通过；**3** 校验器自身故障（读不了输入 / 答案文件等），判 System Error 不算选手错；其余非零为不通过，原因取校验器输出（1 = 答案错，2 = 输出格式错——PE 并入 WA，同 Codeforces / 洛谷）。校验器崩溃、超时同样判 System Error。部分分（`quitp`）暂不支持，按不通过处理并在原因里注明。校验器按位置读三个文件：`argv[1]` 输入、`argv[2]` 考生输出、`argv[3]` 答案。
 
 ## 配置
 

@@ -5,13 +5,15 @@ package server
 //     构造临时 SOJ 题目录（problem.md ← 表单题面）走 ImportDir 单管道，全题型共用；
 //   - PATCH /api/problems/:id/meta：编辑标题/时限/内存/比对/来源等（problemEditable 校验）；
 //   - POST /api/problems/:id/testdata：数据/配置整包替换（zip 只认 data/）；
-//   - GET  /api/problems/:id/testdata/download：权威导出新格式题包。
+//   - GET  /api/problems/:id/testdata/download：权威导出新格式题包；
+//   - GET  /api/problems/checkers：全站自定义校验器清单（约定变更时的盘点与迁移用）。
 // zip 安全面三道闸：请求体上限、条目数与解压总量上限、条目名穿越成分拒绝。
 
 import (
 	"archive/zip"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,6 +32,7 @@ import (
 
 	"soj/internal/archive"
 	"soj/internal/repo"
+	"soj/internal/testdata"
 )
 
 const (
@@ -310,6 +313,8 @@ func parseObjectiveQuestionsForm(raw string) ([]repo.ObjectiveQuestion, error) {
 
 // UpdateChecker 上传/替换题目校验器（C++ 源文件，problemEditable 语义）。
 // 替换后清空编译产物缓存，判题时懒编译生效。落卷固定名 data/checker.cpp。
+// 上传件扩展名认 .cpp / .cc / .cxx（洛谷等主流题包的校验器惯用 checker.cc）。
+// 调用约定见 judge/checker.go：checker <输入> <考生输出> <答案>，可直接 include testlib.h。
 func (h *Handlers) UpdateChecker(c *gin.Context) {
 	id, okID := parseID(c, "id")
 	if !okID {
@@ -325,11 +330,11 @@ func (h *Handlers) UpdateChecker(c *gin.Context) {
 	}
 	fh, err := c.FormFile("checker")
 	if err != nil {
-		fail(c, http.StatusBadRequest, "请上传 checker 源文件（.cpp）")
+		fail(c, http.StatusBadRequest, "请上传 checker 源文件（.cpp / .cc）")
 		return
 	}
-	if !strings.HasSuffix(strings.ToLower(fh.Filename), ".cpp") {
-		fail(c, http.StatusBadRequest, "校验器需为 C++ 源文件（.cpp）")
+	if !checkerSourceExt(fh.Filename) {
+		fail(c, http.StatusBadRequest, "校验器需为 C++ 源文件（.cpp / .cc / .cxx）")
 		return
 	}
 	if fh.Size > 256<<10 {
@@ -347,7 +352,7 @@ func (h *Handlers) UpdateChecker(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "读取校验器失败")
 		return
 	}
-	if err := h.store.WriteFile(id, "data/checker.cpp", data); err != nil {
+	if err := h.provider().WriteFile(id, "data/checker.cpp", data); err != nil {
 		fail(c, http.StatusInternalServerError, "保存校验器失败")
 		return
 	}
@@ -360,6 +365,71 @@ func (h *Handlers) UpdateChecker(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"checker": "data/checker.cpp", "sha": sha})
+}
+
+// checkerSourceExt 校验器上传件的扩展名是否为 C++ 源文件（大小写不敏感）。
+func checkerSourceExt(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".cpp", ".cc", ".cxx":
+		return true
+	}
+	return false
+}
+
+// checkerSourceMax 校验器源码读取上限（上传入口限 256KB，留一倍余量只挡异常大文件）。
+const checkerSourceMax = 512 << 10
+
+// ListProblemCheckers 全站自定义校验器清单（只读，限 problem.edit.all）：每题带源码
+// （base64 逐字节保真）与 sha256——校验器约定变更时据此盘点、备份、按旧指纹匹配迁移
+// （scripts/checker_migrate.py）。单题读取失败不影响整表，该项带 error。
+func (h *Handlers) ListProblemCheckers(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 15*time.Second)
+	defer cancel()
+	metas, truncated, err := h.repo.ListCheckerProblems(ctx)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "读取校验器清单失败")
+		return
+	}
+	type item struct {
+		ID        int64  `json:"id"`
+		Title     string `json:"title"`
+		File      string `json:"file"`
+		SHA       string `json:"sha,omitempty"`
+		SourceB64 string `json:"source_b64,omitempty"`
+		Error     string `json:"error,omitempty"`
+	}
+	out := make([]item, 0, len(metas))
+	store := h.provider() // 惰性构造：进程启动后首个碰数据卷的请求可能就是本接口
+	for _, m := range metas {
+		it := item{ID: m.ID, Title: m.Title, File: m.File}
+		src, err := readCheckerSource(store, m.ID, m.File)
+		if err != nil {
+			it.Error = err.Error()
+		} else {
+			sum := sha256.Sum256(src)
+			it.SHA = fmt.Sprintf("%x", sum)
+			it.SourceB64 = base64.StdEncoding.EncodeToString(src)
+		}
+		out = append(out, it)
+	}
+	ok(c, gin.H{"checkers": out, "truncated": truncated})
+}
+
+// readCheckerSource 有界读取一题的校验器源码（超过 checkerSourceMax 报错，不整读）。
+func readCheckerSource(store testdata.Provider, pid int64, rel string) ([]byte, error) {
+	f, err := store.Open(pid, rel)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, checkerSourceMax+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > checkerSourceMax {
+		return nil, fmt.Errorf("校验器文件超过 %dKB 上限", checkerSourceMax>>10)
+	}
+	return data, nil
 }
 
 // UpdateFunctionFile 函数题 driver/template 即时替换（编辑页不随保存提交）。
@@ -520,7 +590,7 @@ func (h *Handlers) RemoveChecker(c *gin.Context) {
 		fail(c, http.StatusForbidden, "需要「编辑任意题目」权限，或仅编辑自己导入的题目")
 		return
 	}
-	_ = h.store.Delete(id, "data/checker.cpp")
+	_ = h.provider().Delete(id, "data/checker.cpp")
 	if err := h.repo.UpdateProblemMeta(c.Request.Context(), id, repo.ProblemMetaPatch{
 		CheckerFile: new(string), CheckerSHA: new(string), CheckerFileID: new(string),
 	}); err != nil {
