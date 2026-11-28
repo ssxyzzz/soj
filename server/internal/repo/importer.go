@@ -16,6 +16,7 @@ package repo
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -639,7 +640,9 @@ func (im *Importer) ImportDir(ctx context.Context, dir string) (*Problem, error)
 }
 
 // writeTypeFiles 题型专属文件落卷（data/ 固定名）：函数题 driver 必须、template 可选；
-// 交互题 interactor 必须；校验器按 config.checker 声明。
+// 交互题 interactor 必须（整包替换没带则沿用现有的）；校验器按 config.checker 声明。
+// 校验器 / 交互器源码一经（重）写，对应的编译产物缓存即作废——判题机懒编译把产物 fileId
+// 记在题目元数据里，不失效就会继续拿旧产物判，直到沙箱缓存过期。
 func (im *Importer) writeTypeFiles(store testdata.Provider, p *Problem, dir, checkerRel string) error {
 	pid := p.ID
 	read := func(name string) ([]byte, error) {
@@ -663,13 +666,18 @@ func (im *Importer) writeTypeFiles(store testdata.Provider, p *Problem, dir, che
 	}
 	if p.Type == TypeInteractive {
 		src, err := read("interactor.cpp")
-		if err != nil {
+		switch {
+		case err == nil:
+			if err := store.WriteFile(pid, "data/interactor.cpp", src); err != nil {
+				return err
+			}
+			p.InteractorFile, p.InteractorSHA = "data/interactor.cpp", sha256Hex(src)
+			p.InteractorFileID = ""
+		case p.InteractorFile != "" && errors.Is(err, os.ErrNotExist):
+			// 整包替换没带交互器：沿用现有的（源码由 ReplaceData 在清空 data/ 前读出、落完新数据写回）
+		default:
 			return fmt.Errorf("交互题缺少 data/interactor.cpp（读 argv[1] 输入文件、stdin/stdout 与选手双向通信、退出码 0 = 通过）")
 		}
-		if err := store.WriteFile(pid, "data/interactor.cpp", src); err != nil {
-			return err
-		}
-		p.InteractorFile, p.InteractorSHA = "data/interactor.cpp", sha256Hex(src)
 	}
 	if checkerRel != "" {
 		src, err := os.ReadFile(filepath.Join(dir, "data", filepath.FromSlash(checkerRel)))
@@ -681,8 +689,38 @@ func (im *Importer) writeTypeFiles(store testdata.Provider, p *Problem, dir, che
 			return err
 		}
 		p.CheckerFile, p.CheckerSHA = rel, sha256Hex(src)
+		p.CheckerFileID = ""
 	}
 	return nil
+}
+
+// keptTypeSources 整包替换时随原题沿用的题型专属源码（新包没带的校验器 / 交互器）。
+// 校验器 / 交互器在编辑页是即时上传替换的，不随数据包提交：新包带了才换，没带就沿用。
+// 必须在 data/ 清空之前调用——读的是卷内现有文件，落完新数据后由调用方原路写回；
+// 元数据与编译缓存都不动（源码没变，缓存仍有效）。
+func keptTypeSources(store testdata.Provider, p *Problem, dataDir, checkerRel string) (map[string][]byte, error) {
+	kept := map[string][]byte{}
+	keep := func(rel, what string) error {
+		src, err := testdata.ReadAll(store, p.ID, rel)
+		if err != nil {
+			return fmt.Errorf("读取现有%s %s: %w", what, rel, err)
+		}
+		kept[rel] = src
+		return nil
+	}
+	if checkerRel == "" && p.CheckerFile != "" {
+		if err := keep(p.CheckerFile, "校验器"); err != nil {
+			return nil, err
+		}
+	}
+	if p.Type == TypeInteractive && p.InteractorFile != "" {
+		if _, err := os.Stat(filepath.Join(dataDir, "interactor.cpp")); errors.Is(err, os.ErrNotExist) {
+			if err := keep(p.InteractorFile, "交互器"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return kept, nil
 }
 
 // applyConfigExtras config.yaml 的比对模式/文件 IO 归一（时限内存已单独处理）。
@@ -827,9 +865,10 @@ func parseAnswerFile(path string) (answerYAML, error) {
 	return parseAnswerYAML(raw)
 }
 
-// ReplaceData 编辑页整包替换数据（zip 只认 data/）：数据对/附属/题型文件/校验器全量重建，
+// ReplaceData 编辑页整包替换数据（zip 只认 data/）：数据对/附属全量重建，
 // data/config.yaml 可覆盖时限内存/子任务/文件 IO/比对模式；题面与题目元数据（标题/难度/
-// 来源/标签/隐藏）一律不动。
+// 来源/标签/隐藏）一律不动。校验器 / 交互器新包带了才换（落新源码并作废编译缓存），
+// 没带就沿用现有的。
 func (im *Importer) ReplaceData(ctx context.Context, pid int64, dir string) (*Problem, error) {
 	p, err := im.Repo.GetProblem(ctx, pid)
 	if err != nil {
@@ -846,7 +885,16 @@ func (im *Importer) ReplaceData(ctx context.Context, pid int64, dir string) (*Pr
 	if err != nil {
 		return nil, err
 	}
+	checkerRel := ""
+	if cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
+		checkerRel = *cfg.Checker
+	}
 	store := testdata.NewLocalFS(im.DataDir)
+	// 沿用的校验器 / 交互器源码要在清空前读出（读失败即中止，旧数据原样保留）
+	kept, err := keptTypeSources(store, p, dataDir, checkerRel)
+	if err != nil {
+		return nil, err
+	}
 	_ = store.RemoveDir(pid, "data") // 纯替换语义：旧数据/附属全清（只清 data/，题面资产 assets/ 不波及——v0.31）
 
 	cases := make([]CaseMeta, 0, len(pairs))
@@ -896,10 +944,6 @@ func (im *Importer) ReplaceData(ctx context.Context, pid int64, dir string) (*Pr
 		}
 	}
 
-	checkerRel := ""
-	if cfg != nil && cfg.Checker != nil && *cfg.Checker != "" {
-		checkerRel = *cfg.Checker
-	}
 	if err := im.writeTypeFiles(store, p, dir, checkerRel); err != nil {
 		return nil, err
 	}
@@ -909,6 +953,12 @@ func (im *Importer) ReplaceData(ctx context.Context, pid int64, dir string) (*Pr
 			return nil, fmt.Errorf("读取附属文件 %s: %w", rel, err)
 		}
 		if err := store.WriteFile(pid, "data/"+rel, data); err != nil {
+			return nil, err
+		}
+	}
+	// 沿用的校验器 / 交互器源码写回：排在附属文件之后，新包里恰好同名的文件以沿用的为准
+	for rel, src := range kept {
+		if err := store.WriteFile(pid, rel, src); err != nil {
 			return nil, err
 		}
 	}

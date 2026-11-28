@@ -120,7 +120,7 @@ make lint     # ESLint + go vet（+ staticcheck 如已安装）
 
 `type` 缺省为传统题，可设 `objective` / `function` / `interactive`；`hidden: true` 设为主题库隐藏（适合考试题）。Hydro 官方「题库导出」zip 在导入页选「从 Hydro 导入」原样上传即可（题面 problem_zh.md、testdata/、config.yaml 自动识别，目录名数字 ID 不采用）。旧版格式（statement.md + cases/）不再支持，站内任意题「下载数据」导出的包即格式模板。
 
-**自定义校验器（SPJ）**：`config.yaml` 的 `checker:` 声明数据目录里的校验器源文件，编辑页也可直接上传（`.cpp` / `.cc`）。调用约定与 Codeforces / 洛谷 / UOJ / Hydro 一致——`checker <输入> <考生输出> <答案>`，即 testlib `registerTestlibCmd` 的读序；沙箱镜像内置 `testlib.h`，主流 checker 原样可用。退出码：**0** 通过；**3** 校验器自身故障（读不了输入 / 答案文件等），判 System Error 不算选手错；其余非零为不通过，原因取校验器输出（1 = 答案错，2 = 输出格式错——PE 并入 WA，同 Codeforces / 洛谷）。校验器崩溃、超时同样判 System Error。部分分（`quitp`）暂不支持，按不通过处理并在原因里注明。校验器按位置读三个文件：`argv[1]` 输入、`argv[2]` 考生输出、`argv[3]` 答案。
+**自定义校验器（SPJ）**：`config.yaml` 的 `checker:` 声明数据目录里的校验器源文件，编辑页也可直接上传（`.cpp` / `.cc`）。调用约定与 Codeforces / 洛谷 / UOJ / Hydro 一致——`checker <输入> <考生输出> <答案>`，即 testlib `registerTestlibCmd` 的读序；沙箱镜像内置 `testlib.h`，主流 checker 原样可用。退出码：**0** 通过；**3** 校验器自身故障（读不了输入 / 答案文件等），判 System Error 不算选手错；其余非零为不通过，原因取校验器输出（1 = 答案错，2 = 输出格式错——PE 并入 WA，同 Codeforces / 洛谷）。校验器崩溃、超时同样判 System Error。部分分（`quitp`）暂不支持，按不通过处理并在原因里注明。校验器按位置读三个文件：`argv[1]` 输入、`argv[2]` 考生输出、`argv[3]` 答案。编辑页「换数据包」：包里声明了校验器才替换（立即生效），没带则沿用现有的；交互器同理。
 
 ## 配置
 
