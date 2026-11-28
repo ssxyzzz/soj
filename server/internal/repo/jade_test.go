@@ -256,8 +256,8 @@ func TestMaybeAwardJadeBlessing(t *testing.T) {
 	if b.Base != 4 || b.Drop < 0 || b.Drop > 4 {
 		t.Fatalf("祝福发放 = base %d drop %d，期望 base4 drop∈[0,4]（记录不放大）", b.Base, b.Drop)
 	}
-	if b.MultPct != 200 || b.MultFrom == "" {
-		t.Fatalf("祝福 multPct = %d from = %q，期望 200/升维祝福", b.MultPct, b.MultFrom)
+	if b.MultPct != 200 || b.MultFrom != blessName {
+		t.Fatalf("祝福 multPct = %d from = %q，期望 200/%s", b.MultPct, b.MultFrom, blessName)
 	}
 	if b.Total != (b.Base+b.Drop)*2 {
 		t.Fatalf("祝福 total = %d ≠ (base+drop)×2 = %d", b.Total, (b.Base+b.Drop)*2)
@@ -269,8 +269,8 @@ func TestMaybeAwardJadeBlessing(t *testing.T) {
 		t.Fatal("祝福发放未落流水")
 	}
 	reason := entries[0].Reason
-	if !strings.Contains(reason, "升维祝福 ×2") || strings.Contains(reason, "×2 ×2") {
-		t.Fatalf("祝福流水说明 = %q，期望含「升维祝福 ×2」且无连乘", reason)
+	if !strings.Contains(reason, blessName+" ×2") || strings.Contains(reason, "×2 ×2") {
+		t.Fatalf("祝福流水说明 = %q，期望含「%s ×2」且无连乘", reason, blessName)
 	}
 
 	// EnsureLevelBlessing：CAS 幂等——同档二次不重开祝福
@@ -316,6 +316,117 @@ func TestMaybeAwardJadeBlessing(t *testing.T) {
 	}
 	if doc3.BlessedLevel != 6 {
 		t.Fatalf("blessedLevel = %d，期望 6", doc3.BlessedLevel)
+	}
+	// 升级通知正文带祝福名（v0.101.4 更名「升级祝福」）：以「升级祝福已开启」开头、不含旧词
+	var note Notification
+	if err := r.notifications.FindOne(ctx, bson.M{"uid": u, "typ": NotifyLevelUp}).Decode(&note); err != nil {
+		t.Fatalf("升级通知: %v", err)
+	}
+	if !strings.HasPrefix(note.Body, blessName+"已开启") || strings.Contains(note.Body, blessNameOld) {
+		t.Fatalf("升级通知正文 = %q，期望以「%s已开启」开头且不含旧词", note.Body, blessName)
+	}
+}
+
+// TestMigrateBlessRename 升级祝福更名（v0.101.4「升维祝福」→「升级祝福」）的存量订正契约：
+// 旧词落库四处——玉流水说明 / 升级通知正文按子串替换，发放记录与提交开箱回填的倍率来源名
+// 等值改写；流水说明里 2026-10-31 连乘假象修复前留下的「×2 ×2」一并收成「×2」（祝福与其它
+// 来源都算）；不含旧词的行不动，只改说明文字不动其它字段，重跑无命中。
+func TestMigrateBlessRename(t *testing.T) {
+	r := openTestRepo(t)
+	ctx := context.Background()
+	const (
+		bodyOld = "升维祝福已开启：48 小时内做题的玉收入翻倍，趁热打铁！"
+		bodyNew = "升级祝福已开启：48 小时内做题的玉收入翻倍，趁热打铁！"
+	)
+	// 流水说明的历史形态：v0.40 逗号并列式 / 连乘假象修复前的「×2 ×2」（祝福与每日一题各一）/
+	// 现行格式；外加两条不含旧词的行
+	legacyReasons := map[int64]string{
+		1: "首次通过 #12《T》（基础 10 + 掉落 0，升维祝福 ×2，每日一题 ×2）",
+		2: "首次通过 #12《T》（基础 4 + 掉落 4 × 升维祝福 ×2 ×2）",
+		3: "首次通过 #12《T》（基础 4 + 掉落 4 × 升维祝福 ×2）",
+		4: "首次通过 #12《T》（基础 4 + 掉落 0 × 连击加成 ×1.1）",
+		5: "悬赏到期退回（话题 #4，无人打赏部分）",
+		6: "首次通过 #12《T》（基础 4 + 掉落 4 × 每日一题 ×2 ×2）",
+	}
+	for id, reason := range legacyReasons {
+		if _, err := r.jadeLedger.InsertOne(ctx, bson.M{
+			"_id": id, "uid": int64(7), "delta": int64(8), "kind": JadeKindAward,
+			"reason": reason, "ref": int64(12), "at": time.Now(),
+		}); err != nil {
+			t.Fatalf("落存量流水 #%d: %v", id, err)
+		}
+	}
+	for _, a := range []bson.M{
+		{"uid": int64(7), "pid": int64(12), "multPct": 200, "multFrom": blessNameOld},
+		{"uid": int64(8), "pid": int64(12), "multPct": 110, "multFrom": "连击加成"},
+	} {
+		if _, err := r.jadeAwards.InsertOne(ctx, a); err != nil {
+			t.Fatalf("落存量发放记录: %v", err)
+		}
+	}
+	insert(t, r, bson.M{"_id": int64(31), "jadeMultPct": 200, "jadeMultFrom": blessNameOld, "jadeTotal": int64(8)})
+	insert(t, r, bson.M{"_id": int64(32), "jadeMultPct": 200, "jadeMultFrom": "每日一题", "jadeTotal": int64(8)})
+	now := time.Now()
+	for _, n := range []bson.M{
+		{"_id": int64(1), "uid": int64(7), "typ": NotifyLevelUp, "title": "升到 Lv.2", "body": bodyOld, "createdAt": now, "purgeAt": now},
+		{"_id": int64(2), "uid": int64(7), "typ": NotifyLevelUp, "title": "升到 Lv.3", "body": bodyNew, "createdAt": now, "purgeAt": now},
+		{"_id": int64(3), "uid": int64(7), "typ": "system", "title": "公告", "body": "系统维护通知", "createdAt": now, "purgeAt": now},
+	} {
+		if _, err := r.notifications.InsertOne(ctx, n); err != nil {
+			t.Fatalf("落存量通知: %v", err)
+		}
+	}
+
+	n, err := r.migrateBlessRename(ctx)
+	if err != nil || n != 7 {
+		t.Fatalf("迁移 = %d 行（err=%v），期望 7（流水 4 + 发放记录 1 + 提交回填 1 + 通知 1）", n, err)
+	}
+	wantReasons := map[int64]string{
+		1: "首次通过 #12《T》（基础 10 + 掉落 0，升级祝福 ×2，每日一题 ×2）",
+		2: "首次通过 #12《T》（基础 4 + 掉落 4 × 升级祝福 ×2）", // 换词 + 收连乘
+		3: "首次通过 #12《T》（基础 4 + 掉落 4 × 升级祝福 ×2）",
+		4: legacyReasons[4],
+		5: legacyReasons[5],
+		6: "首次通过 #12《T》（基础 4 + 掉落 4 × 每日一题 ×2）", // 只收连乘（来源名不是祝福）
+	}
+	list, _, err := r.JadeLedgerPage(ctx, 7, 1, 10)
+	if err != nil || len(list) != 6 {
+		t.Fatalf("流水 = %d 条（err=%v），期望 6", len(list), err)
+	}
+	for _, e := range list {
+		if e.Reason != wantReasons[e.ID] {
+			t.Fatalf("流水 #%d 说明 = %q，期望 %q", e.ID, e.Reason, wantReasons[e.ID])
+		}
+		if e.Delta != 8 {
+			t.Fatalf("流水 #%d 金额 = %d，期望 8（只改词）", e.ID, e.Delta)
+		}
+	}
+	a, _ := r.GetJadeAward(ctx, 7, 12)
+	if a == nil || a.MultFrom != blessName || a.MultPct != 200 {
+		t.Fatalf("发放记录 = from %q pct %d，期望 %s / 200", a.MultFrom, a.MultPct, blessName)
+	}
+	if a, _ := r.GetJadeAward(ctx, 8, 12); a == nil || a.MultFrom != "连击加成" {
+		t.Fatalf("其它来源的发放记录被改动：from %q", a.MultFrom)
+	}
+	s31, err := r.GetSubmission(ctx, 31)
+	if err != nil || s31.JadeMultFrom != blessName || s31.JadeMultPct != 200 || s31.JadeTotal != 8 {
+		t.Fatalf("提交 #31 开箱回填 = from %q pct %d total %d（err=%v），期望 %s / 200 / 8",
+			s31.JadeMultFrom, s31.JadeMultPct, s31.JadeTotal, err, blessName)
+	}
+	s32, err := r.GetSubmission(ctx, 32)
+	if err != nil || s32.JadeMultFrom != "每日一题" {
+		t.Fatalf("其它来源的提交回填被改动：from %q（err=%v）", s32.JadeMultFrom, err)
+	}
+	for id, want := range map[int64]string{1: bodyNew, 2: bodyNew, 3: "系统维护通知"} {
+		var note Notification
+		if err := r.notifications.FindOne(ctx, bson.M{"_id": id}).Decode(&note); err != nil || note.Body != want {
+			t.Fatalf("通知 #%d 正文 = %q（err=%v），期望 %q", id, note.Body, err, want)
+		}
+	}
+
+	// 幂等：重跑无命中
+	if n, err := r.migrateBlessRename(ctx); err != nil || n != 0 {
+		t.Fatalf("重跑 = %d 行（err=%v），期望 0", n, err)
 	}
 }
 

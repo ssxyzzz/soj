@@ -1377,7 +1377,7 @@ export interface SubmissionGame {
   jade_daily?: boolean
   jade_revenge?: boolean
   jade_mult_pct?: number // 采用倍率百分比（200 = ×2；v0.45 总则）
-  jade_mult_from?: string // 采用倍率来源文案（「升维祝福 ×2」「连击加成」等）
+  jade_mult_from?: string // 采用倍率来源文案（「升级祝福」「连击加成」等）
   combo_cur?: number
   combo_best?: number
   streak_days?: number
@@ -1389,7 +1389,7 @@ export interface SubmissionGame {
 export interface JadeMine {
   balance: number
   currency: string
-  /** 升维祝福（v0.40）：进行中才有值，ISO 时间 */
+  /** 升级祝福（v0.40）：进行中才有值，ISO 时间 */
   bless_until?: string
 }
 

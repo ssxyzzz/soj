@@ -47,6 +47,57 @@ const (
 	JadeKindScoreRegrant       = "score_regrant"       // 取消成绩后恢复/重新 AC 补回（v0.97.29，ref=题目）
 )
 
+// blessName / blessNameOld 升级祝福的名称与更名前的旧词（v0.101.4「升维祝福」→「升级祝福」）。
+// 名称随倍率来源名落发放记录与提交开箱回填、拼进流水说明与升级通知正文；旧词只供存量订正
+// migrateBlessRename 认出改写。
+const (
+	blessName    = "升级祝福"
+	blessNameOld = "升维祝福"
+)
+
+// migrateBlessRename 存量订正（blessRenameV1，v0.101.4）：升级祝福更名前落库的旧词一并改写——
+// 玉流水说明与升级通知正文按子串替换，发放记录与提交开箱回填的倍率来源名等值改写；流水说明
+// 顺带收掉 2026-10-31 连乘假象修复前留下的「×2 ×2」。四处各一次 UpdateMany、按集合大小
+// 有界，无命中天然幂等；返回改写行数（四处合计）。
+func (r *Repo) migrateBlessRename(ctx context.Context) (int64, error) {
+	// 玉流水说明：换词 + 收连乘。连乘假象 = 当时的来源名自带倍率值（「升维祝福 ×2」）、multText
+	// 又拼一次，祝福与每日一题都留了行；现行格式倍率段只会有一个倍率值，相邻两个必是这一处遗留
+	res, err := r.jadeLedger.UpdateMany(ctx,
+		bson.M{"reason": bson.M{"$regex": blessNameOld + "|×2 ×2"}},
+		bson.A{bson.M{"$set": bson.M{"reason": bson.M{"$replaceAll": bson.M{
+			"input": bson.M{"$replaceAll": bson.M{
+				"input": "$reason", "find": blessNameOld, "replacement": blessName}},
+			"find": "×2 ×2", "replacement": "×2"}}}}})
+	if err != nil {
+		return 0, fmt.Errorf("jadeLedger.reason: %w", err)
+	}
+	n := res.ModifiedCount
+	// 升级通知正文：整句里换词
+	res, err = r.notifications.UpdateMany(ctx,
+		bson.M{"body": bson.M{"$regex": blessNameOld}},
+		bson.A{bson.M{"$set": bson.M{"body": bson.M{"$replaceAll": bson.M{
+			"input": "$body", "find": blessNameOld, "replacement": blessName}}}}})
+	if err != nil {
+		return 0, fmt.Errorf("notifications.body: %w", err)
+	}
+	n += res.ModifiedCount
+
+	// 等值改写：来源名字段整个就是祝福名
+	for _, c := range []struct {
+		coll  *mongo.Collection
+		field string
+	}{{r.jadeAwards, "multFrom"}, {r.submissions, "jadeMultFrom"}} {
+		res, err := c.coll.UpdateMany(ctx,
+			bson.M{c.field: blessNameOld},
+			bson.M{"$set": bson.M{c.field: blessName}})
+		if err != nil {
+			return 0, fmt.Errorf("%s.%s: %w", c.coll.Name(), c.field, err)
+		}
+		n += res.ModifiedCount
+	}
+	return n, nil
+}
+
 // ErrInsufficientJade 余额不足（扣减的条件原子更新未命中）。
 var ErrInsufficientJade = errors.New("余额不足")
 
@@ -513,7 +564,7 @@ func (r *Repo) EnsureLevelBlessing(ctx context.Context, uid int64, level int) er
 	_ = r.NotifyUsers(ctx, []int64{uid}, NotifyInput{
 		Typ:   NotifyLevelUp,
 		Title: fmt.Sprintf("升到 Lv.%d", level),
-		Body:  "升维祝福已开启：48 小时内做题的玉收入翻倍，趁热打铁！",
+		Body:  blessName + "已开启：48 小时内做题的玉收入翻倍，趁热打铁！",
 		Link:  "/problems",
 	}, retention)
 	return nil
@@ -538,7 +589,7 @@ func (r *Repo) EnsureLevelBlessingForUser(ctx context.Context, uid int64) error 
 }
 
 // MaybeAwardJade 首次 AC 发玉（同题幂等）。倍率总则（v0.45，2026-10-31 拍板）：
-// 最终玉 = (基础 + 掉落) × max(全部倍率)——升维祝福 ×2 / 连击加成（每满 step +pct%，
+// 最终玉 = (基础 + 掉落) × max(全部倍率)——升级祝福 ×2 / 连击加成（每满 step +pct%，
 // 封顶 capPct）/ 每日一题 ×2 / 一血偿还 ×1.5 / 课堂 PK 名次（raceRankPct，0=无）
 // 全部平级取最高不连乘，峰值 ×2。
 // combo = 本次 AC 生效后的连击数（judge 路径由 TrackJudgeOutcome 先行回传；
@@ -576,7 +627,7 @@ func (r *Repo) MaybeAwardJade(ctx context.Context, uid, pid int64, raceRankPct, 
 	}
 	blessed, berr := r.userBlessed(ctx, uid)
 	if berr == nil && blessed {
-		claim(200, "升维祝福") // 倍率值由 multText 统一拼（2026-10-31 验收期修复：来源名自带 ×2 会渲染成「×2 ×2」连乘假象）
+		claim(200, blessName) // 倍率值由 multText 统一拼（2026-10-31 验收期修复：来源名自带 ×2 会渲染成「×2 ×2」连乘假象）
 	}
 	if cp := set.JadeComboBonusPct(combo); cp > 100 {
 		claim(cp, "连击加成")

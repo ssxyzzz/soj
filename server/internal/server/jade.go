@@ -90,7 +90,7 @@ func (h *Handlers) MyJade(c *gin.Context) {
 	blessUntil, _ := h.repo.UserBlessUntil(c.Request.Context(), uid)
 	resp := gin.H{"balance": bal, "currency": currency}
 	if !blessUntil.IsZero() && blessUntil.After(time.Now()) {
-		resp["bless_until"] = blessUntil.Format(time.RFC3339) // 升维祝福（v0.40）
+		resp["bless_until"] = blessUntil.Format(time.RFC3339) // 升级祝福（v0.40）
 	}
 	ok(c, resp)
 }

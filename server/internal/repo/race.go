@@ -9,7 +9,7 @@ package repo
 //   - 名次即 AC 回写时刻的即时名次（先到先得，无回溯）：前 3 名该题掉落额外
 //     ×2/×1.5/×1.2（默认开、发起可关；掉落为 0 则加成落空——与每日一题 ×2 同构，
 //     不发固定玉），以 JadeKindContestRank 补差一笔发放。
-//   - 全班通知走 NotifyUsers（repo 层直发，jade 升维祝福同款先例）。
+//   - 全班通知走 NotifyUsers（repo 层直发，jade 升级祝福同款先例）。
 
 import (
 	"context"

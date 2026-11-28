@@ -69,7 +69,7 @@ async function refreshBadge() {
 }
 
 // 玉余额（v0.33-①）：用户菜单条目数据源；消费/获取后各页调 jadeApi.mine + setJade 自行刷新
-const blessUntil = ref('') // 升维祝福（v0.40）截止时刻，空 = 无
+const blessUntil = ref('') // 升级祝福（v0.40）截止时刻，空 = 无
 
 async function refreshJade() {
   if (!userStore.token) return
@@ -361,7 +361,7 @@ function onCommand(command: string) {
                 <span class="jade-glyph" aria-hidden="true">◈</span>
                 <b class="jade-num">{{ userStore.jadeBalance }}</b>
                 <span class="jade-unit">{{ userStore.jadeCurrency }}</span>
-                <span v-if="blessActive" class="bless-chip" title="升维祝福：做题玉收入 ×2（48 小时）">⚡×2</span>
+                <span v-if="blessActive" class="bless-chip" title="升级祝福：做题玉收入 ×2（48 小时）">⚡×2</span>
               </el-dropdown-item>
               <!-- v0.17：公开主页入口 -->
               <el-dropdown-item command="me">我的主页</el-dropdown-item>
@@ -809,7 +809,7 @@ function onCommand(command: string) {
 </style>
 
 <style scoped>
-/* 升维祝福徽章（v0.40）：玉余额旁的小闪电 */
+/* 升级祝福徽章（v0.40）：玉余额旁的小闪电 */
 .bless-chip {
   margin-left: var(--soj-sp-6);
   padding: 0 var(--soj-sp-6);

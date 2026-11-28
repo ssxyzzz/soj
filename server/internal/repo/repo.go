@@ -51,7 +51,7 @@ type Repo struct {
 	jadeAwards     *mongo.Collection // 玉首 AC 发放记录（v0.33，{uid,pid} 唯一防重发）
 	jadeLedger     *mongo.Collection // 玉流水（v0.33）
 	jadeBalances   *mongo.Collection // 玉余额物化（v0.33，条件原子扣减防双花）
-	jadeBlessings  *mongo.Collection // 升维祝福审计（v0.40，{uid,level} 唯一幂等）
+	jadeBlessings  *mongo.Collection // 升级祝福审计（v0.40，{uid,level} 唯一幂等）
 	achievements   *mongo.Collection // 成就解锁记录（v0.41，{uid,code} 唯一幂等）
 	dailyProblems  *mongo.Collection // 每日一题（v0.41，_id = 日期串）
 	classroomRaces *mongo.Collection // 课堂 PK（v0.42，班级同题手速赛）
@@ -402,7 +402,7 @@ var freshSkipFlags = []string{
 	"sourceBackfillV1", "adminProblemViewAllV1", "objQuestionsV1",
 	"dataDownloadPermV1", "contentMdV1", "difficultyV1", "dataLayoutV2", "listManageV1",
 	"gradeNoV1", "discussCreatePermV1", "problemImportPermV1", "classEditPermV1",
-	"shopRefundKindV1",
+	"shopRefundKindV1", "blessRenameV1",
 }
 
 // runMigrations 按需执行一次性数据迁移，meta.migrations 记录各项完成标记。
@@ -694,6 +694,19 @@ func (r *Repo) runMigrations(ctx context.Context, store testdata.Provider, users
 			return err
 		}
 		slog.Info("兑换被拒退玉的流水已订正为 shop_refund", "component", "boot", "count", n)
+	}
+	if !flagDone("blessRenameV1") {
+		// v0.101.4：「升维祝福」更名「升级祝福」，源头文案已换；更名前落库的旧词（流水说明 /
+		// 升级通知正文 / 倍率来源名）一并订正，流水说明里连乘假象修复前留下的「×2 ×2」顺带
+		// 收成「×2」（见 migrateBlessRename）
+		n, err := r.migrateBlessRename(ctx)
+		if err != nil {
+			return err
+		}
+		if err := setFlag("blessRenameV1"); err != nil {
+			return err
+		}
+		slog.Info("升级祝福更名：存量旧词已订正", "component", "boot", "count", n)
 	}
 	if !flagDone("sourceBackfillV1") {
 		// v0.12：来源四字段存量回填——来源全空的题按标题方括号前缀识别一次

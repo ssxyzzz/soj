@@ -224,9 +224,9 @@ func (j *Judger) runOneSafely(ctx context.Context, sub *repo.Submission) (status
 			slog.Warn("首 AC 玉发放失败", "component", "jade", "sid", sub.ID, "error", err)
 		} else if awarded {
 			_ = j.Repo.SetSubmissionJade(ctx, sub.UID, sub.ProblemID, sub.ID) // 开箱 payload 回填（尽力而为）
-			// 升维祝福（v0.40）：升级只可能发生在 AC 时刻——首 AC 后检测等级抬升
+			// 升级祝福（v0.40）：升级只可能发生在 AC 时刻——首 AC 后检测等级抬升
 			if berr := j.Repo.EnsureLevelBlessingForUser(ctx, sub.UID); berr != nil {
-				slog.Warn("升维祝福检测失败", "component", "jade", "sid", sub.ID, "error", berr)
+				slog.Warn("升级祝福检测失败", "component", "jade", "sid", sub.ID, "error", berr)
 			}
 		}
 	}

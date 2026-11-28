@@ -65,7 +65,7 @@ type RepoAPI interface {
 	// v0.34 用户档案批：花名册建号 / 年级晋级 / 批量查重（PeekUserSeqs v0.61 按序补空预读）
 	CreateUserWithProfile(ctx context.Context, id int64, username, password, nickname, role string, p repo.UserProfile) (int64, error)
 	PeekUserSeqs(ctx context.Context, want int64) ([]int64, error)
-	// v0.40 升维祝福：读路径兜底检测（判题路径走具体 repo 不经此缝）
+	// v0.40 升级祝福：读路径兜底检测（判题路径走具体 repo 不经此缝）
 	EnsureLevelBlessing(ctx context.Context, uid int64, level int) error
 	UserBlessUntil(ctx context.Context, uid int64) (time.Time, error)
 	// v0.41 游戏感批：开箱 payload / 每日钩子 / 成就星图 / 降临

@@ -12,7 +12,7 @@ export const useGameFeastStore = defineStore('gameFeast', () => {
   const visible = ref(false)
   const rarity = ref<FeastRarity>('plain')
   const jade = ref(0) // 本次首 AC 发玉（0 = 非FirstAC 小 AC 章样式）
-  const jadeMultFrom = ref('') // 采用倍率来源（v0.45 总则：「升维祝福 ×2」等，空 = 无加成）
+  const jadeMultFrom = ref('') // 采用倍率来源（v0.45 总则：「升级祝福」「连击加成」等，空 = 无加成）
   const combo = ref(0)
   const score = ref(0)
   const title = ref('')
